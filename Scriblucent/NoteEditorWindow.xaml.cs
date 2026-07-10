@@ -67,6 +67,27 @@ namespace Scriblucent
         private double _indentSize = DefaultIndentSize;
         private string _measurementUnitSystem = AppSettings.UnitSystemImperial;
         private const string DefaultEditorFontFamily = "Calibri";
+        // Symbol (not Emoji): WPF renders these as classic monochrome glyphs, which stay
+        // sharp and match the UI chrome better than color emoji bitmaps.
+        private const string EditorSymbolFontFallback = "Segoe UI Symbol";
+
+        private static FontFamily CreateEditorFontFamily(string? primary)
+        {
+            var name = string.IsNullOrWhiteSpace(primary) ? DefaultEditorFontFamily : primary.Trim();
+            if (name.Contains("Segoe UI Symbol", StringComparison.OrdinalIgnoreCase))
+                return new FontFamily(name);
+
+            return new FontFamily($"{GetPrimaryFontFamily(name)}, {EditorSymbolFontFallback}");
+        }
+
+        private static string GetPrimaryFontFamily(string? fontFamilySource)
+        {
+            if (string.IsNullOrWhiteSpace(fontFamilySource))
+                return DefaultEditorFontFamily;
+
+            var primary = fontFamilySource.Split(',')[0].Trim();
+            return string.IsNullOrWhiteSpace(primary) ? DefaultEditorFontFamily : primary;
+        }
         private int _fontPanelAnimationVersion;
         private long _editorChangeVersion;
         private long _lastSavedEditorChangeVersion;
@@ -1683,10 +1704,10 @@ namespace Scriblucent
                         ? document.FontSize
                         : preferredFontSize;
 
-                    ContentTextBox.FontFamily = new FontFamily(targetFontFamily);
+                    ContentTextBox.FontFamily = CreateEditorFontFamily(targetFontFamily);
                     ContentTextBox.FontSize = targetFontSize;
 
-                    document.FontFamily = ContentTextBox.FontFamily.Source;
+                    document.FontFamily = GetPrimaryFontFamily(targetFontFamily);
                     document.FontSize = ContentTextBox.FontSize;
 
                     SyncFontSelectorsFromSelection();
@@ -1770,7 +1791,7 @@ namespace Scriblucent
 
                 var newTitle = TitleTextBox.Text;
                 var newTags = ParseTags(TagsTextBox.Text);
-                var newFontFamily = ContentTextBox.FontFamily.Source;
+                var newFontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source);
                 var newFontSize = ContentTextBox.FontSize;
                 var newImages = BuildImageAttachments();
                 ClearAllHighlights();
@@ -2248,7 +2269,7 @@ namespace Scriblucent
             var fontSize = typography.FontSize > 0 ? typography.FontSize : ContentTextBox.FontSize;
             var fontFamily = string.IsNullOrWhiteSpace(typography.FontFamily)
                 ? ContentTextBox.FontFamily
-                : new FontFamily(typography.FontFamily);
+                : CreateEditorFontFamily(typography.FontFamily);
             var estimatedSpaceWidth = fontSize * 0.33;
 
             try
@@ -2775,7 +2796,7 @@ namespace Scriblucent
                 '\u001F',
                 TitleTextBox.Text,
                 string.Join('\u001E', ParseTags(TagsTextBox.Text)),
-                ContentTextBox.FontFamily.Source,
+                GetPrimaryFontFamily(ContentTextBox.FontFamily.Source),
                 ContentTextBox.FontSize.ToString(CultureInfo.InvariantCulture),
                 _editorChangeVersion.ToString(CultureInfo.InvariantCulture));
         }
@@ -3189,7 +3210,7 @@ namespace Scriblucent
                 Content = SerializeEditorContentWithImageMarkers(),
                 Images = CloneImageAttachments(BuildImageAttachments()),
                 Tags = ParseTags(TagsTextBox.Text),
-                FontFamily = ContentTextBox.FontFamily.Source,
+                FontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source),
                 FontSize = ContentTextBox.FontSize,
                 IsEditorFontPanelOpen = _isFontPanelOpen,
                 IsWordWrapEnabled = _isWordWrapEnabled,
@@ -3853,9 +3874,9 @@ namespace Scriblucent
                 return;
 
             var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
-            ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, new FontFamily(fontName));
+            ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, CreateEditorFontFamily(fontName));
 
-            SavePreferredFontFamily(fontName);
+            SavePreferredFontFamily(GetPrimaryFontFamily(fontName));
             SyncFontSelectorsFromSelection();
 
             if (selectionChangesDocument)
@@ -4620,9 +4641,7 @@ namespace Scriblucent
 
         private EditorTypographyState ResolveCurrentSelectionTypography()
         {
-            var fallbackFamily = string.IsNullOrWhiteSpace(ContentTextBox.FontFamily?.Source)
-                ? DefaultEditorFontFamily
-                : ContentTextBox.FontFamily.Source;
+            var fallbackFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily?.Source);
             var fallbackSize = NormalizeEditorFontSize(ContentTextBox.FontSize);
             var fontFamily = fallbackFamily;
             var fontSize = fallbackSize;
@@ -4725,10 +4744,10 @@ namespace Scriblucent
             switch (value)
             {
                 case FontFamily family when !string.IsNullOrWhiteSpace(family.Source):
-                    fontFamily = family.Source;
+                    fontFamily = GetPrimaryFontFamily(family.Source);
                     return true;
                 case string familyName when !string.IsNullOrWhiteSpace(familyName):
-                    fontFamily = familyName.Trim();
+                    fontFamily = GetPrimaryFontFamily(familyName);
                     return true;
                 default:
                     return false;
@@ -4941,7 +4960,7 @@ namespace Scriblucent
         {
             TitleTextBox.Text = document.Title;
             TagsTextBox.Text = string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
-            ContentTextBox.FontFamily = new FontFamily(string.IsNullOrWhiteSpace(document.FontFamily) ? DefaultEditorFontFamily : document.FontFamily);
+            ContentTextBox.FontFamily = CreateEditorFontFamily(document.FontFamily);
             ContentTextBox.FontSize = document.FontSize > 0 ? document.FontSize : 14;
             _isWordWrapEnabled = document.IsWordWrapEnabled ?? _isWordWrapEnabled;
             SetFontPanelOpen(document.IsEditorFontPanelOpen ?? _isFontPanelOpen, animate: false);

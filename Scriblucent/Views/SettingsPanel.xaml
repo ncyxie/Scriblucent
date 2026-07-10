@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
              mc:Ignorable="d"
              d:DesignHeight="520"
              d:DesignWidth="960">
@@ -156,13 +157,14 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="20"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1"
-                               Text="▼"
-                               FontSize="10"
-                               Foreground="{TemplateBinding Foreground}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Margin="0,2,5,0"/>
+                    <icons:AppIcon Grid.Column="1"
+                                   Kind="ChevronDown"
+                                   Width="10"
+                                   Height="10"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="0,2,5,0"/>
                 </Grid>
             </Border>
             <ControlTemplate.Triggers>
@@ -228,7 +230,7 @@
 
                     <Button Grid.Column="1"
                             Style="{StaticResource SettingsCloseIconButtonStyle}"
-                            Content="✕"
+                            Content="{icons:Icon Close}"
                             Click="CloseButton_Click"/>
                 </Grid>
 
@@ -406,12 +408,12 @@
                             </Border>
 
                             <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                <Button Content="▲"
+                                <Button Content="{icons:Icon Kind=ChevronUp, Size=12}"
                                         Width="32"
                                         Height="30"
                                         Click="MoveAiToolUp_Click"
                                         Style="{StaticResource DialogSecondaryButtonStyle}"/>
-                                <Button Content="▼"
+                                <Button Content="{icons:Icon Kind=ChevronDown, Size=12}"
                                         Width="32"
                                         Height="30"
                                         Margin="0,6,0,0"

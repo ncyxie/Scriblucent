@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:models="clr-namespace:Scriblucent.Models"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
              Visibility="Collapsed"
              IsHitTestVisible="False">
     <UserControl.Resources>
@@ -14,7 +15,7 @@
             <Setter Property="Height" Value="30"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
@@ -328,7 +329,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
             <Setter Property="Padding" Value="4"/>
             <Setter Property="CalendarDayButtonStyle" Value="{StaticResource ScheduleCalendarDayButtonStyle}"/>
             <Setter Property="CalendarButtonStyle" Value="{StaticResource ScheduleCalendarButtonStyle}"/>
@@ -405,9 +406,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="18"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1"
-                               Text="▾"
-                               FontSize="11"
+                    <icons:AppIcon Kind="ChevronDown" Width="12" Height="12" Grid.Column="1"
                                Foreground="{TemplateBinding Foreground}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"/>
@@ -566,7 +565,7 @@
                     </StackPanel>
                     <Button Grid.Column="1"
                             Style="{StaticResource ScheduleCloseIconButtonStyle}"
-                            Content="✕"
+                            Content="{icons:Icon Close}"
                             Click="CloseButton_Click"/>
                 </Grid>
 
@@ -610,7 +609,7 @@
                                                                 Padding="8,2"
                                                                 HorizontalAlignment="Left">
                                                             <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="🕒" FontSize="10" Margin="0,0,4,0"/>
+                                                                <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                                 <TextBlock Text="{Binding ScheduledAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
                                                                            FontWeight="SemiBold"
                                                                            FontSize="11"
@@ -623,7 +622,7 @@
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
                                                     <Button Grid.Column="1"
-                                                            Content="🗑"
+                                                            Content="{icons:Icon Delete}"
                                                             Style="{StaticResource ScheduleRemoveButtonStyle}"
                                                             Margin="8,0,0,0"
                                                             VerticalAlignment="Top"

@@ -6,12 +6,14 @@
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
              xmlns:localization="clr-namespace:Scriblucent.Localization"
              xmlns:converters="clr-namespace:Scriblucent.Converters"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
              >
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
 
                 <ResourceDictionary Source="Themes/LightTheme.xaml"/>
+                <ResourceDictionary Source="Themes/Generic.xaml"/>
 
             </ResourceDictionary.MergedDictionaries>
             <x:Static x:Key="Loc" Member="localization:LocalizationProvider.Instance"/>
@@ -30,17 +32,21 @@
             <sys:Double x:Key="CheckGlyphPathLength">14</sys:Double>
             <DoubleCollection x:Key="CheckGlyphDashArray">14</DoubleCollection>
 
-            <Style x:Key="DashboardRevealIconStyle" TargetType="TextBlock">
+            <Style x:Key="DashboardRevealIconStyle" TargetType="{x:Type icons:AppIcon}">
                 <Setter Property="behaviors:IndicatorRevealMotionBehavior.IsEnabled" Value="True"/>
+                <Setter Property="Width" Value="14"/>
+                <Setter Property="Height" Value="14"/>
                 <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="Visibility" Value="Collapsed"/>
             </Style>
-            <Style x:Key="DashboardPinIconStyle" TargetType="TextBlock" BasedOn="{StaticResource DashboardRevealIconStyle}">
+            <Style x:Key="DashboardPinIconStyle" TargetType="{x:Type icons:AppIcon}" BasedOn="{StaticResource DashboardRevealIconStyle}">
                 <Setter Property="behaviors:IndicatorRevealMotionBehavior.SourceProperty" Value="IsPinned"/>
+                <Setter Property="Kind" Value="Pin"/>
             </Style>
-            <Style x:Key="DashboardScheduleIconStyle" TargetType="TextBlock" BasedOn="{StaticResource DashboardRevealIconStyle}">
+            <Style x:Key="DashboardScheduleIconStyle" TargetType="{x:Type icons:AppIcon}" BasedOn="{StaticResource DashboardRevealIconStyle}">
                 <Setter Property="behaviors:IndicatorRevealMotionBehavior.SourceProperty" Value="HasSchedule"/>
+                <Setter Property="Kind" Value="Schedule"/>
             </Style>
 
             <Style x:Key="DashboardMassSelectCheckBoxStyle" TargetType="CheckBox">
@@ -248,7 +254,6 @@
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
                 <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
                 <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
@@ -316,12 +321,9 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="8"
                                     Padding="{TemplateBinding Padding}">
-                                <TextBlock Text="{TemplateBinding Content}"
-                                           Foreground="{TemplateBinding Foreground}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"/>
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
@@ -353,12 +355,9 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="8"
                                     Padding="{TemplateBinding Padding}">
-                                <TextBlock Text="{TemplateBinding Content}"
-                                           Foreground="{TemplateBinding Foreground}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"/>
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
@@ -391,12 +390,9 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="8"
                                     Padding="{TemplateBinding Padding}">
-                                <TextBlock Text="{TemplateBinding Content}"
-                                           Foreground="{TemplateBinding Foreground}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"/>
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
@@ -429,12 +425,9 @@
                                     BorderThickness="{TemplateBinding BorderThickness}"
                                     CornerRadius="8"
                                     Padding="{TemplateBinding Padding}">
-                                <TextBlock Text="{TemplateBinding Content}"
-                                           Foreground="{TemplateBinding Foreground}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"/>
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
@@ -541,14 +534,14 @@
             </Style>
 
             <Style TargetType="{x:Type TextBlock}">
-                <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+                <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
             </Style>
             <!-- Button – modern rounded override -->
             <Style TargetType="{x:Type Button}">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+                <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="Foreground" Value="#1C1C1C"/>
                 <Setter Property="Background" Value="#F0F0F2"/>
@@ -614,7 +607,7 @@
             <Style TargetType="{x:Type MenuItem}">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-                <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+                <Setter Property="FontFamily" Value="Segoe UI, Segoe UI Symbol, sans-serif"/>
                 <Setter Property="FontSize" Value="13"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template">

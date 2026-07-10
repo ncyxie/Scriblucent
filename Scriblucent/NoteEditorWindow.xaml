@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [NoteEditorTitle], Source={StaticResource Loc}}"
         Height="600"
         Width="800"
@@ -11,7 +12,7 @@
         Background="{DynamicResource WindowBackground}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         Closing="NoteEditorWindow_Closing">
     <Window.Resources>
@@ -20,7 +21,7 @@
             <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ButtonBorder"/>
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
             <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
             <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
@@ -64,8 +65,8 @@
             <Setter Property="Width" Value="32"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="Normal"/>
         </Style>
 
         <Style x:Key="EditorDangerToolButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorToolButtonBaseStyle}">
@@ -145,10 +146,9 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="8">
-                            <TextBlock Text="{TemplateBinding Content}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -170,8 +170,8 @@
             <Setter Property="Width" Value="38"/>
             <Setter Property="Height" Value="34"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="Normal"/>
         </Style>
 
         <Style x:Key="EditorRichTextBoxStyle" TargetType="RichTextBox">
@@ -192,9 +192,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="20"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1"
-                               Text="▾"
-                               FontSize="11"
+                    <icons:AppIcon Kind="ChevronDown" Width="12" Height="12" Grid.Column="1"
                                Foreground="{TemplateBinding Foreground}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"/>
@@ -375,11 +373,11 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center">
-                    <Button Content="↶"
+                    <Button Content="{icons:Icon Undo}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [Undo], Source={StaticResource Loc}}"
                             Click="UndoButton_Click"/>
-                    <Button Content="↷"
+                    <Button Content="{icons:Icon Redo}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [Redo], Source={StaticResource Loc}}"
                             Click="RedoButton_Click"/>
@@ -387,12 +385,12 @@
                             Height="22"
                             Margin="2,0,8,0"
                             Background="{DynamicResource BorderColor}"/>
-                    <Button Content="🕘"
+                    <Button Content="{icons:Icon History}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [EditHistory], Source={StaticResource Loc}}"
                             Click="EditHistoryButton_Click"/>
                     <Button x:Name="OnlineSearchButton"
-                            Content="🌐"
+                            Content="{icons:Icon Globe}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [SearchOnline], Source={StaticResource Loc}}"
                             IsEnabled="False"
@@ -402,17 +400,17 @@
                             Margin="2,0,8,0"
                             Background="{DynamicResource BorderColor}"/>
                     <Button x:Name="ConvertToFlashcardsButton"
-                            Content="🧠"
+                            Content="{icons:Icon Flashcards}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [ConvertToFlashcards], Source={StaticResource Loc}}"
                             Click="ConvertToFlashcardsButton_Click"/>
                     <Button x:Name="ConvertToMindMapButton"
-                            Content="🗺"
+                            Content="{icons:Icon MindMaps}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [ConvertToMindMap], Source={StaticResource Loc}}"
                             Click="ConvertToMindMapButton_Click"/>
                     <Button x:Name="ConvertToTestButton"
-                            Content="☑"
+                            Content="{icons:Icon Quizzes}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [ConvertToTest], Source={StaticResource Loc}}"
                             Click="ConvertToTestButton_Click"/>
@@ -421,16 +419,16 @@
                             Margin="2,0,8,0"
                             Background="{DynamicResource BorderColor}"/>
                     <Button x:Name="SearchButton"
-                            Content="🔎"
+                            Content="{icons:Icon Search}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [Search], Source={StaticResource Loc}}"
                             Click="SearchButton_Click"/>
                     <Button x:Name="ClearContentButton"
-                            Content="🗑"
+                            Content="{icons:Icon Delete}"
                             Style="{StaticResource EditorToolIconButtonStyle}"
                             ToolTip="{Binding [ClearContent], Source={StaticResource Loc}}"
                             Click="ClearContentButton_Click"/>
-                    <Button Content="✓"
+                    <Button Content="{icons:Icon Save}"
                             Style="{StaticResource EditorPrimarySaveButtonStyle}"
                             ToolTip="{Binding [Save], Source={StaticResource Loc}}"
                             Click="SaveButton_Click"/>
@@ -632,7 +630,7 @@
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"/>
                     <Button x:Name="BulletListButton"
-                            Content="•"
+                            Content="{icons:Icon Kind=Bullet, Size=14}"
                             Width="32"
                             Height="32"
                             Margin="0,0,6,0"
@@ -674,7 +672,7 @@
                     </Button>
 
                     <Button x:Name="ListRemoveButton"
-                            Content="×"
+                            Content="{icons:Icon Kind=Close, Size=12}"
                             Width="32"
                             Height="32"
                             Margin="0"
@@ -688,52 +686,58 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="3"
-                Grid.Column="0"
-                Margin="20,10,20,8"
-                Padding="2"
-                CornerRadius="10"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                Background="{DynamicResource CardBackground}">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.06"/>
-            </Border.Effect>
-            <Border CornerRadius="8"
-                    Background="{DynamicResource RichTextBoxBackground}">
-                <Grid x:Name="EditorSurface"
-                      ClipToBounds="True">
-                    <RichTextBox x:Name="ContentTextBox"
-                                 Style="{StaticResource EditorRichTextBoxStyle}"
-                                 SelectionChanged="ContentTextBox_SelectionChanged"
-                                 PreviewMouseWheel="ContentTextBox_PreviewMouseWheel"
-                                 TextChanged="ContentTextBox_TextChanged"
-                                 SnapsToDevicePixels="True"
-                                 TextOptions.TextFormattingMode="Display"
-                                 TextOptions.TextRenderingMode="ClearType"
-                                 RenderOptions.ClearTypeHint="Enabled"
-                                 Margin="0"
-                                 Padding="18,16"
-                                 FontSize="14"
-                                 FontFamily="Calibri"
-                                 AcceptsReturn="True"
-                                 AcceptsTab="True"
-                                 KeyboardNavigation.TabNavigation="None"
-                                 IsInactiveSelectionHighlightEnabled="True"
-                                 SelectionBrush="{DynamicResource EditorSelectionBrush}"
-                                 SelectionOpacity="0.4"
-                                 Background="Transparent"
-                                 BorderThickness="0">
-                        <RichTextBox.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{Binding [Cut], Source={StaticResource Loc}}" Command="Cut"/>
-                                <MenuItem Header="{Binding [Copy], Source={StaticResource Loc}}" Command="Copy"/>
-                                <MenuItem Header="{Binding [Paste], Source={StaticResource Loc}}" Command="Paste"/>
-                                <Separator/>
-                                <MenuItem Header="{Binding [SelectAll], Source={StaticResource Loc}}" Command="SelectAll"/>
-                            </ContextMenu>
-                        </RichTextBox.ContextMenu>
-                    </RichTextBox>
+        <Grid Grid.Row="3"
+              Grid.Column="0"
+              Margin="20,10,20,8">
+            <!-- Shadow sits on a sibling so the RichTextBox is not rasterized through an Effect
+                 (DropShadow on an ancestor disables ClearType and softens text/emojis). -->
+            <Border CornerRadius="10"
+                    Background="{DynamicResource CardBackground}"
+                    IsHitTestVisible="False">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.06"/>
+                </Border.Effect>
+            </Border>
+            <Border CornerRadius="10"
+                    Padding="2"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    Background="{DynamicResource CardBackground}">
+                <Border CornerRadius="8"
+                        Background="{DynamicResource RichTextBoxBackground}">
+                    <Grid x:Name="EditorSurface"
+                          ClipToBounds="True">
+                        <RichTextBox x:Name="ContentTextBox"
+                                     Style="{StaticResource EditorRichTextBoxStyle}"
+                                     SelectionChanged="ContentTextBox_SelectionChanged"
+                                     PreviewMouseWheel="ContentTextBox_PreviewMouseWheel"
+                                     TextChanged="ContentTextBox_TextChanged"
+                                     SnapsToDevicePixels="True"
+                                     TextOptions.TextFormattingMode="Ideal"
+                                     TextOptions.TextRenderingMode="ClearType"
+                                     RenderOptions.ClearTypeHint="Enabled"
+                                     Margin="0"
+                                     Padding="18,16"
+                                     FontSize="14"
+                                     FontFamily="Calibri, Segoe UI Symbol"
+                                     AcceptsReturn="True"
+                                     AcceptsTab="True"
+                                     KeyboardNavigation.TabNavigation="None"
+                                     IsInactiveSelectionHighlightEnabled="True"
+                                     SelectionBrush="{DynamicResource EditorSelectionBrush}"
+                                     SelectionOpacity="0.4"
+                                     Background="Transparent"
+                                     BorderThickness="0">
+                            <RichTextBox.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{Binding [Cut], Source={StaticResource Loc}}" Command="Cut"/>
+                                    <MenuItem Header="{Binding [Copy], Source={StaticResource Loc}}" Command="Copy"/>
+                                    <MenuItem Header="{Binding [Paste], Source={StaticResource Loc}}" Command="Paste"/>
+                                    <Separator/>
+                                    <MenuItem Header="{Binding [SelectAll], Source={StaticResource Loc}}" Command="SelectAll"/>
+                                </ContextMenu>
+                            </RichTextBox.ContextMenu>
+                        </RichTextBox>
                     <Canvas x:Name="FloatingImageOverlay"
                             Panel.ZIndex="20"
                             ClipToBounds="False"/>
@@ -746,9 +750,10 @@
                             IsHitTestVisible="False"
                             Panel.ZIndex="30"
                             Visibility="Collapsed"/>
-                </Grid>
+                    </Grid>
+                </Border>
             </Border>
-        </Border>
+        </Grid>
 
         <Border Grid.Row="4"
                 Grid.Column="0"
@@ -781,16 +786,16 @@
                           Padding="0">
                 <StackPanel>
                     <Button x:Name="OpenFileButton"
-                            Content="📂"
+                            Content="{icons:Icon FolderOpen}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [Open], Source={StaticResource Loc}}"
                             Click="OpenFromFileButton_Click"/>
-                    <Button Content="🖨"
+                    <Button Content="{icons:Icon Print}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [Print], Source={StaticResource Loc}}"
                             Click="PrintButton_Click"/>
                     <Button x:Name="ExportButton"
-                            Content="⇩"
+                            Content="{icons:Icon Download}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             FontSize="16"
                             ToolTip="{Binding [Export], Source={StaticResource Loc}}"
@@ -813,38 +818,35 @@
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
-                    <Button Content="🖼"
+                    <Button Content="{icons:Icon Image}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [InsertImage], Source={StaticResource Loc}}"
                             Click="InsertImageButton_Click"/>
                     <Separator Margin="4,0,4,8"/>
                     <Button x:Name="WordWrapButton"
-                            Content="↔"
+                            Content="{icons:Icon WordWrap}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [ToggleWordWrap], Source={StaticResource Loc}}"
                             Click="ToggleWordWrap_Click"/>
                     <Separator Margin="4,0,4,8"/>
                     <Button x:Name="FontButton"
-                            Content="𝑭"
+                            Content="{icons:Icon Font}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [Font], Source={StaticResource Loc}}"
                             Click="FontSettings_Click"/>
                     <Separator Margin="4,0,4,8"/>
                     <Button x:Name="ZoomInButton"
-                            Content="+"
-                            FontSize="18"
+                            Content="{icons:Icon ZoomIn}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [ZoomIn], Source={StaticResource Loc}}"
                             Click="ZoomInButton_Click"/>
                     <Button x:Name="ZoomOutButton"
-                            Content="-"
-                            FontSize="18"
+                            Content="{icons:Icon ZoomOut}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [ZoomOut], Source={StaticResource Loc}}"
                             Click="ZoomOutButton_Click"/>
                     <Button x:Name="ZoomResetButton"
-                            Content="1:1"
-                            FontSize="12"
+                            Content="{icons:Icon ZoomReset}"
                             Style="{StaticResource EditorSideToolButtonStyle}"
                             ToolTip="{Binding [ZoomReset], Source={StaticResource Loc}}"
                             Click="ZoomResetButton_Click"/>

@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:icons="clr-namespace:Scriblucent.Icons"
+                    xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks">
+    <Style TargetType="{x:Type icons:AppIcon}">
+        <Setter Property="Width" Value="15"/>
+        <Setter Property="Height" Value="15"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type icons:AppIcon}">
+                    <iconPacks:PackIconLucide Kind="{TemplateBinding LucideKind}"
+                                              Width="{TemplateBinding Width}"
+                                              Height="{TemplateBinding Height}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              SnapsToDevicePixels="True"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Quieter nav glyphs so labels stay primary in the sidebar -->
+    <Style x:Key="SidebarNavIconStyle" TargetType="{x:Type icons:AppIcon}" BasedOn="{StaticResource {x:Type icons:AppIcon}}">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Opacity" Value="0.68"/>
+    </Style>
+</ResourceDictionary>

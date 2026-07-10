@@ -1,10 +1,13 @@
 <Window x:Class="Scriblucent.Views.EditFlashcardDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [EditFlashcard], Source={StaticResource Loc}}"
         Height="560"
         Width="520"
         WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -71,8 +74,7 @@
 
             <ControlTemplate x:Key="FlashcardCategoryComboToggleTemplate" TargetType="ToggleButton">
                 <Border Background="Transparent">
-                    <TextBlock Text="▾"
-                               FontSize="12"
+                    <icons:AppIcon Kind="ChevronDown" Width="12" Height="12"
                                Foreground="{DynamicResource TextColorSecondary}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"/>

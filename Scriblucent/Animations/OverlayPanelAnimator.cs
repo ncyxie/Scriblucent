@@ -317,11 +317,7 @@ public sealed class OverlayPanelAnimator
         _backdropImage.Visibility = Visibility.Visible;
         _backdropImage.Stretch = Stretch.Fill;
         RenderOptions.SetBitmapScalingMode(_backdropImage, BitmapScalingMode.Linear);
-        _backdropImage.CacheMode = new BitmapCache
-        {
-            EnableClearType = false,
-            SnapsToDevicePixels = true
-        };
+        _backdropImage.CacheMode = DpiAwareBitmapCache.Create(_backdropImage, enableClearType: false);
     }
 
     private void ClearBackdrop()
@@ -344,11 +340,7 @@ public sealed class OverlayPanelAnimator
             _panelCard.Effect = null;
         }
 
-        _motionHost.CacheMode = new BitmapCache
-        {
-            EnableClearType = true,
-            SnapsToDevicePixels = true
-        };
+        _motionHost.CacheMode = DpiAwareBitmapCache.Create(_motionHost, enableClearType: true);
     }
 
     private void EndPanelMotionPrep()

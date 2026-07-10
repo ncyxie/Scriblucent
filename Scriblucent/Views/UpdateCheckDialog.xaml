@@ -1,6 +1,7 @@
 <Window x:Class="Scriblucent.Views.UpdateCheckDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="UpdateCheck"
         Height="420"
         Width="620"
@@ -10,7 +11,7 @@
         Background="Transparent"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         ShowInTaskbar="False">
 
@@ -68,12 +69,12 @@
                             CornerRadius="12"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top">
-                        <TextBlock Text="{Binding IconText}"
-                                   FontSize="22"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource FlashcardKnownChipForeground}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                        <icons:AppIcon Kind="{Binding IconKind}"
+                                       Width="22"
+                                       Height="22"
+                                       Foreground="{DynamicResource FlashcardKnownChipForeground}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                     </Border>
 
                     <TextBlock Grid.Column="1"

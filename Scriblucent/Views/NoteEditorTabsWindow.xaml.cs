@@ -1,4 +1,5 @@
 using Scriblucent.Animations;
+using Scriblucent.Icons;
 using Scriblucent.Models;
 using Scriblucent.ViewModels;
 using System;
@@ -75,10 +76,15 @@ public partial class NoteEditorTabsWindow : Window
 
         var closeButton = new Button
         {
-            Content = "×",
+            Content = new AppIcon
+            {
+                Kind = AppIconKind.Close,
+                Width = 12,
+                Height = 12,
+                Foreground = TryFindResource("TextColor") as Brush ?? Brushes.Black
+            },
             Width = 20,
             Height = 20,
-            FontSize = 12,
             Padding = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,

@@ -21,7 +21,6 @@ public enum ChromeHoverMotionProfile
 public static class ChromeHoverMotionBehavior
 {
     private const double BakedShadowOpacityRest = 1.0;
-    private const double BakedShadowHoverScale = 1.06;
 
     private sealed class State
     {
@@ -254,31 +253,21 @@ public static class ChromeHoverMotionBehavior
         var host = ResolveMotionHost(element);
         var profile = GetProfile(element);
         var durationMs = isEnter ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
-        var targetScale = isEnter ? GetHoverScale(profile) : 1.0;
         var targetLift = isEnter ? GetHoverLiftY(profile) : 0.0;
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
-        var scaleFrom = scale.ScaleX;
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
         var liftFrom = translate.Y;
 
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
         {
             bakedShadow.RenderTransformOrigin = new Point(0.5, 0.5);
             var (shadowScale, _) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
-            var targetShadowScale = isEnter ? BakedShadowHoverScale : 1.0;
-            var shadowScaleFrom = shadowScale.ScaleX;
+            shadowScale.ScaleX = 1;
+            shadowScale.ScaleY = 1;
             var tracks = new[]
             {
-                UiMotion.Track(durationMs, UiMotion.OutCubic, scaleFrom, targetScale, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                }),
-                UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value),
-                UiMotion.Track(durationMs, UiMotion.OutCubic, shadowScaleFrom, targetShadowScale, value =>
-                {
-                    shadowScale.ScaleX = value;
-                    shadowScale.ScaleY = value;
-                })
+                UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
             };
 
             UiMotion.Stop(host);
@@ -295,11 +284,6 @@ public static class ChromeHoverMotionBehavior
 
         var effectTracks = new[]
         {
-            UiMotion.Track(durationMs, UiMotion.OutCubic, scaleFrom, targetScale, value =>
-            {
-                scale.ScaleX = value;
-                scale.ScaleY = value;
-            }),
             UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value),
             UiMotion.Track(durationMs, UiMotion.OutCubic, opacityFromEffect, opacityToEffect, value => shadow.Opacity = value)
         };
@@ -317,16 +301,18 @@ public static class ChromeHoverMotionBehavior
     {
         var profile = GetProfile(element);
         var host = ResolveMotionHost(element);
-        var targetScale = isPressed ? GetPressScale(profile) : element.IsMouseOver ? GetHoverScale(profile) : 1.0;
-        var (scale, _) = UiMotion.EnsureScaleTranslateGroup(host);
-        var scaleFrom = scale.ScaleX;
+        var targetLift = isPressed
+            ? UiMotion.PressNudgeY
+            : element.IsMouseOver
+                ? GetHoverLiftY(profile)
+                : 0.0;
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+        var liftFrom = translate.Y;
         var tracks = new[]
         {
-            UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, scaleFrom, targetScale, value =>
-            {
-                scale.ScaleX = value;
-                scale.ScaleY = value;
-            })
+            UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
         };
 
         UiMotion.Run(host, tracks);
@@ -406,28 +392,12 @@ public static class ChromeHoverMotionBehavior
         return element;
     }
 
-    private static double GetHoverScale(ChromeHoverMotionProfile profile)
-        => profile switch
-        {
-            ChromeHoverMotionProfile.Fab => 1.04,
-            ChromeHoverMotionProfile.FloatingSecondary => 1.03,
-            _ => UiMotion.HoverScale
-        };
-
-    private static double GetPressScale(ChromeHoverMotionProfile profile)
-        => profile switch
-        {
-            ChromeHoverMotionProfile.Fab => 0.96,
-            ChromeHoverMotionProfile.FloatingSecondary => 0.97,
-            _ => 0.98
-        };
-
     private static double GetHoverLiftY(ChromeHoverMotionProfile profile)
         => profile switch
         {
-            ChromeHoverMotionProfile.Fab => -2.0,
-            ChromeHoverMotionProfile.FloatingSecondary => -2.0,
-            ChromeHoverMotionProfile.RecentCard => -3.0,
+            ChromeHoverMotionProfile.Fab => -3.0,
+            ChromeHoverMotionProfile.FloatingSecondary => -3.0,
+            ChromeHoverMotionProfile.RecentCard => UiMotion.CardHoverLiftY,
             _ => 0.0
         };
 

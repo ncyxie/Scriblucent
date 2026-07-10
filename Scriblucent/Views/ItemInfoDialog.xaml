@@ -10,7 +10,7 @@
         Background="Transparent"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         ShowInTaskbar="False">
 
@@ -108,7 +108,7 @@
                                    FontSize="25"
                                    FontWeight="Bold"
                                    Foreground="#2563EB"
-                                   FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+                                   FontFamily="Segoe UI, sans-serif"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    Margin="0,-2,0,0"/>

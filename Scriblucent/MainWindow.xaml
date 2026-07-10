@@ -8,12 +8,13 @@
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:services="clr-namespace:Scriblucent.Services"
         xmlns:anim="clr-namespace:Scriblucent.Animations"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="Scriblucent" Height="600" Width="900"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackground}"
 		UseLayoutRounding="True"
 		SnapsToDevicePixels="True"
-		TextOptions.TextFormattingMode="Display"
+		TextOptions.TextFormattingMode="Ideal"
 		TextOptions.TextRenderingMode="ClearType">
 
     <Window.Resources>
@@ -55,7 +56,7 @@
 			<Setter Property="Padding" Value="11,8"/>
 			<Setter Property="Margin" Value="0,5,7,5"/>
 			<Setter Property="VerticalAlignment" Value="Center"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
 			<Setter Property="Template">
 				<Setter.Value>
@@ -127,7 +128,7 @@
            <Setter Property="Padding" Value="12,10"/>
 			<Setter Property="Cursor" Value="Hand"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="Button">
@@ -168,7 +169,7 @@
 			<Setter Property="Height" Value="30"/>
 			<Setter Property="Margin" Value="0,0,3,0"/>
 			<Setter Property="Padding" Value="0"/>
-			<Setter Property="FontSize" Value="12"/>
+			<Setter Property="FontSize" Value="14"/>
 			<Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
 			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
@@ -216,8 +217,7 @@
 			<Setter Property="OverridesDefaultStyle" Value="True"/>
 			<Setter Property="SnapsToDevicePixels" Value="True"/>
 			<Setter Property="Cursor" Value="Hand"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
-			<Setter Property="FontSize" Value="14"/>
+			<Setter Property="FontSize" Value="16"/>
 			<Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
 			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
@@ -315,7 +315,7 @@
 			<Setter Property="BorderThickness" Value="1"/>
 			<Setter Property="HorizontalContentAlignment" Value="Stretch"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="Button">
@@ -414,7 +414,7 @@
 			<Setter Property="FontSize" Value="14"/>
 			<Setter Property="Cursor" Value="Hand"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="{x:Type Button}">
@@ -457,7 +457,7 @@
 			<Setter Property="OverridesDefaultStyle" Value="True"/>
 			<Setter Property="SnapsToDevicePixels" Value="True"/>
 			<Setter Property="Cursor" Value="Hand"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
 			<Setter Property="FontSize" Value="26"/>
 			<Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
 			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
@@ -480,12 +480,9 @@
 												  BlurRadius="16" ShadowDepth="3"
 												  Direction="270"/>
 							</Border.Effect>
-							<TextBlock Text="{TemplateBinding Content}"
-									   Foreground="{TemplateBinding Foreground}"
-									   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-									   VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-									   Margin="0,-3,0,0"
-									   FontSize="{TemplateBinding FontSize}"/>
+							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+											  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+											  RecognizesAccessKey="True"/>
 						</Border>
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
@@ -576,7 +573,6 @@
 			<Setter Property="BorderThickness" Value="1"/>
 			<Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
 			<Setter Property="FontSize" Value="12"/>
-			<Setter Property="Content" Value="▾"/>
 			<Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
 			<Setter Property="Template">
 				<Setter.Value>
@@ -589,12 +585,10 @@
 							<Border.Effect>
 								<DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08"/>
 							</Border.Effect>
-							<TextBlock Text="{TemplateBinding Content}"
-									   Foreground="{TemplateBinding Foreground}"
-									   HorizontalAlignment="Center"
-									   VerticalAlignment="Center"
-									   Margin="0,-1,0,0"
-									   FontSize="{TemplateBinding FontSize}"/>
+							<icons:AppIcon Kind="ChevronDown"
+										   Width="12"
+										   Height="12"
+										   Foreground="{TemplateBinding Foreground}"/>
 						</Border>
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
@@ -642,12 +636,9 @@
 							<Border.Effect>
 								<DropShadowEffect BlurRadius="7" ShadowDepth="1" Opacity="0.07"/>
 							</Border.Effect>
-							<TextBlock Text="{TemplateBinding Content}"
-									   Foreground="{TemplateBinding Foreground}"
-									   HorizontalAlignment="Center"
-									   VerticalAlignment="Center"
-									   Margin="0,-1,0,0"
-									   FontWeight="{TemplateBinding FontWeight}"/>
+							<ContentPresenter HorizontalAlignment="Center"
+											  VerticalAlignment="Center"
+											  RecognizesAccessKey="True"/>
 						</Border>
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
@@ -678,6 +669,7 @@
 			<Setter Property="Height" Value="28"/>
 			<Setter Property="Padding" Value="0"/>
 			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="FontSize" Value="14"/>
 			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
 			<Setter Property="BorderThickness" Value="1"/>
@@ -1012,7 +1004,7 @@
 			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
 			<Setter Property="BorderThickness" Value="0"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
                <Setter Property="Padding" Value="4"/>
 			<Setter Property="CalendarDayButtonStyle" Value="{StaticResource DashboardCalendarDayButtonStyle}"/>
 			<Setter Property="CalendarButtonStyle" Value="{StaticResource DashboardCalendarButtonStyle}"/>
@@ -1051,8 +1043,7 @@
 							<ColumnDefinition Width="48"/>
 							<ColumnDefinition Width="*"/>
 						</Grid.ColumnDefinitions>
-						<TextBlock Grid.Column="0" Text="☰" FontSize="16" Width="20" TextAlignment="Center"
-								   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+						<icons:AppIcon Grid.Column="0" Kind="Menu" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 						<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 								   Text="{Binding [Menu], Source={StaticResource Loc}}"
 								   FontWeight="SemiBold"/>
@@ -1074,8 +1065,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-								<TextBlock Grid.Column="0" Text="📝" FontSize="14" Width="20" TextAlignment="Center"
-										   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+								<icons:AppIcon Grid.Column="0" Kind="Notes" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [NotesDashboard], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1091,8 +1081,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-								<TextBlock Grid.Column="0" Text="🧠" FontSize="14" Width="20" TextAlignment="Center"
-										   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+								<icons:AppIcon Grid.Column="0" Kind="Flashcards" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [FlashcardsDashboard], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1108,8 +1097,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-								<TextBlock Grid.Column="0" Text="🗺" FontSize="14" Width="20" TextAlignment="Center"
-										   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+								<icons:AppIcon Grid.Column="0" Kind="MindMaps" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [MindMapsDashboard], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1125,24 +1113,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <Border Width="16"
-                                            Height="16"
-                                            Background="Transparent"
-                                            BorderBrush="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                            BorderThickness="0.8"
-                                            CornerRadius="3"
-                                            VerticalAlignment="Center"
-                                            HorizontalAlignment="Center">
-                                        <TextBlock Text="✓"
-                                                    FontSize="10"
-                                                    FontWeight="SemiBold"
-                                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                    TextAlignment="Center"
-                                                    VerticalAlignment="Center"
-                                                    HorizontalAlignment="Center"/>
-                                    </Border>
-                                </Grid>
+								<icons:AppIcon Grid.Column="0" Kind="Quizzes" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [QuizzesDashboard], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1157,8 +1128,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-								<TextBlock Grid.Column="0" Text="⚙" FontSize="14" Width="20" TextAlignment="Center"
-										   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+								<icons:AppIcon Grid.Column="0" Kind="Settings" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [Settings], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1172,8 +1142,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-								<TextBlock Grid.Column="0" Text="ℹ" FontSize="14" Width="20" TextAlignment="Center"
-										   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+								<icons:AppIcon Grid.Column="0" Kind="About" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [About], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1202,11 +1171,13 @@
 				<Grid>
 					<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                     <Image Source="/Scriblucent;component/logo.ico"
+                     <Image Source="/Scriblucent;component/Assets/logo.png"
                                Width="28"
                                Height="28"
                                Margin="0,0,8,0"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               SnapsToDevicePixels="True"/>
 
 						<TextBlock Text="Scriblucent"
                                    FontSize="22"
@@ -1241,11 +1212,7 @@
 								Opacity="0"
 								RenderTransformOrigin="1,0.5">
 							<DockPanel LastChildFill="True">
-                              <TextBlock Text="🔎"
-                                    Foreground="{DynamicResource TextColorSecondary}"
-										   Margin="0,0,8,0"
-                                        VerticalAlignment="Center"
-										   FontSize="13"/>
+                              <icons:AppIcon Kind="Search" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" Margin="0,0,8,0" VerticalAlignment="Center"/>
 								<TextBox x:Name="TopSearchTextBox"
 										 BorderThickness="0"
 										 Background="Transparent"
@@ -1261,8 +1228,7 @@
 						<Button x:Name="TopSearchButton"
 								Grid.Column="1"
                                 Style="{StaticResource TopBarIconButtonStyle}"
-                              Content="🔎"
-                               FontSize="14"
+                              Content="{icons:Icon Search}"
 								Margin="0,0,8,0"
 								ToolTip="{Binding [Search], Source={StaticResource Loc}}"
 								Click="TopSearchButton_Click"/>
@@ -1270,8 +1236,7 @@
 						<Button x:Name="SortNotesButton"
 								Grid.Column="2"
                              Style="{StaticResource TopBarIconButtonStyle}"
-								Content="⇅"
-								FontSize="14"
+								Content="{icons:Icon Sort}"
 								Margin="0,0,8,0"
 								ToolTip="{Binding ActiveSortButtonText}"
 								Click="SortNotesButton_Click"/>
@@ -1279,8 +1244,7 @@
 						<Button x:Name="TagsFilterButton"
 							 Grid.Column="3"
                               Style="{StaticResource TopBarIconButtonStyle}"
-							  Content="🏷"
-							   FontSize="14"
+							  Content="{icons:Icon Tag}"
 								Margin="0,0,8,0"
 								ToolTip="{Binding ActiveTagFilterButtonText}"
 								Click="TagsFilterButton_Click"/>
@@ -1288,8 +1252,7 @@
 						<Button x:Name="DashboardSectionsButton"
 								Grid.Column="4"
 								Style="{StaticResource TopBarIconButtonStyle}"
-								Content="☷"
-								FontSize="14"
+								Content="{icons:Icon Sections}"
 								Margin="0,0,8,0"
                                 ToolTip="{Binding [DashboardSections], Source={StaticResource Loc}}"
 								Click="DashboardSectionsButton_Click"/>
@@ -1579,7 +1542,7 @@
 									   FontWeight="SemiBold"
 									   Foreground="{DynamicResource TextColor}"
 									Margin="8,0,0,0"
-									   FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+									   FontFamily="Segoe UI, sans-serif"
 									   VerticalAlignment="Center"/>
                             </Grid>
                             <Border x:Name="RecentSectionBody"
@@ -1672,13 +1635,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                 Style="{StaticResource DashboardSectionMoveButtonStyle}"
-												Content="↑"
+												Content="{icons:Icon Kind=ArrowUp, Size=12}"
 												Margin="0,0,2,0"
 												ToolTip="{Binding [MoveCalendarSectionUp], Source={StaticResource Loc}}"
 												Click="MoveCalendarUpButton_Click"/>
                                             <Button Grid.Column="1"
 												Style="{StaticResource DashboardSectionMoveButtonStyle}"
-												Content="↓"
+												Content="{icons:Icon Kind=ArrowDown, Size=12}"
 												Margin="0,0,4,0"
 												ToolTip="{Binding [MoveCalendarSectionDown], Source={StaticResource Loc}}"
 												Click="MoveCalendarDownButton_Click"/>
@@ -1746,7 +1709,7 @@
                                                                                 </Grid.ColumnDefinitions>
                                                                                 <Button x:Name="CalendarScheduleGearButton"
 														Grid.Column="0"
-                                                     Content="✎"
+                                                     Content="{icons:Icon Edit}"
 														Style="{StaticResource TopBarIconButtonStyle}"
 														Width="30"
 														Height="30"
@@ -1786,7 +1749,7 @@
 																Padding="6,2"
 																Margin="0,0,4,0"
 																VerticalAlignment="Center">
-                                                                                        <TextBlock Text="{Binding TypeIcon}" FontSize="11" Foreground="{DynamicResource TextColor}"/>
+                                                                                        <icons:AppIcon Kind="{Binding TypeIconKind}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
                                                                                     </Border>
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
 																BorderBrush="{DynamicResource BorderColor}"
@@ -1795,7 +1758,7 @@
 																Padding="8,2"
 																VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                            <TextBlock Text="🕒" Margin="0,0,4,0" FontSize="10" VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                                                             <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
@@ -1876,13 +1839,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentDownButton_Click"/>
@@ -1942,8 +1905,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveGroupsUpButton_Click"/>
-                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveGroupsDownButton_Click"/>
+                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveGroupsUpButton_Click"/>
+                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveGroupsDownButton_Click"/>
                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleGroupsSection], Source={StaticResource Loc}}" Click="ToggleGroupsSectionButton_Click"
                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsGroupsSectionExpanded}" />
@@ -1985,14 +1948,14 @@
                                                                     </Grid.ColumnDefinitions>
                                                                     <Button Grid.Column="0"
 															Style="{StaticResource GroupHeaderMoveButtonStyle}"
-															Content="↑"
+															Content="{icons:Icon Kind=ArrowUp, Size=12}"
 															Margin="0,0,3,0"
 															Tag="{Binding}"
                                             ToolTip="{Binding [MoveThisGroupUp], Source={StaticResource Loc}}"
 															Click="MoveSingleGroupUpButton_Click"/>
                                                                     <Button Grid.Column="1"
 															Style="{StaticResource GroupHeaderMoveButtonStyle}"
-															Content="↓"
+															Content="{icons:Icon Kind=ArrowDown, Size=12}"
 															Margin="0,0,4,0"
 															Tag="{Binding}"
                                           ToolTip="{Binding [MoveThisGroupDown], Source={StaticResource Loc}}"
@@ -2000,7 +1963,7 @@
                                                                     <Button Grid.Column="2"
                                                             Style="{StaticResource GroupHeaderIconButtonStyle}"
 																FontSize="13"
-																Content="🎨"
+																Content="{icons:Icon Color}"
 																Margin="0,0,4,0"
 																Tag="{Binding}"
 																ToolTip="{Binding [GroupBackgroundColor], Source={StaticResource Loc}}"
@@ -2023,7 +1986,7 @@
                                                           Style="{StaticResource GroupHeaderIconButtonStyle}"
 																FontSize="16"
 																FontWeight="Bold"
-																Content="&#x22EE;"
+																Content="{icons:Icon Kind=MoreVertical, Size=14}"
 																Tag="{Binding}"
 																Click="GroupMenuButton_Click">
                                                                         <Button.ContextMenu>
@@ -2101,8 +2064,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveUngroupedUpButton_Click"/>
-                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveUngroupedDownButton_Click"/>
+                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveUngroupedUpButton_Click"/>
+                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveUngroupedDownButton_Click"/>
                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleUngroupedSection], Source={StaticResource Loc}}" Click="ToggleUngroupedSectionButton_Click"
                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsUngroupedSectionExpanded}" />
@@ -2163,7 +2126,7 @@
                             IsEnabled="{Binding IsNotMassSelectMode}"
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
-                            Content="📥"
+                            Content="{icons:Icon Import}"
                             Margin="0,0,37,84"
                             ToolTip="{Binding [ImportNotes], Source={StaticResource Loc}}"
                             Click="ImportButton_Click"/>
@@ -2171,8 +2134,8 @@
                             IsEnabled="{Binding IsNotMassSelectMode}"
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
+                            Content="{icons:Icon Kind=Plus, Size=22}"
                             Margin="0,0,28,24"
-                            Content="+"
                             ToolTip="{Binding [AddNote], Source={StaticResource Loc}}"
                             Command="{Binding AddNoteCommand}"/>
                 </Grid>
@@ -2213,7 +2176,7 @@
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColor}"
                                                Margin="8,0,0,0"
-                                               FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+                                               FontFamily="Segoe UI, sans-serif"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <Border x:Name="FlashcardRecentSectionBody"
@@ -2307,13 +2270,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveCalendarSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveCalendarUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveCalendarSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveCalendarDownButton_Click"/>
@@ -2381,7 +2344,7 @@
                                                                                 </Grid.ColumnDefinitions>
                                                                                 <Button x:Name="CalendarScheduleGearButton"
                                                                                         Grid.Column="0"
-                                                                                        Content="✎"
+                                                                                        Content="{icons:Icon Edit}"
                                                                                         Style="{StaticResource TopBarIconButtonStyle}"
                                                                                         Width="30"
                                                                                         Height="30"
@@ -2421,7 +2384,7 @@
                                                                                             Padding="6,2"
                                                                                             Margin="0,0,4,0"
                                                                                             VerticalAlignment="Center">
-                                                                                        <TextBlock Text="{Binding TypeIcon}" FontSize="11" Foreground="{DynamicResource TextColor}"/>
+                                                                                        <icons:AppIcon Kind="{Binding TypeIconKind}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
                                                                                     </Border>
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
@@ -2430,7 +2393,7 @@
                                                                                             Padding="8,2"
                                                                                             VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                            <TextBlock Text="🕒" Margin="0,0,4,0" FontSize="10" VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                                                             <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
@@ -2511,13 +2474,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentDownButton_Click"/>
@@ -2539,7 +2502,7 @@
                                                 <Button Style="{StaticResource DashboardSectionMoveButtonStyle}"
                                                         FontSize="16"
                                                         FontWeight="Bold"
-                                                        Content="&#x22EE;"
+                                                        Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                         ToolTip="Flashcard actions"
                                                         Click="FlashcardDashboardActionsButton_Click">
                                                     <Button.ContextMenu>
@@ -2597,8 +2560,8 @@
                                                                 <ColumnDefinition Width="Auto"/>
                                                                 <ColumnDefinition Width="*"/>
                                                             </Grid.ColumnDefinitions>
-                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardGroupsUpButton_Click"/>
-                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardGroupsDownButton_Click"/>
+                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardGroupsUpButton_Click"/>
+                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardGroupsDownButton_Click"/>
                                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleGroupsSection], Source={StaticResource Loc}}" Click="ToggleFlashcardDashboardGroupsSectionButton_Click"
                                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardDashboardGroupsSectionExpanded}" />
@@ -2642,14 +2605,14 @@
                                                                 </Grid.ColumnDefinitions>
                                                                 <Button Grid.Column="0"
                                                                         Style="{StaticResource GroupHeaderMoveButtonStyle}"
-                                                                        Content="↑"
+                                                                        Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                                         Margin="0,0,3,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [MoveThisGroupUp], Source={StaticResource Loc}}"
                                                                         Click="MoveDashboardGroupUpButton_Click"/>
                                                                 <Button Grid.Column="1"
                                                                         Style="{StaticResource GroupHeaderMoveButtonStyle}"
-                                                                        Content="↓"
+                                                                        Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                                         Margin="0,0,4,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [MoveThisGroupDown], Source={StaticResource Loc}}"
@@ -2657,7 +2620,7 @@
                                                                 <Button Grid.Column="2"
                                                                         Style="{StaticResource GroupHeaderIconButtonStyle}"
                                                                         FontSize="13"
-                                                                        Content="🎨"
+                                                                        Content="{icons:Icon Color}"
                                                                         Margin="0,0,4,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [GroupBackgroundColor], Source={StaticResource Loc}}"
@@ -2680,7 +2643,7 @@
                                                                         Style="{StaticResource GroupHeaderIconButtonStyle}"
                                                                         FontSize="16"
                                                                         FontWeight="Bold"
-                                                                        Content="&#x22EE;"
+                                                                        Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                         Tag="{Binding}"
                                                                         Click="DashboardGroupMenuButton_Click">
                                                                     <Button.ContextMenu>
@@ -2778,28 +2741,14 @@
                                                                                                 BorderThickness="1"
                                                                                                 ToolTip="{Binding AiGeneratedTooltip}"
                                                                                                 Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
-                                                                                            <TextBlock Text="🤖"
-                                                                                                       FontSize="13"
-                                                                                                       Foreground="{DynamicResource TextColorSecondary}"
-                                                                                                       HorizontalAlignment="Center"
-                                                                                                       VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
                                                                                         </Border>
                                                                                         <StackPanel Grid.Column="1"
                                                                                                     Orientation="Horizontal"
                                                                                                     VerticalAlignment="Center"
                                                                                                     Margin="0,0,6,0">
-                                                                                            <TextBlock Style="{StaticResource DashboardPinIconStyle}"
-                                                                                                       Text="📌"
-                                                                                                       FontSize="13"
-                                                                                                       Foreground="{DynamicResource TextColor}"
-                                                                                                       Margin="0,0,5,0"
-                                                                                                       ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                                                                                            <TextBlock Style="{StaticResource DashboardScheduleIconStyle}"
-                                                                                                       Text="🕒"
-                                                                                                       FontSize="12"
-                                                                                                       Foreground="{DynamicResource TextColor}"
-                                                                                                       Margin="0,0,5,0"
-                                                                                                       ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                                            <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                                             <TextBlock Text="{Binding Title}"
                                                                                                        FontSize="14"
                                                                                                        FontWeight="SemiBold"
@@ -2810,7 +2759,7 @@
                                                                                         <Button x:Name="ListingContextMenuButton"
                                                                                                 Grid.Column="2"
                                                                                                 Tag="{Binding}"
-                                                                                                Content="&#x22EE;"
+                                                                                                Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                                                 Style="{StaticResource DashboardListingMenuButtonStyle}"
                                                                                                 ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                                                 Click="ListingContextMenuButton_Click"/>
@@ -2883,8 +2832,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardUngroupedUpButton_Click"/>
-                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardUngroupedDownButton_Click"/>
+                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardUngroupedUpButton_Click"/>
+                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardUngroupedDownButton_Click"/>
                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleUngroupedSection], Source={StaticResource Loc}}" Click="ToggleFlashcardDashboardUngroupedSectionButton_Click"
                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardDashboardUngroupedSectionExpanded}" />
@@ -2998,28 +2947,14 @@
                                                                             BorderThickness="1"
                                                                             ToolTip="{Binding AiGeneratedTooltip}"
                                                                             Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
-                                                                        <TextBlock Text="🤖"
-                                                                                   FontSize="13"
-                                                                                   Foreground="{DynamicResource TextColorSecondary}"
-																				   HorizontalAlignment="Center"
-																				   VerticalAlignment="Center"/>
+                                                                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
 																	</Border>
 																	<StackPanel Grid.Column="1"
                                                                                 Orientation="Horizontal"
                                                                                 VerticalAlignment="Center"
                                                                                 Margin="0,0,8,0">
-                                                                        <TextBlock Style="{StaticResource DashboardPinIconStyle}"
-                                                                                                       Text="📌"
-                                                                                   FontSize="14"
-                                                                                   Foreground="{DynamicResource TextColor}"
-                                                                                   Margin="0,0,6,0"
-                                                                                   ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                                                                        <TextBlock Style="{StaticResource DashboardScheduleIconStyle}"
-                                                                                   Text="🕒"
-                                                                                   FontSize="13"
-                                                                                   Foreground="{DynamicResource TextColor}"
-                                                                                   Margin="0,0,6,0"
-                                                                                   ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                        <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                        <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                         <TextBlock Text="{Binding Title}"
                                                                                    FontSize="17"
                                                                                    FontWeight="SemiBold"
@@ -3030,7 +2965,7 @@
                                                                     <Button x:Name="ListingContextMenuButton"
                                                                             Grid.Column="2"
                                                                             Tag="{Binding}"
-                                                                            Content="&#x22EE;"
+                                                                            Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                             Style="{StaticResource DashboardListingMenuButtonStyle}"
                                                                             ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                             Click="ListingContextMenuButton_Click"/>
@@ -3096,7 +3031,7 @@
                                 VerticalAlignment="Bottom"
                                 HorizontalAlignment="Right"
                                 Margin="0,0,28,24"
-                                Content="+"
+                                Content="{icons:Icon Kind=Plus, Size=22}"
                                 ToolTip="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
                                 Click="CreateFlashcardsButton_Click"/>
                     </Grid>
@@ -3139,7 +3074,7 @@
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColor}"
                                                Margin="8,0,0,0"
-                                               FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+                                               FontFamily="Segoe UI, sans-serif"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <Border x:Name="QuizRecentSectionBody"
@@ -3233,13 +3168,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveCalendarSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveCalendarUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveCalendarSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveCalendarDownButton_Click"/>
@@ -3307,7 +3242,7 @@
                                                                                 </Grid.ColumnDefinitions>
                                                                                 <Button x:Name="CalendarScheduleGearButton"
                                                                                         Grid.Column="0"
-                                                                                        Content="✎"
+                                                                                        Content="{icons:Icon Edit}"
                                                                                         Style="{StaticResource TopBarIconButtonStyle}"
                                                                                         Width="30"
                                                                                         Height="30"
@@ -3347,7 +3282,7 @@
                                                                                             Padding="6,2"
                                                                                             Margin="0,0,4,0"
                                                                                             VerticalAlignment="Center">
-                                                                                        <TextBlock Text="{Binding TypeIcon}" FontSize="11" Foreground="{DynamicResource TextColor}"/>
+                                                                                        <icons:AppIcon Kind="{Binding TypeIconKind}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
                                                                                     </Border>
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
@@ -3356,7 +3291,7 @@
                                                                                             Padding="8,2"
                                                                                             VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                            <TextBlock Text="🕒" Margin="0,0,4,0" FontSize="10" VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                                                             <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
@@ -3437,13 +3372,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentDownButton_Click"/>
@@ -3465,7 +3400,7 @@
                                                 <Button Style="{StaticResource DashboardSectionMoveButtonStyle}"
                                                         FontSize="16"
                                                         FontWeight="Bold"
-                                                        Content="&#x22EE;"
+                                                        Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                         Margin="0,0,0,0"
                                                         ToolTip="Quiz actions"
                                                         Click="QuizDashboardActionsButton_Click">
@@ -3524,8 +3459,8 @@
                                                                 <ColumnDefinition Width="Auto"/>
                                                                 <ColumnDefinition Width="*"/>
                                                             </Grid.ColumnDefinitions>
-                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveQuizDashboardGroupsUpButton_Click"/>
-                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveQuizDashboardGroupsDownButton_Click"/>
+                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveQuizDashboardGroupsUpButton_Click"/>
+                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveQuizDashboardGroupsDownButton_Click"/>
                                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleGroupsSection], Source={StaticResource Loc}}" Click="ToggleQuizDashboardGroupsSectionButton_Click"
                                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsQuizDashboardGroupsSectionExpanded}" />
@@ -3569,14 +3504,14 @@
                                                                 </Grid.ColumnDefinitions>
                                                                 <Button Grid.Column="0"
                                                                         Style="{StaticResource GroupHeaderMoveButtonStyle}"
-                                                                        Content="↑"
+                                                                        Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                                         Margin="0,0,3,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [MoveThisGroupUp], Source={StaticResource Loc}}"
                                                                         Click="MoveDashboardGroupUpButton_Click"/>
                                                                 <Button Grid.Column="1"
                                                                         Style="{StaticResource GroupHeaderMoveButtonStyle}"
-                                                                        Content="↓"
+                                                                        Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                                         Margin="0,0,4,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [MoveThisGroupDown], Source={StaticResource Loc}}"
@@ -3584,7 +3519,7 @@
                                                                 <Button Grid.Column="2"
                                                                         Style="{StaticResource GroupHeaderIconButtonStyle}"
                                                                         FontSize="13"
-                                                                        Content="🎨"
+                                                                        Content="{icons:Icon Color}"
                                                                         Margin="0,0,4,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [GroupBackgroundColor], Source={StaticResource Loc}}"
@@ -3607,7 +3542,7 @@
                                                                         Style="{StaticResource GroupHeaderIconButtonStyle}"
                                                                         FontSize="16"
                                                                         FontWeight="Bold"
-                                                                        Content="&#x22EE;"
+                                                                        Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                         Tag="{Binding}"
                                                                         Click="DashboardGroupMenuButton_Click">
                                                                     <Button.ContextMenu>
@@ -3705,28 +3640,14 @@
                                                                                                 BorderThickness="1"
                                                                                                 ToolTip="{Binding AiGeneratedTooltip}"
                                                                                                 Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
-                                                                                            <TextBlock Text="🤖"
-                                                                                                       FontSize="13"
-                                                                                                       Foreground="{DynamicResource TextColorSecondary}"
-                                                                                                       HorizontalAlignment="Center"
-                                                                                                       VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
                                                                                         </Border>
                                                                                         <StackPanel Grid.Column="1"
                                                                                                     Orientation="Horizontal"
                                                                                                     VerticalAlignment="Center"
                                                                                                     Margin="0,0,6,0">
-                                                                                            <TextBlock Style="{StaticResource DashboardPinIconStyle}"
-                                                                                                       Text="📌"
-                                                                                                       FontSize="13"
-                                                                                                       Foreground="{DynamicResource TextColor}"
-                                                                                                       Margin="0,0,5,0"
-                                                                                                       ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                                                                                            <TextBlock Style="{StaticResource DashboardScheduleIconStyle}"
-                                                                                                       Text="🕒"
-                                                                                                       FontSize="12"
-                                                                                                       Foreground="{DynamicResource TextColor}"
-                                                                                                       Margin="0,0,5,0"
-                                                                                                       ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                                            <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                                             <TextBlock Text="{Binding Title}"
                                                                                                        FontSize="14"
                                                                                                        FontWeight="SemiBold"
@@ -3737,7 +3658,7 @@
                                                                                         <Button x:Name="ListingContextMenuButton"
                                                                                                 Grid.Column="2"
                                                                                                 Tag="{Binding}"
-                                                                                                Content="&#x22EE;"
+                                                                                                Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                                                 Style="{StaticResource DashboardListingMenuButtonStyle}"
                                                                                                 ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                                                 Click="ListingContextMenuButton_Click"/>
@@ -3810,8 +3731,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveQuizDashboardUngroupedUpButton_Click"/>
-                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveQuizDashboardUngroupedDownButton_Click"/>
+                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveQuizDashboardUngroupedUpButton_Click"/>
+                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveQuizDashboardUngroupedDownButton_Click"/>
                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleUngroupedSection], Source={StaticResource Loc}}" Click="ToggleQuizDashboardUngroupedSectionButton_Click"
                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsQuizDashboardUngroupedSectionExpanded}" />
@@ -3926,28 +3847,14 @@
                                                                             BorderThickness="1"
                                                                             ToolTip="{Binding AiGeneratedTooltip}"
                                                                             Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
-                                                                        <TextBlock Text="🤖"
-                                                                                   FontSize="13"
-                                                                                   Foreground="{DynamicResource TextColorSecondary}"
-																				   HorizontalAlignment="Center"
-																				   VerticalAlignment="Center"/>
+                                                                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
 																	</Border>
 																	<StackPanel Grid.Column="1"
                                                                                 Orientation="Horizontal"
                                                                                 VerticalAlignment="Center"
                                                                                 Margin="0,0,8,0">
-                                                                        <TextBlock Style="{StaticResource DashboardPinIconStyle}"
-                                                                                                       Text="📌"
-                                                                                   FontSize="14"
-                                                                                   Foreground="{DynamicResource TextColor}"
-                                                                                   Margin="0,0,6,0"
-                                                                                   ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                                                                        <TextBlock Style="{StaticResource DashboardScheduleIconStyle}"
-                                                                                   Text="🕒"
-                                                                                   FontSize="13"
-                                                                                   Foreground="{DynamicResource TextColor}"
-                                                                                   Margin="0,0,6,0"
-                                                                                   ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                        <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                        <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                         <TextBlock Text="{Binding Title}"
                                                                                    FontSize="17"
                                                                                    FontWeight="SemiBold"
@@ -3958,7 +3865,7 @@
                                                                     <Button x:Name="ListingContextMenuButton"
                                                                             Grid.Column="2"
                                                                             Tag="{Binding}"
-                                                                            Content="&#x22EE;"
+                                                                            Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                             Style="{StaticResource DashboardListingMenuButtonStyle}"
                                                                             ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                             Click="ListingContextMenuButton_Click"/>
@@ -4018,7 +3925,7 @@
                                 VerticalAlignment="Bottom"
                                 HorizontalAlignment="Right"
                                 Margin="0,0,28,24"
-                                Content="+"
+                                Content="{icons:Icon Kind=Plus, Size=22}"
                                 ToolTip="{Binding [CreateQuiz], Source={StaticResource Loc}}"
                                 Click="CreateQuizButton_Click"/>
                     </Grid>
@@ -4061,7 +3968,7 @@
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColor}"
                                                Margin="8,0,0,0"
-                                               FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+                                               FontFamily="Segoe UI, sans-serif"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <Border x:Name="MindMapRecentSectionBody"
@@ -4155,13 +4062,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveCalendarSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveCalendarUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveCalendarSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveCalendarDownButton_Click"/>
@@ -4229,7 +4136,7 @@
                                                                                 </Grid.ColumnDefinitions>
                                                                                 <Button x:Name="CalendarScheduleGearButton"
                                                                                         Grid.Column="0"
-                                                                                        Content="✎"
+                                                                                        Content="{icons:Icon Edit}"
                                                                                         Style="{StaticResource TopBarIconButtonStyle}"
                                                                                         Width="30"
                                                                                         Height="30"
@@ -4269,7 +4176,7 @@
                                                                                             Padding="6,2"
                                                                                             Margin="0,0,4,0"
                                                                                             VerticalAlignment="Center">
-                                                                                        <TextBlock Text="{Binding TypeIcon}" FontSize="11" Foreground="{DynamicResource TextColor}"/>
+                                                                                        <icons:AppIcon Kind="{Binding TypeIconKind}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
                                                                                     </Border>
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
@@ -4278,7 +4185,7 @@
                                                                                             Padding="8,2"
                                                                                             VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                                            <TextBlock Text="🕒" Margin="0,0,4,0" FontSize="10" VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                                                             <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
@@ -4359,13 +4266,13 @@
                                             </Grid.ColumnDefinitions>
                                             <Button Grid.Column="0"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↑"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                     Margin="0,0,2,0"
                                                     ToolTip="{Binding [MoveSectionUp], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentUpButton_Click"/>
                                             <Button Grid.Column="1"
                                                     Style="{StaticResource DashboardSectionMoveButtonStyle}"
-                                                    Content="↓"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                     Margin="0,0,4,0"
                                                     ToolTip="{Binding [MoveSectionDown], Source={StaticResource Loc}}"
                                                     Click="MoveDashboardContentDownButton_Click"/>
@@ -4426,8 +4333,8 @@
                                                                 <ColumnDefinition Width="Auto"/>
                                                                 <ColumnDefinition Width="*"/>
                                                             </Grid.ColumnDefinitions>
-                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveMindMapDashboardGroupsUpButton_Click"/>
-                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveMindMapDashboardGroupsDownButton_Click"/>
+                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveMindMapDashboardGroupsUpButton_Click"/>
+                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveMindMapDashboardGroupsDownButton_Click"/>
                                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleGroupsSection], Source={StaticResource Loc}}" Click="ToggleMindMapDashboardGroupsSectionButton_Click"
                                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsMindMapDashboardGroupsSectionExpanded}" />
@@ -4473,14 +4380,14 @@
                                                                 </Grid.ColumnDefinitions>
                                                                 <Button Grid.Column="0"
                                                                         Style="{StaticResource GroupHeaderMoveButtonStyle}"
-                                                                        Content="↑"
+                                                                        Content="{icons:Icon Kind=ArrowUp, Size=12}"
                                                                         Margin="0,0,3,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [MoveThisGroupUp], Source={StaticResource Loc}}"
                                                                         Click="MoveDashboardGroupUpButton_Click"/>
                                                                 <Button Grid.Column="1"
                                                                         Style="{StaticResource GroupHeaderMoveButtonStyle}"
-                                                                        Content="↓"
+                                                                        Content="{icons:Icon Kind=ArrowDown, Size=12}"
                                                                         Margin="0,0,4,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [MoveThisGroupDown], Source={StaticResource Loc}}"
@@ -4488,7 +4395,7 @@
                                                                 <Button Grid.Column="2"
                                                                         Style="{StaticResource GroupHeaderIconButtonStyle}"
                                                                         FontSize="13"
-                                                                        Content="🎨"
+                                                                        Content="{icons:Icon Color}"
                                                                         Margin="0,0,4,0"
                                                                         Tag="{Binding}"
                                                                         ToolTip="{Binding [GroupBackgroundColor], Source={StaticResource Loc}}"
@@ -4508,7 +4415,7 @@
                                                                     </Button.ContextMenu>
                                                                 </Button>
                                                                 <Button Grid.Column="3"
-                                Content="&#x22EE;"
+                                Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                 Tag="{Binding}"
                                 FontSize="16"
                                 FontWeight="Bold"
@@ -4616,28 +4523,14 @@
                                                                                                 BorderThickness="1"
                                                                                                 ToolTip="{Binding AiGeneratedTooltip}"
                                                                                                 Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
-                                                                                            <TextBlock Text="🤖"
-                                                                                                       FontSize="13"
-                                                                                                       Foreground="{DynamicResource TextColorSecondary}"
-                                                                                                       HorizontalAlignment="Center"
-                                                                                                       VerticalAlignment="Center"/>
+                                                                                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
                                                                                         </Border>
                                                                                         <StackPanel Grid.Column="1"
                                                                                                     Orientation="Horizontal"
                                                                                                     VerticalAlignment="Center"
                                                                                                     Margin="0,0,6,0">
-                                                                                            <TextBlock Style="{StaticResource DashboardPinIconStyle}"
-                                                                                                       Text="📌"
-                                                                                                       FontSize="13"
-                                                                                                       Foreground="{DynamicResource TextColor}"
-                                                                                                       Margin="0,0,5,0"
-                                                                                                       ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                                                                                            <TextBlock Style="{StaticResource DashboardScheduleIconStyle}"
-                                                                                                       Text="🕒"
-                                                                                                       FontSize="12"
-                                                                                                       Foreground="{DynamicResource TextColor}"
-                                                                                                       Margin="0,0,5,0"
-                                                                                                       ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                                            <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                                             <TextBlock Text="{Binding Title}"
                                                                                                        FontSize="14"
                                                                                                        FontWeight="SemiBold"
@@ -4648,7 +4541,7 @@
                                                                                         <Button x:Name="ListingContextMenuButton"
                                                                                                 Grid.Column="2"
                                                                                                 Tag="{Binding}"
-                                                                                                Content="&#x22EE;"
+                                                                                                Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                                                 Style="{StaticResource DashboardListingMenuButtonStyle}"
                                                                                                 ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                                                 Click="ListingContextMenuButton_Click"/>
@@ -4721,8 +4614,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="↑" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveMindMapDashboardUngroupedUpButton_Click"/>
-                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="↓" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveMindMapDashboardUngroupedDownButton_Click"/>
+                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveMindMapDashboardUngroupedUpButton_Click"/>
+                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveMindMapDashboardUngroupedDownButton_Click"/>
                                             <Button Grid.Column="2" ToolTip="{Binding [ToggleUngroupedSection], Source={StaticResource Loc}}" Click="ToggleMindMapDashboardUngroupedSectionButton_Click"
                                             Style="{StaticResource DashboardSectionToggleButtonStyle}"
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsMindMapDashboardUngroupedSectionExpanded}" />
@@ -4889,28 +4782,14 @@
                                                                             BorderThickness="1"
                                                                             ToolTip="{Binding AiGeneratedTooltip}"
                                                                             Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
-                                                                       <TextBlock Text="🤖"
-                                                                                  FontSize="13"
-                                                                                  Foreground="{DynamicResource TextColorSecondary}"
-                                                                                  HorizontalAlignment="Center"
-                                                                                  VerticalAlignment="Center"/>
+                                                                       <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
                                                                     </Border>
                                                                     <StackPanel Grid.Column="1"
                                                                                 Orientation="Horizontal"
                                                                                 VerticalAlignment="Center"
                                                                                 Margin="0,0,8,0">
-                                                                        <TextBlock Style="{StaticResource DashboardPinIconStyle}"
-                                                                                                       Text="📌"
-                                                                                   FontSize="14"
-                                                                                   Foreground="{DynamicResource TextColor}"
-                                                                                   Margin="0,0,6,0"
-                                                                                   ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                                                                        <TextBlock Style="{StaticResource DashboardScheduleIconStyle}"
-                                                                                   Text="🕒"
-                                                                                   FontSize="13"
-                                                                                   Foreground="{DynamicResource TextColor}"
-                                                                                   Margin="0,0,6,0"
-                                                                                   ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                        <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                        <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                         <TextBlock Text="{Binding Title}"
                                                                                    FontSize="17"
                                                                                    FontWeight="SemiBold"
@@ -4921,7 +4800,7 @@
                                                                     <Button x:Name="ListingContextMenuButton"
                                                                             Grid.Column="2"
                                                                             Tag="{Binding}"
-                                                                            Content="&#x22EE;"
+                                                                            Content="{icons:Icon Kind=MoreVertical, Size=14}"
                                                                             Style="{StaticResource DashboardListingMenuButtonStyle}"
                                                                             ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                             Click="ListingContextMenuButton_Click"/>
@@ -5029,8 +4908,8 @@
                     <Button Style="{StaticResource FabStyle}"
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
+                            Content="{icons:Icon Kind=Plus, Size=22}"
                             Margin="0,0,28,24"
-                            Content="+"
                             ToolTip="{Binding [CreateMindMap], Source={StaticResource Loc}}"
                             Click="CreateMindMapButton_Click"/>
                 </Grid>
@@ -5098,17 +4977,17 @@
                                 Margin="0,0,6,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="☑"
+                                        Content="{icons:Icon SelectAll}"
                                         ToolTip="{Binding [MassSelectSelectAll], Source={StaticResource Loc}}"
                                         Command="{Binding SelectAllVisibleNotesCommand}"/>
                                 <Button Style="{StaticResource MassActionDangerIconButtonStyle}"
-                                        Content="🗑"
+                                        Content="{icons:Icon Delete}"
                                         FontSize="13"
                                         ToolTip="{Binding [MassSelectDeleteSelected], Source={StaticResource Loc}}"
                                         Click="DeleteSelectedMassButton_Click"/>
                                 <Button x:Name="MassSelectMoreActionsToggleButton"
                                         Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="›"
+                                        Content="{icons:Icon More}"
                                         ToolTip="{Binding [MassSelectMoreActions], Source={StaticResource Loc}}"
                                         Click="ToggleMassSelectMoreActionsButton_Click"/>
                             </StackPanel>
@@ -5132,28 +5011,28 @@
                             </Border.RenderTransform>
                             <WrapPanel VerticalAlignment="Center">
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="🧩"
+                                        Content="{icons:Icon Group}"
                                         ToolTip="{Binding [MassSelectGroupSelected], Source={StaticResource Loc}}"
                                         Command="{Binding GroupSelectedNotesCommand}"/>
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="↩"
+                                        Content="{icons:Icon Ungroup}"
                                         ToolTip="{Binding [MassSelectUngroupSelected], Source={StaticResource Loc}}"
                                         Command="{Binding RemoveSelectedFromGroupsCommand}"/>
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="📌"
+                                        Content="{icons:Icon Pin}"
                                         ToolTip="{Binding [MassSelectPinSelected], Source={StaticResource Loc}}"
                                         Command="{Binding PinSelectedNotesCommand}"/>
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="📍"
+                                        Content="{icons:Icon Unpin}"
                                         ToolTip="{Binding [MassSelectUnpinSelected], Source={StaticResource Loc}}"
                                         Command="{Binding UnpinSelectedNotesCommand}"/>
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
-                                        Content="⧉"
+                                        Content="{icons:Icon Duplicate}"
                                         ToolTip="{Binding [MassSelectDuplicateSelected], Source={StaticResource Loc}}"
                                         Command="{Binding DuplicateSelectedNotesCommand}"/>
                                 <Button Style="{StaticResource MassActionIconButtonStyle}"
                                         Margin="0"
-                                        Content="🏷"
+                                        Content="{icons:Icon Tag}"
                                         ToolTip="{Binding [MassSelectAddTags], Source={StaticResource Loc}}"
                                         Click="AddTagsToSelectedButton_Click"/>
                             </WrapPanel>
@@ -5167,8 +5046,7 @@
                             VerticalAlignment="Stretch">
                         <Button Style="{StaticResource MassActionIconButtonStyle}"
                                 Margin="0"
-                                Content="×"
-                                FontSize="15"
+                                Content="{icons:Icon Close}"
                                 ToolTip="{Binding [Close], Source={StaticResource Loc}}"
                                 Click="ExitMassSelectButton_Click"/>
                     </Border>

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:services="clr-namespace:Scriblucent.Services"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
@@ -14,7 +15,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="Opacity" Value="0.86"/>
             <Setter Property="Margin" Value="0,5,0,0"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, sans-serif"/>
+            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
         </Style>
 
         <Style x:Key="AboutCloseIconButtonStyle" TargetType="Button">
@@ -112,7 +113,7 @@
 
                     <Button Grid.Column="1"
                             Style="{StaticResource AboutCloseIconButtonStyle}"
-                            Content="✕"
+                            Content="{icons:Icon Close}"
                             Click="CloseButton_Click"/>
                 </Grid>
 
@@ -130,24 +131,26 @@
                                 <Border.Effect>
                                     <DropShadowEffect Color="#000000" Opacity="0.18" BlurRadius="12" ShadowDepth="2" Direction="270"/>
                                 </Border.Effect>
-                                <Image Source="/Scriblucent;component/logo.ico"
+                                <Image Source="/Scriblucent;component/Assets/logo.png"
                                        Width="30"
                                        Height="30"
                                        HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       SnapsToDevicePixels="True"/>
                             </Border>
                             <TextBlock Text="Scriblucent"
                                        FontSize="20"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"
                                        HorizontalAlignment="Center"
-                                       FontFamily="Segoe UI Variable, Segoe UI, sans-serif"/>
+                                       FontFamily="Segoe UI, sans-serif"/>
                             <TextBlock Text="{x:Static services:AppVersionInfo.DisplayVersion}"
                                        FontSize="11"
                                        Foreground="{DynamicResource TextColorSecondary}"
                                        HorizontalAlignment="Center"
                                        Margin="0,4,0,0"
-                                       FontFamily="Segoe UI Variable, Segoe UI, sans-serif"/>
+                                       FontFamily="Segoe UI, sans-serif"/>
                         </StackPanel>
                     </Border>
 
@@ -159,7 +162,7 @@
                                    Foreground="{DynamicResource TextColor}"
                                    Opacity="0.86"
                                    Margin="0,0,0,10"
-                                   FontFamily="Segoe UI Variable, Segoe UI, sans-serif"/>
+                                   FontFamily="Segoe UI, sans-serif"/>
 
                         <Separator Background="{DynamicResource BorderColor}" Margin="0,0,0,10"/>
 
@@ -168,7 +171,7 @@
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource TextColorSecondary}"
                                    Margin="0,0,0,6"
-                                   FontFamily="Segoe UI Variable, Segoe UI, sans-serif"/>
+                                   FontFamily="Segoe UI, sans-serif"/>
 
                         <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Mantas Gaižutis"/>
                         <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Jaunius Pigaga"/>

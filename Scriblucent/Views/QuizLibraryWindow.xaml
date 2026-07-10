@@ -9,6 +9,8 @@
         MinWidth="940"
         MinHeight="620"
         WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
         Background="{DynamicResource WindowBackground}">
     <Window.Resources>
         <Style x:Key="LibraryToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">

@@ -1,6 +1,7 @@
 <Window x:Class="Scriblucent.Views.QuizStartOptionsDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [QuizStartOptionsTitle], Source={StaticResource Loc}}"
         Height="420"
         Width="600"
@@ -10,7 +11,7 @@
         Background="Transparent"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         ShowInTaskbar="False">
 
@@ -63,9 +64,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="20"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1"
-                               Text="▾"
-                               FontSize="11"
+                    <icons:AppIcon Kind="ChevronDown" Width="12" Height="12" Grid.Column="1"
                                Foreground="{TemplateBinding Foreground}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"/>
@@ -210,8 +209,7 @@
                             CornerRadius="12"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top">
-                        <TextBlock Text="▶"
-                                   FontSize="19"
+                        <icons:AppIcon Kind="Play" Width="12" Height="12"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource FlashcardKnownChipForeground}"
                                    HorizontalAlignment="Center"

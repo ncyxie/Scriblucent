@@ -259,11 +259,7 @@ namespace Scriblucent
                 return;
 
             savedMainContentCacheMode = root.CacheMode;
-            root.CacheMode = new BitmapCache
-            {
-                EnableClearType = true,
-                SnapsToDevicePixels = true
-            };
+            root.CacheMode = DpiAwareBitmapCache.Create(root, enableClearType: true);
         }
 
         internal void EndChildWindowOwnerMotion(CacheMode? savedMainContentCacheMode)

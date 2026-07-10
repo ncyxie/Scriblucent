@@ -1,0 +1,68 @@
+using MahApps.Metro.IconPacks;
+
+namespace Scriblucent.Icons;
+
+/// <summary>
+/// Maps app semantics to Lucide icons (via MahApps IconPacks) — thin, recognizable, maintained set.
+/// </summary>
+public static class AppIconKindMap
+{
+    public static PackIconLucideKind ToLucide(AppIconKind kind) => kind switch
+    {
+        AppIconKind.Menu => PackIconLucideKind.Menu,
+        AppIconKind.Notes => PackIconLucideKind.FileText,
+        AppIconKind.Flashcards => PackIconLucideKind.Layers,
+        AppIconKind.MindMaps => PackIconLucideKind.GitBranch,
+        AppIconKind.Quizzes => PackIconLucideKind.ListChecks,
+        AppIconKind.Settings => PackIconLucideKind.Settings,
+        AppIconKind.About => PackIconLucideKind.Info,
+        AppIconKind.Search => PackIconLucideKind.Search,
+        AppIconKind.Sort => PackIconLucideKind.ArrowUpDown,
+        AppIconKind.Tag => PackIconLucideKind.Tag,
+        AppIconKind.Sections => PackIconLucideKind.LayoutGrid,
+        AppIconKind.Import => PackIconLucideKind.FileInput,
+        AppIconKind.Edit => PackIconLucideKind.Pencil,
+        AppIconKind.Color => PackIconLucideKind.Palette,
+        AppIconKind.Pin => PackIconLucideKind.Pin,
+        AppIconKind.Unpin => PackIconLucideKind.PinOff,
+        AppIconKind.Schedule => PackIconLucideKind.Calendar,
+        AppIconKind.Delete => PackIconLucideKind.Trash2,
+        AppIconKind.AiGenerated => PackIconLucideKind.Sparkles,
+        AppIconKind.SelectAll => PackIconLucideKind.CheckCheck,
+        AppIconKind.Group => PackIconLucideKind.Folders,
+        AppIconKind.Ungroup => PackIconLucideKind.Ungroup,
+        AppIconKind.Duplicate => PackIconLucideKind.Copy,
+        AppIconKind.More => PackIconLucideKind.ChevronRight,
+        AppIconKind.MoreVertical => PackIconLucideKind.EllipsisVertical,
+        AppIconKind.Close => PackIconLucideKind.X,
+        AppIconKind.ChevronUp => PackIconLucideKind.ChevronUp,
+        AppIconKind.ChevronDown => PackIconLucideKind.ChevronDown,
+        AppIconKind.ArrowUp => PackIconLucideKind.ArrowUp,
+        AppIconKind.ArrowDown => PackIconLucideKind.ArrowDown,
+        AppIconKind.Swap => PackIconLucideKind.ArrowLeftRight,
+        AppIconKind.Checkmark => PackIconLucideKind.Check,
+        AppIconKind.Undo => PackIconLucideKind.Undo2,
+        AppIconKind.Redo => PackIconLucideKind.Redo2,
+        AppIconKind.History => PackIconLucideKind.History,
+        AppIconKind.Globe => PackIconLucideKind.Globe,
+        AppIconKind.Save => PackIconLucideKind.Save,
+        AppIconKind.FolderOpen => PackIconLucideKind.FolderOpen,
+        AppIconKind.Print => PackIconLucideKind.Printer,
+        AppIconKind.Download => PackIconLucideKind.Download,
+        AppIconKind.Image => PackIconLucideKind.Image,
+        AppIconKind.Clear => PackIconLucideKind.Eraser,
+        AppIconKind.WordWrap => PackIconLucideKind.TextWrap,
+        AppIconKind.Font => PackIconLucideKind.Type,
+        AppIconKind.Plus => PackIconLucideKind.Plus,
+        AppIconKind.Minus => PackIconLucideKind.Minus,
+        AppIconKind.ZoomIn => PackIconLucideKind.ZoomIn,
+        AppIconKind.ZoomOut => PackIconLucideKind.ZoomOut,
+        AppIconKind.ZoomReset => PackIconLucideKind.Ratio,
+        AppIconKind.Bullet => PackIconLucideKind.List,
+        AppIconKind.Play => PackIconLucideKind.Play,
+        AppIconKind.Lightbulb => PackIconLucideKind.Lightbulb,
+        AppIconKind.Refresh => PackIconLucideKind.RefreshCw,
+        AppIconKind.Warning => PackIconLucideKind.TriangleAlert,
+        _ => PackIconLucideKind.CircleQuestionMark
+    };
+}

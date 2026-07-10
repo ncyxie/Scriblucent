@@ -1,4 +1,5 @@
 using Scriblucent.Animations;
+using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent.Services;
 using System.Diagnostics;
@@ -16,7 +17,7 @@ namespace Scriblucent.Views
 
         public string TitleText { get; }
         public string MessageText { get; }
-        public string IconText { get; }
+        public AppIconKind IconKind { get; }
         public string CurrentVersionText { get; }
         public string LatestVersionText { get; }
         public string PublishedText { get; }
@@ -36,7 +37,7 @@ namespace Scriblucent.Views
                 ? LocalizationService.GetString("UpdateAvailableTitle")
                 : LocalizationService.GetString("AppUpdate");
             MessageText = BuildMessage(result);
-            IconText = result.IsUpdateAvailable ? "↑" : "✓";
+            IconKind = result.IsUpdateAvailable ? AppIconKind.ArrowUp : AppIconKind.Checkmark;
             CurrentVersionText = string.Format(LocalizationService.GetString("UpdateCurrentVersionFormat"), result.CurrentVersion);
             LatestVersionText = string.Format(LocalizationService.GetString("UpdateLatestVersionFormat"), latestVersion);
             PublishedText = latest?.PublishedAt is null
@@ -63,7 +64,7 @@ namespace Scriblucent.Views
         {
             TitleText = title;
             MessageText = message;
-            IconText = "!";
+            IconKind = AppIconKind.Warning;
             CurrentVersionText = string.Format(LocalizationService.GetString("UpdateCurrentVersionFormat"), AppVersionInfo.DisplayVersion);
             LatestVersionText = LocalizationService.GetString("UpdateLatestVersionUnavailable");
             PublishedText = string.Empty;

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Scriblucent.Animations;
 namespace Scriblucent.Controls;
 
 /// <summary>
@@ -161,11 +162,7 @@ internal static class DashboardScrollSurfaceCache
                 continue;
 
             Applied[surface] = surface.CacheMode;
-            surface.CacheMode = new BitmapCache(ResolveRenderScale(surface))
-            {
-                SnapsToDevicePixels = true,
-                EnableClearType = false
-            };
+            surface.CacheMode = DpiAwareBitmapCache.Create(surface, enableClearType: false);
             applied++;
         }
 
@@ -174,14 +171,6 @@ internal static class DashboardScrollSurfaceCache
 
         if (Pending.Count > 0)
             ScheduleFlush();
-    }
-
-    private static double ResolveRenderScale(FrameworkElement surface)
-    {
-        // Rasterize at device resolution; caches now outlive the scroll animation and a
-        // 1.0-scale texture reads blurry on high-DPI displays once motion stops.
-        var dpi = VisualTreeHelper.GetDpi(surface);
-        return Math.Max(1.0, Math.Max(dpi.DpiScaleX, dpi.DpiScaleY));
     }
 
     private static bool IsLargeViewport(ScrollViewer scrollViewer)

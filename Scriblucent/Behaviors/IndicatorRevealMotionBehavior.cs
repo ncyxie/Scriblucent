@@ -21,7 +21,7 @@ public static class IndicatorRevealMotionBehavior
     public static int RevealAnimationMs => EnterMs;
 
     public static int DismissAnimationMs => ExitMs;
-    private const double EnterScale = 0.45;
+    private const double EnterLiftY = 6;
     private const int PendingWindowMs = 4000;
     private const int RetryDelayMs = 80;
 
@@ -535,10 +535,12 @@ public static class IndicatorRevealMotionBehavior
     {
         UiMotion.Stop(element);
         element.Visibility = Visibility.Visible;
-        element.Opacity = 1;
-        var scale = UiMotion.EnsureScale(element);
-        scale.ScaleX = EnterScale;
-        scale.ScaleY = EnterScale;
+        element.Opacity = 0;
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(element);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+        translate.X = 0;
+        translate.Y = EnterLiftY;
     }
 
     private static void ApplyRestingVisible(FrameworkElement element)
@@ -546,9 +548,11 @@ public static class IndicatorRevealMotionBehavior
         UiMotion.Stop(element);
         element.Visibility = Visibility.Visible;
         element.Opacity = 1;
-        var scale = UiMotion.EnsureScale(element);
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(element);
         scale.ScaleX = 1;
         scale.ScaleY = 1;
+        translate.X = 0;
+        translate.Y = 0;
     }
 
     private static void ApplyInactive(FrameworkElement element)
@@ -556,9 +560,11 @@ public static class IndicatorRevealMotionBehavior
         UiMotion.Stop(element);
         element.Visibility = Visibility.Collapsed;
         element.Opacity = 0;
-        var scale = UiMotion.EnsureScale(element);
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(element);
         scale.ScaleX = 1;
         scale.ScaleY = 1;
+        translate.X = 0;
+        translate.Y = 0;
     }
 
     private static void StartReveal(FrameworkElement element, (Guid Id, string Property) key)
@@ -567,21 +573,19 @@ public static class IndicatorRevealMotionBehavior
             AnimatingKeys.Add(key);
 
         UiMotion.Stop(element);
-        var scale = UiMotion.EnsureScale(element);
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(element);
         element.Visibility = Visibility.Visible;
-        element.Opacity = 1;
-        scale.ScaleX = EnterScale;
-        scale.ScaleY = EnterScale;
+        element.Opacity = 0;
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+        translate.Y = EnterLiftY;
 
         UiMotion.Run(
             element,
             new[]
             {
-                UiMotion.Track(EnterMs, UiMotion.OutBack, EnterScale, 1, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
+                UiMotion.Track(EnterMs, UiMotion.OutCubic, 0, 1, value => element.Opacity = value),
+                UiMotion.Track(EnterMs, UiMotion.OutBack, EnterLiftY, 0, value => translate.Y = value)
             },
             onComplete: () =>
             {
@@ -604,23 +608,20 @@ public static class IndicatorRevealMotionBehavior
         }
 
         UiMotion.Stop(element);
-        var scale = UiMotion.EnsureScale(element);
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(element);
         element.Visibility = Visibility.Visible;
-        element.Opacity = 1;
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
 
-        var startScale = Math.Clamp(scale.ScaleX, EnterScale, 1);
-        scale.ScaleX = startScale;
-        scale.ScaleY = startScale;
+        var startOpacity = element.Opacity;
+        var startLift = translate.Y;
 
         UiMotion.Run(
             element,
             new[]
             {
-                UiMotion.Track(ExitMs, UiMotion.InCubic, startScale, EnterScale, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
+                UiMotion.Track(ExitMs, UiMotion.InCubic, startOpacity, 0, value => element.Opacity = value),
+                UiMotion.Track(ExitMs, UiMotion.InCubic, startLift, EnterLiftY, value => translate.Y = value)
             },
             onComplete: () =>
             {

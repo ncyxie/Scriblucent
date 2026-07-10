@@ -1,8 +1,9 @@
-﻿<Window x:Class="Scriblucent.Views.FlashcardsPreviewWindow"
+<Window x:Class="Scriblucent.Views.FlashcardsPreviewWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         x:Name="FlashcardsWindow"
         Title="{Binding [FlashcardsPreviewTitle], Source={StaticResource Loc}}"
         Height="730"
@@ -10,6 +11,10 @@
         MinHeight="730"
         MinWidth="760"
         WindowStartupLocation="CenterOwner"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
         Background="{DynamicResource WindowBackground}"
         Closing="FlashcardsPreviewWindow_Closing">
     <Window.Resources>
@@ -26,9 +31,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="18"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="1"
-                               Text="▾"
-                               FontSize="11"
+                    <icons:AppIcon Kind="ChevronDown" Width="12" Height="12" Grid.Column="1"
                                Foreground="{TemplateBinding Foreground}"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"/>
@@ -222,16 +225,22 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08"/>
-                            </Border.Effect>
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <Grid>
+                            <Border CornerRadius="8"
+                                    Background="{TemplateBinding Background}"
+                                    IsHitTestVisible="False">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08"/>
+                                </Border.Effect>
+                            </Border>
+                            <Border x:Name="ButtonBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
@@ -275,12 +284,12 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Effect" Value="{StaticResource FlashcardStudyCardShadow}"/>
+            <!-- No Effect here: DropShadow on the text host softens study-card glyphs/emojis.
+                 Shadow is painted on a sibling in the study face templates. -->
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource FlashcardCardHoverBackground}"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource FlashcardCardHoverBorder}"/>
-                    <Setter Property="Effect" Value="{StaticResource FlashcardStudyCardHoverShadow}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -455,12 +464,12 @@
                                        Foreground="{DynamicResource FlashcardSideChipForeground}"/>
                         </Border>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="✎"
+                            <Button Content="{icons:Icon Kind=Edit, Size=13}"
                                     Width="26" Height="24" Padding="0"
                                     Style="{StaticResource FlashcardSearchIconButtonStyle}"
                                     ToolTip="{Binding [Edit], Source={StaticResource Loc}}"
                                     Click="EditFlashcardButton_Click"/>
-                            <Button Content="⇄"
+                            <Button Content="{icons:Icon Kind=Swap, Size=13}"
                                     Width="26" Height="24" Margin="6,0,0,0" Padding="0"
                                     Style="{StaticResource FlashcardSearchIconButtonStyle}"
                                     ToolTip="{Binding [MoveToSet], Source={StaticResource Loc}}"
@@ -508,12 +517,12 @@
                                        Foreground="{DynamicResource FlashcardSideChipForeground}"/>
                         </Border>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="✎"
+                            <Button Content="{icons:Icon Kind=Edit, Size=13}"
                                     Width="26" Height="24" Padding="0"
                                     Style="{StaticResource FlashcardSearchIconButtonStyle}"
                                     ToolTip="{Binding [Edit], Source={StaticResource Loc}}"
                                     Click="EditFlashcardButton_Click"/>
-                            <Button Content="⇄"
+                            <Button Content="{icons:Icon Kind=Swap, Size=13}"
                                     Width="26" Height="24" Margin="6,0,0,0" Padding="0"
                                     Style="{StaticResource FlashcardSearchIconButtonStyle}"
                                     ToolTip="{Binding [MoveToSet], Source={StaticResource Loc}}"
@@ -539,7 +548,12 @@
         </DataTemplate>
 
         <DataTemplate x:Key="FlashcardStudyQuestionFaceTemplate">
-            <Border Style="{StaticResource FlashcardStudyCardStyle}">
+            <Grid Width="316" Height="224">
+                <Border CornerRadius="12"
+                        Background="{DynamicResource FlashcardCardBackground}"
+                        Effect="{StaticResource FlashcardStudyCardShadow}"
+                        IsHitTestVisible="False"/>
+                <Border Style="{StaticResource FlashcardStudyCardStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -574,7 +588,7 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Top">
-                            <Button Content="⇄"
+                            <Button Content="{icons:Icon Kind=Swap, Size=13}"
                                     Width="26"
                                     Height="24"
                                     Margin="0,0,8,0"
@@ -603,11 +617,17 @@
                                Foreground="{DynamicResource TextColorSecondary}"
                                HorizontalAlignment="Right"/>
                 </Grid>
-            </Border>
+                </Border>
+            </Grid>
         </DataTemplate>
 
         <DataTemplate x:Key="FlashcardStudyAnswerFaceTemplate">
-            <Border Style="{StaticResource FlashcardStudyCardStyle}">
+            <Grid Width="316" Height="224">
+                <Border CornerRadius="12"
+                        Background="{DynamicResource FlashcardCardBackground}"
+                        Effect="{StaticResource FlashcardStudyCardShadow}"
+                        IsHitTestVisible="False"/>
+                <Border Style="{StaticResource FlashcardStudyCardStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -642,7 +662,7 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Top">
-                            <Button Content="⇄"
+                            <Button Content="{icons:Icon Kind=Swap, Size=13}"
                                     Width="26"
                                     Height="24"
                                     Margin="0,0,8,0"
@@ -671,7 +691,8 @@
                                Foreground="{DynamicResource TextColorSecondary}"
                                HorizontalAlignment="Right"/>
                 </Grid>
-            </Border>
+                </Border>
+            </Grid>
         </DataTemplate>
 
         </ResourceDictionary>
@@ -750,7 +771,7 @@
                             Style="{StaticResource FlashcardLinkedNoteButtonStyle}"
                             Click="LinkedNoteButton_Click"
                             ToolTip="{Binding ElementName=FlashcardsWindow, Path=LinkedNoteButtonToolTip}"
-                            TextOptions.TextFormattingMode="Display"/>
+                            TextOptions.TextFormattingMode="Ideal"/>
                     <Border x:Name="AiGeneratedInfoBadge"
                             Width="30"
                             Height="30"
@@ -762,11 +783,7 @@
                             VerticalAlignment="Center"
                             ToolTipService.InitialShowDelay="180"
                             Visibility="Collapsed">
-                        <TextBlock Text="🤖"
-                                   FontSize="14"
-                                   Foreground="{DynamicResource TextColorSecondary}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
                     </Border>
                 </StackPanel>
             </Grid>
@@ -862,11 +879,10 @@
                                         BorderThickness="1"
                                         CornerRadius="8">
                                     <DockPanel LastChildFill="True">
-                                        <TextBlock Text="⌕"
+                                        <icons:AppIcon Kind="Search" Width="14" Height="14"
                                                    Foreground="{DynamicResource TextColorSecondary}"
                                                    Margin="0,0,8,0"
-                                                   VerticalAlignment="Center"
-                                                   FontSize="13"/>
+                                                   VerticalAlignment="Center"/>
                                         <TextBox x:Name="FlashcardSearchTextBox"
                                                  BorderThickness="0"
                                                  Background="Transparent"
@@ -910,12 +926,12 @@
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"/>
                                     <Button Grid.Column="1"
-                                            Content="✎"
+                                            Content="{icons:Icon Kind=Edit, Size=13}"
                                             Style="{StaticResource SetOptionActionButtonStyle}"
                                             ToolTip="{Binding [RenameFlashcardSet], Source={StaticResource Loc}}"
                                             Click="RenameSetInListButton_Click"/>
                                     <Button Grid.Column="2"
-                                            Content="×"
+                                            Content="{icons:Icon Kind=Close, Size=12}"
                                             Style="{StaticResource SetOptionActionButtonStyle}"
                                             ToolTip="{Binding [DeleteFlashcardSet], Source={StaticResource Loc}}"
                                             Click="DeleteSetInListButton_Click"/>

@@ -59,7 +59,9 @@ public static class UiMotion
     public const double NavShiftX = 22;
     public const double StudyNavShiftX = 26;
     public const double CrossFadeShiftX = 18;
-    public const double HoverScale = 1.02;
+    public const double CardHoverLiftY = -5.0;
+    public const double ChipHoverLiftY = -2.0;
+    public const double PressNudgeY = 1.5;
     public const double EnterScale = 0.78;
     public const double ExitScale = 0.66;
     public const double CollapsedScale = 0.92;
@@ -150,11 +152,7 @@ public static class UiMotion
         if (state.Depth == 0)
         {
             state.PreviousCacheMode = element.CacheMode;
-            element.CacheMode = new BitmapCache
-            {
-                EnableClearType = true,
-                SnapsToDevicePixels = true
-            };
+            element.CacheMode = DpiAwareBitmapCache.Create(element, enableClearType: true);
 
             if (suppressEffect && element.Effect is not null)
             {

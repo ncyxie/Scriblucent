@@ -1,3 +1,5 @@
+using Scriblucent.Icons;
+
 namespace Scriblucent.ViewModels;
 
 public enum ScheduledItemType { Note, Flashcard, MindMap, Quiz }
@@ -11,13 +13,13 @@ public sealed class CalendarScheduledItemViewModel
 
     public string TimeText => ScheduledAt.ToString("HH:mm");
 
-    public string TypeIcon => ItemType switch
+    public AppIconKind TypeIconKind => ItemType switch
     {
-        ScheduledItemType.Note => "📝",
-        ScheduledItemType.Flashcard => "🧠",
-        ScheduledItemType.MindMap => "🗺",
-        ScheduledItemType.Quiz => "☑",
-        _ => "📄"
+        ScheduledItemType.Note => AppIconKind.Notes,
+        ScheduledItemType.Flashcard => AppIconKind.Flashcards,
+        ScheduledItemType.MindMap => AppIconKind.MindMaps,
+        ScheduledItemType.Quiz => AppIconKind.Quizzes,
+        _ => AppIconKind.Notes
     };
 
     public NoteCardViewModel? Note { get; init; }

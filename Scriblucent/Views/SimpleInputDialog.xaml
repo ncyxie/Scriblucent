@@ -6,6 +6,8 @@
         Height="185"
         Width="420"
         WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"

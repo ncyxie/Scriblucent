@@ -8,13 +8,13 @@ namespace Scriblucent.Behaviors;
 
 /// <summary>
 /// Subtle enter and hover motion for dashboard tag chips.
+/// Hover uses lift instead of scale so chip text stays sharp.
 /// </summary>
 public static class TagChipMotionBehavior
 {
     private const int EnterMs = 220;
     private const int HoverMs = 160;
     private const double EnterLiftY = 4;
-    private const double HoverScale = 1.03;
 
     private sealed class State
     {
@@ -120,41 +120,33 @@ public static class TagChipMotionBehavior
         }
 
         UiMotion.Stop(border);
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(border);
+        var (_, translate) = UiMotion.EnsureScaleTranslateGroup(border);
         border.Opacity = 0;
         translate.Y = EnterLiftY;
-        scale.ScaleX = UiMotion.StaggerEnterScale;
-        scale.ScaleY = UiMotion.StaggerEnterScale;
 
         UiMotion.Run(
             border,
             new[]
             {
                 UiMotion.Track(EnterMs, UiMotion.OutCubic, 0, 1, value => border.Opacity = value),
-                UiMotion.Track(EnterMs, UiMotion.OutBack, EnterLiftY, 0, value => translate.Y = value),
-                UiMotion.Track(EnterMs, UiMotion.OutBack, UiMotion.StaggerEnterScale, 1, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
+                UiMotion.Track(EnterMs, UiMotion.OutBack, EnterLiftY, 0, value => translate.Y = value)
             });
     }
 
     private static void PlayHover(Border border, bool isEnter)
     {
-        var (scale, _) = UiMotion.EnsureScaleTranslateGroup(border);
-        var targetScale = isEnter ? HoverScale : 1.0;
-        var scaleFrom = scale.ScaleX;
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(border);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+
+        var targetLift = isEnter ? UiMotion.ChipHoverLiftY : 0.0;
+        var liftFrom = translate.Y;
 
         UiMotion.Run(
             border,
             new[]
             {
-                UiMotion.Track(HoverMs, UiMotion.OutCubic, scaleFrom, targetScale, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
+                UiMotion.Track(HoverMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
             });
     }
 

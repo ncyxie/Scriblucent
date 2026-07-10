@@ -5,6 +5,8 @@
         Height="460"
         Width="640"
         WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
         ResizeMode="CanResize"
         MinHeight="380"
         MinWidth="520"

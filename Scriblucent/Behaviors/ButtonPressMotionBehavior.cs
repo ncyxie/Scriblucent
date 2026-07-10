@@ -7,12 +7,11 @@ using Scriblucent.Animations;
 namespace Scriblucent.Behaviors;
 
 /// <summary>
-/// Subtle press scale for chrome buttons (section toggles, calendar days, dialog actions).
+/// Subtle press motion for chrome buttons (section toggles, calendar days, dialog actions).
+/// Uses a downward nudge instead of scale so label text stays sharp while pressed.
 /// </summary>
 public static class ButtonPressMotionBehavior
 {
-    private const double PressScale = 0.98;
-
     private sealed class State
     {
         public bool IsAttached;
@@ -103,9 +102,11 @@ public static class ButtonPressMotionBehavior
 
         UiMotion.Stop(element);
         var host = ResolveMotionHost(element);
-        var scale = UiMotion.EnsureScale(host);
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
         scale.ScaleX = 1;
         scale.ScaleY = 1;
+        translate.X = 0;
+        translate.Y = 0;
         state.IsAttached = false;
         state.IsPressed = false;
     }
@@ -116,19 +117,18 @@ public static class ButtonPressMotionBehavior
             return;
 
         var host = ResolveMotionHost(element);
-        var (scale, _) = UiMotion.EnsureScaleTranslateGroup(host);
-        var targetScale = isPressed ? PressScale : 1.0;
-        var scaleFrom = scale.ScaleX;
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+
+        var targetNudge = isPressed ? UiMotion.PressNudgeY : 0.0;
+        var nudgeFrom = translate.Y;
 
         UiMotion.Run(
             element,
             new[]
             {
-                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, scaleFrom, targetScale, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, nudgeFrom, targetNudge, value => translate.Y = value)
             });
     }
 

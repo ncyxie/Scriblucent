@@ -22,10 +22,7 @@
         Flashcard/Quiz/MindMap templates. This is plain layout (Margin), not a transform, so it
         composes with the card's own transform predictably instead of needing to match it.
     -->
-    <Grid Opacity="0.6">
-        <Grid.CacheMode>
-            <BitmapCache EnableClearType="False" SnapsToDevicePixels="True"/>
-        </Grid.CacheMode>
+    <Grid x:Name="ShadowRoot" Opacity="0.6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="22"/>
             <ColumnDefinition Width="*"/>

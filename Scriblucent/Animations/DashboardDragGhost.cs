@@ -679,11 +679,7 @@ public static class DashboardDragGhost
                 IsHitTestVisible = false
             };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.LowQuality);
-            image.CacheMode = new BitmapCache
-            {
-                EnableClearType = false,
-                SnapsToDevicePixels = true
-            };
+            image.CacheMode = DpiAwareBitmapCache.Create(image, enableClearType: false);
 
             Content = image;
             Width = bakedGhost.WidthDip;

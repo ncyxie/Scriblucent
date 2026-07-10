@@ -97,6 +97,8 @@ public static class CardSurfaceMotionBehavior
     {
         Detach(element);
         UiMotion.Cleanup(element);
+        if (GetProfile(element) == CardSurfaceMotionProfile.Listing)
+            UiMotion.Cleanup(ResolveListingMotionSurface(element));
     }
 
     /// <summary>
@@ -801,8 +803,13 @@ public static class CardSurfaceMotionBehavior
             : element;
 
         var durationMs = isEnter ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
-        var targetScale = isEnter ? UiMotion.HoverScale : 1.0;
-        var (scale, _) = UiMotion.EnsureScaleTranslateGroup(hoverTarget);
+        // Lift instead of scale: RenderTransform scale upscales already-drawn ClearType
+        // glyphs and inevitably softens text/icons. A translate pop stays pixel-sharp.
+        var targetLift = isEnter ? UiMotion.CardHoverLiftY : 0.0;
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(hoverTarget);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+
         var suppressShadow = ShouldSuppressShadowMotion(element);
         DropShadowEffect? shadow = null;
         if (!suppressShadow)
@@ -812,14 +819,10 @@ public static class CardSurfaceMotionBehavior
                 shadow.BlurRadius = UiMotion.ShadowBlurHover;
         }
 
-        var scaleFrom = scale.ScaleX;
+        var liftFrom = translate.Y;
         var tracks = new List<RenderTransitionClock.Track>
         {
-            UiMotion.Track(durationMs, UiMotion.OutCubic, scaleFrom, targetScale, value =>
-            {
-                scale.ScaleX = value;
-                scale.ScaleY = value;
-            })
+            UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
         };
 
         if (shadow is not null)

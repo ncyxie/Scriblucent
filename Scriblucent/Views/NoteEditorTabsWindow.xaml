@@ -5,6 +5,8 @@
         Height="720"
         Width="1050"
         WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
         Background="{DynamicResource WindowBackground}">
     <Window.Resources>
         <Style x:Key="EditorTabItemStyle" TargetType="TabItem">
