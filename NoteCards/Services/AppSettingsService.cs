@@ -47,6 +47,9 @@ public static class AppSettingsService
                     ?? BundledModelHostService.GetRecommendedFlashcardModelKeyForCurrentMachine();
             }
 
+            settings.FlashcardFlipDelayMilliseconds = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(
+                settings.FlashcardFlipDelayMilliseconds);
+
             return settings;
         }
         catch

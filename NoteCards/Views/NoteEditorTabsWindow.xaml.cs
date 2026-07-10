@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Models;
 using NoteCards.ViewModels;
 using System;
@@ -32,9 +33,19 @@ public partial class NoteEditorTabsWindow : Window
         InitializeComponent();
         NoteCards.Services.WindowThemeService.Register(this);
         PreviewKeyDown += NoteEditorTabsWindow_PreviewKeyDown;
+        EditorTabs.SelectionChanged += EditorTabs_SelectionChanged;
+        Loaded += (_, _) => UiMotion.ConfigurePopupsForWindow(this);
+        Closing += Window_Closing;
+        WindowContentEnterHelper.AnimateOnLoaded(this, "EditorTabs", FinalizeWindowClose);
     }
 
-    public void OpenOrFocusNote(NoteCardViewModel noteViewModel, object? sharedDataContext)
+    private void EditorTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (EditorTabs.SelectedContent is FrameworkElement content)
+            UiMotion.AnimateContentEnter(content, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
+    }
+
+    public void OpenOrFocusNote(NoteCardViewModel noteViewModel, object? sharedDataContext, bool animateContent = true)
     {
         var documentId = noteViewModel.Document.Id;
         if (_tabsByDocumentId.TryGetValue(documentId, out var existingState))
@@ -120,6 +131,8 @@ public partial class NoteEditorTabsWindow : Window
 
         EditorTabs.Items.Add(tabItem);
         EditorTabs.SelectedItem = tabItem;
+        if (animateContent && hostedContent is FrameworkElement hostedElement)
+            UiMotion.AnimateContentEnter(hostedElement, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
     }
 
     public void ApplyMeasurementUnitSystemPreference(string unitSystem)
@@ -163,6 +176,23 @@ public partial class NoteEditorTabsWindow : Window
         if (askConfirmation && !state.Editor.ConfirmCloseIfNeeded())
             return false;
 
+        if (!UiMotion.PrefersReducedMotion && state.TabItem.Content is FrameworkElement content)
+        {
+            UiMotion.Fade(
+                content,
+                0,
+                UiMotion.NavFadeOutMs,
+                UiMotion.InCubic,
+                () => FinishCloseTab(state));
+            return true;
+        }
+
+        FinishCloseTab(state);
+        return true;
+    }
+
+    private void FinishCloseTab(EditorTabState state)
+    {
         state.Editor.DocumentAutoSaved -= state.AutoSaveHandler;
         state.Editor.CloseRequested -= OnEditorCloseRequested;
         state.CloseButton.Click -= state.CloseClickHandler;
@@ -170,17 +200,16 @@ public partial class NoteEditorTabsWindow : Window
 
         state.TabItem.Content = null;
         EditorTabs.Items.Remove(state.TabItem);
-        _tabsByDocumentId.Remove(documentId);
+        _tabsByDocumentId.Remove(state.DocumentId);
 
         if (!_isWindowClosing && EditorTabs.Items.Count == 0)
             Close();
-
-        return true;
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
-        _isWindowClosing = true;
+        if (WindowContentEnterHelper.ShouldBypassCloseHandling(this))
+            return;
 
         foreach (var state in _tabsByDocumentId.Values.ToList())
         {
@@ -188,11 +217,15 @@ public partial class NoteEditorTabsWindow : Window
                 continue;
 
             e.Cancel = true;
-            _isWindowClosing = false;
             return;
         }
+    }
 
-        foreach (var documentId in _tabsByDocumentId.Keys.ToList())
-            CloseTab(documentId, askConfirmation: false);
+    private void FinalizeWindowClose()
+    {
+        _isWindowClosing = true;
+
+        foreach (var state in _tabsByDocumentId.Values.ToList())
+            FinishCloseTab(state);
     }
 }

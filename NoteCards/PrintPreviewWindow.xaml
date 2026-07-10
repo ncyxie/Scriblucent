@@ -5,7 +5,7 @@
         Height="700" Width="900"
         WindowStartupLocation="CenterOwner"
         Background="#EBEBEF">
-    <Grid>
+    <Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -19,11 +19,15 @@
                 Padding="16,12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="{Binding [Print], Source={StaticResource Loc}, StringFormat=🖨 {0}}"
-                        Padding="16,6"
+                        Style="{StaticResource DialogPrimaryButtonStyle}"
+                        MinWidth="100"
+                        Padding="16,8"
                         Margin="0,0,8,0"
                         Click="PrintButton_Click"/>
                 <Button Content="{Binding [Close], Source={StaticResource Loc}}"
-                        Padding="16,6"
+                        Style="{StaticResource DialogSecondaryButtonStyle}"
+                        MinWidth="90"
+                        Padding="16,8"
                         Click="CloseButton_Click"/>
             </StackPanel>
         </Border>

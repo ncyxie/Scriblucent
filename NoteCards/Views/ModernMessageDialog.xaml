@@ -15,22 +15,35 @@
         TextOptions.TextRenderingMode="ClearType"
         ShowInTaskbar="False">
 
-    <Grid Background="#66000000">
-        <Border x:Name="DialogCard"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="16"
-                Padding="30,28,30,24"
+    <Grid x:Name="OverlayRoot">
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"/>
+            </Grid>
+        </Viewbox>
+        <Border x:Name="PanelMotionHost"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                MaxWidth="540">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.30" BlurRadius="36" ShadowDepth="0"/>
-            </Border.Effect>
-            <Border.RenderTransform>
-                <TranslateTransform/>
-            </Border.RenderTransform>
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="DialogCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="30,28,30,24"
+                    MaxWidth="540">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.30" BlurRadius="36" ShadowDepth="0"/>
+                </Border.Effect>
 
             <Grid>
                 <Grid.RowDefinitions>
@@ -116,6 +129,7 @@
                             Click="PrimaryButton_Click"/>
                 </StackPanel>
             </Grid>
+            </Border>
         </Border>
     </Grid>
 </Window>

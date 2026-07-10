@@ -1,10 +1,10 @@
-﻿using NoteCards.Localization;
+﻿using NoteCards.Animations;
+using NoteCards.Localization;
 using NoteCards.Models;
 using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace NoteCards.Views
 {
@@ -19,12 +19,13 @@ namespace NoteCards.Views
 
         private Button? _selectedIconButton;
 
-    private bool _isClosingAnimationRunning;
+    private readonly OverlayDialogAnimator _overlayAnimator;
     private bool _pendingDialogResult;
 
     public StyleNodeDialog()
     {
         InitializeComponent();
+        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
         NoteCards.Services.WindowThemeService.Register(this);
         Loaded += StyleNodeDialog_Loaded;
 
@@ -48,7 +49,8 @@ namespace NoteCards.Views
     private void StyleNodeDialog_Loaded(object sender, RoutedEventArgs e)
     {
         ApplyOwnerBounds();
-        BeginOpenAnimation();
+        UiMotion.ConfigurePopupsForWindow(this);
+        _overlayAnimator.BeginOpen();
     }
 
         public void LoadFromNode(MindMapNode node)
@@ -237,24 +239,34 @@ namespace NoteCards.Views
 
         private void HighlightButtonAsSelected(Button button)
         {
-            button.Background = new SolidColorBrush(Color.FromRgb(232, 240, 254));
-            button.BorderBrush = new SolidColorBrush(Color.FromRgb(59, 130, 246));
+            button.Background = FindResource("SelectionBackground") as Brush
+                ?? new SolidColorBrush(Color.FromRgb(232, 240, 254));
+            button.BorderBrush = new SolidColorBrush(Color.FromRgb(74, 110, 224));
             button.BorderThickness = new Thickness(2);
         }
 
         private void ClearIconButtonHighlighting()
         {
-            if (FindName("IconGrid") is WrapPanel iconGrid)
+            if (FindName("IconGrid") is not WrapPanel iconGrid)
+                return;
+
+            var defaultBackground = FindResource("CardBackground") as Brush ?? Brushes.Transparent;
+            var defaultBorder = FindResource("BorderColor") as Brush ?? Brushes.Gray;
+            var customBackground = FindResource("SelectionBackground") as Brush ?? defaultBackground;
+
+            foreach (var child in iconGrid.Children)
             {
-                foreach (var child in iconGrid.Children)
-                {
-                    if (child is Button button)
-                    {
-                        button.Background = Brushes.White;
-                        button.BorderBrush = FindResource("BorderColor") as Brush ?? Brushes.Gray;
-                        button.BorderThickness = new Thickness(1);
-                    }
-                }
+                if (child is not Button button)
+                    continue;
+
+                var isCustomButton = button.ToolTip?.ToString() == LocalizationService.GetString("AddCustomIcon")
+                    || button.Content?.ToString() == "➕";
+
+                button.Background = isCustomButton ? customBackground : defaultBackground;
+                button.BorderBrush = isCustomButton
+                    ? new SolidColorBrush(Color.FromRgb(74, 110, 224))
+                    : defaultBorder;
+                button.BorderThickness = new Thickness(1);
             }
         }
 
@@ -276,61 +288,14 @@ namespace NoteCards.Views
 
         private Color? ShowColorPicker()
         {
-            var colors = new[]
+            var dialog = new ColorPickerDialog
             {
-                Colors.White, Colors.Black,
-                Color.FromRgb(239, 68, 68), Color.FromRgb(249, 115, 22),
-                Color.FromRgb(245, 158, 11), Color.FromRgb(34, 197, 94),
-                Color.FromRgb(59, 130, 246), Color.FromRgb(139, 92, 246),
-                Color.FromRgb(236, 72, 153), Color.FromRgb(244, 63, 94),
-                Color.FromRgb(209, 213, 219), Color.FromRgb(107, 114, 128)
+                Owner = this
             };
 
-            Color? selectedColor = null;
-
-            var dialog = new Window
-            {
-                Title = LocalizationService.GetString("SelectColorKey"), // Updated localization key
-                Width = 320,
-                Height = 280,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = this,
-                Background = Brushes.White
-            };
-
-            var panel = new WrapPanel { Margin = new Thickness(16) };
-
-            foreach (var color in colors)
-            {
-                var button = new Button
-                {
-                    Width = 40,
-                    Height = 40,
-                    Margin = new Thickness(4),
-                    Background = new SolidColorBrush(color),
-                    BorderBrush = Brushes.Gray,
-                    BorderThickness = new Thickness(1),
-                    Tag = color
-                };
-
-                button.Click += (s, e) =>
-                {
-                    selectedColor = color;
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                };
-
-                panel.Children.Add(button);
-            }
-
-            dialog.Content = panel;
-
-            if (dialog.ShowDialog() == true)
-            {
-                return selectedColor;
-            }
-
-            return null;
+            return dialog.ShowDialog() == true
+                ? dialog.SelectedColor
+                : null;
         }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -356,51 +321,14 @@ namespace NoteCards.Views
         }
     }
 
-    private void BeginOpenAnimation()
-    {
-        Opacity = 0;
-
-        if (DialogCard.RenderTransform is not TranslateTransform translate)
-        {
-            translate = new TranslateTransform();
-            DialogCard.RenderTransform = translate;
-        }
-
-        translate.Y = 12;
-
-        var duration = TimeSpan.FromMilliseconds(190);
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12, 0, duration) { EasingFunction = ease });
-    }
-
     private void BeginCloseAnimation(bool dialogResult)
     {
-        if (_isClosingAnimationRunning)
-            return;
-
-        _isClosingAnimationRunning = true;
         _pendingDialogResult = dialogResult;
-
-        if (DialogCard.RenderTransform is not TranslateTransform translate)
-        {
-            translate = new TranslateTransform();
-            DialogCard.RenderTransform = translate;
-        }
-
-        var duration = TimeSpan.FromMilliseconds(150);
-        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
-
-        var fadeOut = new DoubleAnimation(Opacity, 0, duration) { EasingFunction = ease };
-        fadeOut.Completed += (_, _) =>
+        _overlayAnimator.BeginClose(() =>
         {
             DialogResult = _pendingDialogResult;
             Close();
-        };
-
-        BeginAnimation(OpacityProperty, fadeOut);
-        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(translate.Y, 8, duration) { EasingFunction = ease });
+        });
     }
     }
 }

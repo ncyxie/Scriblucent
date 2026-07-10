@@ -107,6 +107,11 @@
   <data name="MeasurementUnitSystem" xml:space="preserve"><value>Measurement system</value></data>
   <data name="MeasurementUnitImperial" xml:space="preserve"><value>Imperial (inches)</value></data>
   <data name="MeasurementUnitMetric" xml:space="preserve"><value>Metric (centimeters)</value></data>
+  <data name="Animations" xml:space="preserve"><value>Animations</value></data>
+  <data name="ReduceAnimations" xml:space="preserve"><value>Reduce animations</value></data>
+  <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>
+  <data name="RecentItemsLimit" xml:space="preserve"><value>Recent items shown</value></data>
+  <data name="RecentItemsLimitUnit" xml:space="preserve"><value>items</value></data>
   <data name="ThemeLight" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeDark" xml:space="preserve"><value>Dark</value></data>
   <data name="ThemeSystem" xml:space="preserve"><value>Use system</value></data>
@@ -682,7 +687,14 @@ Right-click to remove</value></data>
   <data name="NodeBorderColor" xml:space="preserve"><value>Border color</value></data>
   <data name="NodeBorderThickness" xml:space="preserve"><value>Border thickness</value></data>
   <data name="NodeShape" xml:space="preserve"><value>Shape</value></data>
+  <data name="ShapeRectangle" xml:space="preserve"><value>Rectangle</value></data>
+  <data name="ShapeRounded" xml:space="preserve"><value>Rounded rectangle</value></data>
+  <data name="ShapeCircle" xml:space="preserve"><value>Circle</value></data>
+  <data name="ShapeEllipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="NodeIcon" xml:space="preserve"><value>Icon</value></data>
+  <data name="NodeIconBadgeColor" xml:space="preserve"><value>Icon badge color</value></data>
+  <data name="SelectIcon" xml:space="preserve"><value>Custom icon</value></data>
+  <data name="EnterCustomIconEmoji" xml:space="preserve"><value>Enter an emoji or symbol for this node.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Add custom icon</value></data>
   <data name="ClearIcon" xml:space="preserve"><value>Clear icon</value></data>
   <data name="SelectColor" xml:space="preserve"><value>Select color</value></data>

@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:services="clr-namespace:NoteCards.Services"
+             xmlns:behaviors="clr-namespace:NoteCards.Behaviors"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
@@ -17,6 +18,8 @@
         </Style>
 
         <Style x:Key="AboutCloseIconButtonStyle" TargetType="Button">
+            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
+            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="CloseButtonBorder"/>
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
@@ -55,22 +58,38 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="OverlayRoot" Background="#66000000" MouseDown="OverlayRoot_MouseDown">
-        <Border x:Name="PanelCard"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="16"
-                Width="Auto"
-                MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
-                MaxWidth="500"
+    <Grid x:Name="OverlayRoot">
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"
+                           MouseDown="OverlayDim_MouseDown"/>
+            </Grid>
+        </Viewbox>
+        <Border x:Name="PanelMotionHost"
                 Margin="20"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.20" BlurRadius="24" ShadowDepth="0"/>
-            </Border.Effect>
-
+                VerticalAlignment="Center"
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="PanelCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Width="Auto"
+                    MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
+                    MaxWidth="500">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.20" BlurRadius="24" ShadowDepth="0"/>
+                </Border.Effect>
             <ScrollViewer VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           CanContentScroll="True">
@@ -168,6 +187,7 @@
                 </StackPanel>
                 </Grid>
             </ScrollViewer>
+            </Border>
         </Border>
     </Grid>
 </UserControl>

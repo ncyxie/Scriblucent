@@ -1,4 +1,6 @@
-﻿using NoteCards.Localization;
+﻿using NoteCards.Animations;
+using NoteCards.Behaviors;
+using NoteCards.Localization;
 using NoteCards;
 using NoteCards.Models;
 using System.Collections.Generic;
@@ -32,6 +34,7 @@ public partial class QuizModeWindow : Window
     private readonly HashSet<int> _hintUsedQuestions = new();
     public QuizAttempt? LastAttempt { get; private set; }
     private List<int> _wrongQuestionIndices = new();
+    private bool _timerWarningActive;
 
     public QuizModeWindow(QuizDocument quiz, int timeLimitSeconds = 0)
     {
@@ -50,6 +53,7 @@ public partial class QuizModeWindow : Window
 
         StartTimer();
         LoadQuestion();
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     private void StartTimer()
@@ -67,7 +71,7 @@ public partial class QuizModeWindow : Window
                 UpdateTimerDisplay(_remainingTime);
 
                 // ⚠️ Įspėjimas kai lieka mažai laiko (pvz. 30 sek)
-                if (_remainingTime.TotalSeconds <= 30)
+                if (_remainingTime.TotalSeconds <= 30 && !_timerWarningActive)
                     HighlightTimerWarning();
 
                 // ⏱️ Kai laikas baigiasi — automatiškai pateikti
@@ -88,8 +92,14 @@ public partial class QuizModeWindow : Window
 
     private void HighlightTimerWarning()
     {
-        if (FindName("TimerText") is TextBlock timerText)
-            timerText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+        if (FindName("TimerText") is not TextBlock timerText)
+            return;
+
+        _timerWarningActive = true;
+        timerText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+
+        if (!UiMotion.PrefersReducedMotion)
+            UiMotion.PulseOpacity(timerText, timerText, 0.72, 1.0, 1400);
     }
     private void UpdateTimerDisplay(TimeSpan time)
     {
@@ -164,14 +174,13 @@ public partial class QuizModeWindow : Window
                         FontSize = 14,
                         FontWeight = FontWeights.Normal,
                         MinHeight = 44,
-
-                        // ✅ ADD THESE:
-                        Focusable = false,                    // Prevents focus rectangle interference
-                        OverridesDefaultStyle = true,         // Ignores default hover/pressed triggers
-                        Template = CreateSimpleButtonTemplate() // Optional: use minimal template below
+                        Focusable = false,
+                        OverridesDefaultStyle = true,
+                        Template = CreateSimpleButtonTemplate()
                     };
 
-                    // ✅ Wire up click event BEFORE adding to panel
+                    ButtonPressMotionBehavior.SetIsEnabled(button, true);
+                    ButtonPressMotionBehavior.SetMotionHostName(button, "ButtonBorder");
                     button.Click += OptionButton_Click;
                     optionsPanel.Children.Add(button);
                 }
@@ -188,8 +197,7 @@ public partial class QuizModeWindow : Window
     {
         var template = new ControlTemplate(typeof(Button));
         var border = new FrameworkElementFactory(typeof(Border));
-
-        // ✅ Set CornerRadius directly on the Border (not via binding)
+        border.SetValue(FrameworkElement.NameProperty, "ButtonBorder");
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
 
         // ✅ Bind Background/Border properties from Button to Border using RelativeSource.TemplatedParent
@@ -369,23 +377,78 @@ public partial class QuizModeWindow : Window
         if (FindName("PreviousButton") is Button prevButton)
             prevButton.IsEnabled = _currentQuestionIndex > 0;
 
-        if (FindName("NextButton") is Button nextButton)
-        {
-            if (_currentQuestionIndex == _quiz.Questions.Count - 1)
-            {
-                nextButton.Visibility = Visibility.Collapsed;
-                if (FindName("SubmitButton") is Button submitButton)
-                    submitButton.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                nextButton.Visibility = Visibility.Visible;
-                if (FindName("SubmitButton") is Button sb2) sb2.Visibility = Visibility.Collapsed;
-            }
-        }
+        var showSubmit = _currentQuestionIndex == _quiz.Questions.Count - 1;
+        CrossFadeFooterButtons(showSubmit);
 
         if (FindName("DoneButton") is Button doneButton)
-            doneButton.Visibility = Visibility.Collapsed;
+            SetFooterButtonVisible(doneButton, false);
+    }
+
+    private void CrossFadeFooterButtons(bool showSubmit)
+    {
+        if (FindName("NextButton") is not Button nextButton
+            || FindName("SubmitButton") is not Button submitButton)
+            return;
+
+        var outgoing = showSubmit ? nextButton : submitButton;
+        var incoming = showSubmit ? submitButton : nextButton;
+        var outgoingVisible = outgoing.Visibility == Visibility.Visible;
+
+        if (UiMotion.PrefersReducedMotion || !outgoingVisible)
+        {
+            nextButton.Visibility = showSubmit ? Visibility.Collapsed : Visibility.Visible;
+            submitButton.Visibility = showSubmit ? Visibility.Visible : Visibility.Collapsed;
+            nextButton.Opacity = 1;
+            submitButton.Opacity = 1;
+            return;
+        }
+
+        UiMotion.Stop(outgoing);
+        UiMotion.Stop(incoming);
+        UiMotion.Fade(
+            outgoing,
+            0,
+            UiMotion.NavFadeOutMs,
+            UiMotion.InCubic,
+            () =>
+            {
+                outgoing.Visibility = Visibility.Collapsed;
+                outgoing.Opacity = 1;
+                incoming.Visibility = Visibility.Visible;
+                incoming.Opacity = 0;
+                UiMotion.Fade(incoming, 1, UiMotion.QuickMs, UiMotion.OutCubic);
+            });
+    }
+
+    private static void SetFooterButtonVisible(Button button, bool visible)
+    {
+        if (visible)
+        {
+            button.Visibility = Visibility.Visible;
+            button.Opacity = 1;
+            return;
+        }
+
+        if (button.Visibility != Visibility.Visible)
+            return;
+
+        if (UiMotion.PrefersReducedMotion)
+        {
+            button.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UiMotion.Stop(button);
+        UiMotion.Fade(
+            button,
+            0,
+            UiMotion.NavFadeOutMs,
+            UiMotion.InCubic,
+            () =>
+            {
+                button.Visibility = Visibility.Collapsed;
+                button.Opacity = 1;
+            });
     }
 
     private void QuizModeWindow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -499,24 +562,77 @@ public partial class QuizModeWindow : Window
 
     private void UpdateOptionVisuals(List<QuizOption> selectedOptions)
     {
-        if (FindName("OptionsPanel") is StackPanel optionsPanel)
+        if (FindName("OptionsPanel") is not StackPanel optionsPanel)
+            return;
+
+        foreach (var child in optionsPanel.Children)
         {
-            foreach (var child in optionsPanel.Children)
-            {
-                if (child is Button optButton && optButton.Tag is QuizOption opt)
-                {
-                    bool isSelected = selectedOptions.Contains(opt);
-                    optButton.Background = isSelected
-                        ? (Brush)FindResource("NoteCardSelection")
-                        : (Brush)FindResource("CardBackground");
-                    optButton.BorderBrush = isSelected
-                        ? (Brush)FindResource("NoteCardSelectionBorder")
-                        : (Brush)FindResource("BorderColor");
-                    optButton.BorderThickness = isSelected ? new Thickness(2) : new Thickness(1);
-                    optButton.FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal;
-                }
-            }
+            if (child is not Button optButton || optButton.Tag is not QuizOption opt)
+                continue;
+
+            var isSelected = selectedOptions.Contains(opt);
+            optButton.Background = isSelected
+                ? (Brush)FindResource("NoteCardSelection")
+                : (Brush)FindResource("CardBackground");
+            optButton.BorderBrush = isSelected
+                ? (Brush)FindResource("NoteCardSelectionBorder")
+                : (Brush)FindResource("BorderColor");
+            optButton.FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal;
+
+            AnimateOptionSelection(optButton, isSelected);
         }
+    }
+
+    private static void AnimateOptionSelection(Button button, bool isSelected)
+    {
+        var targetThickness = isSelected ? 2.0 : 1.0;
+        var currentThickness = button.BorderThickness.Left;
+
+        if (Math.Abs(currentThickness - targetThickness) < 0.01)
+            return;
+
+        if (UiMotion.PrefersReducedMotion)
+        {
+            button.BorderThickness = new Thickness(targetThickness);
+            return;
+        }
+
+        UiMotion.Stop(button);
+        button.RenderTransformOrigin = new Point(0.5, 0.5);
+        var scale = UiMotion.EnsureScale(button);
+
+        UiMotion.RunComposited(
+            button,
+            new[]
+            {
+                UiMotion.Track(
+                    UiMotion.QuickMs,
+                    UiMotion.OutCubic,
+                    currentThickness,
+                    targetThickness,
+                    value => button.BorderThickness = new Thickness(value)),
+                UiMotion.Track(
+                    UiMotion.QuickMs / 2,
+                    UiMotion.OutCubic,
+                    1,
+                    isSelected ? 1.012 : 1.006,
+                    value =>
+                    {
+                        scale.ScaleX = value;
+                        scale.ScaleY = value;
+                    }),
+                UiMotion.Track(
+                    UiMotion.QuickMs / 2,
+                    UiMotion.OutCubic,
+                    isSelected ? 1.012 : 1.006,
+                    1,
+                    value =>
+                    {
+                        scale.ScaleX = value;
+                        scale.ScaleY = value;
+                    },
+                    startDelayMs: UiMotion.QuickMs / 2)
+            });
     }
     private void LoadHintSection()
     {
@@ -541,7 +657,11 @@ public partial class QuizModeWindow : Window
         _hintUsedQuestions.Add(_currentQuestionIndex);
 
         if (FindName("HintTextBorder") is Border hintBorder)
+        {
             hintBorder.Visibility = Visibility.Visible;
+            hintBorder.Opacity = 0;
+            UiMotion.Fade(hintBorder, 1, UiMotion.OpenMs, UiMotion.OutQuad);
+        }
 
         if (FindName("ShowHintButton") is Button showHintBtn)
             showHintBtn.Visibility = Visibility.Collapsed;
@@ -551,21 +671,14 @@ public partial class QuizModeWindow : Window
     {
         if (_isResultsView)
         {
-            _isResultsView = false;
-            _timer?.Start();
-            if (FindName("ResultsView") is Border rv) rv.Visibility = Visibility.Collapsed;
-            if (FindName("QuestionView") is Border qv) qv.Visibility = Visibility.Visible;
-            if (FindName("DoneButton") is Button db) db.Visibility = Visibility.Collapsed;
-            if (FindName("SubmitButton") is Button sb) sb.Visibility = Visibility.Collapsed;
-            if (FindName("NextButton") is Button nb) nb.Visibility = Visibility.Visible;
-            LoadQuestion();
+            AnimateReturnFromResults();
             return;
         }
 
         if (_currentQuestionIndex > 0)
         {
             _currentQuestionIndex--;
-            LoadQuestion();
+            LoadQuestionAnimated(-1);
         }
     }
 
@@ -574,7 +687,7 @@ public partial class QuizModeWindow : Window
         if (_currentQuestionIndex < _quiz.Questions.Count - 1)
         {
             _currentQuestionIndex++;
-            LoadQuestion();
+            LoadQuestionAnimated(1);
         }
     }
 
@@ -696,27 +809,75 @@ public partial class QuizModeWindow : Window
         };
 
 
+        var displayTime = _isCountdown ? TimeSpan.FromSeconds(_timeLimitSeconds) - _remainingTime : _elapsedTime;
+        AnimateResultsTransition(
+            () => ApplyResultsVisibility(
+                correctCount,
+                totalQuestions,
+                percentage,
+                passed,
+                passingScore,
+                displayTime,
+                questions),
+            passed);
+    }
+
+    private void ApplyResultsVisibility(
+        int correctCount,
+        int totalQuestions,
+        double percentage,
+        bool passed,
+        int passingScore,
+        TimeSpan displayTime,
+        List<QuizQuestion> questions)
+    {
         if (FindName("QuestionView") is Border qv) qv.Visibility = Visibility.Collapsed;
         if (FindName("ResultsView") is Border rv) rv.Visibility = Visibility.Visible;
         if (FindName("ProgressText") is TextBlock pt) pt.Text = string.Format(LocalizationService.GetString("QuizResultsLabelFormat"), correctCount, totalQuestions);
-        var displayTime = _isCountdown ? TimeSpan.FromSeconds(_timeLimitSeconds) - _remainingTime : _elapsedTime;
         if (FindName("TimerText") is TextBlock tt) tt.Text = displayTime.ToString(@"hh\:mm\:ss");
 
+        var prepareScoreReveal = !UiMotion.PrefersReducedMotion;
         if (FindName("ResultsTitleText") is TextBlock rt)
-            rt.Text = LocalizationService.GetString(passed ? "QuizPassedResult" : "QuizFailedResult");
-        if (FindName("ResultsScoreText") is TextBlock rs)
-            rs.Text = string.Format(LocalizationService.GetString("QuizScoreWithPassingFormat"), correctCount, totalQuestions, percentage, passingScore);
-        if (FindName("ResultsTimeText") is TextBlock rtime)
-            rtime.Text = string.Format(LocalizationService.GetString("QuizTimeFormat"), displayTime.ToString(@"hh\:mm\:ss"));
-        if (FindName("PreviousButton") is Button pb) pb.Visibility = Visibility.Collapsed;
-        if (FindName("NextButton") is Button nb) nb.Visibility = Visibility.Collapsed;
-        if (FindName("SubmitButton") is Button sb) sb.Visibility = Visibility.Collapsed;
-        if (FindName("DoneButton") is Button db) db.Visibility = Visibility.Visible;
-        if (FindName("RetryAllButton") is Button rab) rab.Visibility = Visibility.Visible;
-        if (FindName("RetryWrongButton") is Button rwb)
         {
-            rwb.Visibility = _wrongQuestionIndices.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            rt.Text = LocalizationService.GetString(passed ? "QuizPassedResult" : "QuizFailedResult");
+            if (prepareScoreReveal)
+                rt.Opacity = 0;
         }
+
+        if (FindName("ResultsScoreText") is TextBlock rs)
+        {
+            rs.Text = string.Format(LocalizationService.GetString("QuizScoreWithPassingFormat"), correctCount, totalQuestions, percentage, passingScore);
+            if (prepareScoreReveal)
+                rs.Opacity = 0;
+        }
+
+        if (FindName("ResultsTimeText") is TextBlock rtime)
+        {
+            rtime.Text = string.Format(LocalizationService.GetString("QuizTimeFormat"), displayTime.ToString(@"hh\:mm\:ss"));
+            if (prepareScoreReveal)
+                rtime.Opacity = 0;
+        }
+        if (FindName("PreviousButton") is Button pb) SetFooterButtonVisible(pb, false);
+        if (FindName("NextButton") is Button nb) SetFooterButtonVisible(nb, false);
+        if (FindName("SubmitButton") is Button sb) SetFooterButtonVisible(sb, false);
+        if (FindName("DoneButton") is Button db)
+        {
+            db.Visibility = Visibility.Visible;
+            if (UiMotion.PrefersReducedMotion)
+            {
+                db.Opacity = 1;
+            }
+            else
+            {
+                db.Opacity = 0;
+                UiMotion.Fade(db, 1, UiMotion.QuickMs, UiMotion.OutCubic);
+            }
+        }
+
+        if (FindName("RetryAllButton") is Button rab)
+            UiMotion.AnimateInlineReveal(rab, true);
+        if (FindName("RetryWrongButton") is Button rwb)
+            UiMotion.AnimateInlineReveal(rwb, _wrongQuestionIndices.Count > 0);
         if (FindName("ResultsQuestionsPanel") is StackPanel rp)
         {
             rp.Children.Clear();
@@ -855,9 +1016,172 @@ public partial class QuizModeWindow : Window
 
                 card.Child = content;
                 rp.Children.Add(card);
+                AnimateResultsReviewCard(card, i);
             }
         }
     }
+
+    private static void AnimateResultsReviewCard(FrameworkElement card, int index)
+    {
+        if (UiMotion.PrefersReducedMotion)
+            return;
+
+        card.Opacity = 0;
+        var translate = UiMotion.EnsureTranslate(card);
+        translate.Y = UiMotion.ContentLiftY;
+        var delay = Math.Min(index * 35, 280);
+
+        UiMotion.RunComposited(
+            card,
+            new[]
+            {
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, 0, 1, value => card.Opacity = value, startDelayMs: delay),
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, UiMotion.ContentLiftY, 0, value => translate.Y = value, startDelayMs: delay)
+            });
+    }
+
+    private void LoadQuestionAnimated(int direction)
+    {
+        if (direction == 0 || UiMotion.PrefersReducedMotion || FindName("QuestionView") is not FrameworkElement questionView)
+        {
+            LoadQuestion();
+            return;
+        }
+
+        var translate = UiMotion.EnsureTranslate(questionView);
+        var exitOffset = direction > 0 ? -UiMotion.NavShiftX : UiMotion.NavShiftX;
+        var opacityStart = questionView.Opacity;
+
+        UiMotion.RunComposited(
+            questionView,
+            new[]
+            {
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.InCubic, opacityStart, 0, value => questionView.Opacity = value),
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.InCubic, 0, exitOffset, value => translate.X = value)
+            },
+            () =>
+            {
+                LoadQuestion();
+                translate.X = -exitOffset;
+                questionView.Opacity = 0;
+                UiMotion.RunComposited(
+                    questionView,
+                    new[]
+                    {
+                        UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, 0, 1, value => questionView.Opacity = value),
+                        UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, -exitOffset, 0, value => translate.X = value)
+                    });
+            });
+    }
+
+    private void AnimateReturnFromResults()
+    {
+        if (FindName("ResultsView") is not FrameworkElement resultsView
+            || FindName("QuestionView") is not FrameworkElement questionView
+            || UiMotion.PrefersReducedMotion)
+        {
+            ApplyReturnFromResultsState();
+            LoadQuestion();
+            return;
+        }
+
+        UiMotion.RunComposited(
+            resultsView,
+            new[]
+            {
+                UiMotion.Track(UiMotion.CloseMs, UiMotion.InCubic, resultsView.Opacity, 0, value => resultsView.Opacity = value)
+            },
+            () =>
+            {
+                ApplyReturnFromResultsState();
+                LoadQuestion();
+                questionView.Opacity = 0;
+                var translate = UiMotion.EnsureTranslate(questionView);
+                translate.Y = UiMotion.PanelLiftY;
+                UiMotion.RunComposited(
+                    questionView,
+                    new[]
+                    {
+                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, 0, 1, value => questionView.Opacity = value),
+                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, UiMotion.PanelLiftY, 0, value => translate.Y = value)
+                    });
+            });
+    }
+
+    private void ApplyReturnFromResultsState()
+    {
+        _isResultsView = false;
+        _timer?.Start();
+        if (FindName("ResultsView") is Border rv)
+        {
+            rv.Visibility = Visibility.Collapsed;
+            rv.Opacity = 1;
+        }
+
+        if (FindName("QuestionView") is Border qv)
+            qv.Visibility = Visibility.Visible;
+        if (FindName("DoneButton") is Button db)
+            SetFooterButtonVisible(db, false);
+        if (FindName("RetryAllButton") is Button rab)
+            UiMotion.AnimateInlineReveal(rab, false);
+        if (FindName("RetryWrongButton") is Button rwb)
+            UiMotion.AnimateInlineReveal(rwb, false);
+    }
+
+    private void AnimateResultsTransition(Action applyResults, bool passed)
+    {
+        void PlayCelebration()
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+            {
+                if (passed && CelebrationOverlay != null)
+                    StudyCelebration.PlayConfetti(CelebrationOverlay);
+
+                StudyCelebration.RevealScore(
+                    FindName("ResultsTitleText") as FrameworkElement,
+                    FindName("ResultsScoreText") as FrameworkElement,
+                    FindName("ResultsTimeText") as FrameworkElement);
+            });
+        }
+
+        if (FindName("QuestionView") is not FrameworkElement questionView
+            || FindName("ResultsView") is not FrameworkElement resultsView
+            || UiMotion.PrefersReducedMotion)
+        {
+            applyResults();
+            PlayCelebration();
+            return;
+        }
+
+        UiMotion.RunComposited(
+            questionView,
+            new[]
+            {
+                UiMotion.Track(UiMotion.CloseMs, UiMotion.InCubic, questionView.Opacity, 0, value => questionView.Opacity = value)
+            },
+            () =>
+            {
+                applyResults();
+                resultsView.Visibility = Visibility.Visible;
+                resultsView.Opacity = 0;
+                var scale = UiMotion.EnsureScale(resultsView, 0.97);
+                scale.ScaleX = 0.97;
+                scale.ScaleY = 0.97;
+                UiMotion.RunComposited(
+                    resultsView,
+                    new[]
+                    {
+                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, 0, 1, value => resultsView.Opacity = value),
+                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, 0.97, 1, value =>
+                        {
+                            scale.ScaleX = value;
+                            scale.ScaleY = value;
+                        })
+                    },
+                    PlayCelebration);
+            });
+    }
+
     private void RetryAllButton_Click(object sender, RoutedEventArgs e)
     {
         _timer?.Stop();

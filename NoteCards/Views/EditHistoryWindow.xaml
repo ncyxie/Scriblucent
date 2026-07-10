@@ -26,7 +26,7 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Grid Margin="16">
+    <Grid x:Name="ContentRoot" Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="10"/>

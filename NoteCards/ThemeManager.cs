@@ -83,9 +83,8 @@ namespace NoteCards
                 Application.Current.Resources.MergedDictionaries.Insert(0, dict);
             }
 
-            // Invalidate all windows
             var refreshVersion = ++_nativeThemeRefreshVersion;
-            ApplyNativeThemeToOpenWindows(_currentTheme, invalidateVisuals: true, rebuildFrame: false);
+            ApplyNativeThemeToOpenWindows(_currentTheme, invalidateVisuals: true, rebuildFrame: true);
             RefreshNativeThemeAfterLayout(_currentTheme, refreshVersion);
         }
 
@@ -149,7 +148,7 @@ namespace NoteCards
                 {
                     ApplyNativeThemeToOpenWindows(theme, invalidateVisuals: false, rebuildFrame: true);
                 }
-            }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }, System.Windows.Threading.DispatcherPriority.Render);
         }
     }
 }

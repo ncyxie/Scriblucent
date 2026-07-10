@@ -3,11 +3,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{Binding [SimpleInputTitle], Source={StaticResource Loc}}"
         MinHeight="185"
-        SizeToContent="Height"
+        Height="185"
         Width="420"
         WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
         ResizeMode="NoResize"
-        Background="{DynamicResource WindowBackground}">
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        ShowInTaskbar="False">
     <Window.Resources>
         <Style x:Key="SimpleInputTextBoxStyle" TargetType="TextBox">
             <Setter Property="MinHeight" Value="36"/>
@@ -44,47 +49,75 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="10"
-            Padding="14"
-            Background="{DynamicResource CardBackground}"
-            BorderBrush="{DynamicResource BorderColor}"
-            BorderThickness="1"
-            CornerRadius="10">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <Grid x:Name="OverlayRoot">
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"/>
+            </Grid>
+        </Viewbox>
 
-            <TextBlock x:Name="PromptText"
-                       Grid.Row="0"
-                       FontWeight="SemiBold"
-                       FontSize="13"
-                       Foreground="{DynamicResource TextColor}"
-                       TextWrapping="Wrap"
-                       Margin="0,0,0,8"/>
+        <Border x:Name="PanelMotionHost"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="DialogCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    Padding="18"
+                    MinWidth="360"
+                    MaxWidth="420">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.24" BlurRadius="28" ShadowDepth="0"/>
+                </Border.Effect>
 
-            <TextBox x:Name="InputBox"
-                     Grid.Row="1"
-                     Margin="0,0,0,12"
-                     Style="{StaticResource SimpleInputTextBoxStyle}"/>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="2"
-                        Orientation="Horizontal"
-                        HorizontalAlignment="Right">
-                <Button Content="{Binding [Cancel], Source={StaticResource Loc}}"
-                        Style="{StaticResource DialogSecondaryButtonStyle}"
-                        MinWidth="84"
-                        Padding="14,7"
-                        Margin="0,0,8,0"
-                        Click="Cancel_Click"/>
-                <Button Content="{Binding [Ok], Source={StaticResource Loc}}"
-                        Style="{StaticResource DialogPrimaryButtonStyle}"
-                        MinWidth="84"
-                        Padding="14,7"
-                        Click="Ok_Click"/>
-            </StackPanel>
-        </Grid>
-    </Border>
+                    <TextBlock x:Name="PromptText"
+                               Grid.Row="0"
+                               FontWeight="SemiBold"
+                               FontSize="13"
+                               Foreground="{DynamicResource TextColor}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,10"/>
+
+                    <TextBox x:Name="InputBox"
+                             Grid.Row="1"
+                             Margin="0,0,0,14"
+                             Style="{StaticResource SimpleInputTextBoxStyle}"/>
+
+                    <StackPanel Grid.Row="2"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Content="{Binding [Cancel], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                MinWidth="84"
+                                Padding="14,7"
+                                Margin="0,0,8,0"
+                                Click="Cancel_Click"/>
+                        <Button Content="{Binding [Ok], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogPrimaryButtonStyle}"
+                                MinWidth="84"
+                                Padding="14,7"
+                                Click="Ok_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
+    </Grid>
 </Window>

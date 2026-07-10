@@ -11,7 +11,7 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         ShowInTaskbar="False">
-    <Grid Background="#66000000">
+    <Grid x:Name="OverlayRoot">
         <Grid.Resources>
             <Style x:Key="FlashcardEditorInputStyle" TargetType="TextBox">
                 <Setter Property="Padding" Value="12"/>
@@ -127,7 +127,7 @@
                                        IsOpen="{TemplateBinding IsDropDownOpen}"
                                        AllowsTransparency="True"
                                        Focusable="False"
-                                       PopupAnimation="Fade">
+                                       PopupAnimation="None">
                                     <Border Margin="0,6,0,0"
                                             MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                             MaxHeight="180"
@@ -177,21 +177,34 @@
             </Style>
         </Grid.Resources>
 
-        <Border x:Name="DialogCard"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="16"
-                Padding="28"
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"/>
+            </Grid>
+        </Viewbox>
+        <Border x:Name="PanelMotionHost"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                MaxWidth="480">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="32" ShadowDepth="4"/>
-            </Border.Effect>
-            <Border.RenderTransform>
-                <TranslateTransform/>
-            </Border.RenderTransform>
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="DialogCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="28"
+                    MaxWidth="480">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="32" ShadowDepth="4"/>
+                </Border.Effect>
 
             <Grid>
                 <Grid.RowDefinitions>
@@ -299,6 +312,7 @@
                             Click="SaveButton_Click"/>
                 </StackPanel>
             </Grid>
+            </Border>
         </Border>
     </Grid>
 </Window>

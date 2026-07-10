@@ -1,15 +1,15 @@
+using NoteCards.Animations;
 using NoteCards.Localization;
 using System.Media;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace NoteCards.Views;
 
 public partial class ModernMessageDialog : Window
 {
-    private bool _isClosingAnimationRunning;
+    private readonly OverlayDialogAnimator _overlayAnimator;
     private MessageBoxResult _pendingResult;
     private ModernDialogResult _pendingChoice;
 
@@ -66,6 +66,7 @@ public partial class ModernMessageDialog : Window
         EscapeChoice = ResultToChoice(EscapeResult);
 
         InitializeComponent();
+        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
         ApplyPrimaryButtonStyle(DialogTone);
         ConfigureButtonLayout();
         NoteCards.Services.WindowThemeService.Register(this);
@@ -125,6 +126,7 @@ public partial class ModernMessageDialog : Window
         EscapeChoice = ResultToChoice(EscapeResult);
 
         InitializeComponent();
+        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
         ApplyButtonStyles(
             primaryStyle ?? DefaultPrimaryButtonStyleForTone(tone),
             secondaryStyle,
@@ -144,10 +146,13 @@ public partial class ModernMessageDialog : Window
     private void ModernMessageDialog_Loaded(object sender, RoutedEventArgs e)
     {
         ApplyOwnerBounds();
-        FocusDefaultButton();
-        ConfigureNativeDialogButtons();
+        UiMotion.ConfigurePopupsForWindow(this);
         PlayDialogSound();
-        BeginOpenAnimation();
+        _overlayAnimator.BeginOpen(() =>
+        {
+            FocusDefaultButton();
+            ConfigureNativeDialogButtons();
+        });
     }
 
     private void ApplyOwnerBounds()
@@ -449,52 +454,16 @@ public partial class ModernMessageDialog : Window
         }
     }
 
-    private void BeginOpenAnimation()
-    {
-        Opacity = 0;
-
-        if (DialogCard.RenderTransform is not TranslateTransform translate)
-        {
-            translate = new TranslateTransform();
-            DialogCard.RenderTransform = translate;
-        }
-
-        translate.Y = 12;
-
-        var duration = TimeSpan.FromMilliseconds(190);
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12, 0, duration) { EasingFunction = ease });
-    }
-
     private void BeginCloseAnimation(MessageBoxResult result, ModernDialogResult choice)
     {
-        if (_isClosingAnimationRunning)
-            return;
-
-        _isClosingAnimationRunning = true;
         _pendingResult = result;
         _pendingChoice = choice;
 
-        if (DialogCard.RenderTransform is not TranslateTransform translate)
-        {
-            translate = new TranslateTransform();
-            DialogCard.RenderTransform = translate;
-        }
-
-        var duration = TimeSpan.FromMilliseconds(150);
-        var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
-
-        var fadeOut = new DoubleAnimation(Opacity, 0, duration) { EasingFunction = ease };
-        fadeOut.Completed += (_, _) =>
+        _overlayAnimator.BeginClose(() =>
         {
             SelectedResult = _pendingResult;
             SelectedChoice = _pendingChoice;
             Close();
-        };
-
-        BeginAnimation(OpacityProperty, fadeOut);
-        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(translate.Y, 8, duration) { EasingFunction = ease });
+        });
     }
 }

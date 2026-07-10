@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Localization;
 using System;
 using System.Windows;
@@ -8,6 +9,7 @@ namespace NoteCards.Views
     public partial class SearchReplaceDialogLocalized : Window
     {
         private readonly NoteEditorWindow _editor;
+        private readonly OverlayDialogAnimator _overlayAnimator;
 
         public SearchReplaceDialogLocalized(
             NoteEditorWindow editor,
@@ -21,7 +23,9 @@ namespace NoteCards.Views
             _editor = editor;
 
             InitializeComponent();
+            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
             NoteCards.Services.WindowThemeService.Register(this);
+            Loaded += SearchReplaceDialogLocalized_Loaded;
 
             SearchBox.Text = initialSearch ?? string.Empty;
             ReplaceBox.Text = initialReplace ?? string.Empty;
@@ -32,16 +36,34 @@ namespace NoteCards.Views
             UpdateButtonState();
             UpdateStatus();
 
-            if (focusReplace)
+            _focusReplaceOnOpen = focusReplace;
+        }
+
+        private readonly bool _focusReplaceOnOpen;
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            OverlayDialogBoundsHelper.Apply(this);
+        }
+
+        private void SearchReplaceDialogLocalized_Loaded(object? sender, RoutedEventArgs e)
+        {
+            OverlayDialogBoundsHelper.Apply(this);
+            UiMotion.ConfigurePopupsForWindow(this);
+            _overlayAnimator.BeginOpen(() =>
             {
-                ReplaceBox.SelectAll();
-                ReplaceBox.Focus();
-            }
-            else
-            {
-                SearchBox.SelectAll();
-                SearchBox.Focus();
-            }
+                if (_focusReplaceOnOpen)
+                {
+                    ReplaceBox.SelectAll();
+                    ReplaceBox.Focus();
+                }
+                else
+                {
+                    SearchBox.SelectAll();
+                    SearchBox.Focus();
+                }
+            });
         }
 
         public string SearchText => SearchBox.Text ?? string.Empty;
@@ -88,7 +110,7 @@ namespace NoteCards.Views
         {
             if (e.Key == Key.Escape)
             {
-                Close();
+                BeginCloseAnimation();
                 e.Handled = true;
                 return;
             }
@@ -109,8 +131,16 @@ namespace NoteCards.Views
 
         private void Close_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = true;
-            Close();
+            BeginCloseAnimation();
+        }
+
+        private void BeginCloseAnimation()
+        {
+            _overlayAnimator.BeginClose(() =>
+            {
+                DialogResult = true;
+                Close();
+            });
         }
 
         protected override void OnClosed(EventArgs e)

@@ -5,8 +5,7 @@
         Height="720"
         Width="1050"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource WindowBackground}"
-        Closing="Window_Closing">
+        Background="{DynamicResource WindowBackground}">
     <Window.Resources>
         <Style x:Key="EditorTabItemStyle" TargetType="TabItem">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>

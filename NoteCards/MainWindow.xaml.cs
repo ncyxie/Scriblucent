@@ -1,4 +1,6 @@
 using NoteCards.Animations;
+using NoteCards.Behaviors;
+using NoteCards.Controls;
 using NoteCards.Localization;
 using NoteCards.Models;
 using NoteCards.Services;
@@ -7,6 +9,7 @@ using NoteCards.Views;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Linq;
 using System.Globalization;
 using System.Windows;
@@ -14,37 +17,51 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
+using System.Windows.Interop;
 using System.Windows.Markup;
 
 namespace NoteCards
 {
     public partial class MainWindow : Window
     {
+        private const int WmSettingChange = 0x001A;
+
         private const double DragScrollEdgeThreshold = 64;
         private const double DragScrollStep = 18;
         private const double DashboardDragScrollEdgeThreshold = 96;
         private const double DashboardDragScrollMinStep = 16;
         private const double DashboardDragScrollMaxStep = 46;
-        private const int SectionAnimationMs = 280;
-        private const int DashboardViewAnimationMs = 420;
         private const double TopSearchExpandedWidth = 320;
-        private const int TopSearchAnimationMs = 300;
-        private const int SidebarAnimationMs = 240;
+        private const string DashboardNotes = "Notes";
+        private const string DashboardFlashcards = "Flashcards";
+        private const string DashboardQuizzes = "Quizzes";
+        private const string DashboardMindMaps = "MindMaps";
 
         private MainViewModel? _observedViewModel;
-        private bool _lastKnownGroupsFirst = true;
+        private string _lastActiveDashboard = string.Empty;
+        private bool _dashboardTransitionActive;
+
+        internal bool IsDashboardTransitionActive => _dashboardTransitionActive;
+
+        private readonly HashSet<FrameworkElement> _emptyDashboardEnterScheduled = new();
+        private bool _dashboardPresenceHandlersAttached;
         private bool _notesLayoutRefreshQueued;
-        private bool _notesLayoutDeferredRefreshQueued;
+        private bool _ungroupedLayoutRefreshQueued;
+
         private bool _dashboardLayoutRefreshQueued;
-        private bool _dashboardLayoutDeferredRefreshQueued;
         private NoteEditorTabsWindow? _noteEditorTabsWindow;
         private Point _dashboardListingDragStart;
         private bool _suppressDashboardListingOpen;
-        private readonly Dictionary<Border, Brush?> _dashboardDropOriginalBorderBrushes = new();
-        private readonly Dictionary<Border, Thickness> _dashboardDropOriginalBorderThicknesses = new();
+        private const double UngroupedDropZoneCornerRadius = 16;
+
+        private readonly Dictionary<Border, Brush?> _dropZoneOriginalBorderBrushes = new();
+        private readonly Dictionary<Border, Thickness> _dropZoneOriginalBorderThicknesses = new();
+        private readonly Dictionary<Border, CornerRadius> _dropZoneOriginalCornerRadius = new();
+        private readonly Dictionary<Border, Brush?> _dropZoneOriginalBackgrounds = new();
+        private WeakReference<FrameworkElement>? _listingDropGlowHost;
         private DispatcherTimer? _dashboardDragScrollTimer;
         private ScrollViewer? _dashboardDragScrollViewer;
         private Point _dashboardDragScrollPosition;
@@ -60,34 +77,58 @@ namespace NoteCards
         private FrameworkElement? GroupsSectionBodyElement => FindName("GroupsSectionBody") as FrameworkElement;
         private ItemsControl? GroupsItemsControlElement => FindName("GroupsItemsControl") as ItemsControl;
         private FrameworkElement? UngroupedSectionBodyElement => FindName("UngroupedSectionBody") as FrameworkElement;
+        private FrameworkElement? UngroupedNotesItemsControlElement => FindName("UngroupedNotesItemsControl") as FrameworkElement;
         private FrameworkElement? NotesDashboardSectionBodyElement => FindName("NotesDashboardSectionBody") as FrameworkElement;
         private FrameworkElement? FlashcardGroupsSectionBodyElement => FindName("FlashcardGroupsSectionBody") as FrameworkElement;
         private FrameworkElement? FlashcardDashboardGroupsSectionBodyElement => FindName("FlashcardDashboardGroupsSectionBody") as FrameworkElement;
         private FrameworkElement? FlashcardDashboardUngroupedSectionBodyElement => FindName("FlashcardDashboardUngroupedSectionBody") as FrameworkElement;
         private ItemsControl? FlashcardDashboardGroupsItemsControlElement => FindName("FlashcardDashboardGroupsItemsControl") as ItemsControl;
-        private ItemsControl? FlashcardDashboardUngroupedItemsControlElement => FindName("FlashcardDashboardUngroupedItemsControl") as ItemsControl;
+        private FrameworkElement? FlashcardDashboardUngroupedItemsControlElement => FindName("FlashcardDashboardUngroupedItemsControl") as FrameworkElement;
         private FrameworkElement? QuizGroupsSectionBodyElement => FindName("QuizGroupsSectionBody") as FrameworkElement;
         private FrameworkElement? QuizDashboardGroupsSectionBodyElement => FindName("QuizDashboardGroupsSectionBody") as FrameworkElement;
         private FrameworkElement? QuizDashboardUngroupedSectionBodyElement => FindName("QuizDashboardUngroupedSectionBody") as FrameworkElement;
         private ItemsControl? QuizDashboardGroupsItemsControlElement => FindName("QuizDashboardGroupsItemsControl") as ItemsControl;
-        private ItemsControl? QuizDashboardUngroupedItemsControlElement => FindName("QuizDashboardUngroupedItemsControl") as ItemsControl;
+        private FrameworkElement? QuizDashboardUngroupedItemsControlElement => FindName("QuizDashboardUngroupedItemsControl") as FrameworkElement;
         private FrameworkElement? MindMapGroupsSectionBodyElement => FindName("MindMapGroupsSectionBody") as FrameworkElement;
         private FrameworkElement? MindMapDashboardGroupsSectionBodyElement => FindName("MindMapDashboardGroupsSectionBody") as FrameworkElement;
         private FrameworkElement? MindMapDashboardUngroupedSectionBodyElement => FindName("MindMapDashboardUngroupedSectionBody") as FrameworkElement;
+        private FrameworkElement? NotesDashboardViewElement => FindName("NotesDashboardView") as FrameworkElement;
+        private FrameworkElement? FlashcardsDashboardViewElement => FindName("FlashcardsDashboardView") as FrameworkElement;
+        private FrameworkElement? QuizzesDashboardViewElement => FindName("QuizzesDashboardView") as FrameworkElement;
+        private FrameworkElement? MindMapsDashboardViewElement => FindName("MindMapsDashboardView") as FrameworkElement;
+        private FrameworkElement? NotesEmptyDashboardPanelElement => FindName("NotesEmptyDashboardPanel") as FrameworkElement;
+        private FrameworkElement? NotesDashboardContentHostElement => FindName("NotesDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? FlashcardsDashboardContentHostElement => FindName("FlashcardsDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? QuizzesDashboardContentHostElement => FindName("QuizzesDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? MindMapsDashboardContentHostElement => FindName("MindMapsDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? FlashcardsEmptyDashboardPanelElement => FindName("FlashcardsEmptyDashboardPanel") as FrameworkElement;
+        private FrameworkElement? QuizzesEmptyDashboardPanelElement => FindName("QuizzesEmptyDashboardPanel") as FrameworkElement;
+        private FrameworkElement? MindMapsEmptyDashboardPanelElement => FindName("MindMapsEmptyDashboardPanel") as FrameworkElement;
         private ItemsControl? MindMapDashboardGroupsItemsControlElement => FindName("MindMapDashboardGroupsItemsControl") as ItemsControl;
-        private ItemsControl? MindMapDashboardUngroupedItemsControlElement => FindName("MindMapDashboardUngroupedItemsControl") as ItemsControl;
+        private FrameworkElement? MindMapDashboardUngroupedItemsControlElement => FindName("MindMapDashboardUngroupedItemsControl") as FrameworkElement;
         private ScrollViewer? FlashcardsScrollViewerElement => FindName("FlashcardsScrollViewer") as ScrollViewer;
         private ScrollViewer? QuizzesScrollViewerElement => FindName("QuizzesScrollViewer") as ScrollViewer;
         private ScrollViewer? MindMapsScrollViewerElement => FindName("MindMapsScrollViewer") as ScrollViewer;
         private FrameworkElement? CalendarSectionContainerElement => FindName("CalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? FlashcardCalendarSectionContainerElement => FindName("FlashcardCalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? QuizCalendarSectionContainerElement => FindName("QuizCalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? MindMapCalendarSectionContainerElement => FindName("MindMapCalendarSectionContainer") as FrameworkElement;
         private FrameworkElement? GroupsSectionContainerElement => FindName("GroupsSectionContainer") as FrameworkElement;
         private FrameworkElement? UngroupedSectionContainerElement => FindName("UngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? FlashcardDashboardUngroupedSectionContainerElement => FindName("FlashcardDashboardUngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? QuizDashboardUngroupedSectionContainerElement => FindName("QuizDashboardUngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? MindMapDashboardUngroupedSectionContainerElement => FindName("MindMapDashboardUngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? FlashcardDashboardGroupsSectionContainerElement => FindName("FlashcardDashboardGroupsSectionContainer") as FrameworkElement;
+        private FrameworkElement? QuizDashboardGroupsSectionContainerElement => FindName("QuizDashboardGroupsSectionContainer") as FrameworkElement;
+        private FrameworkElement? MindMapDashboardGroupsSectionContainerElement => FindName("MindMapDashboardGroupsSectionContainer") as FrameworkElement;
         private FrameworkElement? MassSelectOverlayToolbarElement => FindName("MassSelectOverlayToolbar") as FrameworkElement;
         private FrameworkElement? MassSelectMoreActionsPanelElement => FindName("MassSelectMoreActionsPanel") as FrameworkElement;
         private Button? MassSelectMoreActionsToggleButtonElement => FindName("MassSelectMoreActionsToggleButton") as Button;
         private Popup? SortNotesPopupElement => FindName("SortNotesPopup") as Popup;
         private Popup? DashboardSectionsPopupElement => FindName("DashboardSectionsPopup") as Popup;
         private ColumnDefinition? SidebarColumnElement => FindName("SidebarColumn") as ColumnDefinition;
+        private FrameworkElement? SidebarChromeElement => FindName("SidebarChrome") as FrameworkElement;
+        private FrameworkElement? MainContentRootElement => FindName("MainContentRoot") as FrameworkElement;
         private bool _isMassSelectMoreActionsExpanded;
 
         internal static bool IsNoteDragInProgress { get; private set; }
@@ -97,16 +138,75 @@ namespace NoteCards
             IsNoteDragInProgress = isInProgress;
         }
 
-        public MainWindow()
+        private bool _startupDataInitialized;
+        private readonly Models.AppSettings? _startupSettings;
+
+        public MainWindow(Models.AppSettings? startupSettings = null)
         {
+            _startupSettings = startupSettings;
             InitializeComponent();
             NoteCards.Services.WindowThemeService.Register(this);
-            NoteCards.Services.ActivityTracker.Initialize();
             ApplyCurrentLanguage();
             LocalizationService.CultureChanged += LocalizationService_CultureChanged;
             Loaded += MainWindow_Loaded;
+            ContentRendered += MainWindow_ContentRendered;
             Unloaded += MainWindow_Unloaded;
+            AttachDashboardPresenceHandlers();
+            StateChanged += MainWindow_StateChanged;
             DataContextChanged += MainWindow_DataContextChanged;
+            InitializeShellViewModel();
+        }
+
+        private void InitializeShellViewModel()
+        {
+            if (DataContext is MainViewModel)
+                return;
+
+            var viewModel = new MainViewModel(
+                _startupSettings,
+                loadPersistedContent: false,
+                applyThemeAndCulture: false);
+            DataContext = viewModel;
+            SetDashboardViewImmediate(viewModel.ActiveDashboard);
+            _lastActiveDashboard = viewModel.ActiveDashboard;
+            ApplySectionStateImmediately();
+        }
+
+        private void MainWindow_ContentRendered(object? sender, EventArgs e)
+        {
+            ContentRendered -= MainWindow_ContentRendered;
+            InitializeStartupData();
+        }
+
+        private void InitializeStartupData()
+        {
+            if (_startupDataInitialized)
+                return;
+
+            _startupDataInitialized = true;
+            Dispatcher.BeginInvoke(() =>
+            {
+                NoteCards.Services.ActivityTracker.Initialize();
+
+                if (DataContext is MainViewModel viewModel)
+                    viewModel.LoadPersistedContent();
+            }, DispatcherPriority.Background);
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+
+            if (PresentationSource.FromVisual(this) is HwndSource source)
+                source.AddHook(WndProc);
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WmSettingChange)
+                ReducedMotionPreferences.Refresh();
+
+            return IntPtr.Zero;
         }
 
         private void LocalizationService_CultureChanged(object? sender, EventArgs e)
@@ -119,10 +219,100 @@ namespace NoteCards
             Language = XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag);
         }
 
+        private static readonly object ListingShadowSuspendScope = new();
+        private static readonly object SidebarAnimationShadowScope = new();
+        private static readonly object DashboardTransitionShadowScope = new();
+
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                SuspendListingCardShadows();
+                return;
+            }
+
+            if (WindowState is not (WindowState.Normal or WindowState.Maximized))
+                return;
+
+            DashboardShadowSuspender.TryResume(ListingShadowSuspendScope);
+            Dispatcher.BeginInvoke(() =>
+            {
+                RefreshDashboardVirtualizationHosts();
+                EnsureActiveListingDashboardInteractive();
+            }, DispatcherPriority.Loaded);
+        }
+
+        private void SuspendListingCardShadows()
+        {
+            DashboardShadowSuspender.TrySuspend(ListingShadowSuspendScope, NotesScrollViewer);
+            DashboardShadowSuspender.TrySuspend(ListingShadowSuspendScope, FlashcardsScrollViewerElement);
+            DashboardShadowSuspender.TrySuspend(ListingShadowSuspendScope, QuizzesScrollViewerElement);
+            DashboardShadowSuspender.TrySuspend(ListingShadowSuspendScope, MindMapsScrollViewerElement);
+            DashboardShadowSuspender.TrySuspend(ListingShadowSuspendScope, RecentNotesScrollViewer);
+        }
+
+        internal void BeginChildWindowOwnerMotion(ref CacheMode? savedMainContentCacheMode)
+        {
+            SuspendListingCardShadows();
+
+            if (MainContentRootElement is not { } root)
+                return;
+
+            savedMainContentCacheMode = root.CacheMode;
+            root.CacheMode = new BitmapCache
+            {
+                EnableClearType = true,
+                SnapsToDevicePixels = true
+            };
+        }
+
+        internal void EndChildWindowOwnerMotion(CacheMode? savedMainContentCacheMode)
+        {
+            if (MainContentRootElement is { } root)
+                root.CacheMode = savedMainContentCacheMode;
+
+            DashboardShadowSuspender.TryResume(ListingShadowSuspendScope);
+        }
+
+        private void SuspendDashboardShadowsForSidebarAnimation()
+        {
+            DashboardShadowSuspender.TryResume(SidebarAnimationShadowScope);
+            DashboardShadowSuspender.TrySuspend(SidebarAnimationShadowScope, NotesScrollViewer);
+            DashboardShadowSuspender.TrySuspend(SidebarAnimationShadowScope, FlashcardsScrollViewerElement);
+            DashboardShadowSuspender.TrySuspend(SidebarAnimationShadowScope, QuizzesScrollViewerElement);
+            DashboardShadowSuspender.TrySuspend(SidebarAnimationShadowScope, MindMapsScrollViewerElement);
+            DashboardShadowSuspender.TrySuspend(SidebarAnimationShadowScope, RecentNotesScrollViewer);
+        }
+
+        private void CompleteSidebarAnimation()
+            => DashboardShadowSuspender.TryResume(SidebarAnimationShadowScope);
+
+        private void OnNotesDashboardReady(object? sender, EventArgs e)
+        {
+            if (sender is not MainViewModel vm)
+                return;
+
+            if (ResolveDashboardMotionScope(vm.ActiveDashboard) is { } scope)
+                EnsureDashboardContentHostRestState(scope);
+
+            if (IsLoaded)
+                QueueActiveDashboardEmptyEnterIfNeeded(vm);
+
+            QueueNotesLayoutRefresh();
+            QueueDashboardLayoutRefresh();
+            EnsureActiveListingDashboardInteractive();
+            Dispatcher.BeginInvoke(EnsureAllListingDashboardsInteractive, DispatcherPriority.ApplicationIdle);
+        }
+
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            AttachViewModel(DataContext as MainViewModel);
+            ConfigurePopupAnimations();
             ApplySectionStateImmediately();
+            EnsureAllDashboardContentHostsRestState();
+            if (DataContext is MainViewModel vm && vm.IsNotesDashboardReady)
+                OnNotesDashboardReady(vm, EventArgs.Empty);
+            else
+                Dispatcher.BeginInvoke(EnsureActiveListingDashboardInteractive, DispatcherPriority.Loaded);
         }
 
         private void MainWindow_Unloaded(object sender, RoutedEventArgs e)
@@ -134,16 +324,29 @@ namespace NoteCards
         private void MainWindow_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             AttachViewModel(e.NewValue as MainViewModel);
+            if (e.NewValue is MainViewModel vm)
+            {
+                SetDashboardViewImmediate(vm.ActiveDashboard);
+                _lastActiveDashboard = vm.ActiveDashboard;
+                if (IsLoaded)
+                    QueueActiveDashboardEmptyEnterIfNeeded(vm);
+            }
+
             ApplySectionStateImmediately();
+            EnsureAllDashboardContentHostsRestState();
+            Dispatcher.BeginInvoke(EnsureActiveListingDashboardInteractive, DispatcherPriority.Loaded);
         }
 
         private void AttachViewModel(MainViewModel? vm)
         {
             if (_observedViewModel != null)
             {
+                _observedViewModel.NotesDashboardReady -= OnNotesDashboardReady;
+                ReleaseDashboardMotionEngines();
+                _observedViewModel.MotionHost = null;
                 _observedViewModel.PropertyChanged -= ViewModel_PropertyChanged;
                 _observedViewModel.Notes.CollectionChanged -= ViewModel_NotesCollectionChanged;
-                _observedViewModel.NoteGroups.CollectionChanged -= ViewModel_NotesCollectionChanged;
+                _observedViewModel.NoteGroups.CollectionChanged -= ViewModel_NoteGroupsCollectionChanged;
                 _observedViewModel.FlashcardSets.CollectionChanged -= ViewModel_DashboardCollectionChanged;
                 _observedViewModel.FlashcardSetGroups.CollectionChanged -= ViewModel_DashboardCollectionChanged;
                 _observedViewModel.MindMaps.CollectionChanged -= ViewModel_DashboardCollectionChanged;
@@ -156,16 +359,25 @@ namespace NoteCards
 
             if (_observedViewModel != null)
             {
+                _observedViewModel.MotionHost = this;
+                _observedViewModel.NotesDashboardReady += OnNotesDashboardReady;
+                if (_observedViewModel.IsNotesDashboardReady)
+                    OnNotesDashboardReady(_observedViewModel, EventArgs.Empty);
+
                 _observedViewModel.PropertyChanged += ViewModel_PropertyChanged;
                 _observedViewModel.Notes.CollectionChanged += ViewModel_NotesCollectionChanged;
-                _observedViewModel.NoteGroups.CollectionChanged += ViewModel_NotesCollectionChanged;
+                _observedViewModel.NoteGroups.CollectionChanged += ViewModel_NoteGroupsCollectionChanged;
                 _observedViewModel.FlashcardSets.CollectionChanged += ViewModel_DashboardCollectionChanged;
-                _observedViewModel.FlashcardSetGroups.CollectionChanged += ViewModel_DashboardCollectionChanged;
+                _observedViewModel.FlashcardSetGroups.CollectionChanged += ViewModel_FlashcardSetGroupsCollectionChanged;
                 _observedViewModel.MindMaps.CollectionChanged += ViewModel_DashboardCollectionChanged;
-                _observedViewModel.MindMapGroups.CollectionChanged += ViewModel_DashboardCollectionChanged;
+                _observedViewModel.MindMapGroups.CollectionChanged += ViewModel_MindMapGroupsCollectionChanged;
                 _observedViewModel.Quizzes.CollectionChanged += ViewModel_DashboardCollectionChanged;
-                _observedViewModel.QuizGroups.CollectionChanged += ViewModel_DashboardCollectionChanged;
-                _lastKnownGroupsFirst = _observedViewModel.IsGroupsFirst;
+                _observedViewModel.QuizGroups.CollectionChanged += ViewModel_QuizGroupsCollectionChanged;
+                _notesHadGroups = _observedViewModel.HasGroups;
+                _flashcardsHadGroups = _observedViewModel.HasFlashcardSetGroups;
+                _quizzesHadGroups = _observedViewModel.HasQuizGroups;
+                _mindMapsHadGroups = _observedViewModel.HasMindMapGroups;
+                Dispatcher.BeginInvoke(EnsureAllDashboardContentHostsRestState, DispatcherPriority.Loaded);
                 QueueNotesLayoutRefresh();
                 QueueDashboardLayoutRefresh();
             }
@@ -173,41 +385,197 @@ namespace NoteCards
 
         private void ViewModel_NotesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
+            if (e.Action is NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Remove)
+                return;
+
             QueueNotesLayoutRefresh();
+        }
+
+        private bool _notesHadGroups;
+        private bool _flashcardsHadGroups;
+        private bool _quizzesHadGroups;
+        private bool _mindMapsHadGroups;
+
+        private void ViewModel_NoteGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove
+                     && e.OldItems is not null
+                     && !ShouldSkipGroupRemoveAnimation)
+            {
+                foreach (NoteGroupViewModel removed in e.OldItems)
+                    AnimateRemovedGroupCard(GroupsItemsControlElement, removed.GroupId);
+            }
+
+            QueueNotesLayoutRefresh();
+        }
+
+        private void ViewModel_FlashcardSetGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove
+                     && e.OldItems is not null
+                     && !ShouldSkipGroupRemoveAnimation)
+            {
+                foreach (FlashcardSetGroupViewModel removed in e.OldItems)
+                    AnimateRemovedGroupCard(FlashcardDashboardGroupsItemsControlElement, removed.GroupId);
+            }
+
+            QueueDashboardLayoutRefresh();
+        }
+
+        private void ViewModel_QuizGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove
+                     && e.OldItems is not null
+                     && !ShouldSkipGroupRemoveAnimation)
+            {
+                foreach (QuizGroupViewModel removed in e.OldItems)
+                    AnimateRemovedGroupCard(QuizDashboardGroupsItemsControlElement, removed.GroupId);
+            }
+
+            QueueDashboardLayoutRefresh();
+        }
+
+        private void ViewModel_MindMapGroupsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Remove
+                     && e.OldItems is not null
+                     && !ShouldSkipGroupRemoveAnimation)
+            {
+                foreach (MindMapGroupViewModel removed in e.OldItems)
+                    AnimateRemovedGroupCard(MindMapDashboardGroupsItemsControlElement, removed.GroupId);
+            }
+
+            QueueDashboardLayoutRefresh();
+        }
+
+        private void AnimateRemovedGroupCard(ItemsControl? itemsControl, Guid groupId)
+        {
+            if (itemsControl is null)
+                return;
+
+            var border = FindGroupCardBorder(itemsControl, groupId);
+            if (border is null)
+                return;
+
+            CardSurfaceMotionBehavior.PlayExit(border);
+        }
+
+        private static FrameworkElement? FindGroupCardBorder(DependencyObject root, Guid groupId)
+        {
+            if (root is Border { Tag: NoteGroupViewModel noteGroup } && noteGroup.GroupId == groupId)
+                return (FrameworkElement)root;
+            if (root is Border { Tag: FlashcardSetGroupViewModel flashcardGroup } && flashcardGroup.GroupId == groupId)
+                return (FrameworkElement)root;
+            if (root is Border { Tag: QuizGroupViewModel quizGroup } && quizGroup.GroupId == groupId)
+                return (FrameworkElement)root;
+            if (root is Border { Tag: MindMapGroupViewModel mindMapGroup } && mindMapGroup.GroupId == groupId)
+                return (FrameworkElement)root;
+
+            var count = VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < count; i++)
+            {
+                var found = FindGroupCardBorder(VisualTreeHelper.GetChild(root, i), groupId);
+                if (found is not null)
+                    return found;
+            }
+
+            return null;
+        }
+
+        private void QueueUngroupedNotesLayoutRefresh()
+        {
+            if (_ungroupedLayoutRefreshQueued)
+                return;
+
+            _ungroupedLayoutRefreshQueued = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _ungroupedLayoutRefreshQueued = false;
+                UngroupedSectionBodyElement?.InvalidateMeasure();
+                UngroupedSectionBodyElement?.InvalidateArrange();
+            }), DispatcherPriority.Background);
+        }
+
+        private bool _flashcardUngroupedLayoutRefreshQueued;
+        private bool _quizUngroupedLayoutRefreshQueued;
+        private bool _mindMapUngroupedLayoutRefreshQueued;
+
+        private void QueueUngroupedFlashcardsLayoutRefresh()
+        {
+            if (_dashboardTransitionActive
+                || DashboardMotionEngine.ShouldDeferVirtualizationRefresh(DashboardMotionScope.Flashcards)
+                || _flashcardUngroupedLayoutRefreshQueued)
+                return;
+
+            _flashcardUngroupedLayoutRefreshQueued = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _flashcardUngroupedLayoutRefreshQueued = false;
+                FlashcardDashboardUngroupedSectionBodyElement?.InvalidateMeasure();
+                FlashcardDashboardUngroupedSectionBodyElement?.InvalidateArrange();
+            }), DispatcherPriority.Background);
+        }
+
+        private void QueueUngroupedQuizzesLayoutRefresh()
+        {
+            if (_dashboardTransitionActive
+                || DashboardMotionEngine.ShouldDeferVirtualizationRefresh(DashboardMotionScope.Quizzes)
+                || _quizUngroupedLayoutRefreshQueued)
+                return;
+
+            _quizUngroupedLayoutRefreshQueued = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _quizUngroupedLayoutRefreshQueued = false;
+                QuizDashboardUngroupedSectionBodyElement?.InvalidateMeasure();
+                QuizDashboardUngroupedSectionBodyElement?.InvalidateArrange();
+            }), DispatcherPriority.Background);
+        }
+
+        private void QueueUngroupedMindMapsLayoutRefresh()
+        {
+            if (_dashboardTransitionActive
+                || DashboardMotionEngine.ShouldDeferVirtualizationRefresh(DashboardMotionScope.MindMaps)
+                || _mindMapUngroupedLayoutRefreshQueued)
+                return;
+
+            _mindMapUngroupedLayoutRefreshQueued = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _mindMapUngroupedLayoutRefreshQueued = false;
+                MindMapDashboardUngroupedSectionBodyElement?.InvalidateMeasure();
+                MindMapDashboardUngroupedSectionBodyElement?.InvalidateArrange();
+            }), DispatcherPriority.Background);
         }
 
         private void ViewModel_DashboardCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
+            if (e.Action is NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Remove)
+                return;
+
             QueueDashboardLayoutRefresh();
         }
 
         private void QueueNotesLayoutRefresh()
         {
-            if (!_notesLayoutRefreshQueued)
-            {
-                _notesLayoutRefreshQueued = true;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    _notesLayoutRefreshQueued = false;
-                    RefreshNotesDashboardLayout();
-                }), DispatcherPriority.Render);
-            }
-
-            if (_notesLayoutDeferredRefreshQueued)
+            if (_dashboardTransitionActive
+                || DashboardMotionEngine.ShouldDeferVirtualizationRefresh()
+                || _notesLayoutRefreshQueued
+                || !string.Equals(_observedViewModel?.ActiveDashboard, DashboardNotes, StringComparison.Ordinal))
                 return;
 
-            _notesLayoutDeferredRefreshQueued = true;
+            _notesLayoutRefreshQueued = true;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                _notesLayoutDeferredRefreshQueued = false;
+                _notesLayoutRefreshQueued = false;
                 RefreshNotesDashboardLayout();
-            }), DispatcherPriority.ContextIdle);
+            }), DispatcherPriority.Background);
         }
 
         private void RefreshNotesDashboardLayout()
         {
-            if (_observedViewModel != null)
-                EnsureExpandedSectionsNotClipped(_observedViewModel);
+            if (_observedViewModel?.HasNotes == true)
+                EnsureDashboardContentHostRestState(DashboardMotionScope.Notes);
 
             GroupsItemsControlElement?.InvalidateMeasure();
             GroupsItemsControlElement?.InvalidateArrange();
@@ -226,33 +594,22 @@ namespace NoteCards
             NotesDashboardSectionBodyElement?.InvalidateMeasure();
             NotesDashboardSectionBodyElement?.InvalidateArrange();
 
-            GroupsItemsControlElement?.UpdateLayout();
-            GroupsSectionBodyElement?.UpdateLayout();
-            NotesDashboardSectionBodyElement?.UpdateLayout();
-            NotesScrollViewer?.UpdateLayout();
+            RefreshDashboardVirtualizationHosts(DashboardMotionScope.Notes);
         }
 
         private void QueueDashboardLayoutRefresh()
         {
-            if (!_dashboardLayoutRefreshQueued)
-            {
-                _dashboardLayoutRefreshQueued = true;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    _dashboardLayoutRefreshQueued = false;
-                    RefreshDashboardBlockLayouts();
-                }), DispatcherPriority.Render);
-            }
-
-            if (_dashboardLayoutDeferredRefreshQueued)
+            if (_dashboardTransitionActive
+                || DashboardMotionEngine.ShouldDeferVirtualizationRefresh()
+                || _dashboardLayoutRefreshQueued)
                 return;
 
-            _dashboardLayoutDeferredRefreshQueued = true;
+            _dashboardLayoutRefreshQueued = true;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                _dashboardLayoutDeferredRefreshQueued = false;
+                _dashboardLayoutRefreshQueued = false;
                 RefreshDashboardBlockLayouts();
-            }), DispatcherPriority.ContextIdle);
+            }), DispatcherPriority.Background);
         }
 
         private void RefreshDashboardBlockLayouts()
@@ -260,27 +617,61 @@ namespace NoteCards
             if (_observedViewModel != null)
                 EnsureExpandedSectionsNotClipped(_observedViewModel);
 
-            InvalidateDashboardBlockLayout(
-                FlashcardDashboardGroupsItemsControlElement,
-                FlashcardDashboardUngroupedItemsControlElement,
-                FlashcardGroupsSectionBodyElement,
-                FlashcardDashboardGroupsSectionBodyElement,
-                FlashcardDashboardUngroupedSectionBodyElement,
-                FlashcardsScrollViewerElement);
-            InvalidateDashboardBlockLayout(
-                QuizDashboardGroupsItemsControlElement,
-                QuizDashboardUngroupedItemsControlElement,
-                QuizGroupsSectionBodyElement,
-                QuizDashboardGroupsSectionBodyElement,
-                QuizDashboardUngroupedSectionBodyElement,
-                QuizzesScrollViewerElement);
-            InvalidateDashboardBlockLayout(
-                MindMapDashboardGroupsItemsControlElement,
-                MindMapDashboardUngroupedItemsControlElement,
-                MindMapGroupsSectionBodyElement,
-                MindMapDashboardGroupsSectionBodyElement,
-                MindMapDashboardUngroupedSectionBodyElement,
-                MindMapsScrollViewerElement);
+            if (_observedViewModel is { } viewModel)
+            {
+                var restScope = viewModel.ActiveDashboard switch
+                {
+                    DashboardFlashcards when viewModel.HasFlashcardSets => DashboardMotionScope.Flashcards,
+                    DashboardQuizzes when viewModel.HasQuizzes => DashboardMotionScope.Quizzes,
+                    DashboardMindMaps when viewModel.HasMindMaps => DashboardMotionScope.MindMaps,
+                    _ => (DashboardMotionScope?)null
+                };
+
+                if (restScope is { } scopeToRestore)
+                    EnsureDashboardContentHostRestState(scopeToRestore);
+            }
+
+            DashboardMotionScope? scope = _observedViewModel?.ActiveDashboard switch
+            {
+                DashboardFlashcards => DashboardMotionScope.Flashcards,
+                DashboardQuizzes => DashboardMotionScope.Quizzes,
+                DashboardMindMaps => DashboardMotionScope.MindMaps,
+                _ => null
+            };
+
+            switch (_observedViewModel?.ActiveDashboard)
+            {
+                case DashboardFlashcards:
+                    InvalidateDashboardBlockLayout(
+                        FlashcardDashboardGroupsItemsControlElement,
+                        FlashcardDashboardUngroupedItemsControlElement,
+                        FlashcardGroupsSectionBodyElement,
+                        FlashcardDashboardGroupsSectionBodyElement,
+                        FlashcardDashboardUngroupedSectionBodyElement,
+                        FlashcardsScrollViewerElement);
+                    break;
+                case DashboardQuizzes:
+                    InvalidateDashboardBlockLayout(
+                        QuizDashboardGroupsItemsControlElement,
+                        QuizDashboardUngroupedItemsControlElement,
+                        QuizGroupsSectionBodyElement,
+                        QuizDashboardGroupsSectionBodyElement,
+                        QuizDashboardUngroupedSectionBodyElement,
+                        QuizzesScrollViewerElement);
+                    break;
+                case DashboardMindMaps:
+                    InvalidateDashboardBlockLayout(
+                        MindMapDashboardGroupsItemsControlElement,
+                        MindMapDashboardUngroupedItemsControlElement,
+                        MindMapGroupsSectionBodyElement,
+                        MindMapDashboardGroupsSectionBodyElement,
+                        MindMapDashboardUngroupedSectionBodyElement,
+                        MindMapsScrollViewerElement);
+                    break;
+            }
+
+            if (scope is { } activeScope)
+                RefreshDashboardVirtualizationHosts(activeScope);
         }
 
         private static void InvalidateDashboardBlockLayout(params FrameworkElement?[] elements)
@@ -290,9 +681,6 @@ namespace NoteCards
                 element?.InvalidateMeasure();
                 element?.InvalidateArrange();
             }
-
-            foreach (var element in elements)
-                element?.UpdateLayout();
         }
 
         private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -304,89 +692,160 @@ namespace NoteCards
             {
                 if (e.PropertyName == nameof(MainViewModel.IsRecentSectionExpanded))
                 {
-                    AnimateSectionVisibility(RecentSectionBodyElement, vm.IsRecentSectionExpanded);
-                    AnimateSectionVisibility(FlashcardRecentSectionBodyElement, vm.IsRecentSectionExpanded);
-                    AnimateSectionVisibility(QuizRecentSectionBodyElement, vm.IsRecentSectionExpanded);
-                    AnimateSectionVisibility(MindMapRecentSectionBodyElement, vm.IsRecentSectionExpanded);
+                    AnimateSharedDashboardSectionVisibility(
+                        vm,
+                        ResolveActiveRecentSectionBody(vm),
+                        RecentSectionBodyElement,
+                        FlashcardRecentSectionBodyElement,
+                        QuizRecentSectionBodyElement,
+                        MindMapRecentSectionBodyElement,
+                        vm.IsRecentSectionExpanded,
+                        ScheduleAllDashboardVirtualizationRefreshAfterSectionAnimation);
                 }
                 else if (e.PropertyName == nameof(MainViewModel.IsCalendarSectionExpanded))
                 {
-                    AnimateSectionVisibility(CalendarSectionBodyElement, vm.IsCalendarSectionExpanded);
-                    AnimateSectionVisibility(FlashcardCalendarSectionBodyElement, vm.IsCalendarSectionExpanded);
-                    AnimateSectionVisibility(QuizCalendarSectionBodyElement, vm.IsCalendarSectionExpanded);
-                    AnimateSectionVisibility(MindMapCalendarSectionBodyElement, vm.IsCalendarSectionExpanded);
+                    AnimateSharedDashboardSectionVisibility(
+                        vm,
+                        ResolveActiveCalendarSectionBody(vm),
+                        CalendarSectionBodyElement,
+                        FlashcardCalendarSectionBodyElement,
+                        QuizCalendarSectionBodyElement,
+                        MindMapCalendarSectionBodyElement,
+                        vm.IsCalendarSectionExpanded,
+                        ScheduleAllDashboardVirtualizationRefreshAfterSectionAnimation);
                 }
                 else if (e.PropertyName == nameof(MainViewModel.IsGroupsSectionExpanded))
-                    AnimateSectionVisibility(GroupsSectionBodyElement, vm.IsGroupsSectionExpanded);
+                    AnimateSectionVisibility(GroupsSectionBodyElement, vm.IsGroupsSectionExpanded, QueueNotesLayoutRefresh);
                 else if (e.PropertyName == nameof(MainViewModel.IsUngroupedSectionExpanded))
-                    AnimateSectionVisibility(UngroupedSectionBodyElement, vm.IsUngroupedSectionExpanded);
+                    AnimateSectionVisibility(UngroupedSectionBodyElement, vm.IsUngroupedSectionExpanded, QueueNotesLayoutRefresh);
                 else if (e.PropertyName == nameof(MainViewModel.IsNotesDashboardSectionExpanded))
-                    AnimateSectionVisibility(NotesDashboardSectionBodyElement, vm.IsNotesDashboardSectionExpanded);
+                    AnimateSectionVisibility(NotesDashboardSectionBodyElement, vm.IsNotesDashboardSectionExpanded, QueueNotesLayoutRefresh);
                 else if (e.PropertyName == nameof(MainViewModel.IsFlashcardGroupsSectionExpanded))
-                    AnimateSectionVisibility(FlashcardGroupsSectionBodyElement, vm.IsFlashcardGroupsSectionExpanded);
+                    AnimateSectionVisibility(FlashcardGroupsSectionBodyElement, vm.IsFlashcardGroupsSectionExpanded, ScheduleFlashcardVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsFlashcardDashboardGroupsSectionExpanded))
-                    AnimateSectionVisibility(FlashcardDashboardGroupsSectionBodyElement, vm.IsFlashcardDashboardGroupsSectionExpanded);
+                    AnimateSectionVisibility(FlashcardDashboardGroupsSectionBodyElement, vm.IsFlashcardDashboardGroupsSectionExpanded, ScheduleFlashcardVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsFlashcardDashboardUngroupedSectionExpanded))
-                    AnimateSectionVisibility(FlashcardDashboardUngroupedSectionBodyElement, vm.IsFlashcardDashboardUngroupedSectionExpanded);
+                    AnimateSectionVisibility(FlashcardDashboardUngroupedSectionBodyElement, vm.IsFlashcardDashboardUngroupedSectionExpanded, ScheduleFlashcardVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsQuizGroupsSectionExpanded))
-                    AnimateSectionVisibility(QuizGroupsSectionBodyElement, vm.IsQuizGroupsSectionExpanded);
+                    AnimateSectionVisibility(QuizGroupsSectionBodyElement, vm.IsQuizGroupsSectionExpanded, ScheduleQuizVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsQuizDashboardGroupsSectionExpanded))
-                    AnimateSectionVisibility(QuizDashboardGroupsSectionBodyElement, vm.IsQuizDashboardGroupsSectionExpanded);
+                    AnimateSectionVisibility(QuizDashboardGroupsSectionBodyElement, vm.IsQuizDashboardGroupsSectionExpanded, ScheduleQuizVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsQuizDashboardUngroupedSectionExpanded))
-                    AnimateSectionVisibility(QuizDashboardUngroupedSectionBodyElement, vm.IsQuizDashboardUngroupedSectionExpanded);
+                    AnimateSectionVisibility(QuizDashboardUngroupedSectionBodyElement, vm.IsQuizDashboardUngroupedSectionExpanded, ScheduleQuizVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsMindMapGroupsSectionExpanded))
-                    AnimateSectionVisibility(MindMapGroupsSectionBodyElement, vm.IsMindMapGroupsSectionExpanded);
+                    AnimateSectionVisibility(MindMapGroupsSectionBodyElement, vm.IsMindMapGroupsSectionExpanded, ScheduleMindMapVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsMindMapDashboardGroupsSectionExpanded))
-                    AnimateSectionVisibility(MindMapDashboardGroupsSectionBodyElement, vm.IsMindMapDashboardGroupsSectionExpanded);
+                    AnimateSectionVisibility(MindMapDashboardGroupsSectionBodyElement, vm.IsMindMapDashboardGroupsSectionExpanded, ScheduleMindMapVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsMindMapDashboardUngroupedSectionExpanded))
-                    AnimateSectionVisibility(MindMapDashboardUngroupedSectionBodyElement, vm.IsMindMapDashboardUngroupedSectionExpanded);
-                else if (e.PropertyName == nameof(MainViewModel.IsGroupsFirst))
-                {
-                    var movedUp = vm.IsGroupsFirst != _lastKnownGroupsFirst && vm.IsGroupsFirst;
-                    var movedDown = vm.IsGroupsFirst != _lastKnownGroupsFirst && !vm.IsGroupsFirst;
-
-                    if (movedUp)
-                        AnimateSectionSwap(-20, 20);
-                    else if (movedDown)
-                        AnimateSectionSwap(20, -20);
-
-                    _lastKnownGroupsFirst = vm.IsGroupsFirst;
-                }
+                    AnimateSectionVisibility(MindMapDashboardUngroupedSectionBodyElement, vm.IsMindMapDashboardUngroupedSectionExpanded, ScheduleMindMapVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.HasGroups))
                 {
+                    if (vm.HasGroups && !_notesHadGroups && vm.IsDashboardRevealMotionEnabled)
+                        PlayGroupsSectionReveal(DashboardMotionScope.Notes);
+
+                    _notesHadGroups = vm.HasGroups;
                     EnsureExpandedSectionsNotClipped(vm);
                     QueueNotesLayoutRefresh();
                 }
-                else if (e.PropertyName == nameof(MainViewModel.HasNotes)
-                      || e.PropertyName == nameof(MainViewModel.HasUngroupedNotes))
+                else if (e.PropertyName == nameof(MainViewModel.HasNotes))
                 {
-                    QueueNotesLayoutRefresh();
+                    if (vm.HasNotes)
+                        QueueUngroupedNotesLayoutRefresh();
+                    else
+                    {
+                        EnsureDashboardContentHostRestState(DashboardMotionScope.Notes);
+                        ScheduleEmptyDashboardEnter(NotesEmptyDashboardPanelElement, DashboardNotes);
+                    }
                 }
-                else if (e.PropertyName == nameof(MainViewModel.HasFlashcardSetGroups)
-                      || e.PropertyName == nameof(MainViewModel.HasUngroupedFlashcardSets)
-                      || e.PropertyName == nameof(MainViewModel.HasMindMapGroups)
-                      || e.PropertyName == nameof(MainViewModel.HasUngroupedMindMaps)
-                      || e.PropertyName == nameof(MainViewModel.HasQuizGroups)
-                      || e.PropertyName == nameof(MainViewModel.HasUngroupedQuizzes))
+                else if (e.PropertyName == nameof(MainViewModel.HasFlashcardSets))
                 {
+                    if (vm.HasFlashcardSets)
+                        QueueDashboardLayoutRefresh();
+                    else
+                    {
+                        EnsureDashboardContentHostRestState(DashboardMotionScope.Flashcards);
+                        ScheduleEmptyDashboardEnter(FlashcardsEmptyDashboardPanelElement, DashboardFlashcards);
+                    }
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasQuizzes))
+                {
+                    if (vm.HasQuizzes)
+                        QueueDashboardLayoutRefresh();
+                    else
+                    {
+                        EnsureDashboardContentHostRestState(DashboardMotionScope.Quizzes);
+                        ScheduleEmptyDashboardEnter(QuizzesEmptyDashboardPanelElement, DashboardQuizzes);
+                    }
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasMindMaps))
+                {
+                    if (vm.HasMindMaps)
+                        QueueDashboardLayoutRefresh();
+                    else
+                    {
+                        EnsureDashboardContentHostRestState(DashboardMotionScope.MindMaps);
+                        ScheduleEmptyDashboardEnter(MindMapsEmptyDashboardPanelElement, DashboardMindMaps);
+                    }
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasUngroupedNotes))
+                {
+                    QueueUngroupedNotesLayoutRefresh();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasFlashcardSetGroups))
+                {
+                    if (vm.HasFlashcardSetGroups && !_flashcardsHadGroups && vm.IsDashboardRevealMotionEnabled)
+                        PlayGroupsSectionReveal(DashboardMotionScope.Flashcards);
+
+                    _flashcardsHadGroups = vm.HasFlashcardSetGroups;
                     QueueDashboardLayoutRefresh();
                 }
-                else if (e.PropertyName == nameof(MainViewModel.IsSidebarExpanded)
-                      || e.PropertyName == nameof(MainViewModel.SidebarWidth))
+                else if (e.PropertyName == nameof(MainViewModel.HasQuizGroups))
+                {
+                    if (vm.HasQuizGroups && !_quizzesHadGroups && vm.IsDashboardRevealMotionEnabled)
+                        PlayGroupsSectionReveal(DashboardMotionScope.Quizzes);
+
+                    _quizzesHadGroups = vm.HasQuizGroups;
+                    QueueDashboardLayoutRefresh();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasMindMapGroups))
+                {
+                    if (vm.HasMindMapGroups && !_mindMapsHadGroups && vm.IsDashboardRevealMotionEnabled)
+                        PlayGroupsSectionReveal(DashboardMotionScope.MindMaps);
+
+                    _mindMapsHadGroups = vm.HasMindMapGroups;
+                    QueueDashboardLayoutRefresh();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasUngroupedFlashcardSets))
+                {
+                    QueueUngroupedFlashcardsLayoutRefresh();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasUngroupedQuizzes))
+                {
+                    QueueUngroupedQuizzesLayoutRefresh();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.HasUngroupedMindMaps))
+                {
+                    QueueUngroupedMindMapsLayoutRefresh();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.SidebarWidth))
                 {
                     AnimateSidebarWidth(vm.SidebarWidth);
                 }
                 else if (e.PropertyName == nameof(MainViewModel.IsMassSelectMode))
                 {
                     AnimateMassSelectOverlay(vm.IsMassSelectMode);
+                    MassSelectHighlightBehavior.ScheduleSyncAllDashboardGrids();
                 }
-                else if (e.PropertyName == nameof(MainViewModel.IsFlashcardsView)
-                      || e.PropertyName == nameof(MainViewModel.IsMindMapsView)
-                      || e.PropertyName == nameof(MainViewModel.IsQuizzesView)
-                      || e.PropertyName == nameof(MainViewModel.IsNotesView))
+                else if (e.PropertyName == nameof(MainViewModel.ActiveMassSelectedCount) && vm.IsMassSelectMode)
                 {
+                    MassSelectHighlightBehavior.ScheduleSyncAllDashboardGrids();
+                }
+                else if (e.PropertyName == nameof(MainViewModel.ActiveDashboard))
+                {
+                    AnimateDashboardTransition(vm.ActiveDashboard);
                     CloseNotesDashboardChrome();
                 }
+
             });
         }
 
@@ -418,7 +877,7 @@ namespace NoteCards
             SetSidebarWidthImmediately(vm.SidebarWidth);
             SetMassSelectOverlayStateImmediately(vm.IsMassSelectMode);
             EnsureExpandedSectionsNotClipped(vm);
-            _lastKnownGroupsFirst = vm.IsGroupsFirst;
+
         }
 
         private void SetMassSelectOverlayStateImmediately(bool isVisible)
@@ -427,9 +886,10 @@ namespace NoteCards
             if (overlay is null)
                 return;
 
-            overlay.BeginAnimation(OpacityProperty, null);
-            var translate = EnsureMassOverlayTranslateTransform(overlay);
-            translate.BeginAnimation(TranslateTransform.YProperty, null);
+            UiMotion.Stop(overlay);
+            UiMotion.Clear(overlay, UIElement.OpacityProperty);
+            var translate = UiMotion.EnsureTranslate(overlay);
+            UiMotion.Clear(translate, TranslateTransform.YProperty);
 
             if (isVisible)
             {
@@ -441,7 +901,7 @@ namespace NoteCards
 
             overlay.Visibility = Visibility.Collapsed;
             overlay.Opacity = 0;
-            translate.Y = -12;
+            translate.Y = -UiMotion.PanelLiftY;
             SetMassSelectMoreActionsStateImmediately(false);
         }
 
@@ -451,48 +911,12 @@ namespace NoteCards
             if (overlay is null)
                 return;
 
-            overlay.BeginAnimation(OpacityProperty, null);
-            var translate = EnsureMassOverlayTranslateTransform(overlay);
-            translate.BeginAnimation(TranslateTransform.YProperty, null);
-
-            var duration = TimeSpan.FromMilliseconds(190);
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            if (isVisible)
-            {
-                overlay.Visibility = Visibility.Visible;
-                overlay.Opacity = 0;
-                translate.Y = -12;
-
-                overlay.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-                translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-12, 0, duration) { EasingFunction = ease });
-                return;
-            }
-
-            if (overlay.Visibility != Visibility.Visible)
-                return;
-
-            var fadeOut = new DoubleAnimation(overlay.Opacity, 0, duration) { EasingFunction = ease };
-            fadeOut.Completed += (_, _) =>
-            {
-                overlay.Visibility = Visibility.Collapsed;
-                overlay.Opacity = 0;
-                translate.Y = -12;
-            };
-
-            overlay.BeginAnimation(OpacityProperty, fadeOut);
-            translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(translate.Y, -12, duration) { EasingFunction = ease });
-            SetMassSelectMoreActionsStateImmediately(false);
-        }
-
-        private static TranslateTransform EnsureMassOverlayTranslateTransform(FrameworkElement overlay)
-        {
-            if (overlay.RenderTransform is TranslateTransform translate)
-                return translate;
-
-            var created = new TranslateTransform(0, 0);
-            overlay.RenderTransform = created;
-            return created;
+            UiMotion.SlideFadePanel(
+                overlay,
+                isVisible,
+                durationMs: UiMotion.OpenMs,
+                offsetY: UiMotion.PanelLiftY,
+                onComplete: isVisible ? null : () => SetMassSelectMoreActionsStateImmediately(false));
         }
 
         private void SetMassSelectMoreActionsStateImmediately(bool isExpanded)
@@ -504,10 +928,11 @@ namespace NoteCards
             if (panel is null)
                 return;
 
-            panel.BeginAnimation(OpacityProperty, null);
-            var scale = EnsureMassMoreActionsScaleTransform(panel);
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            UiMotion.Stop(panel);
+            UiMotion.Clear(panel, UIElement.OpacityProperty);
+            var scale = UiMotion.EnsureScale(panel, UiMotion.CollapsedScale);
+            UiMotion.Clear(scale, ScaleTransform.ScaleXProperty);
+            UiMotion.Clear(scale, ScaleTransform.ScaleYProperty);
 
             if (isExpanded)
             {
@@ -520,8 +945,8 @@ namespace NoteCards
 
             panel.Visibility = Visibility.Collapsed;
             panel.Opacity = 0;
-            scale.ScaleX = 0.92;
-            scale.ScaleY = 0.92;
+            scale.ScaleX = UiMotion.CollapsedScale;
+            scale.ScaleY = UiMotion.CollapsedScale;
         }
 
         private void ToggleMassSelectMoreActionsButton_Click(object sender, RoutedEventArgs e)
@@ -541,42 +966,7 @@ namespace NoteCards
             if (panel is null)
                 return;
 
-            panel.BeginAnimation(OpacityProperty, null);
-            var scale = EnsureMassMoreActionsScaleTransform(panel);
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-
-            var duration = TimeSpan.FromMilliseconds(170);
-            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            if (expand)
-            {
-                panel.Visibility = Visibility.Visible;
-                panel.Opacity = 0;
-                scale.ScaleX = 0.92;
-                scale.ScaleY = 0.92;
-
-                panel.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = easing });
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.92, 1, duration) { EasingFunction = easing });
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.92, 1, duration) { EasingFunction = easing });
-                return;
-            }
-
-            if (panel.Visibility != Visibility.Visible)
-                return;
-
-            var fadeOut = new DoubleAnimation(panel.Opacity, 0, duration) { EasingFunction = easing };
-            fadeOut.Completed += (_, _) =>
-            {
-                panel.Visibility = Visibility.Collapsed;
-                panel.Opacity = 0;
-                scale.ScaleX = 0.92;
-                scale.ScaleY = 0.92;
-            };
-
-            panel.BeginAnimation(OpacityProperty, fadeOut);
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(scale.ScaleX, 0.92, duration) { EasingFunction = easing });
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(scale.ScaleY, 0.92, duration) { EasingFunction = easing });
+            UiMotion.ScaleFadePanel(panel, expand, durationMs: UiMotion.FastMs);
         }
 
         private void UpdateMassSelectMoreActionsToggleIcon()
@@ -585,16 +975,6 @@ namespace NoteCards
                 return;
 
             toggle.Content = _isMassSelectMoreActionsExpanded ? "‹" : "›";
-        }
-
-        private static ScaleTransform EnsureMassMoreActionsScaleTransform(FrameworkElement panel)
-        {
-            if (panel.RenderTransform is ScaleTransform scale)
-                return scale;
-
-            var created = new ScaleTransform(0.92, 0.92);
-            panel.RenderTransform = created;
-            return created;
         }
 
         private void SetSidebarWidthImmediately(double width)
@@ -615,18 +995,25 @@ namespace NoteCards
             if (Math.Abs(currentWidth - targetWidth) < 0.5)
             {
                 SidebarColumnElement.Width = new GridLength(targetWidth, GridUnitType.Pixel);
+                CompleteSidebarAnimation();
                 return;
             }
 
-            var animation = new GridLengthAnimation
+            if (SidebarChromeElement is not null)
             {
-                From = new GridLength(currentWidth, GridUnitType.Pixel),
-                To = new GridLength(targetWidth, GridUnitType.Pixel),
-                Duration = TimeSpan.FromMilliseconds(SidebarAnimationMs),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
-            };
+                SuspendDashboardShadowsForSidebarAnimation();
+                UiMotion.AnimateSidebarChrome(
+                    SidebarChromeElement,
+                    SidebarColumnElement,
+                    currentWidth,
+                    targetWidth,
+                    UiMotion.SidebarResizeMs,
+                    CompleteSidebarAnimation);
+                return;
+            }
 
-            SidebarColumnElement.BeginAnimation(ColumnDefinition.WidthProperty, animation);
+            SidebarColumnElement.Width = new GridLength(targetWidth, GridUnitType.Pixel);
+            CompleteSidebarAnimation();
         }
 
         private static void EnsureExpandedSectionsNotClipped(MainViewModel vm)
@@ -675,7 +1062,9 @@ namespace NoteCards
 
         private static void AllowExpandedSectionContent(FrameworkElement section)
         {
-            section.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
+            UiMotion.Clear(section, FrameworkElement.MaxHeightProperty);
+            section.ClearValue(FrameworkElement.HeightProperty);
+            section.Clip = null;
             section.MaxHeight = double.PositiveInfinity;
             section.ClipToBounds = false;
         }
@@ -685,7 +1074,8 @@ namespace NoteCards
             if (section is null)
                 return;
 
-            var translate = EnsureSectionTranslateTransform(section);
+            section.RenderTransformOrigin = new Point(0.5, 0);
+            var translate = UiMotion.EnsureTranslate(section);
 
             if (isExpanded)
             {
@@ -700,106 +1090,351 @@ namespace NoteCards
             section.Visibility = Visibility.Collapsed;
             section.Opacity = 0;
             section.MaxHeight = 0;
+            section.ClearValue(FrameworkElement.HeightProperty);
+            section.Clip = null;
             translate.Y = -8;
         }
 
-        private static void AnimateSectionVisibility(FrameworkElement? section, bool isExpanded)
+        private void AnimateSectionVisibility(FrameworkElement? section, bool isExpanded, Action? onComplete = null)
         {
             if (section is null)
-                return;
-
-            section.BeginAnimation(OpacityProperty, null);
-            section.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
-            var translate = EnsureSectionTranslateTransform(section);
-            translate.BeginAnimation(TranslateTransform.YProperty, null);
-
-            var duration = TimeSpan.FromMilliseconds(SectionAnimationMs);
-            var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
-
-            if (isExpanded)
             {
-                section.Visibility = Visibility.Visible;
-                section.ClipToBounds = true;
-                section.MaxHeight = double.PositiveInfinity;
-
-                section.Measure(new Size(section.ActualWidth > 0 ? section.ActualWidth : double.PositiveInfinity, double.PositiveInfinity));
-                var targetHeight = Math.Max(1, section.DesiredSize.Height + 8);
-
-                section.MaxHeight = 0;
-                section.Opacity = 0;
-                translate.Y = -8;
-
-                var expandHeight = new DoubleAnimation(0, targetHeight, duration) { EasingFunction = ease };
-                expandHeight.Completed += (_, _) => AllowExpandedSectionContent(section);
-
-                section.BeginAnimation(FrameworkElement.MaxHeightProperty, expandHeight);
-                translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-8, 0, duration) { EasingFunction = ease });
-                section.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)));
+                onComplete?.Invoke();
                 return;
             }
 
-            section.ClipToBounds = true;
-            var startHeight = section.ActualHeight;
-            if (startHeight <= 0)
+            UiMotion.AnimateClipReveal(section, isExpanded, UiMotion.SectionMs, onComplete: onComplete);
+        }
+
+        private void AnimateSharedDashboardSectionVisibility(
+            MainViewModel vm,
+            FrameworkElement? activeSection,
+            FrameworkElement? notesSection,
+            FrameworkElement? flashcardsSection,
+            FrameworkElement? quizzesSection,
+            FrameworkElement? mindMapsSection,
+            bool isExpanded,
+            Action? onComplete = null)
+        {
+            foreach (var section in new[] { notesSection, flashcardsSection, quizzesSection, mindMapsSection })
             {
-                section.Visibility = Visibility.Collapsed;
-                section.Opacity = 0;
-                section.MaxHeight = 0;
-                translate.Y = -8;
-                return;
+                if (section is null || ReferenceEquals(section, activeSection))
+                    continue;
+
+                SetSectionVisibilityImmediately(section, isExpanded);
             }
 
-            section.MaxHeight = startHeight;
-            var collapseAnimation = new DoubleAnimation(translate.Y, -8, duration) { EasingFunction = ease };
-            collapseAnimation.Completed += (_, _) =>
+            AnimateSectionVisibility(activeSection, isExpanded, onComplete);
+        }
+
+        private FrameworkElement? ResolveActiveRecentSectionBody(MainViewModel vm)
+            => ResolveActiveDashboardSectionBody(
+                vm,
+                RecentSectionBodyElement,
+                FlashcardRecentSectionBodyElement,
+                QuizRecentSectionBodyElement,
+                MindMapRecentSectionBodyElement);
+
+        private FrameworkElement? ResolveActiveCalendarSectionBody(MainViewModel vm)
+            => ResolveActiveDashboardSectionBody(
+                vm,
+                CalendarSectionBodyElement,
+                FlashcardCalendarSectionBodyElement,
+                QuizCalendarSectionBodyElement,
+                MindMapCalendarSectionBodyElement);
+
+        private static FrameworkElement? ResolveActiveDashboardSectionBody(
+            MainViewModel vm,
+            FrameworkElement? notesSection,
+            FrameworkElement? flashcardsSection,
+            FrameworkElement? quizzesSection,
+            FrameworkElement? mindMapsSection)
+            => vm.ActiveDashboard switch
             {
-                section.Visibility = Visibility.Collapsed;
-                section.Opacity = 0;
-                section.MaxHeight = 0;
-                translate.Y = -8;
+                DashboardFlashcards => flashcardsSection ?? notesSection,
+                DashboardQuizzes => quizzesSection ?? notesSection,
+                DashboardMindMaps => mindMapsSection ?? notesSection,
+                _ => notesSection
             };
 
-            section.BeginAnimation(FrameworkElement.MaxHeightProperty, new DoubleAnimation(startHeight, 0, duration)
+        private void ScheduleNotesLayoutRefreshAfterSectionAnimation()
+            => ScheduleVirtualizationRefreshAfterSectionAnimation(QueueNotesLayoutRefresh);
+
+        private void ScheduleAllDashboardVirtualizationRefreshAfterSectionAnimation()
+            => ScheduleVirtualizationRefreshAfterSectionAnimation(() => RefreshDashboardVirtualizationHosts());
+
+        private void ScheduleFlashcardVirtualizationRefreshAfterSectionAnimation()
+            => ScheduleVirtualizationRefreshAfterSectionAnimation(() => RefreshDashboardVirtualizationHosts(DashboardMotionScope.Flashcards));
+
+        private void ScheduleQuizVirtualizationRefreshAfterSectionAnimation()
+            => ScheduleVirtualizationRefreshAfterSectionAnimation(() => RefreshDashboardVirtualizationHosts(DashboardMotionScope.Quizzes));
+
+        private void ScheduleMindMapVirtualizationRefreshAfterSectionAnimation()
+            => ScheduleVirtualizationRefreshAfterSectionAnimation(() => RefreshDashboardVirtualizationHosts(DashboardMotionScope.MindMaps));
+
+        private void ScheduleVirtualizationRefreshAfterSectionAnimation(Action refresh)
+            => ScheduleMotionRefreshAfterAnimation(refresh, UiMotion.SectionMs);
+
+        private void ScheduleReflowVirtualizationRefresh(DashboardMotionScope scope)
+            => ScheduleMotionRefreshAfterAnimation(() => RefreshDashboardVirtualizationHosts(scope), UiMotion.ReflowMs);
+
+        private static void ScheduleMotionRefreshAfterAnimation(Action refresh, int durationMs)
+        {
+            var timer = new DispatcherTimer
             {
-                EasingFunction = ease
-            });
-            translate.BeginAnimation(TranslateTransform.YProperty, collapseAnimation);
-            section.BeginAnimation(OpacityProperty, new DoubleAnimation(section.Opacity, 0, TimeSpan.FromMilliseconds(180)));
+                Interval = TimeSpan.FromMilliseconds(durationMs + 16)
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                refresh();
+            };
+            timer.Start();
         }
 
-        private static TranslateTransform EnsureSectionTranslateTransform(FrameworkElement section)
+        private void SwapNotesGroupsAndUngroupedSections(bool groupsFirst)
         {
-            section.RenderTransformOrigin = new Point(0.5, 0);
+            if (DataContext is not MainViewModel vm || vm.IsGroupsFirst == groupsFirst)
+                return;
 
-            if (section.RenderTransform is TransformGroup group)
+            AnimateDashboardSectionPairSwap(
+                GroupsSectionContainerElement,
+                UngroupedSectionContainerElement,
+                () => vm.IsGroupsFirst = groupsFirst,
+                DashboardMotionScope.Notes,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.Notes));
+        }
+
+        private void SwapNotesCalendarAndDashboard(bool calendarFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsCalendarFirst == calendarFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                CalendarSectionContainerElement,
+                NotesDashboardContentHostElement,
+                () => vm.IsCalendarFirst = calendarFirst,
+                DashboardMotionScope.Notes,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.Notes));
+        }
+
+        private void SwapFlashcardDashboardGroupsAndUngrouped(bool groupsFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsFlashcardDashboardGroupsFirst == groupsFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                FlashcardDashboardGroupsSectionContainerElement,
+                FlashcardDashboardUngroupedSectionContainerElement,
+                () => vm.IsFlashcardDashboardGroupsFirst = groupsFirst,
+                DashboardMotionScope.Flashcards,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.Flashcards));
+        }
+
+        private void SwapFlashcardCalendarAndDashboard(bool calendarFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsCalendarFirst == calendarFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                FlashcardCalendarSectionContainerElement,
+                FlashcardsDashboardContentHostElement,
+                () => vm.IsCalendarFirst = calendarFirst,
+                DashboardMotionScope.Flashcards,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.Flashcards));
+        }
+
+        private void SwapQuizDashboardGroupsAndUngrouped(bool groupsFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsQuizDashboardGroupsFirst == groupsFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                QuizDashboardGroupsSectionContainerElement,
+                QuizDashboardUngroupedSectionContainerElement,
+                () => vm.IsQuizDashboardGroupsFirst = groupsFirst,
+                DashboardMotionScope.Quizzes,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.Quizzes));
+        }
+
+        private void SwapQuizCalendarAndDashboard(bool calendarFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsCalendarFirst == calendarFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                QuizCalendarSectionContainerElement,
+                QuizzesDashboardContentHostElement,
+                () => vm.IsCalendarFirst = calendarFirst,
+                DashboardMotionScope.Quizzes,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.Quizzes));
+        }
+
+        private void SwapMindMapDashboardGroupsAndUngrouped(bool groupsFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsMindMapDashboardGroupsFirst == groupsFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                MindMapDashboardGroupsSectionContainerElement,
+                MindMapDashboardUngroupedSectionContainerElement,
+                () => vm.IsMindMapDashboardGroupsFirst = groupsFirst,
+                DashboardMotionScope.MindMaps,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.MindMaps));
+        }
+
+        private void SwapMindMapCalendarAndDashboard(bool calendarFirst)
+        {
+            if (DataContext is not MainViewModel vm || vm.IsCalendarFirst == calendarFirst)
+                return;
+
+            AnimateDashboardSectionPairSwap(
+                MindMapCalendarSectionContainerElement,
+                MindMapsDashboardContentHostElement,
+                () => vm.IsCalendarFirst = calendarFirst,
+                DashboardMotionScope.MindMaps,
+                () => ScheduleReflowVirtualizationRefresh(DashboardMotionScope.MindMaps));
+        }
+
+        private void AnimateDashboardSectionPairSwap(
+            FrameworkElement? firstSection,
+            FrameworkElement? secondSection,
+            Action applySwap,
+            DashboardMotionScope motionScope,
+            Action? afterSwap = null)
+        {
+            if (ShouldApplyReorderMotionInstantly())
             {
-                var existingTranslate = group.Children.OfType<TranslateTransform>().FirstOrDefault();
-                if (existingTranslate != null)
-                    return existingTranslate;
-
-                var translate = new TranslateTransform(0, 0);
-                group.Children.Insert(0, translate);
-                return translate;
+                applySwap();
+                afterSwap?.Invoke();
+                return;
             }
 
-            if (section.RenderTransform is TranslateTransform directTranslate)
-                return directTranslate;
+            if (firstSection is null || secondSection is null)
+            {
+                applySwap();
+                afterSwap?.Invoke();
+                return;
+            }
 
-            var transformGroup = new TransformGroup();
-            var newTranslate = new TranslateTransform(0, 0);
-            transformGroup.Children.Add(newTranslate);
+            if (firstSection.Visibility != Visibility.Visible || secondSection.Visibility != Visibility.Visible)
+            {
+                applySwap();
+                afterSwap?.Invoke();
+                return;
+            }
 
-            if (section.RenderTransform != null && section.RenderTransform != Transform.Identity)
-                transformGroup.Children.Add(section.RenderTransform);
+            var parent = VisualTreeHelper.GetParent(firstSection) as UIElement;
+            if (parent is null || !ReferenceEquals(VisualTreeHelper.GetParent(secondSection), parent))
+            {
+                applySwap();
+                afterSwap?.Invoke();
+                return;
+            }
 
-            section.RenderTransform = transformGroup;
-            return newTranslate;
+            var engine = EnsureDashboardMotionEngine(motionScope);
+            engine.BeginLayoutAnimation();
+
+            parent.UpdateLayout();
+            var firstOldY = MeasureTopOffset(firstSection, parent);
+            var secondOldY = MeasureTopOffset(secondSection, parent);
+
+            applySwap();
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                RunFlipPairAnimation(
+                    firstSection,
+                    secondSection,
+                    parent,
+                    firstOldY,
+                    secondOldY,
+                    engine,
+                    afterSwap);
+            }, DispatcherPriority.Render);
         }
 
-        private void AnimateSectionSwap(double groupsOffset, double ungroupedOffset)
+        private bool ShouldApplyReorderMotionInstantly()
+            => _dashboardTransitionActive || UiMotion.PrefersReducedMotion;
+
+        private static double MeasureTopOffset(FrameworkElement element, UIElement relativeTo)
         {
-            AnimateSectionReflow(GroupsSectionContainerElement, groupsOffset);
-            AnimateSectionReflow(UngroupedSectionContainerElement, ungroupedOffset);
+            try
+            {
+                return element.TransformToAncestor(relativeTo).Transform(new Point(0, 0)).Y;
+            }
+            catch (InvalidOperationException)
+            {
+                return 0;
+            }
+        }
+
+        private void RunFlipPairAnimation(
+            FrameworkElement first,
+            FrameworkElement second,
+            UIElement parent,
+            double firstOldY,
+            double secondOldY,
+            DashboardMotionEngine engine,
+            Action? onAllComplete = null)
+        {
+            parent.UpdateLayout();
+            var firstDelta = firstOldY - MeasureTopOffset(first, parent);
+            var secondDelta = secondOldY - MeasureTopOffset(second, parent);
+
+            var animations = 0;
+            if (Math.Abs(firstDelta) >= 0.5)
+                animations++;
+            if (Math.Abs(secondDelta) >= 0.5)
+                animations++;
+
+            if (animations == 0)
+            {
+                engine.EndLayoutAnimation();
+                onAllComplete?.Invoke();
+                return;
+            }
+
+            var remaining = animations;
+            void OnOneComplete()
+            {
+                remaining--;
+                if (remaining > 0)
+                    return;
+
+                engine.EndLayoutAnimation();
+                onAllComplete?.Invoke();
+            }
+
+            AnimateSectionFlipOffset(first, firstDelta, OnOneComplete);
+            AnimateSectionFlipOffset(second, secondDelta, OnOneComplete);
+        }
+
+        private static void AnimateSectionFlipOffset(FrameworkElement element, double startOffset, Action? onComplete = null)
+        {
+            if (Math.Abs(startOffset) < 0.5)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            element.RenderTransformOrigin = new Point(0.5, 0);
+            var translate = UiMotion.EnsureTranslate(element);
+            UiMotion.Stop(element);
+            UiMotion.Clear(element, UIElement.OpacityProperty);
+            translate.Y = startOffset;
+
+            UiMotion.RunComposited(
+                element,
+                new[]
+                {
+                    UiMotion.Track(UiMotion.ReflowMs, UiMotion.OutQuad, startOffset, 0, value => translate.Y = value)
+                },
+                () =>
+                {
+                    translate.Y = 0;
+                    onComplete?.Invoke();
+                });
         }
 
         private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
@@ -811,37 +1446,14 @@ namespace NoteCards
                 vm.CalendarSelectedDate = calendar.SelectedDate.Value.Date;
         }
 
-        private static void AnimateSectionReflow(FrameworkElement? element, double startOffset)
-        {
-            if (element is null)
-                return;
 
-            if (element.RenderTransform is not TranslateTransform transform)
-            {
-                transform = new TranslateTransform();
-                element.RenderTransform = transform;
-            }
-
-            transform.BeginAnimation(TranslateTransform.YProperty, null);
-            element.BeginAnimation(OpacityProperty, null);
-
-            transform.Y = startOffset;
-            element.Opacity = 0.82;
-
-            var duration = TimeSpan.FromMilliseconds(SectionAnimationMs);
-            transform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(startOffset, 0, duration)
-            {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            });
-            element.BeginAnimation(OpacityProperty, new DoubleAnimation(0.82, 1, duration));
-        }
 
         private void NotesScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (!IsNoteDragInProgress || sender is not ScrollViewer scrollViewer)
                 return;
 
-            if (e.Data.GetData(typeof(NoteCardViewModel)) is not NoteCardViewModel)
+            if (e.Data.GetData(typeof(NoteCardViewModel)) is not NoteCardViewModel draggedNote)
                 return;
 
             var cursorPosition = e.GetPosition(scrollViewer);
@@ -853,6 +1465,154 @@ namespace NoteCards
             else if (cursorPosition.Y > scrollViewer.ViewportHeight - DragScrollEdgeThreshold)
             {
                 scrollViewer.ScrollToVerticalOffset(Math.Min(scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset + DragScrollStep));
+            }
+        }
+
+        private void NotesScrollViewer_PreviewDragLeave(object sender, DragEventArgs e)
+        {
+            if (DashboardDragGhost.IsNoteDropGlowSyncActive)
+                NoteCardControl.ClearDropGlowOwner();
+        }
+
+        internal void SyncNoteDropGlowDuringDrag(
+            NoteCardViewModel? draggedNote,
+            NoteCardControl? dragSource)
+        {
+            if (draggedNote is null)
+                return;
+
+            if (NotesScrollViewer is null)
+            {
+                NoteCardControl.ClearDropGlowOwner();
+                return;
+            }
+
+            if (!DashboardDragGhost.TryGetCursorScreenPoint(out var screenPoint))
+            {
+                NoteCardControl.ClearDropGlowOwner();
+                return;
+            }
+
+            NoteCardControl.SyncDropGlowAtScreenPoint(
+                NotesScrollViewer,
+                screenPoint,
+                draggedNote,
+                dragSource);
+        }
+
+        internal void SyncDashboardListingDropVisualDuringDrag(
+            object? draggedListing,
+            FrameworkElement? dragSource)
+        {
+            if (draggedListing is null)
+                return;
+
+            if (DataContext is MainViewModel { IsMassSelectMode: true })
+            {
+                ClearDashboardListingDropVisuals();
+                return;
+            }
+
+            var scrollViewer = ResolveActiveDashboardScrollViewer();
+            if (scrollViewer is null)
+            {
+                ClearDashboardListingDropVisuals();
+                return;
+            }
+
+            if (!DashboardDragGhost.TryGetCursorScreenPoint(out var screenPoint))
+            {
+                ClearDashboardListingDropVisuals();
+                return;
+            }
+
+            FrameworkElement? dropTarget = null;
+            ForEachDashboardListing(scrollViewer, candidate =>
+            {
+                if (ReferenceEquals(candidate, dragSource)
+                    || candidate.Tag is not { } targetListing
+                    || !CanDropListingOnTarget(draggedListing, targetListing)
+                    || !IsScreenPointWithinElement(candidate, screenPoint))
+                {
+                    return;
+                }
+
+                dropTarget = candidate;
+            });
+
+            if (dropTarget is null)
+                ClearDashboardListingDropVisuals();
+            else
+                SetDashboardListingDropVisual(dropTarget, true);
+        }
+
+        private ScrollViewer? ResolveActiveDashboardScrollViewer()
+        {
+            if (DataContext is not MainViewModel vm)
+                return null;
+
+            return vm.ActiveDashboard switch
+            {
+                DashboardNotes => NotesScrollViewer,
+                DashboardFlashcards => FlashcardsScrollViewerElement,
+                DashboardQuizzes => QuizzesScrollViewerElement,
+                DashboardMindMaps => MindMapsScrollViewerElement,
+                _ => null
+            };
+        }
+
+        private void ClearDashboardListingDropVisuals()
+        {
+            ClearListingDropGlow();
+
+            foreach (var border in _dropZoneOriginalBorderBrushes.Keys.ToList())
+                RestoreDropZoneBorderVisual(border);
+        }
+
+        private static void ForEachDashboardListing(DependencyObject root, Action<FrameworkElement> visit)
+        {
+            if (root is FrameworkElement { Tag: FlashcardSetViewModel or MindMapViewModel or QuizViewModel } element)
+                visit(element);
+
+            var childCount = VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < childCount; i++)
+                ForEachDashboardListing(VisualTreeHelper.GetChild(root, i), visit);
+        }
+
+        private static bool CanDropListingOnTarget(object draggedListing, object targetListing)
+        {
+            return draggedListing switch
+            {
+                FlashcardSetViewModel dragged when targetListing is FlashcardSetViewModel target
+                    => !ReferenceEquals(dragged, target),
+                MindMapViewModel dragged when targetListing is MindMapViewModel target
+                    => !ReferenceEquals(dragged, target),
+                QuizViewModel dragged when targetListing is QuizViewModel target
+                    => !ReferenceEquals(dragged, target),
+                _ => false
+            };
+        }
+
+        private static bool IsScreenPointWithinElement(FrameworkElement element, Point screenPoint)
+        {
+            if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+                return false;
+
+            if (PresentationSource.FromVisual(element) is null)
+                return false;
+
+            try
+            {
+                var local = element.PointFromScreen(screenPoint);
+                var margin = element.Margin;
+                return local.X >= -margin.Left
+                    && local.Y >= -margin.Top
+                    && local.X <= element.ActualWidth + margin.Right
+                    && local.Y <= element.ActualHeight + margin.Bottom;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -945,70 +1705,236 @@ namespace NoteCards
             e.Handled = true;
         }
 
-        private void RecentNotesScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        private void ConfigurePopupAnimations()
         {
-            if (sender is not ScrollViewer scrollViewer)
-                return;
-
-            var nextOffset = Math.Clamp(scrollViewer.HorizontalOffset - (e.Delta / 3d), 0, scrollViewer.ScrollableWidth);
-            scrollViewer.ScrollToHorizontalOffset(nextOffset);
-            e.Handled = true;
+            UiMotion.ConfigurePopupsForWindow(this);
         }
 
-        private void DashboardView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void AnimateDashboardTransition(string newDashboard)
         {
-            if (e.NewValue is not true || sender is not FrameworkElement dashboard)
+            if (!IsLoaded || string.IsNullOrWhiteSpace(newDashboard))
                 return;
 
-            if (!IsLoaded)
+            if (string.IsNullOrEmpty(_lastActiveDashboard)
+                || string.Equals(_lastActiveDashboard, newDashboard, StringComparison.Ordinal))
             {
-                dashboard.Opacity = 1;
-                var initialScale = EnsureDashboardViewScaleTransform(dashboard);
-                initialScale.ScaleX = 1;
-                initialScale.ScaleY = 1;
+                SetDashboardViewImmediate(newDashboard);
+                _lastActiveDashboard = newDashboard;
+                Dispatcher.BeginInvoke(EnsureAllListingDashboardsInteractive, DispatcherPriority.Loaded);
                 return;
             }
 
-            AnimateDashboardViewEnter(dashboard);
+            var previousDashboard = _lastActiveDashboard;
+            var outgoing = ResolveDashboardView(previousDashboard);
+            var incoming = ResolveDashboardView(newDashboard);
+            if (outgoing is null || incoming is null)
+            {
+                _dashboardTransitionActive = false;
+                SetDashboardViewImmediate(newDashboard);
+                _lastActiveDashboard = newDashboard;
+                return;
+            }
+
+            if (ResolveDashboardMotionScope(previousDashboard) is { } previousScope)
+            {
+                EnsureDashboardContentHostRestState(previousScope);
+                EnsureRecentSectionRestState(previousScope);
+            }
+
+            _lastActiveDashboard = newDashboard;
+            _dashboardTransitionActive = true;
+
+            DashboardShadowSuspender.TrySuspend(DashboardTransitionShadowScope, outgoing);
+            DashboardShadowSuspender.TrySuspend(DashboardTransitionShadowScope, incoming);
+
+            incoming.Visibility = Visibility.Visible;
+            incoming.Opacity = 0;
+            incoming.IsHitTestVisible = false;
+            outgoing.IsHitTestVisible = false;
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                incoming.UpdateLayout();
+                outgoing.UpdateLayout();
+
+                if (_observedViewModel is { IsRecentSectionVisible: true, IsRecentSectionExpanded: true })
+                    RecentStripEnterMotionBehavior.TryPrepEnterHold(incoming);
+
+                UiMotion.CrossFadeDashboardPanelsComposited(
+                    outgoing,
+                    incoming,
+                    () =>
+                    {
+                        incoming.IsHitTestVisible = true;
+                        outgoing.IsHitTestVisible = true;
+                        _dashboardTransitionActive = false;
+                        DashboardShadowSuspender.TryResume(DashboardTransitionShadowScope);
+
+                        if (ResolveDashboardMotionScope(newDashboard) is { } incomingScope)
+                            PlayDashboardSwitchReveal(incomingScope);
+                        else
+                            QueueDashboardLayoutRefresh();
+
+                        Dispatcher.BeginInvoke(EnsureActiveListingDashboardInteractive, DispatcherPriority.Loaded);
+                    });
+            }, DispatcherPriority.Render);
         }
 
-        private static void AnimateDashboardViewEnter(FrameworkElement dashboard)
+        private void SetDashboardViewImmediate(string dashboard)
         {
-            dashboard.BeginAnimation(OpacityProperty, null);
-            var scale = EnsureDashboardViewScaleTransform(dashboard);
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-
-            dashboard.Opacity = 0;
-            const double startScale = 0.995;
-            scale.ScaleX = startScale;
-            scale.ScaleY = startScale;
-
-            var duration = TimeSpan.FromMilliseconds(DashboardViewAnimationMs);
-            var ease = new QuinticEase { EasingMode = EasingMode.EaseOut };
-
-            dashboard.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
+            foreach (var view in AllDashboardViews())
             {
-                EasingFunction = ease
-            });
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(startScale, 1, duration)
-            {
-                EasingFunction = ease
-            });
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(startScale, 1, duration)
-            {
-                EasingFunction = ease
-            });
+                if (view is null)
+                    continue;
+
+                var isActive = ReferenceEquals(view, ResolveDashboardView(dashboard));
+                view.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+                view.Opacity = 1;
+            }
         }
 
-        private static ScaleTransform EnsureDashboardViewScaleTransform(FrameworkElement dashboard)
-        {
-            if (dashboard.RenderTransform is ScaleTransform scale)
-                return scale;
+        private FrameworkElement? ResolveDashboardView(string? dashboard)
+            => dashboard switch
+            {
+                DashboardNotes => NotesDashboardViewElement,
+                DashboardFlashcards => FlashcardsDashboardViewElement,
+                DashboardQuizzes => QuizzesDashboardViewElement,
+                DashboardMindMaps => MindMapsDashboardViewElement,
+                _ => null
+            };
 
-            scale = new ScaleTransform(1, 1);
-            dashboard.RenderTransform = scale;
-            return scale;
+        private IEnumerable<FrameworkElement?> AllDashboardViews()
+        {
+            yield return NotesDashboardViewElement;
+            yield return FlashcardsDashboardViewElement;
+            yield return QuizzesDashboardViewElement;
+            yield return MindMapsDashboardViewElement;
+        }
+
+        private void QueueActiveDashboardEmptyEnterIfNeeded(MainViewModel vm)
+        {
+            FrameworkElement? panel = vm.ActiveDashboard switch
+            {
+                DashboardNotes when vm.ShowNotesEmptyDashboard => NotesEmptyDashboardPanelElement,
+                DashboardFlashcards when vm.ShowFlashcardsEmptyDashboard => FlashcardsEmptyDashboardPanelElement,
+                DashboardQuizzes when vm.ShowQuizzesEmptyDashboard => QuizzesEmptyDashboardPanelElement,
+                DashboardMindMaps when vm.ShowMindMapsEmptyDashboard => MindMapsEmptyDashboardPanelElement,
+                _ => null
+            };
+
+            QueueEmptyDashboardEnterAnimation(panel);
+        }
+
+        private void AttachDashboardPresenceHandlers()
+        {
+            if (_dashboardPresenceHandlersAttached)
+                return;
+
+            _dashboardPresenceHandlersAttached = true;
+
+            AttachEmptyDashboardPresenceHandler(NotesEmptyDashboardPanelElement, DashboardNotes, () => !(_observedViewModel?.HasNotes ?? true));
+            AttachEmptyDashboardPresenceHandler(FlashcardsEmptyDashboardPanelElement, DashboardFlashcards, () => !(_observedViewModel?.HasFlashcardSets ?? true));
+            AttachEmptyDashboardPresenceHandler(QuizzesEmptyDashboardPanelElement, DashboardQuizzes, () => !(_observedViewModel?.HasQuizzes ?? true));
+            AttachEmptyDashboardPresenceHandler(MindMapsEmptyDashboardPanelElement, DashboardMindMaps, () => !(_observedViewModel?.HasMindMaps ?? true));
+
+        }
+
+        private void AttachEmptyDashboardPresenceHandler(
+            FrameworkElement? panel,
+            string dashboard,
+            Func<bool> isStillEmpty)
+        {
+            if (panel is null)
+                return;
+
+            panel.IsVisibleChanged += (_, _) =>
+            {
+                if (panel.Visibility != Visibility.Visible || !IsLoaded)
+                    return;
+
+                ScheduleEmptyDashboardEnter(panel, dashboard, isStillEmpty);
+            };
+        }
+
+        private void ScheduleEmptyDashboardEnter(
+            FrameworkElement? panel,
+            string dashboard,
+            Func<bool>? isStillEmpty = null)
+        {
+            if (panel is null || !IsLoaded)
+                return;
+
+            if (_dashboardTransitionActive)
+            {
+                Dispatcher.BeginInvoke(
+                    () => ScheduleEmptyDashboardEnter(panel, dashboard, isStillEmpty),
+                    DispatcherPriority.Loaded);
+                return;
+            }
+
+            if (!_emptyDashboardEnterScheduled.Add(panel))
+                return;
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                _emptyDashboardEnterScheduled.Remove(panel);
+
+                if (panel.Visibility != Visibility.Visible)
+                    return;
+
+                if (DataContext is not MainViewModel vm)
+                    return;
+
+                if (!string.Equals(vm.ActiveDashboard, dashboard, StringComparison.Ordinal))
+                    return;
+
+                if (isStillEmpty is not null && !isStillEmpty())
+                    return;
+
+                if (ResolveDashboardView(dashboard) is { Opacity: < 0.98 })
+                    return;
+
+                UiMotion.Stop(panel);
+                if (UiMotion.ShouldSkipDashboardRevealMotion())
+                {
+                    panel.Opacity = 1;
+                    if (panel is Panel container)
+                    {
+                        foreach (var child in container.Children.OfType<FrameworkElement>())
+                            UiMotion.EnsureContentRevealRestState(child);
+                    }
+
+                    return;
+                }
+
+                UiMotion.AnimateEmptyDashboardEnter(panel);
+            }, DispatcherPriority.Render);
+        }
+
+        private void QueueEmptyDashboardEnterAnimation(FrameworkElement? panel)
+        {
+            if (panel is null)
+                return;
+
+            var dashboard = ReferenceEquals(panel, NotesEmptyDashboardPanelElement) ? DashboardNotes
+                : ReferenceEquals(panel, FlashcardsEmptyDashboardPanelElement) ? DashboardFlashcards
+                : ReferenceEquals(panel, QuizzesEmptyDashboardPanelElement) ? DashboardQuizzes
+                : ReferenceEquals(panel, MindMapsEmptyDashboardPanelElement) ? DashboardMindMaps
+                : null;
+
+            if (dashboard is null)
+                return;
+
+            Func<bool>? isStillEmpty = dashboard switch
+            {
+                DashboardNotes => () => !(_observedViewModel?.HasNotes ?? true),
+                DashboardFlashcards => () => !(_observedViewModel?.HasFlashcardSets ?? true),
+                DashboardQuizzes => () => !(_observedViewModel?.HasQuizzes ?? true),
+                DashboardMindMaps => () => !(_observedViewModel?.HasMindMaps ?? true),
+                _ => null
+            };
+
+            ScheduleEmptyDashboardEnter(panel, dashboard, isStillEmpty);
         }
 
         private void OpenFromFileMenuButton_Click(object sender, RoutedEventArgs e)
@@ -1123,44 +2049,33 @@ namespace NoteCards
         {
             CollapseTopSearchPanel();
 
-            if (SortNotesPopupElement != null)
-                SortNotesPopupElement.IsOpen = false;
-
-            if (DashboardSectionsPopupElement != null)
-                DashboardSectionsPopupElement.IsOpen = false;
-
-            TagsFilterPopup.IsOpen = false;
+            UiMotion.ClosePopup(SortNotesPopupElement);
+            UiMotion.ClosePopup(DashboardSectionsPopupElement);
+            UiMotion.ClosePopup(TagsFilterPopup);
         }
 
         private void SortNotesButton_Click(object sender, RoutedEventArgs e)
         {
             CollapseTopSearchPanel();
-            TagsFilterPopup.IsOpen = false;
-            if (DashboardSectionsPopupElement != null)
-                DashboardSectionsPopupElement.IsOpen = false;
-
-            if (SortNotesPopupElement != null)
-                SortNotesPopupElement.IsOpen = !SortNotesPopupElement.IsOpen;
+            UiMotion.ClosePopup(TagsFilterPopup);
+            UiMotion.ClosePopup(DashboardSectionsPopupElement);
+            UiMotion.TogglePopup(SortNotesPopupElement);
         }
 
         private void TagsFilterButton_Click(object sender, RoutedEventArgs e)
         {
             CollapseTopSearchPanel();
-            if (SortNotesPopupElement != null)
-                SortNotesPopupElement.IsOpen = false;
-            if (DashboardSectionsPopupElement != null)
-                DashboardSectionsPopupElement.IsOpen = false;
-            TagsFilterPopup.IsOpen = !TagsFilterPopup.IsOpen;
+            UiMotion.ClosePopup(SortNotesPopupElement);
+            UiMotion.ClosePopup(DashboardSectionsPopupElement);
+            UiMotion.TogglePopup(TagsFilterPopup);
         }
 
         private void DashboardSectionsButton_Click(object sender, RoutedEventArgs e)
         {
             CollapseTopSearchPanel();
-            if (SortNotesPopupElement != null)
-                SortNotesPopupElement.IsOpen = false;
-            TagsFilterPopup.IsOpen = false;
-            if (DashboardSectionsPopupElement != null)
-                DashboardSectionsPopupElement.IsOpen = !DashboardSectionsPopupElement.IsOpen;
+            UiMotion.ClosePopup(SortNotesPopupElement);
+            UiMotion.ClosePopup(TagsFilterPopup);
+            UiMotion.TogglePopup(DashboardSectionsPopupElement);
         }
 
         private void TopSearchButton_Click(object sender, RoutedEventArgs e)
@@ -1205,30 +2120,16 @@ namespace NoteCards
 
         private void ExpandTopSearchPanel()
         {
-            TagsFilterPopup.IsOpen = false;
-            if (SortNotesPopupElement != null)
-                SortNotesPopupElement.IsOpen = false;
-            if (DashboardSectionsPopupElement != null)
-                DashboardSectionsPopupElement.IsOpen = false;
+            UiMotion.ClosePopup(TagsFilterPopup);
+            UiMotion.ClosePopup(SortNotesPopupElement);
+            UiMotion.ClosePopup(DashboardSectionsPopupElement);
 
-            TopSearchPanel.Visibility = Visibility.Visible;
             TopSearchPanel.IsHitTestVisible = true;
-            TopSearchPanel.BeginAnimation(FrameworkElement.WidthProperty, null);
-            TopSearchPanel.BeginAnimation(OpacityProperty, null);
-
-            TopSearchPanel.Width = 0;
-            TopSearchPanel.Opacity = 0;
-
-            var duration = TimeSpan.FromMilliseconds(TopSearchAnimationMs);
-            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-            TopSearchPanel.BeginAnimation(FrameworkElement.WidthProperty, new DoubleAnimation(0, TopSearchExpandedWidth, duration)
-            {
-                EasingFunction = easeOut
-            });
-            TopSearchPanel.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration)
-            {
-                EasingFunction = easeOut
-            });
+            UiMotion.ExpandHorizontalPanel(
+                TopSearchPanel,
+                show: true,
+                TopSearchExpandedWidth,
+                UiMotion.SearchMs);
 
             Dispatcher.BeginInvoke(() =>
             {
@@ -1242,41 +2143,19 @@ namespace NoteCards
             if (TopSearchPanel.Visibility != Visibility.Visible)
                 return;
 
-            // Read current visual state first, then animate to collapsed state.
-            // Clearing animations before this can snap values and make collapse look instant.
-            var startWidth = TopSearchPanel.ActualWidth > 0
-                ? TopSearchPanel.ActualWidth
-                : Math.Max(TopSearchPanel.Width, 1);
-            var startOpacity = TopSearchPanel.Opacity;
-
-            if (startOpacity <= 0)
-                startOpacity = 1;
-
-            var duration = TimeSpan.FromMilliseconds(TopSearchAnimationMs);
-            var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
-            var widthAnimation = new DoubleAnimation(startWidth, 0, duration)
-            {
-                EasingFunction = easeIn
-            };
-            widthAnimation.Completed += (_, _) =>
-            {
-                TopSearchPanel.Visibility = Visibility.Collapsed;
-                TopSearchPanel.IsHitTestVisible = false;
-                TopSearchPanel.Width = 0;
-                TopSearchPanel.Opacity = 0;
-            };
-
-            TopSearchPanel.BeginAnimation(FrameworkElement.WidthProperty, widthAnimation);
-            TopSearchPanel.BeginAnimation(OpacityProperty, new DoubleAnimation(startOpacity, 0, duration)
-            {
-                EasingFunction = easeIn
-            });
+            UiMotion.ExpandHorizontalPanel(
+                TopSearchPanel,
+                show: false,
+                TopSearchExpandedWidth,
+                UiMotion.SearchMs,
+                () => TopSearchPanel.IsHitTestVisible = false);
         }
 
         // Open editor for a specific note card
         public void OpenNoteEditor(NoteCardViewModel noteViewModel)
         {
-            if (_noteEditorTabsWindow == null || !_noteEditorTabsWindow.IsLoaded)
+            var openingNewWindow = _noteEditorTabsWindow == null || !_noteEditorTabsWindow.IsLoaded;
+            if (openingNewWindow)
             {
                 _noteEditorTabsWindow = new NoteEditorTabsWindow
                 {
@@ -1286,13 +2165,18 @@ namespace NoteCards
                 _noteEditorTabsWindow.Closed += (_, _) =>
                 {
                     _noteEditorTabsWindow = null;
+                    Activate();
                 };
 
+                _noteEditorTabsWindow.OpenOrFocusNote(noteViewModel, DataContext, animateContent: false);
                 _noteEditorTabsWindow.Show();
+                _noteEditorTabsWindow.Activate();
+                return;
             }
 
-            _noteEditorTabsWindow.OpenOrFocusNote(noteViewModel, DataContext);
-            _noteEditorTabsWindow.Activate();
+            var editorWindow = _noteEditorTabsWindow!;
+            editorWindow.OpenOrFocusNote(noteViewModel, DataContext);
+            editorWindow.Activate();
         }
 
         public void OpenNoteSchedule(NoteCardViewModel noteViewModel)
@@ -1306,6 +2190,9 @@ namespace NoteCards
 
         private void CreateFlashcardsButton_Click(object sender, RoutedEventArgs e)
         {
+            if (DataContext is MainViewModel { IsMassSelectMode: true })
+                return;
+
             if (DataContext is MainViewModel vm)
                 OpenFlashcardSetEditor(vm, null);
         }
@@ -1313,10 +2200,7 @@ namespace NoteCards
         private void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
-            {
-                menu.PlacementTarget = button;
-                menu.IsOpen = true;
-            }
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private void OpenFlashcardCombineMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1345,12 +2229,18 @@ namespace NoteCards
 
         private void CreateQuizButton_Click(object sender, RoutedEventArgs e)
         {
+            if (DataContext is MainViewModel { IsMassSelectMode: true })
+                return;
+
             if (DataContext is MainViewModel vm)
                 OpenQuizEditor(vm, null);
         }
 
         private void CreateMindMapButton_Click(object sender, RoutedEventArgs e)
         {
+            if (DataContext is MainViewModel { IsMassSelectMode: true })
+                return;
+
             if (DataContext is not MainViewModel vm)
                 return;
 
@@ -1505,10 +2395,7 @@ namespace NoteCards
         private void QuizDashboardActionsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
-            {
-                menu.PlacementTarget = button;
-                menu.IsOpen = true;
-            }
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private void OpenQuizLibraryMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1568,7 +2455,7 @@ namespace NoteCards
                 LocalizationService.GetString("Confirm"));
 
             if (confirmed)
-                vm.DeleteQuiz(quiz);
+                vm.RequestDeleteQuiz(quiz);
         }
 
         private void OpenQuizMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1639,7 +2526,7 @@ namespace NoteCards
                 LocalizationService.GetString("Confirm"));
 
             if (confirmed)
-                vm.DeleteFlashcardSet(set);
+                vm.RequestDeleteFlashcardSet(set);
         }
 
         private void DuplicateFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1718,9 +2605,7 @@ namespace NoteCards
 
             // Delete the mind map
             if (DataContext is MainViewModel vm)
-            {
-                vm.DeleteMindMap(mindMapVm);
-            }
+                vm.RequestDeleteMindMap(mindMapVm);
         }
 
         private void RemoveMindMapFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
@@ -2336,40 +3221,16 @@ namespace NoteCards
         }
 
         private void MoveFlashcardDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsFlashcardDashboardGroupsFirst = true;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void MoveFlashcardDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsFlashcardDashboardGroupsFirst = false;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: false);
 
         private void MoveFlashcardDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsFlashcardDashboardGroupsFirst = false;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: false);
 
         private void MoveFlashcardDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsFlashcardDashboardGroupsFirst = true;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void ToggleQuizDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
@@ -2384,40 +3245,16 @@ namespace NoteCards
         }
 
         private void MoveQuizDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsQuizDashboardGroupsFirst = true;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void MoveQuizDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsQuizDashboardGroupsFirst = false;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: false);
 
         private void MoveQuizDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsQuizDashboardGroupsFirst = false;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: false);
 
         private void MoveQuizDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsQuizDashboardGroupsFirst = true;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void ToggleMindMapDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
@@ -2432,40 +3269,16 @@ namespace NoteCards
         }
 
         private void MoveMindMapDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsMindMapDashboardGroupsFirst = true;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void MoveMindMapDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsMindMapDashboardGroupsFirst = false;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: false);
 
         private void MoveMindMapDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsMindMapDashboardGroupsFirst = false;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: false);
 
         private void MoveMindMapDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-            {
-                vm.IsMindMapDashboardGroupsFirst = true;
-                QueueDashboardLayoutRefresh();
-            }
-        }
+            => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void ExitMassSelectButton_Click(object sender, RoutedEventArgs e)
         {
@@ -2537,51 +3350,49 @@ namespace NoteCards
         }
 
         private void MoveGroupsUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsGroupsFirst = true;
-        }
+            => SwapNotesGroupsAndUngroupedSections(groupsFirst: true);
 
         private void MoveGroupsDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsGroupsFirst = false;
-        }
+            => SwapNotesGroupsAndUngroupedSections(groupsFirst: false);
 
         private void MoveUngroupedUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsGroupsFirst = false;
-        }
+            => SwapNotesGroupsAndUngroupedSections(groupsFirst: false);
 
         private void MoveUngroupedDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsGroupsFirst = true;
-        }
+            => SwapNotesGroupsAndUngroupedSections(groupsFirst: true);
 
         private void MoveCalendarUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsCalendarFirst = true;
-        }
+            => SwapActiveDashboardCalendarAndDashboard(calendarFirst: true);
 
         private void MoveCalendarDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsCalendarFirst = false;
-        }
+            => SwapActiveDashboardCalendarAndDashboard(calendarFirst: false);
 
         private void MoveDashboardContentUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.IsCalendarFirst = false;
-        }
+            => SwapActiveDashboardCalendarAndDashboard(calendarFirst: false);
 
         private void MoveDashboardContentDownButton_Click(object sender, RoutedEventArgs e)
+            => SwapActiveDashboardCalendarAndDashboard(calendarFirst: true);
+
+        private void SwapActiveDashboardCalendarAndDashboard(bool calendarFirst)
         {
-            if (DataContext is MainViewModel vm)
-                vm.IsCalendarFirst = true;
+            if (DataContext is not MainViewModel vm)
+                return;
+
+            switch (vm.ActiveDashboard)
+            {
+                case DashboardFlashcards:
+                    SwapFlashcardCalendarAndDashboard(calendarFirst);
+                    break;
+                case DashboardQuizzes:
+                    SwapQuizCalendarAndDashboard(calendarFirst);
+                    break;
+                case DashboardMindMaps:
+                    SwapMindMapCalendarAndDashboard(calendarFirst);
+                    break;
+                default:
+                    SwapNotesCalendarAndDashboard(calendarFirst);
+                    break;
+            }
         }
 
         private void MoveSingleGroupUpButton_Click(object sender, RoutedEventArgs e)
@@ -2590,13 +3401,13 @@ namespace NoteCards
                 return;
 
             if (DataContext is MainViewModel vm)
-            {
-                var currentIndex = vm.NoteGroups.IndexOf(group);
-                var swapGroupId = currentIndex > 0 ? vm.NoteGroups[currentIndex - 1].GroupId : Guid.Empty;
-
-                if (vm.MoveGroupUp(group))
-                    AnimateGroupOrderChange(group.GroupId, swapGroupId, -14, 14);
-            }
+                TryAnimateGroupMove(
+                    GroupsItemsControlElement,
+                    vm.NoteGroups,
+                    group,
+                    moveUp: true,
+                    DashboardMotionScope.Notes,
+                    () => vm.MoveGroupUp(group));
         }
 
         private void MoveSingleGroupDownButton_Click(object sender, RoutedEventArgs e)
@@ -2605,131 +3416,205 @@ namespace NoteCards
                 return;
 
             if (DataContext is MainViewModel vm)
-            {
-                var currentIndex = vm.NoteGroups.IndexOf(group);
-                var swapGroupId = currentIndex >= 0 && currentIndex < vm.NoteGroups.Count - 1
-                    ? vm.NoteGroups[currentIndex + 1].GroupId
-                    : Guid.Empty;
-
-                if (vm.MoveGroupDown(group))
-                    AnimateGroupOrderChange(group.GroupId, swapGroupId, 14, -14);
-            }
+                TryAnimateGroupMove(
+                    GroupsItemsControlElement,
+                    vm.NoteGroups,
+                    group,
+                    moveUp: false,
+                    DashboardMotionScope.Notes,
+                    () => vm.MoveGroupDown(group));
         }
 
-        private void AnimateGroupOrderChange(Guid primaryGroupId, Guid secondaryGroupId, double primaryOffset, double secondaryOffset)
+        private void TryAnimateGroupMove<T>(
+            ItemsControl? groupsList,
+            IList<T> groups,
+            T group,
+            bool moveUp,
+            DashboardMotionScope motionScope,
+            Func<bool> applyMove) where T : class
         {
-            var groupsList = GroupsItemsControlElement;
             if (groupsList is null)
+            {
+                applyMove();
                 return;
+            }
+
+            var currentIndex = groups.IndexOf(group);
+            var swapIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
+            if (currentIndex < 0 || swapIndex < 0 || swapIndex >= groups.Count)
+                return;
+
+            AnimateGroupPairSwap(
+                groupsList,
+                group,
+                groups[swapIndex],
+                motionScope,
+                applyMove);
+        }
+
+        private void AnimateGroupPairSwap(
+            ItemsControl groupsList,
+            object primaryItem,
+            object secondaryItem,
+            DashboardMotionScope motionScope,
+            Func<bool> applyMove)
+        {
+            if (ShouldApplyReorderMotionInstantly())
+            {
+                applyMove();
+                return;
+            }
+
+            groupsList.UpdateLayout();
+
+            var capturedBefore = TryResolveGroupContainers(
+                groupsList,
+                primaryItem,
+                secondaryItem,
+                out var primaryContainer,
+                out var secondaryContainer,
+                out var parent);
+
+            if (!capturedBefore || parent is null)
+            {
+                applyMove();
+                return;
+            }
+
+            var engine = EnsureDashboardMotionEngine(motionScope);
+            engine.BeginLayoutAnimation();
+
+            parent.UpdateLayout();
+            var primaryOldY = MeasureTopOffset(primaryContainer, parent);
+            var secondaryOldY = MeasureTopOffset(secondaryContainer, parent);
+
+            if (!applyMove())
+            {
+                engine.EndLayoutAnimation();
+                return;
+            }
 
             Dispatcher.BeginInvoke(() =>
             {
-                if (DataContext is not MainViewModel vm)
-                    return;
-
-                var duration = TimeSpan.FromMilliseconds(130);
-                var easing = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-
-                var first = vm.NoteGroups.FirstOrDefault(g => g.GroupId == primaryGroupId);
-                if (first != null)
-                    AnimateGroupContainer(groupsList, first, primaryOffset, duration, easing);
-
-                if (secondaryGroupId != Guid.Empty)
+                groupsList.UpdateLayout();
+                if (!TryResolveGroupContainers(groupsList, primaryItem, secondaryItem, out var primary, out var secondary, out var panel)
+                    || panel is null)
                 {
-                    var second = vm.NoteGroups.FirstOrDefault(g => g.GroupId == secondaryGroupId);
-                    if (second != null)
-                        AnimateGroupContainer(groupsList, second, secondaryOffset, duration, easing);
+                    engine.EndLayoutAnimation();
+                    return;
                 }
+
+                RunFlipPairAnimation(
+                    primary,
+                    secondary,
+                    panel,
+                    primaryOldY,
+                    secondaryOldY,
+                    engine,
+                    () => ScheduleReflowVirtualizationRefresh(motionScope));
             }, DispatcherPriority.Render);
         }
 
-        private static void AnimateGroupContainer(ItemsControl groupsList, object item, double offset, Duration duration, IEasingFunction easing)
+        private static bool TryResolveGroupContainers(
+            ItemsControl groupsList,
+            object primaryItem,
+            object secondaryItem,
+            out FrameworkElement primaryContainer,
+            out FrameworkElement secondaryContainer,
+            out UIElement? parent)
         {
-            if (groupsList.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement container)
-                return;
+            primaryContainer = null!;
+            secondaryContainer = null!;
+            parent = null;
 
-            TranslateTransform translate;
-            if (container.RenderTransform is TranslateTransform direct)
-            {
-                translate = direct;
-            }
-            else
-            {
-                translate = new TranslateTransform();
-                container.RenderTransform = translate;
-            }
+            if (groupsList.ItemContainerGenerator.ContainerFromItem(primaryItem) is not FrameworkElement primary)
+                return false;
 
-            translate.BeginAnimation(TranslateTransform.YProperty, null);
-            translate.Y = offset;
-            translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offset, 0, duration)
-            {
-                EasingFunction = easing
-            });
+            if (groupsList.ItemContainerGenerator.ContainerFromItem(secondaryItem) is not FrameworkElement secondary)
+                return false;
+
+            parent = VisualTreeHelper.GetParent(primary) as UIElement;
+            if (parent is null || !ReferenceEquals(VisualTreeHelper.GetParent(secondary), parent))
+                return false;
+
+            primaryContainer = primary;
+            secondaryContainer = secondary;
+            return true;
         }
 
         private void GroupBorder_DragOver(object sender, DragEventArgs e)
         {
-            var draggedNote = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
-            if (draggedNote is null)
-            {
-                e.Effects = DragDropEffects.None;
-                e.Handled = true;
-                return;
-            }
+            var canDrop = e.Data.GetData(typeof(NoteCardViewModel)) is NoteCardViewModel;
+            SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), canDrop);
+            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
 
-            e.Effects = DragDropEffects.Move;
+        private void GroupBorder_DragLeave(object sender, DragEventArgs e)
+        {
+            SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
         private void GroupBorder_Drop(object sender, DragEventArgs e)
         {
-            if (sender is not Border border || border.Tag is not NoteGroupViewModel targetGroup)
-                return;
+            try
+            {
+                if (sender is not Border border || border.Tag is not NoteGroupViewModel targetGroup)
+                    return;
 
-            var draggedNote = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
-            if (draggedNote is null)
-                return;
+                var draggedNote = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
+                if (draggedNote is null)
+                    return;
 
-            if (DataContext is MainViewModel vm && vm.TryMoveNoteToGroup(draggedNote, targetGroup))
-                QueueNotesLayoutRefresh();
+                if (DataContext is MainViewModel vm && vm.TryMoveNoteToGroup(draggedNote, targetGroup))
+                    QueueNotesLayoutRefresh();
 
-            e.Handled = true;
+                e.Handled = true;
+            }
+            finally
+            {
+                SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
+            }
         }
 
         private void UngroupedDropZone_DragOver(object sender, DragEventArgs e)
         {
-            var draggedNote = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
-            if (draggedNote?.IsGrouped == true)
-            {
-                e.Effects = DragDropEffects.Move;
-            }
-            else
-            {
-                e.Effects = DragDropEffects.None;
-            }
+            var canDrop = e.Data.GetData(typeof(NoteCardViewModel)) is NoteCardViewModel { IsGrouped: true };
+            SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), canDrop);
+            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
 
+        private void UngroupedDropZone_DragLeave(object sender, DragEventArgs e)
+        {
+            SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
         private void UngroupedDropZone_Drop(object sender, DragEventArgs e)
         {
-            var draggedNote = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
-            if (draggedNote is null)
-                return;
+            try
+            {
+                var draggedNote = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
+                if (draggedNote is null)
+                    return;
 
-            if (DataContext is MainViewModel vm)
-                vm.TryDropToUngrouped(draggedNote);
+                if (DataContext is MainViewModel vm)
+                    vm.TryDropToUngrouped(draggedNote);
 
-            e.Handled = true;
+                e.Handled = true;
+            }
+            finally
+            {
+                SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
+            }
         }
 
         private void GroupMenuButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button button && button.ContextMenu != null)
-            {
-                button.ContextMenu.PlacementTarget = button;
-                button.ContextMenu.IsOpen = true;
-            }
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private void ListingContextMenuButton_Click(object sender, RoutedEventArgs e)
@@ -2741,9 +3626,7 @@ namespace NoteCards
             if (cardElement?.ContextMenu is null)
                 return;
 
-            cardElement.ContextMenu.PlacementTarget = menuButton;
-            cardElement.ContextMenu.Placement = PlacementMode.Bottom;
-            cardElement.ContextMenu.IsOpen = true;
+            UiMotion.OpenContextMenu(cardElement.ContextMenu, menuButton, PlacementMode.Bottom);
             e.Handled = true;
         }
 
@@ -2781,7 +3664,11 @@ namespace NoteCards
             _suppressDashboardListingOpen = true;
             try
             {
-                DragDrop.DoDragDrop(element, CreateDashboardListingDataObject(listing), DragDropEffects.Move);
+                DashboardDragGhost.Execute(
+                    element,
+                    CreateDashboardListingDataObject(listing),
+                    DragDropEffects.Move,
+                    _dashboardListingDragStart);
                 e.Handled = true;
             }
             finally
@@ -2802,10 +3689,15 @@ namespace NoteCards
             if (IsWithinListingContextMenuButton(e.OriginalSource as DependencyObject))
                 return;
 
+            if (DashboardMassSelectCheckBoxBehavior.IsMassSelectCheckBox(e.OriginalSource as DependencyObject))
+                return;
+
             var listing = ResolveDashboardListingFromElement(sender as FrameworkElement);
             if (DataContext is MainViewModel { IsMassSelectMode: true } massSelectVm)
             {
                 massSelectVm.ToggleMassSelectForDashboardItem(listing);
+                if (sender is DependencyObject source)
+                    MassSelectHighlightBehavior.RequestVisualSync(source);
                 e.Handled = true;
                 return;
             }
@@ -2837,7 +3729,8 @@ namespace NoteCards
             }
 
             var canDrop = CanDropDashboardListing(sender, e);
-            SetDashboardListingDropVisual(sender as DependencyObject, canDrop);
+            if (!DashboardDragGhost.IsListingDropVisualSyncActive)
+                SetDashboardListingDropVisual(sender as DependencyObject, canDrop);
             e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
             e.Handled = true;
         }
@@ -2852,14 +3745,16 @@ namespace NoteCards
             }
 
             var canDrop = CanDropDashboardListing(sender, e);
-            SetDashboardListingDropVisual(sender as DependencyObject, canDrop);
+            if (!DashboardDragGhost.IsListingDropVisualSyncActive)
+                SetDashboardListingDropVisual(sender as DependencyObject, canDrop);
             e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
             e.Handled = true;
         }
 
         private void DashboardListing_PreviewDragLeave(object sender, DragEventArgs e)
         {
-            SetDashboardListingDropVisual(sender as DependencyObject, false);
+            if (!DashboardDragGhost.IsListingDropVisualSyncActive)
+                SetDashboardListingDropVisual(sender as DependencyObject, false);
             e.Handled = true;
         }
 
@@ -2890,38 +3785,54 @@ namespace NoteCards
             if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
                 && CanDropDashboardListing(listingElement, e))
             {
+                SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
                 e.Effects = DragDropEffects.Move;
                 return;
             }
 
-            e.Effects = CanDropDashboardListingOnGroup(sender, e) ? DragDropEffects.Move : DragDropEffects.None;
+            var canDrop = CanDropDashboardListingOnGroup(sender, e);
+            SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), canDrop);
+            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)
+        {
+            SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
         private void DashboardGroupBorder_PreviewDrop(object sender, DragEventArgs e)
         {
-            if (DataContext is not MainViewModel vm || sender is not FrameworkElement targetElement)
-                return;
-
-            if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
-                && CanDropDashboardListing(listingElement, e))
-                return;
-
-            var changed = targetElement.Tag switch
+            try
             {
-                FlashcardSetGroupViewModel target when e.Data.GetData(typeof(FlashcardSetViewModel)) is FlashcardSetViewModel dragged
-                    => vm.TryMoveFlashcardSetToGroup(dragged, target),
-                MindMapGroupViewModel target when e.Data.GetData(typeof(MindMapViewModel)) is MindMapViewModel dragged
-                    => vm.TryMoveMindMapToGroup(dragged, target),
-                QuizGroupViewModel target when e.Data.GetData(typeof(QuizViewModel)) is QuizViewModel dragged
-                    => vm.TryMoveQuizToGroup(dragged, target),
-                _ => false
-            };
+                if (DataContext is not MainViewModel vm || sender is not FrameworkElement targetElement)
+                    return;
 
-            if (changed)
+                if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
+                    && CanDropDashboardListing(listingElement, e))
+                    return;
+
+                var changed = targetElement.Tag switch
+                {
+                    FlashcardSetGroupViewModel target when e.Data.GetData(typeof(FlashcardSetViewModel)) is FlashcardSetViewModel dragged
+                        => vm.TryMoveFlashcardSetToGroup(dragged, target),
+                    MindMapGroupViewModel target when e.Data.GetData(typeof(MindMapViewModel)) is MindMapViewModel dragged
+                        => vm.TryMoveMindMapToGroup(dragged, target),
+                    QuizGroupViewModel target when e.Data.GetData(typeof(QuizViewModel)) is QuizViewModel dragged
+                        => vm.TryMoveQuizToGroup(dragged, target),
+                    _ => false
+                };
+
+                if (changed)
+                {
+                    QueueDashboardLayoutRefresh();
+                    e.Handled = true;
+                }
+            }
+            finally
             {
-                QueueDashboardLayoutRefresh();
-                e.Handled = true;
+                SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
             }
         }
 
@@ -2929,6 +3840,7 @@ namespace NoteCards
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
             {
+                SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
                 e.Effects = DragDropEffects.None;
                 e.Handled = true;
                 return;
@@ -2937,58 +3849,68 @@ namespace NoteCards
             if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
                 && CanDropDashboardListing(listingElement, e))
             {
+                SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
                 e.Effects = DragDropEffects.Move;
                 return;
             }
 
-            if (!CanDropDashboardListingToUngrouped(e))
-            {
-                e.Effects = DragDropEffects.None;
-                return;
-            }
+            var canDrop = CanDropDashboardListingToUngrouped(e);
+            SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), canDrop);
+            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
 
-            e.Effects = DragDropEffects.Move;
+        private void DashboardUngroupedDropZone_DragLeave(object sender, DragEventArgs e)
+        {
+            SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
         private void DashboardUngroupedDropZone_Drop(object sender, DragEventArgs e)
         {
-            if (DataContext is MainViewModel { IsMassSelectMode: true })
+            try
             {
-                e.Effects = DragDropEffects.None;
-                e.Handled = true;
-                return;
+                if (DataContext is MainViewModel { IsMassSelectMode: true })
+                {
+                    e.Effects = DragDropEffects.None;
+                    e.Handled = true;
+                    return;
+                }
+
+                if (DataContext is not MainViewModel vm)
+                    return;
+
+                if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
+                    && TryHandleDashboardListingDrop(listingElement.Tag, e, listingElement))
+                    return;
+
+                var changed = false;
+                switch (e.Data)
+                {
+                    case IDataObject data when data.GetData(typeof(FlashcardSetViewModel)) is FlashcardSetViewModel { Document.GroupId: not null } flashcardSet:
+                        vm.RemoveFlashcardSetFromGroup(flashcardSet);
+                        changed = true;
+                        e.Handled = true;
+                        break;
+                    case IDataObject data when data.GetData(typeof(MindMapViewModel)) is MindMapViewModel { Document.GroupId: not null } mindMap:
+                        vm.RemoveMindMapFromGroup(mindMap);
+                        changed = true;
+                        e.Handled = true;
+                        break;
+                    case IDataObject data when data.GetData(typeof(QuizViewModel)) is QuizViewModel { Document.GroupId: not null } quiz:
+                        vm.RemoveQuizFromGroup(quiz);
+                        changed = true;
+                        e.Handled = true;
+                        break;
+                }
+
+                if (changed)
+                    QueueDashboardLayoutRefresh();
             }
-
-            if (DataContext is not MainViewModel vm)
-                return;
-
-            if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
-                && TryHandleDashboardListingDrop(listingElement.Tag, e, listingElement))
-                return;
-
-            var changed = false;
-            switch (e.Data)
+            finally
             {
-                case IDataObject data when data.GetData(typeof(FlashcardSetViewModel)) is FlashcardSetViewModel { Document.GroupId: not null } flashcardSet:
-                    vm.RemoveFlashcardSetFromGroup(flashcardSet);
-                    changed = true;
-                    e.Handled = true;
-                    break;
-                case IDataObject data when data.GetData(typeof(MindMapViewModel)) is MindMapViewModel { Document.GroupId: not null } mindMap:
-                    vm.RemoveMindMapFromGroup(mindMap);
-                    changed = true;
-                    e.Handled = true;
-                    break;
-                case IDataObject data when data.GetData(typeof(QuizViewModel)) is QuizViewModel { Document.GroupId: not null } quiz:
-                    vm.RemoveQuizFromGroup(quiz);
-                    changed = true;
-                    e.Handled = true;
-                    break;
+                SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
             }
-
-            if (changed)
-                QueueDashboardLayoutRefresh();
         }
 
         private static bool CanDropDashboardListingToUngrouped(DragEventArgs e)
@@ -3130,13 +4052,31 @@ namespace NoteCards
             switch (group)
             {
                 case FlashcardSetGroupViewModel flashcardGroup:
-                    vm.MoveFlashcardSetGroupUp(flashcardGroup);
+                    TryAnimateGroupMove(
+                        FlashcardDashboardGroupsItemsControlElement,
+                        vm.FlashcardSetGroups,
+                        flashcardGroup,
+                        moveUp: true,
+                        DashboardMotionScope.Flashcards,
+                        () => vm.MoveFlashcardSetGroupUp(flashcardGroup));
                     break;
                 case MindMapGroupViewModel mindMapGroup:
-                    vm.MoveMindMapGroupUp(mindMapGroup);
+                    TryAnimateGroupMove(
+                        MindMapDashboardGroupsItemsControlElement,
+                        vm.MindMapGroups,
+                        mindMapGroup,
+                        moveUp: true,
+                        DashboardMotionScope.MindMaps,
+                        () => vm.MoveMindMapGroupUp(mindMapGroup));
                     break;
                 case QuizGroupViewModel quizGroup:
-                    vm.MoveQuizGroupUp(quizGroup);
+                    TryAnimateGroupMove(
+                        QuizDashboardGroupsItemsControlElement,
+                        vm.QuizGroups,
+                        quizGroup,
+                        moveUp: true,
+                        DashboardMotionScope.Quizzes,
+                        () => vm.MoveQuizGroupUp(quizGroup));
                     break;
             }
         }
@@ -3149,33 +4089,45 @@ namespace NoteCards
             switch (group)
             {
                 case FlashcardSetGroupViewModel flashcardGroup:
-                    vm.MoveFlashcardSetGroupDown(flashcardGroup);
+                    TryAnimateGroupMove(
+                        FlashcardDashboardGroupsItemsControlElement,
+                        vm.FlashcardSetGroups,
+                        flashcardGroup,
+                        moveUp: false,
+                        DashboardMotionScope.Flashcards,
+                        () => vm.MoveFlashcardSetGroupDown(flashcardGroup));
                     break;
                 case MindMapGroupViewModel mindMapGroup:
-                    vm.MoveMindMapGroupDown(mindMapGroup);
+                    TryAnimateGroupMove(
+                        MindMapDashboardGroupsItemsControlElement,
+                        vm.MindMapGroups,
+                        mindMapGroup,
+                        moveUp: false,
+                        DashboardMotionScope.MindMaps,
+                        () => vm.MoveMindMapGroupDown(mindMapGroup));
                     break;
                 case QuizGroupViewModel quizGroup:
-                    vm.MoveQuizGroupDown(quizGroup);
+                    TryAnimateGroupMove(
+                        QuizDashboardGroupsItemsControlElement,
+                        vm.QuizGroups,
+                        quizGroup,
+                        moveUp: false,
+                        DashboardMotionScope.Quizzes,
+                        () => vm.MoveQuizGroupDown(quizGroup));
                     break;
             }
         }
 
         private void DashboardGroupColorButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button { ContextMenu: not null } button)
-            {
-                button.ContextMenu.PlacementTarget = button;
-                button.ContextMenu.IsOpen = true;
-            }
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private void DashboardGroupMenuButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button { ContextMenu: not null } button)
-            {
-                button.ContextMenu.PlacementTarget = button;
-                button.ContextMenu.IsOpen = true;
-            }
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private void DashboardGroupColorMenuItem_Click(object sender, RoutedEventArgs e)
@@ -3314,34 +4266,296 @@ namespace NoteCards
 
         private void SetDashboardListingDropVisual(DependencyObject? source, bool isActive)
         {
-            if (source is null)
+            if (source is not FrameworkElement listingElement)
                 return;
 
-            var border = FindDashboardListingCardBorder(source);
+            if (!isActive)
+            {
+                if (_listingDropGlowHost?.TryGetTarget(out var host) == true
+                    && ReferenceEquals(host, listingElement))
+                {
+                    ClearListingDropGlow();
+                }
+
+                return;
+            }
+
+            if (_listingDropGlowHost?.TryGetTarget(out var current) == true
+                && ReferenceEquals(current, listingElement))
+            {
+                return;
+            }
+
+            ClearListingDropGlow();
+
+            if (EnsureListingDropGlowOverlay(listingElement) is { } glow)
+            {
+                DashboardDropGlowVisual.AnimateToActive(glow);
+                _listingDropGlowHost = new WeakReference<FrameworkElement>(listingElement);
+            }
+        }
+
+        private void ClearListingDropGlow()
+        {
+            if (_listingDropGlowHost?.TryGetTarget(out var host) == true
+                && FindListingDropGlowOverlay(host) is { } glow)
+            {
+                DashboardDropGlowVisual.Reset(glow);
+            }
+
+            _listingDropGlowHost = null;
+        }
+
+        private static Border? EnsureListingDropGlowOverlay(FrameworkElement listingElement)
+        {
+            UnwrapLegacyListingGlowShell(listingElement);
+
+            var existing = FindListingDropGlowOverlay(listingElement);
+            if (existing is not null && IsListingGlowOverlayHosted(existing))
+                return existing;
+
+            if (existing is not null)
+            {
+                DashboardDropGlowVisual.Reset(existing);
+                if (existing.Parent is Panel panel)
+                    panel.Children.Remove(existing);
+            }
+
+            var cardBorder = FindDashboardListingCardBorder(listingElement);
+            if (cardBorder is null)
+                return null;
+
+            return TryCreateCardBorderListingGlow(cardBorder);
+        }
+
+        private static Border? TryCreateCardBorderListingGlow(Border cardBorder)
+        {
+            if (cardBorder.Child is Grid { Tag: var hostTag } existingHost
+                && string.Equals(hostTag as string, DashboardDropGlowVisual.ListingGlowOverlayHostTag, StringComparison.Ordinal)
+                && FindListingDropGlowInTree(existingHost) is { } hostedGlow)
+            {
+                return hostedGlow;
+            }
+
+            var content = cardBorder.Child;
+            if (content is null)
+                return null;
+
+            var host = new Grid
+            {
+                Tag = DashboardDropGlowVisual.ListingGlowOverlayHostTag
+            };
+
+            cardBorder.Child = null;
+            host.Children.Add(content);
+
+            var padding = cardBorder.Padding;
+            var glow = CreateListingDropGlowBorder(cardBorder);
+            glow.Margin = new Thickness(-padding.Left, -padding.Top, -padding.Right, -padding.Bottom);
+            glow.HorizontalAlignment = HorizontalAlignment.Stretch;
+            glow.VerticalAlignment = VerticalAlignment.Stretch;
+            host.Children.Add(glow);
+
+            cardBorder.Child = host;
+            return glow;
+        }
+
+        private static void UnwrapLegacyListingGlowShell(FrameworkElement listingElement)
+        {
+            if (listingElement is not Border outerBorder
+                || outerBorder.Child is not Grid { Tag: var tag } host
+                || !string.Equals(tag as string, "DashboardListingDropGlowHost", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Border? innerCard = null;
+            foreach (var child in host.Children)
+            {
+                if (child is Border { Tag: var childTag } border
+                    && !string.Equals(childTag as string, DashboardDropGlowVisual.ListingGlowTag, StringComparison.Ordinal))
+                {
+                    innerCard = border;
+                    break;
+                }
+            }
+
+            if (innerCard is null)
+                return;
+
+            if (FindListingDropGlowInTree(host) is { } glow)
+            {
+                DashboardDropGlowVisual.Reset(glow);
+                host.Children.Remove(glow);
+            }
+
+            var margin = innerCard.Margin;
+            outerBorder.Padding = new Thickness(margin.Left, margin.Top, margin.Right, margin.Bottom);
+            innerCard.Margin = new Thickness(0);
+            outerBorder.Child = innerCard;
+        }
+
+        private static Border CreateListingDropGlowBorder(Border cardBorder)
+        {
+            var glow = new Border
+            {
+                Tag = DashboardDropGlowVisual.ListingGlowTag,
+                Background = Brushes.Transparent,
+                BorderBrush = DashboardDropGlowVisual.DropBorderBrush,
+                BorderThickness = new Thickness(0),
+                CornerRadius = cardBorder.CornerRadius,
+                Opacity = 0,
+                IsHitTestVisible = false
+            };
+            Panel.SetZIndex(glow, 50);
+            return glow;
+        }
+
+        private static Border? FindListingDropGlowOverlay(FrameworkElement listingElement)
+            => FindListingDropGlowInTree(listingElement);
+
+        private static Border? FindListingDropGlowInTree(DependencyObject root)
+        {
+            if (root is Border { Tag: var tag } border
+                && string.Equals(tag as string, DashboardDropGlowVisual.ListingGlowTag, StringComparison.Ordinal))
+            {
+                return border;
+            }
+
+            var childCount = VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < childCount; i++)
+            {
+                if (FindListingDropGlowInTree(VisualTreeHelper.GetChild(root, i)) is { } glow)
+                    return glow;
+            }
+
+            return null;
+        }
+
+        private static bool IsListingGlowOverlayHosted(Border glow)
+        {
+            return VisualTreeHelper.GetParent(glow) is Grid { Tag: var tag }
+                && string.Equals(tag as string, DashboardDropGlowVisual.ListingGlowOverlayHostTag, StringComparison.Ordinal);
+        }
+
+        internal void ClearAllDragDropVisuals()
+        {
+            ClearDashboardListingDropVisuals();
+            NoteCardControl.ClearDropGlowOwner();
+        }
+
+        private void SetDropZoneBorderVisual(Border? border, bool isActive)
+        {
             if (border is null)
                 return;
 
             if (isActive)
             {
-                if (!_dashboardDropOriginalBorderBrushes.ContainsKey(border))
+                if (_dropZoneOriginalBorderBrushes.ContainsKey(border))
+                    return;
+
+                foreach (var activeBorder in _dropZoneOriginalBorderBrushes.Keys.ToList())
                 {
-                    _dashboardDropOriginalBorderBrushes[border] = border.BorderBrush;
-                    _dashboardDropOriginalBorderThicknesses[border] = border.BorderThickness;
+                    if (!ReferenceEquals(activeBorder, border))
+                        RestoreDropZoneBorderVisual(activeBorder);
+                }
+
+                if (!_dropZoneOriginalBorderBrushes.ContainsKey(border))
+                {
+                    _dropZoneOriginalBorderBrushes[border] = border.BorderBrush;
+                    _dropZoneOriginalBorderThicknesses[border] = border.BorderThickness;
+                    _dropZoneOriginalCornerRadius[border] = border.CornerRadius;
+                    _dropZoneOriginalBackgrounds[border] = border.Background;
                 }
 
                 border.BorderBrush = GetDashboardDropBrush();
+                if (IsUngroupedDropZoneBorder(border))
+                {
+                    border.CornerRadius = new CornerRadius(UngroupedDropZoneCornerRadius);
+                    border.Background = GetUngroupedDropFillBrush();
+                }
+                else if (border.BorderThickness.Left < 0.5)
+                    border.CornerRadius = new CornerRadius(12);
+
                 AnimateBorderThickness(border, new Thickness(2), 150);
                 return;
             }
 
-            if (!_dashboardDropOriginalBorderBrushes.TryGetValue(border, out var originalBrush)
-                || !_dashboardDropOriginalBorderThicknesses.TryGetValue(border, out var originalThickness))
+            RestoreDropZoneBorderVisual(border, animate: true);
+        }
+
+        private void RestoreDropZoneBorderVisual(Border border, bool animate = false)
+        {
+            if (!_dropZoneOriginalBorderBrushes.TryGetValue(border, out var originalBrush)
+                || !_dropZoneOriginalBorderThicknesses.TryGetValue(border, out var originalThickness))
                 return;
 
+            UiMotion.Stop(border);
             border.BorderBrush = originalBrush;
-            AnimateBorderThickness(border, originalThickness, 150);
-            _dashboardDropOriginalBorderBrushes.Remove(border);
-            _dashboardDropOriginalBorderThicknesses.Remove(border);
+            border.CornerRadius = _dropZoneOriginalCornerRadius.TryGetValue(border, out var originalRadius)
+                ? originalRadius
+                : border.CornerRadius;
+            border.Background = _dropZoneOriginalBackgrounds.TryGetValue(border, out var originalBackground)
+                ? originalBackground
+                : border.Background;
+
+            if (animate)
+                AnimateBorderThickness(border, originalThickness, 150);
+            else
+                border.BorderThickness = originalThickness;
+
+            _dropZoneOriginalBorderBrushes.Remove(border);
+            _dropZoneOriginalBorderThicknesses.Remove(border);
+            _dropZoneOriginalCornerRadius.Remove(border);
+            _dropZoneOriginalBackgrounds.Remove(border);
+        }
+
+        private static bool IsUngroupedDropZoneBorder(Border border)
+            => border.Name is "UngroupedSectionContainer"
+                or "FlashcardDashboardUngroupedSectionContainer"
+                or "QuizDashboardUngroupedSectionContainer"
+                or "MindMapDashboardUngroupedSectionContainer";
+
+        private Brush GetUngroupedDropFillBrush()
+        {
+            if (TryFindResource("SelectionBackground") is SolidColorBrush selection)
+            {
+                var fill = Color.FromArgb(48, selection.Color.R, selection.Color.G, selection.Color.B);
+                return new SolidColorBrush(fill);
+            }
+
+            return new SolidColorBrush(Color.FromArgb(48, 63, 111, 232));
+        }
+
+        private static Border? ResolveGroupDropZoneBorder(DependencyObject? source)
+        {
+            while (source != null)
+            {
+                if (source is Border border
+                    && border.Tag is NoteGroupViewModel or FlashcardSetGroupViewModel or MindMapGroupViewModel or QuizGroupViewModel)
+                    return border;
+
+                source = VisualTreeHelper.GetParent(source);
+            }
+
+            return null;
+        }
+
+        private static Border? ResolveUngroupedDropZoneBorder(DependencyObject? source)
+        {
+            while (source != null)
+            {
+                if (source is Border { Name: var name } border
+                    && name is "UngroupedSectionContainer"
+                        or "FlashcardDashboardUngroupedSectionContainer"
+                        or "QuizDashboardUngroupedSectionContainer"
+                        or "MindMapDashboardUngroupedSectionContainer")
+                    return border;
+
+                source = VisualTreeHelper.GetParent(source);
+            }
+
+            return null;
         }
 
         private Brush GetDashboardDropBrush()
@@ -3372,106 +4586,7 @@ namespace NoteCards
 
         private static void AnimateBorderThickness(Border border, Thickness to, int durationMs)
         {
-            border.BeginAnimation(Border.BorderThicknessProperty, new ThicknessAnimation
-            {
-                To = to,
-                Duration = TimeSpan.FromMilliseconds(durationMs),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            });
-        }
-
-        private void DashboardGroupedListingCard_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Border border)
-                return;
-
-            var (scale, translate) = EnsureDashboardGroupedListingTransforms(border);
-            var shadow = EnsureDashboardGroupedListingShadow(border);
-            border.Opacity = 0;
-            scale.ScaleX = 0.88;
-            scale.ScaleY = 0.88;
-            translate.Y = 0;
-            shadow.BlurRadius = 8;
-            shadow.Opacity = 0.08;
-
-            var popEasing = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.25 };
-            AnimateDouble(border, UIElement.OpacityProperty, 1, 250);
-            AnimateDouble(scale, ScaleTransform.ScaleXProperty, 1, 320, popEasing);
-            AnimateDouble(scale, ScaleTransform.ScaleYProperty, 1, 320, popEasing);
-        }
-
-        private void DashboardGroupedListingCard_MouseEnter(object sender, MouseEventArgs e)
-        {
-            if (sender is not Border border)
-                return;
-
-            var (scale, _) = EnsureDashboardGroupedListingTransforms(border);
-            var shadow = EnsureDashboardGroupedListingShadow(border);
-            AnimateDouble(scale, ScaleTransform.ScaleXProperty, 1.02, 180);
-            AnimateDouble(scale, ScaleTransform.ScaleYProperty, 1.02, 180);
-            AnimateDouble(shadow, DropShadowEffect.BlurRadiusProperty, 14, 180);
-            AnimateDouble(shadow, DropShadowEffect.OpacityProperty, 0.18, 180);
-        }
-
-        private void DashboardGroupedListingCard_MouseLeave(object sender, MouseEventArgs e)
-        {
-            if (sender is not Border border)
-                return;
-
-            var (scale, _) = EnsureDashboardGroupedListingTransforms(border);
-            var shadow = EnsureDashboardGroupedListingShadow(border);
-            AnimateDouble(scale, ScaleTransform.ScaleXProperty, 1, 200);
-            AnimateDouble(scale, ScaleTransform.ScaleYProperty, 1, 200);
-            AnimateDouble(shadow, DropShadowEffect.BlurRadiusProperty, 8, 200);
-            AnimateDouble(shadow, DropShadowEffect.OpacityProperty, 0.08, 200);
-        }
-
-        private static (ScaleTransform Scale, TranslateTransform Translate) EnsureDashboardGroupedListingTransforms(Border border)
-        {
-            if (border.RenderTransform is TransformGroup existingGroup)
-            {
-                var existingScale = existingGroup.Children.OfType<ScaleTransform>().FirstOrDefault();
-                var existingTranslate = existingGroup.Children.OfType<TranslateTransform>().FirstOrDefault();
-                if (existingScale is not null && existingTranslate is not null)
-                    return (existingScale, existingTranslate);
-            }
-
-            var scale = new ScaleTransform(1, 1);
-            var translate = new TranslateTransform();
-            var group = new TransformGroup();
-            group.Children.Add(scale);
-            group.Children.Add(translate);
-            border.RenderTransformOrigin = new Point(0.5, 0.5);
-            border.RenderTransform = group;
-            return (scale, translate);
-        }
-
-        private static DropShadowEffect EnsureDashboardGroupedListingShadow(Border border)
-        {
-            if (border.Effect is DropShadowEffect shadow
-                && border.ReadLocalValue(UIElement.EffectProperty) != DependencyProperty.UnsetValue)
-                return shadow;
-
-            shadow = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                Opacity = 0.08,
-                BlurRadius = 8,
-                ShadowDepth = 1,
-                Direction = 270
-            };
-            border.Effect = shadow;
-            return shadow;
-        }
-
-        private static void AnimateDouble(IAnimatable target, DependencyProperty property, double to, int durationMs, IEasingFunction? easingFunction = null)
-        {
-            target.BeginAnimation(property, new DoubleAnimation
-            {
-                To = to,
-                Duration = TimeSpan.FromMilliseconds(durationMs),
-                EasingFunction = easingFunction ?? new CubicEase { EasingMode = EasingMode.EaseOut }
-            });
+            UiMotion.AnimateThickness(border, border.BorderThickness, to, durationMs);
         }
 
         private static bool IsWithinListingContextMenuButton(DependencyObject? source)
@@ -3510,11 +4625,8 @@ namespace NoteCards
 
         private void GroupColorButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button button && button.ContextMenu != null)
-            {
-                button.ContextMenu.PlacementTarget = button;
-                button.ContextMenu.IsOpen = true;
-            }
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private void RenameGroupMenuItem_Click(object sender, RoutedEventArgs e)
@@ -3599,9 +4711,8 @@ namespace NoteCards
         private void ImportButton_Click(object sender, RoutedEventArgs e)
         {
             CollapseTopSearchPanel();
-            if (SortNotesPopupElement != null)
-                SortNotesPopupElement.IsOpen = false;
-            TagsFilterPopup.IsOpen = false;
+            UiMotion.ClosePopup(SortNotesPopupElement);
+            UiMotion.ClosePopup(TagsFilterPopup);
 
             var openFileDialog = new Microsoft.Win32.OpenFileDialog
             {

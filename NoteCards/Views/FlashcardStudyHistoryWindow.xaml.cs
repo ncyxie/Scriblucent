@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Models;
 using NoteCards.ViewModels;
 using System.Collections.ObjectModel;
@@ -32,6 +33,7 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
         NoteCards.Services.WindowThemeService.Register(this);
         DataContext = this;
         RefreshList();
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     public FlashcardStudyHistoryWindow(Func<FlashcardSetDocument> documentProvider, Action clearAction)
@@ -42,6 +44,7 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
         NoteCards.Services.WindowThemeService.Register(this);
         DataContext = this;
         RefreshList();
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     public ObservableCollection<StudyDisplayItem> Items => _items;

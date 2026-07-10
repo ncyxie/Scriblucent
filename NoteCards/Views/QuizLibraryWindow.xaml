@@ -62,7 +62,7 @@
             </Setter>
         </Style>
 
-        <Style x:Key="LibraryOptionCheckBoxStyle" TargetType="{x:Type CheckBox}">
+        <Style x:Key="LibraryOptionCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -89,7 +89,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>

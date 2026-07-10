@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+using NoteCards.Animations;
 using System.Windows.Threading;
 
 namespace NoteCards.Behaviors;
@@ -164,14 +164,8 @@ public static class ScrollBarAutoHideBehavior
             if (scrollBar.Visibility != Visibility.Visible)
                 continue;
 
-            var animation = new DoubleAnimation
-            {
-                To = targetOpacity,
-                Duration = TimeSpan.FromMilliseconds(180),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-
-            scrollBar.BeginAnimation(UIElement.OpacityProperty, animation, HandoffBehavior.SnapshotAndReplace);
+            UiMotion.Clear(scrollBar, UIElement.OpacityProperty);
+            UiMotion.Fade(scrollBar, targetOpacity, 180, UiMotion.OutQuad);
         }
     }
 

@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Localization;
 using NoteCards.Models;
 using NoteCards.ViewModels;
@@ -49,6 +50,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         UpdateStatusText();
         UpdateFilteredVisibility();
         _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     public ObservableCollection<global::NoteCards.Views.QuizLibraryItemViewModel> Quizzes => _quizzes;

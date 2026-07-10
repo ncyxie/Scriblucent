@@ -16,7 +16,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using NoteCards.Controls;
@@ -26,7 +26,6 @@ namespace NoteCards
     public partial class NoteEditorWindow : Window
     {
         private bool? _pendingDialogResult = null;
-        private bool _isPlayingCloseAnimation = false;
         private bool _isHostedInTab;
         // Last search/replace state for Find Next / Replace Next functionality
         private string? _lastSearchQuery = null;
@@ -316,6 +315,7 @@ namespace NoteCards
 
         private void ThemeManager_ThemeChanged(object? sender, EventArgs e)
         {
+            NoteCards.Services.WindowThemeService.ApplyTheme(this, ThemeManager.CurrentTheme, rebuildFrame: true);
             ApplyRichTextBoxTheme();
             UpdateEditorToolButtonStates();
             UpdateEditorScrollbarCorner();
@@ -323,6 +323,7 @@ namespace NoteCards
 
         private void NoteEditorWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            UiMotion.ConfigurePopupsForWindow(this);
             AttachContentScrollViewer();
             UpdateFloatingImageOverlayLayout();
             ScheduleFloatingImageOverlayLayoutUpdate();
@@ -407,11 +408,10 @@ namespace NoteCards
             // When hosted inside tabs, the window is never shown, so force visible state here.
             if (RootGrid != null)
             {
-                RootGrid.BeginAnimation(UIElement.OpacityProperty, null);
+                UiMotion.Stop(RootGrid);
+                UiMotion.Clear(RootGrid, UIElement.OpacityProperty);
                 RootGrid.Opacity = 1;
-
-                if (RootGrid.RenderTransform is TranslateTransform translate)
-                    translate.Y = 0;
+                UiMotion.EnsureTranslate(RootGrid).Y = 0;
             }
         }
 
@@ -460,15 +460,17 @@ namespace NoteCards
 
         private void NoteEditorWindow_Closing(object sender, CancelEventArgs e)
         {
-            if (_isPlayingCloseAnimation)
-                return;
-
             if (!_allowCloseWithoutPrompt && !ConfirmCloseIfNeeded())
             {
                 e.Cancel = true;
                 return;
             }
 
+            PerformEditorCloseCleanup();
+        }
+
+        private void PerformEditorCloseCleanup()
+        {
             StopAutoSaveTimer();
             DetachContentScrollViewer();
             Loaded -= NoteEditorWindow_Loaded;
@@ -479,10 +481,6 @@ namespace NoteCards
             _mindMapConversionCancellationSource?.Cancel();
             _testConversionCancellationSource?.Cancel();
             ThemeManager.ThemeChanged -= ThemeManager_ThemeChanged;
-
-            // For non-modal windows, just close directly
-            // No need for animation since the window will close immediately
-            e.Cancel = false;
         }
 
         public bool ConfirmCloseIfNeeded()
@@ -520,24 +518,6 @@ namespace NoteCards
             return string.IsNullOrWhiteSpace(title)
                 ? LocalizationService.GetString("NewNoteTitle")
                 : title;
-        }
-
-        private void AnimateAndClose()
-        {
-            if (_isPlayingCloseAnimation)
-                return;
-
-            _isPlayingCloseAnimation = true;
-
-            var sb = ((Storyboard)Resources["CloseStoryboard"]).Clone();
-            sb.Completed += (_, _) =>
-            {
-                if (_pendingDialogResult.HasValue)
-                    this.DialogResult = _pendingDialogResult.Value;
-                else
-                    this.Close();
-            };
-            sb.Begin(this);
         }
 
         private void ClearAllHighlights()
@@ -857,7 +837,7 @@ namespace NoteCards
                 var text = BuildAiProgressText(status, null, null, out var useAnimation);
 
                 if (useAnimation)
-                    ShowPersistentStatusIndicator(text);
+                    ShowPersistentStatusIndicator(text, pulse: true);
                 else
                     ShowPersistentStatusIndicatorWithoutAnimation(text);
             });
@@ -988,7 +968,7 @@ namespace NoteCards
                     out var useAnimation);
 
                 if (useAnimation)
-                    ShowPersistentStatusIndicator(text);
+                    ShowPersistentStatusIndicator(text, pulse: true);
                 else
                     ShowPersistentStatusIndicatorWithoutAnimation(text);
             });
@@ -1120,7 +1100,7 @@ namespace NoteCards
                     out var useAnimation);
 
                 if (useAnimation)
-                    ShowPersistentStatusIndicator(text);
+                    ShowPersistentStatusIndicator(text, pulse: true);
                 else
                     ShowPersistentStatusIndicatorWithoutAnimation(text);
             });
@@ -1264,24 +1244,22 @@ namespace NoteCards
             return baseText;
         }
 
-        private void ShowPersistentStatusIndicator(string message)
+        private void ShowPersistentStatusIndicator(string message, bool pulse = false)
         {
             AnimateStatusIndicatorRow(expand: true);
-            StatusIndicatorText.BeginAnimation(TextBlock.OpacityProperty, null);
+            UiMotion.Clear(StatusIndicatorText, UIElement.OpacityProperty);
             StatusIndicatorText.Text = message;
             StatusIndicatorText.Visibility = Visibility.Visible;
-
-            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220))
-            {
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            StatusIndicatorText.BeginAnimation(TextBlock.OpacityProperty, fadeIn);
+            StatusIndicatorText.Opacity = 0;
+            UiMotion.Fade(StatusIndicatorText, 1, UiMotion.OpenMs, UiMotion.OutQuad);
+            if (pulse)
+                UiMotion.PulseOpacity(StatusIndicatorText, StatusIndicatorText, 0.72, 1.0);
         }
 
     private void ShowPersistentStatusIndicatorWithoutAnimation(string message)
     {
         AnimateStatusIndicatorRow(expand: true);
-        StatusIndicatorText.BeginAnimation(TextBlock.OpacityProperty, null);
+        UiMotion.Clear(StatusIndicatorText, UIElement.OpacityProperty);
         StatusIndicatorText.Opacity = 1;
         StatusIndicatorText.Text = message;
         StatusIndicatorText.Visibility = Visibility.Visible;
@@ -1295,19 +1273,20 @@ namespace NoteCards
                 return;
             }
 
-            StatusIndicatorText.BeginAnimation(TextBlock.OpacityProperty, null);
+            UiMotion.Clear(StatusIndicatorText, UIElement.OpacityProperty);
+            var opacityStart = StatusIndicatorText.Opacity;
 
-            var fadeOut = new DoubleAnimation(StatusIndicatorText.Opacity, 0, TimeSpan.FromMilliseconds(280))
-            {
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            fadeOut.Completed += (s, e) =>
-            {
-                StatusIndicatorText.Visibility = Visibility.Collapsed;
-                StatusIndicatorText.Text = string.Empty;
-                AnimateStatusIndicatorRow(expand: false);
-            };
-            StatusIndicatorText.BeginAnimation(TextBlock.OpacityProperty, fadeOut);
+            UiMotion.Fade(
+                StatusIndicatorText,
+                0,
+                UiMotion.SectionMs,
+                UiMotion.OutCubic,
+                () =>
+                {
+                    StatusIndicatorText.Visibility = Visibility.Collapsed;
+                    StatusIndicatorText.Text = string.Empty;
+                    AnimateStatusIndicatorRow(expand: false);
+                });
         }
 
         private void AnimateStatusIndicatorRow(bool expand)
@@ -1322,20 +1301,18 @@ namespace NoteCards
 
             if (Math.Abs(currentHeight - targetHeight) < 0.5)
             {
-                StatusIndicatorRow.BeginAnimation(RowDefinition.HeightProperty, null);
+                UiMotion.Clear(StatusIndicatorRow, RowDefinition.HeightProperty);
                 StatusIndicatorRow.Height = new GridLength(targetHeight, GridUnitType.Pixel);
                 return;
             }
 
-            var animation = new GridLengthAnimation
-            {
-                From = new GridLength(currentHeight, GridUnitType.Pixel),
-                To = new GridLength(targetHeight, GridUnitType.Pixel),
-                Duration = TimeSpan.FromMilliseconds(220),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-
-            StatusIndicatorRow.BeginAnimation(RowDefinition.HeightProperty, animation);
+            UiMotion.AnimateRowHeight(
+                StatusIndicatorRow,
+                StatusIndicatorRow,
+                currentHeight,
+                targetHeight,
+                UiMotion.OpenMs,
+                UiMotion.OutQuad);
         }
 
         internal FindReplaceResult PerformFindNext(
@@ -2785,9 +2762,11 @@ namespace NoteCards
             if (_isLoadingDocument || EditedIndicatorText is null)
                 return;
 
-            EditedIndicatorText.Visibility = HasUnsavedChanges()
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            var shouldShow = HasUnsavedChanges();
+            if (shouldShow)
+                UiMotion.AnimateInlineReveal(EditedIndicatorText, true);
+            else
+                UiMotion.AnimateInlineReveal(EditedIndicatorText, false);
         }
 
         private string GetEditorSnapshot()
@@ -3014,8 +2993,7 @@ namespace NoteCards
             if (ExportButton.ContextMenu == null)
                 return;
 
-            ExportButton.ContextMenu.PlacementTarget = ExportButton;
-            ExportButton.ContextMenu.IsOpen = true;
+            UiMotion.OpenContextMenu(ExportButton.ContextMenu, ExportButton);
         }
 
         private void ExportTextMenuItem_Click(object sender, RoutedEventArgs e)
@@ -3846,18 +3824,24 @@ namespace NoteCards
         {
             ShowPersistentStatusIndicator(message);
 
-            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(800))
-            {
-                BeginTime = TimeSpan.FromSeconds(1.15),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            fadeOut.Completed += (s, e) =>
-            {
-                StatusIndicatorText.Visibility = Visibility.Collapsed;
-                StatusIndicatorText.Text = string.Empty;
-                AnimateStatusIndicatorRow(expand: false);
-            };
-            StatusIndicatorText.BeginAnimation(TextBlock.OpacityProperty, fadeOut);
+            UiMotion.Run(
+                StatusIndicatorText,
+                new[]
+                {
+                    UiMotion.Track(
+                        800,
+                        UiMotion.OutQuad,
+                        1,
+                        0,
+                        value => StatusIndicatorText.Opacity = value,
+                        () =>
+                        {
+                            StatusIndicatorText.Visibility = Visibility.Collapsed;
+                            StatusIndicatorText.Text = string.Empty;
+                            AnimateStatusIndicatorRow(expand: false);
+                        },
+                        startDelayMs: 1150)
+                });
         }
 
         private void FontFamilyBox_Changed(object sender, SelectionChangedEventArgs e)
@@ -3978,8 +3962,9 @@ namespace NoteCards
 
             if (!animate)
             {
-                FontPanel.BeginAnimation(UIElement.OpacityProperty, null);
-                EnsureFontPanelTransform().BeginAnimation(TranslateTransform.YProperty, null);
+                UiMotion.Stop(FontPanel);
+                UiMotion.Clear(FontPanel, UIElement.OpacityProperty);
+                UiMotion.Clear(EnsureFontPanelTransform(), TranslateTransform.YProperty);
                 FontPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
                 FontPanel.Opacity = isOpen ? 1 : 0;
                 EnsureFontPanelTransform().Y = isOpen ? 0 : -6;
@@ -3993,51 +3978,36 @@ namespace NoteCards
         {
             var animationVersion = ++_fontPanelAnimationVersion;
             var transform = EnsureFontPanelTransform();
-            var duration = TimeSpan.FromMilliseconds(170);
-            var ease = new QuadraticEase
-            {
-                EasingMode = show ? EasingMode.EaseOut : EasingMode.EaseIn
-            };
+            var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
+            var opacityFrom = FontPanel.Opacity;
+            var yFrom = transform.Y;
 
             if (show)
-            {
                 FontPanel.Visibility = Visibility.Visible;
-            }
 
-            var opacityAnimation = new DoubleAnimation
-            {
-                To = show ? 1 : 0,
-                Duration = duration,
-                EasingFunction = ease
-            };
-
-            var slideAnimation = new DoubleAnimation
-            {
-                To = show ? 0 : -6,
-                Duration = duration,
-                EasingFunction = ease
-            };
-
-            if (!show)
-            {
-                opacityAnimation.Completed += (_, _) =>
+            UiMotion.Stop(FontPanel);
+            UiMotion.RunComposited(
+                FontPanel,
+                new[]
                 {
-                    if (animationVersion == _fontPanelAnimationVersion && !_isFontPanelOpen)
+                    UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => FontPanel.Opacity = value),
+                    UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
+                },
+                () =>
+                {
+                    if (!show && animationVersion == _fontPanelAnimationVersion && !_isFontPanelOpen)
                         FontPanel.Visibility = Visibility.Collapsed;
-                };
-            }
-
-            FontPanel.BeginAnimation(UIElement.OpacityProperty, opacityAnimation);
-            transform.BeginAnimation(TranslateTransform.YProperty, slideAnimation);
+                });
         }
 
         private TranslateTransform EnsureFontPanelTransform()
         {
-            if (FontPanel.RenderTransform is TranslateTransform translate)
-                return translate;
+            var translate = UiMotion.EnsureTranslate(FontPanel);
+            if (FontPanel.RenderTransform is TranslateTransform { IsFrozen: false }
+                && Math.Abs(translate.Y) < 0.001
+                && !_isFontPanelOpen)
+                translate.Y = -6;
 
-            translate = new TranslateTransform { Y = _isFontPanelOpen ? 0 : -6 };
-            FontPanel.RenderTransform = translate;
             return translate;
         }
 
@@ -4419,8 +4389,7 @@ namespace NoteCards
             if (button.ContextMenu == null)
                 return;
 
-            button.ContextMenu.PlacementTarget = button;
-            button.ContextMenu.IsOpen = true;
+            UiMotion.OpenContextMenu(button.ContextMenu, button);
         }
 
         private void ListBulletDiscMenuItem_Click(object sender, RoutedEventArgs e)

@@ -61,7 +61,24 @@ public static class ModernDialog
             dialog.Owner = resolvedOwner;
 
         dialog.ShowDialog();
+        ActivateOwner(resolvedOwner);
         return dialog.SelectedChoice;
+    }
+
+    private static void ActivateOwner(Window? owner)
+    {
+        var target = owner is { IsVisible: true } ? owner : Application.Current?.MainWindow;
+        if (target is null)
+            return;
+
+        try
+        {
+            target.Activate();
+        }
+        catch
+        {
+            // Owner may be closing; ignore.
+        }
     }
 
     public static void ShowInfo(Window? owner, string title, string message)

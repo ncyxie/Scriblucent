@@ -1,17 +1,22 @@
+using NoteCards;
+using NoteCards.Animations;
+using NoteCards.Behaviors;
 using NoteCards.ViewModels;
 using NoteCards.Localization;
 using NoteCards.Views;
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
-using System.Windows.Media.Animation;
+using System.Windows.Media;
 
 namespace NoteCards.Controls;
 
 public partial class NoteCardControl : UserControl
 {
+    private static WeakReference<NoteCardControl>? _dropGlowOwner;
+
     private Point _dragStart;
     private bool _suppressOpenOnMouseUp;
 
@@ -21,7 +26,28 @@ public partial class NoteCardControl : UserControl
 
         // Use PreviewMouseLeftButtonUp so clicks inside child controls still trigger opening the editor
         PreviewMouseLeftButtonUp += NoteCardControl_PreviewMouseLeftButtonUp;
+        Loaded += OnCardLoaded;
+        Unloaded += OnUnloaded;
         Cursor = Cursors.Hand;
+    }
+
+    private void OnCardLoaded(object sender, RoutedEventArgs e)
+    {
+        if (ContentPreview is null || BindingOperations.GetBinding(ContentPreview, TextBlock.TextProperty) is not null)
+            return;
+
+        ContentPreview.SetBinding(
+            TextBlock.TextProperty,
+            new Binding(nameof(NoteCardViewModel.Content))
+            {
+                FallbackValue = string.Empty
+            });
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        BindingOperations.ClearBinding(ContentPreview, TextBlock.TextProperty);
+        CardSurfaceMotionBehavior.Cleanup(this);
     }
 
     private void NoteCardControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -36,6 +62,9 @@ public partial class NoteCardControl : UserControl
         if (MenuButton.IsMouseOver)
             return;
 
+        if (DashboardMassSelectCheckBoxBehavior.IsMassSelectCheckBox(e.OriginalSource as DependencyObject))
+            return;
+
         // Get the ViewModel from DataContext
         var viewModel = DataContext as NoteCardViewModel;
         var mainWindow = Window.GetWindow(this) as MainWindow;
@@ -44,6 +73,7 @@ public partial class NoteCardControl : UserControl
         if (viewModel != null && mainVm?.IsMassSelectMode == true)
         {
             mainVm.ToggleMassSelectForNote(viewModel);
+            MassSelectHighlightBehavior.RequestVisualSync(this);
             return;
         }
 
@@ -93,7 +123,11 @@ public partial class NoteCardControl : UserControl
         MainWindow.SetNoteDragInProgress(true);
         try
         {
-            DragDrop.DoDragDrop(this, new DataObject(typeof(NoteCardViewModel), draggedNote), DragDropEffects.Move);
+            DashboardDragGhost.Execute(
+                this,
+                new DataObject(typeof(NoteCardViewModel), draggedNote),
+                DragDropEffects.Move,
+                _dragStart);
         }
         finally
         {
@@ -103,6 +137,14 @@ public partial class NoteCardControl : UserControl
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
+        if (DashboardDragGhost.IsActiveDragSource(this))
+        {
+            ResetDropGlow();
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
         if (Window.GetWindow(this) is MainWindow { DataContext: MainViewModel { IsMassSelectMode: true } })
         {
             e.Effects = DragDropEffects.None;
@@ -112,27 +154,37 @@ public partial class NoteCardControl : UserControl
 
         if (DataContext is not NoteCardViewModel target)
         {
+            ResetDropGlow();
             e.Effects = DragDropEffects.None;
             e.Handled = true;
             return;
         }
 
         var dragged = e.Data.GetData(typeof(NoteCardViewModel)) as NoteCardViewModel;
-        e.Effects = dragged is not null && !ReferenceEquals(dragged, target)
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
+        var canDrop = dragged is not null && !ReferenceEquals(dragged, target);
+
+        if (!DashboardDragGhost.IsNoteDropGlowSyncActive)
+        {
+            if (canDrop)
+                SetDropGlowOwner(this);
+            else if (_dropGlowOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, this))
+                ResetDropGlow();
+        }
+
+        e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void OnDragEnter(object sender, DragEventArgs e)
     {
-        if (CanAcceptDrop(e))
-            AnimateDropGlow(1, 2);
+        if (DashboardDragGhost.IsActiveDragSource(this))
+            ResetDropGlow();
     }
 
     private void OnDragLeave(object sender, DragEventArgs e)
     {
-        AnimateDropGlow(0, 0);
+        ReleaseDropGlowOwnership();
+        ResetDropGlowVisual();
     }
 
     private void OnDrop(object sender, DragEventArgs e)
@@ -166,14 +218,12 @@ public partial class NoteCardControl : UserControl
                 changed = mainVm.TryGroupNotes(draggedNote, targetNote);
             }
 
-            if (changed)
-                AnimateDropGlow(0.85, 3);
-
             e.Handled = true;
         }
         finally
         {
-            AnimateDropGlow(0, 0);
+            ResetDropGlowVisual();
+            SetDropGlowSuppressed(false);
         }
     }
 
@@ -189,41 +239,167 @@ public partial class NoteCardControl : UserControl
         return dragged is not null && !ReferenceEquals(dragged, target);
     }
 
-    private void AnimateDropGlow(double opacity, double thickness)
+    internal static void SyncDropGlowAtScreenPoint(
+        DependencyObject? searchRoot,
+        Point screenPoint,
+        NoteCardViewModel? draggedNote,
+        NoteCardControl? dragSource)
     {
-        DropGlow.BeginAnimation(OpacityProperty, new DoubleAnimation
+        if (searchRoot is null || draggedNote is null)
+            return;
+
+        if (Window.GetWindow(searchRoot) is MainWindow { DataContext: MainViewModel { IsMassSelectMode: true } })
         {
-            To = opacity,
-            Duration = TimeSpan.FromMilliseconds(150),
-            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            ClearDropGlowOwner();
+            return;
+        }
+
+        NoteCardControl? glowTarget = null;
+        ForEachNoteCard(searchRoot, candidate =>
+        {
+            if (ReferenceEquals(candidate, dragSource)
+                || candidate.DataContext is not NoteCardViewModel targetNote
+                || ReferenceEquals(targetNote, draggedNote)
+                || !IsScreenPointWithinCard(candidate, screenPoint))
+            {
+                return;
+            }
+
+            glowTarget = candidate;
         });
 
-        DropGlow.BeginAnimation(Border.BorderThicknessProperty, new ThicknessAnimation
-        {
-            To = new Thickness(thickness),
-            Duration = TimeSpan.FromMilliseconds(150),
-            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-        });
+        SetDropGlowOwner(glowTarget);
     }
+
+    private static void ForEachNoteCard(DependencyObject root, Action<NoteCardControl> visit)
+    {
+        if (root is NoteCardControl card)
+            visit(card);
+
+        var childCount = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < childCount; i++)
+            ForEachNoteCard(VisualTreeHelper.GetChild(root, i), visit);
+    }
+
+    private static bool IsScreenPointWithinCard(NoteCardControl card, Point screenPoint)
+    {
+        if (!card.IsVisible || card.ActualWidth <= 0 || card.ActualHeight <= 0)
+            return false;
+
+        if (PresentationSource.FromVisual(card) is null)
+            return false;
+
+        try
+        {
+            var local = card.PointFromScreen(screenPoint);
+            var margin = card.Margin;
+            return local.X >= -margin.Left
+                && local.Y >= -margin.Top
+                && local.X <= card.ActualWidth + margin.Right
+                && local.Y <= card.ActualHeight + margin.Bottom;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    internal static void ClearDropGlowOwner()
+    {
+        if (_dropGlowOwner?.TryGetTarget(out var owner) == true)
+            owner.ResetDropGlowVisual();
+
+        _dropGlowOwner = null;
+    }
+
+    internal void ResetDropGlow()
+    {
+        ReleaseDropGlowOwnership();
+        ResetDropGlowVisual();
+    }
+
+    private static void SetDropGlowOwner(NoteCardControl? owner)
+    {
+        if (owner is null)
+        {
+            ClearDropGlowOwner();
+            return;
+        }
+
+        if (_dropGlowOwner?.TryGetTarget(out var previous) == true)
+        {
+            if (ReferenceEquals(previous, owner))
+                return;
+
+            previous.ResetDropGlowVisual();
+        }
+
+        _dropGlowOwner = new WeakReference<NoteCardControl>(owner);
+        owner.EnsureDropGlow(1, 2.5);
+    }
+
+    private void ReleaseDropGlowOwnership()
+    {
+        if (_dropGlowOwner?.TryGetTarget(out var owner) == true && ReferenceEquals(owner, this))
+            _dropGlowOwner = null;
+    }
+
+    private void ResetDropGlowVisual()
+        => DashboardDropGlowVisual.Reset(DropGlow);
+
+    internal void SetDropGlowSuppressed(bool suppressed)
+    {
+        if (suppressed)
+            ResetDropGlow();
+
+        DropGlow.Visibility = suppressed ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    internal void SetDragDimmed(bool dimmed, double fadedOpacity = 0.22)
+    {
+        DragDimOverlay.Visibility = Visibility.Collapsed;
+        DragDimOverlay.Opacity = 0;
+
+        if (dimmed)
+        {
+            SetDropGlowSuppressed(true);
+            Opacity = fadedOpacity;
+        }
+        else
+        {
+            SetDropGlowSuppressed(false);
+            ClearValue(OpacityProperty);
+        }
+
+        IsHitTestVisible = true;
+    }
+
+    internal void ClearDragVisualState()
+    {
+        if (DashboardDragGhost.IsActiveDragSource(this))
+            return;
+
+        SetDragDimmed(false);
+    }
+
+    internal void PrepareForMoveExit()
+    {
+        ReleaseDropGlowOwnership();
+        ResetDropGlowVisual();
+        SetDropGlowSuppressed(true);
+        UiMotion.Stop(this);
+        SetDragDimmed(false);
+    }
+
+    private void EnsureDropGlow(double opacity, double thickness)
+        => DashboardDropGlowVisual.Animate(DropGlow, opacity, thickness);
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (e.OldValue is NoteCardViewModel old)
-            old.PropertyChanged -= OnViewModelPropertyChanged;
-        if (e.NewValue is NoteCardViewModel vm)
-            vm.PropertyChanged += OnViewModelPropertyChanged;
-    }
-
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(NoteCardViewModel.IsDeleting))
-            return;
-        if (sender is not NoteCardViewModel vm || !vm.IsDeleting)
-            return;
-
-        var sb = ((Storyboard)Resources["ExitStoryboard"]).Clone();
-        sb.Completed += (_, _) => vm.ExecuteDelete();
-        sb.Begin(this);
+        ClearDragVisualState();
+        MassSelectHighlightBehavior.SyncContainer(this);
+        DashboardMassSelectCheckBoxBehavior.SyncContainer(this);
+        IndicatorRevealMotionBehavior.SyncContainer(this);
     }
 
     private void OnMouseEnter(object sender, MouseEventArgs e)
@@ -264,9 +440,7 @@ public partial class NoteCardControl : UserControl
             return;
 
         MenuButton.ContextMenu.DataContext = DataContext;
-        MenuButton.ContextMenu.PlacementTarget = placementTarget;
-        MenuButton.ContextMenu.Placement = placement;
-        MenuButton.ContextMenu.IsOpen = true;
+        UiMotion.OpenContextMenu(MenuButton.ContextMenu, placementTarget, placement);
     }
 
     private void OnOpenMenuClick(object sender, RoutedEventArgs e)

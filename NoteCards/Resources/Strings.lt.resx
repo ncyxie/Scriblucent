@@ -107,6 +107,11 @@
   <data name="MeasurementUnitSystem" xml:space="preserve"><value>Matavimo sistema</value></data>
   <data name="MeasurementUnitImperial" xml:space="preserve"><value>Imperinė (coliai)</value></data>
   <data name="MeasurementUnitMetric" xml:space="preserve"><value>Metrinė (centimetrai)</value></data>
+  <data name="Animations" xml:space="preserve"><value>Animacijos</value></data>
+  <data name="ReduceAnimations" xml:space="preserve"><value>Mažinti animacijas</value></data>
+  <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>
+  <data name="RecentItemsLimit" xml:space="preserve"><value>Rodomų naujausių elementų skaičius</value></data>
+  <data name="RecentItemsLimitUnit" xml:space="preserve"><value>vnt.</value></data>
   <data name="ThemeLight" xml:space="preserve"><value>Šviesi</value></data>
   <data name="ThemeDark" xml:space="preserve"><value>Tamsi</value></data>
   <data name="ThemeSystem" xml:space="preserve"><value>Naudoti sistemos</value></data>
@@ -630,7 +635,14 @@ Dešiniu pelės mygtuku pašalinsite</value></data>
   <data name="NodeBorderColor" xml:space="preserve"><value>Rėmelio spalva</value></data>
   <data name="NodeBorderThickness" xml:space="preserve"><value>Rėmelio storis</value></data>
   <data name="NodeShape" xml:space="preserve"><value>Forma</value></data>
+  <data name="ShapeRectangle" xml:space="preserve"><value>Stačiakampis</value></data>
+  <data name="ShapeRounded" xml:space="preserve"><value>Suapvalintas stačiakampis</value></data>
+  <data name="ShapeCircle" xml:space="preserve"><value>Apskritimas</value></data>
+  <data name="ShapeEllipse" xml:space="preserve"><value>Elipsė</value></data>
   <data name="NodeIcon" xml:space="preserve"><value>Ikona</value></data>
+  <data name="NodeIconBadgeColor" xml:space="preserve"><value>Ikonos ženkliuko spalva</value></data>
+  <data name="SelectIcon" xml:space="preserve"><value>Savo ikona</value></data>
+  <data name="EnterCustomIconEmoji" xml:space="preserve"><value>Įveskite šio mazgo emoji ar simbolį.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Pridėti savo ikoną</value></data>
   <data name="ClearIcon" xml:space="preserve"><value>Pašalinti ikoną</value></data>
   <data name="SelectColor" xml:space="preserve"><value>Pasirinkti spalvą</value></data>

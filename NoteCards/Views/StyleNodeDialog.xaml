@@ -13,33 +13,237 @@
 		TextOptions.TextFormattingMode="Display"
 		TextOptions.TextRenderingMode="ClearType"
         ShowInTaskbar="False">
-	<Grid Background="#66000000">
-		<Border x:Name="DialogCard"
-				Background="{DynamicResource CardBackground}"
-				BorderBrush="{DynamicResource BorderColor}"
-				BorderThickness="1"
-				CornerRadius="16"
-				Padding="28"
+    <Window.Resources>
+        <Style x:Key="StyleNodeComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StyleNodeComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource StyleNodeComboBoxItemStyle}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="ComboBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="26"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <ContentPresenter Grid.Column="0"
+                                                      Margin="8,0,4,0"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Left"
+                                                      Content="{TemplateBinding SelectionBoxItem}"
+                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
+
+                                    <Border Grid.Column="1"
+                                            Background="Transparent"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="1,0,0,0">
+                                        <Path HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Fill="{DynamicResource TextColorSecondary}"
+                                              Data="M 0 0 L 8 0 L 4 5 Z"/>
+                                    </Border>
+
+                                    <ToggleButton Grid.ColumnSpan="2"
+                                                  Focusable="False"
+                                                  Background="Transparent"
+                                                  BorderBrush="Transparent"
+                                                  BorderThickness="0"
+                                                  ClickMode="Press"
+                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Background="Transparent"
+                                                        BorderBrush="Transparent"
+                                                        BorderThickness="0"/>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                </Grid>
+                            </Border>
+
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   PopupAnimation="None">
+                                <Border Background="{DynamicResource CardBackground}"
+                                        BorderBrush="{DynamicResource BorderColor}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        SnapsToDevicePixels="True"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer Margin="1"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  CanContentScroll="True">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StyleNodeColorSwatchButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="SwatchBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SwatchBorder" Property="BorderBrush" Value="#4A6EE0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StyleNodeClearButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="28"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+
+        <Style x:Key="StyleNodeIconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="52"/>
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="IconButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="IconButtonBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StyleNodeCustomIconButtonStyle" TargetType="Button" BasedOn="{StaticResource StyleNodeIconButtonStyle}">
+            <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+            <Setter Property="BorderBrush" Value="#4A6EE0"/>
+        </Style>
+    </Window.Resources>
+
+	<Grid x:Name="OverlayRoot">
+		<Viewbox x:Name="ScrimViewbox"
+				 Stretch="Fill"
+				 RenderOptions.BitmapScalingMode="Linear">
+			<Grid x:Name="ScrimHost">
+				<Image x:Name="BackdropSnapshot"
+					   Stretch="Fill"
+					   Visibility="Collapsed"
+					   IsHitTestVisible="False"/>
+				<Rectangle x:Name="OverlayDim"
+						   Fill="#66000000"/>
+			</Grid>
+		</Viewbox>
+		<Border x:Name="PanelMotionHost"
 				HorizontalAlignment="Center"
 				VerticalAlignment="Center"
-				MaxWidth="440" Height="542">
-			<Border.Effect>
-				<DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="32" ShadowDepth="4"/>
-			</Border.Effect>
-			<Border.RenderTransform>
-				<TranslateTransform/>
-			</Border.RenderTransform>
+				RenderTransformOrigin="0.5,1"
+				UseLayoutRounding="True"
+				SnapsToDevicePixels="True">
+			<Border x:Name="DialogCard"
+					Background="{DynamicResource CardBackground}"
+					BorderBrush="{DynamicResource BorderColor}"
+					BorderThickness="1"
+					CornerRadius="16"
+					Padding="28"
+					MaxWidth="440"
+					Height="542">
+				<Border.Effect>
+					<DropShadowEffect Color="#000000" Opacity="0.25" BlurRadius="32" ShadowDepth="4"/>
+				</Border.Effect>
 
 			<Grid>
 				<Grid.RowDefinitions>
-					<RowDefinition Height="Auto"/>
 					<RowDefinition Height="Auto"/>
 					<RowDefinition Height="*"/>
 					<RowDefinition Height="Auto"/>
 				</Grid.RowDefinitions>
 
-				<!-- Title -->
-             <TextBlock Grid.Row="0"
+				<TextBlock Grid.Row="0"
 						   Text="{Binding [MindMapStyleOrganizeTitle], Source={StaticResource Loc}}"
                            FontSize="20"
                            FontWeight="SemiBold"
@@ -47,10 +251,8 @@
                            Margin="0,0,0,20"/>
 
 				<ScrollViewer Grid.Row="1"
-                              VerticalScrollBarVisibility="Auto"
-                              MaxHeight="380">
+                              VerticalScrollBarVisibility="Auto">
 					<StackPanel>
-						<!-- Background Color -->
 						<Grid Margin="0,0,0,16">
 							<Grid.ColumnDefinitions>
 								<ColumnDefinition Width="*"/>
@@ -63,24 +265,16 @@
                                        Foreground="{DynamicResource TextColor}"/>
 							<StackPanel Grid.Column="1" Orientation="Horizontal">
 								<Button x:Name="BackgroundColorButton"
-                                        Width="32" Height="32"
-                                        BorderThickness="1"
-                                        BorderBrush="{DynamicResource BorderColor}"
+                                        Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
                                         Click="BackgroundColorButton_Click"
                                         ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
 								<Button Content="✕"
-                                        Width="28" Height="28"
-                                        Margin="6,0,0,0"
-                                        Background="Transparent"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        Foreground="{DynamicResource TextColorSecondary}"
+                                        Style="{StaticResource StyleNodeClearButtonStyle}"
                                         Click="ClearBackgroundColorButton_Click"
                                         ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
 							</StackPanel>
 						</Grid>
 
-						<!-- Border Color -->
 						<Grid Margin="0,0,0,16">
 							<Grid.ColumnDefinitions>
 								<ColumnDefinition Width="*"/>
@@ -93,24 +287,16 @@
                                        Foreground="{DynamicResource TextColor}"/>
 							<StackPanel Grid.Column="1" Orientation="Horizontal">
 								<Button x:Name="BorderColorButton"
-                                        Width="32" Height="32"
-                                        BorderThickness="1"
-                                        BorderBrush="{DynamicResource BorderColor}"
+                                        Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
                                         Click="BorderColorButton_Click"
                                         ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
 								<Button Content="✕"
-                                        Width="28" Height="28"
-                                        Margin="6,0,0,0"
-                                        Background="Transparent"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        Foreground="{DynamicResource TextColorSecondary}"
+                                        Style="{StaticResource StyleNodeClearButtonStyle}"
                                         Click="ClearBorderColorButton_Click"
                                         ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
 							</StackPanel>
 						</Grid>
 
-						<!-- Border Thickness -->
 						<Grid Margin="0,0,0,16">
 							<Grid.ColumnDefinitions>
 								<ColumnDefinition Width="*"/>
@@ -138,7 +324,6 @@
 							</StackPanel>
 						</Grid>
 
-						<!-- Node Shape -->
 						<Grid Margin="0,0,0,16">
 							<Grid.ColumnDefinitions>
 								<ColumnDefinition Width="*"/>
@@ -151,7 +336,8 @@
                                        Foreground="{DynamicResource TextColor}"/>
 							<ComboBox x:Name="ShapeComboBox"
                                       Grid.Column="1"
-                                      Width="150"
+                                      Width="180"
+                                      Style="{StaticResource StyleNodeComboBoxStyle}"
                                       SelectedValuePath="Tag"
                                       SelectionChanged="ShapeComboBox_SelectionChanged">
 								<ComboBoxItem Content="{Binding [ShapeRectangle], Source={StaticResource Loc}}" Tag="Rectangle"/>
@@ -161,7 +347,6 @@
 							</ComboBox>
 						</Grid>
 
-						<!-- Icon Section -->
 						<Grid Margin="0,0,0,8">
 							<Grid.ColumnDefinitions>
 								<ColumnDefinition Width="*"/>
@@ -172,116 +357,71 @@
 									   FontSize="13"
 									   FontWeight="SemiBold"
 									   Foreground="{DynamicResource TextColor}"/>
-							<Button x:Name="IconBadgeColorButton"
-								Width="32" Height="32"
-								BorderThickness="1"
-								BorderBrush="{DynamicResource BorderColor}"
-								Click="IconBadgeColorButton_Click"
-								ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}" Margin="233,0,10,0"/>
 							<Button Grid.Column="1"
-									Content="✕" Height="28"
-									Background="Transparent"
-									BorderBrush="{DynamicResource BorderColor}"
-									BorderThickness="1"
-									Foreground="{DynamicResource TextColorSecondary}"
+									Content="✕"
+									Style="{StaticResource StyleNodeClearButtonStyle}"
+									Margin="0"
 									Click="ClearIconButton_Click"
-									ToolTip="{Binding [ClearIcon], Source={StaticResource Loc}}" Margin="0,0,10,0"/>
+									ToolTip="{Binding [ClearIcon], Source={StaticResource Loc}}"/>
 						</Grid>
 
-						<!-- Icon Selection Grid -->
-						<Border Grid.Row="2"
-								Margin="0,8,0,16"
+						<Grid Margin="0,0,0,12">
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="Auto"/>
+							</Grid.ColumnDefinitions>
+							<TextBlock Text="{Binding [NodeIconBadgeColor], Source={StaticResource Loc}}"
+									   VerticalAlignment="Center"
+									   FontSize="12"
+									   Foreground="{DynamicResource TextColorSecondary}"/>
+							<StackPanel Grid.Column="1" Orientation="Horizontal">
+								<Button x:Name="IconBadgeColorButton"
+										Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
+										Click="IconBadgeColorButton_Click"
+										ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
+								<Button Content="✕"
+										Style="{StaticResource StyleNodeClearButtonStyle}"
+										Click="ClearIconBadgeColorButton_Click"
+										ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
+							</StackPanel>
+						</Grid>
+
+						<Border Margin="0,0,0,8"
 								Padding="12"
-								Background="#F8F9FC"
+								Background="{DynamicResource WindowBackground}"
 								BorderBrush="{DynamicResource BorderColor}"
 								BorderThickness="1"
-								CornerRadius="8"
+								CornerRadius="10"
 								MaxHeight="200">
 							<ScrollViewer VerticalScrollBarVisibility="Auto"
 										  HorizontalScrollBarVisibility="Disabled">
-								<!-- ✅ Add x:Name so we can find it in code-behind -->
 								<WrapPanel x:Name="IconGrid" Orientation="Horizontal">
-									<!-- Row 1 -->
-									<Button Content="📌" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="⭐" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="💡" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🎯" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="📝" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🔔" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="❤️" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🔥" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-
-									<!-- Row 2 -->
-									<Button Content="✨" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="📚" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🎓" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="💼" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🏆" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🎨" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🚀" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="💻" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-
-									<!-- Row 3 -->
-									<Button Content="📊" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🔍" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="⚙️" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🔗" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="📁" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="📍" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="✔️" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-									<Button Content="🎉" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="White" BorderBrush="{DynamicResource BorderColor}"
-											BorderThickness="1" Click="IconButton_Click"/>
-
-									<!-- Custom Icon Button -->
-									<Button Content="➕" Width="52" Height="52" Margin="3" FontSize="20"
-											Background="#E8ECF5" BorderBrush="#4A6EE0" BorderThickness="1"
+									<Button Content="📌" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="⭐" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="💡" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🎯" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="📝" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🔔" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="❤️" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🔥" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="✨" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="📚" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🎓" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="💼" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🏆" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🎨" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🚀" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="💻" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="📊" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🔍" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="⚙️" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🔗" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="📁" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="📍" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="✔️" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="🎉" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
+									<Button Content="➕"
+											Style="{StaticResource StyleNodeCustomIconButtonStyle}"
 											Click="CustomIconButton_Click"
 											ToolTip="{Binding [AddCustomIcon], Source={StaticResource Loc}}"/>
 								</WrapPanel>
@@ -290,7 +430,6 @@
 					</StackPanel>
 				</ScrollViewer>
 
-				<!-- Buttons -->
 				<StackPanel Grid.Row="2"
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
@@ -308,6 +447,7 @@
                             Click="SaveButton_Click"/>
 				</StackPanel>
 			</Grid>
+			</Border>
 		</Border>
 	</Grid>
 </Window>

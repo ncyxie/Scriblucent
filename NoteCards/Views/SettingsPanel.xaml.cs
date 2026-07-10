@@ -1,4 +1,5 @@
 using NoteCards;
+using NoteCards.Animations;
 using NoteCards.Localization;
 using NoteCards.Models;
 using NoteCards.Services;
@@ -13,9 +14,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-
+using System.Windows.Threading;
 namespace NoteCards.Views
 {
     public partial class SettingsPanel : UserControl
@@ -28,13 +27,10 @@ namespace NoteCards.Views
             public bool IsDownloaded { get; set; }
         }
 
-        private const int OverlayAnimationMs = 180;
-        private const int PanelAnimationMs = 220;
-        private const double PanelOffsetY = 14;
         private const int MinAutoSaveIntervalSeconds = 5;
         private const int MaxAutoSaveIntervalSeconds = 86400;
 
-        private bool _isClosing;
+        private readonly OverlayPanelAnimator _overlayAnimator;
         private bool _isApplyingSettings;
         private bool _isDownloadingAiModel;
         private bool _isDownloadingRuntime;
@@ -47,11 +43,24 @@ namespace NoteCards.Views
         public SettingsPanel()
         {
             InitializeComponent();
+            UiMotion.ConfigurePopupsForElement(this);
+            _overlayAnimator = OverlayPanelAnimator.Bind(this, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
             AiToolsListBox.ItemsSource = _managedAiTools;
             LocalizationProvider.Instance.PropertyChanged += LocalizationProvider_PropertyChanged;
             Unloaded += (_, _) => LocalizationProvider.Instance.PropertyChanged -= LocalizationProvider_PropertyChanged;
             NoteEditorWindow.AiGenerationStateChanged += NoteEditorWindow_AiGenerationStateChanged;
             Unloaded += (_, _) => NoteEditorWindow.AiGenerationStateChanged -= NoteEditorWindow_AiGenerationStateChanged;
+            ThemeManager.ThemeChanged += ThemeManager_ThemeChanged;
+            Unloaded += (_, _) => ThemeManager.ThemeChanged -= ThemeManager_ThemeChanged;
+        }
+
+        private void ThemeManager_ThemeChanged(object? sender, EventArgs e)
+        {
+            if (Visibility != Visibility.Visible || _overlayAnimator.IsClosing)
+                return;
+
+            _overlayAnimator.RefreshBackdrop(
+                () => OverlayBackdropCapture.TryCaptureBehindOverlays(Window.GetWindow(this)));
         }
 
         private void NoteEditorWindow_AiGenerationStateChanged(object? sender, EventArgs e)
@@ -75,46 +84,13 @@ namespace NoteCards.Views
 
         public void ShowAnimated()
         {
-            _isClosing = false;
-            Visibility = Visibility.Visible;
-            IsHitTestVisible = true;
+            _overlayAnimator.Show(
+                () => _overlayAnimator.RunAfterFirstRender(PopulatePanelContent, DispatcherPriority.ApplicationIdle),
+                () => OverlayBackdropCapture.TryCaptureForDimAnimation(Window.GetWindow(this)));
+        }
 
-            OverlayRoot.BeginAnimation(OpacityProperty, null);
-            PanelCard.BeginAnimation(OpacityProperty, null);
-            var translate = EnsurePanelTranslate();
-            translate.BeginAnimation(TranslateTransform.YProperty, null);
-
-            OverlayRoot.Opacity = 0;
-            PanelCard.Opacity = 0;
-            translate.Y = PanelOffsetY;
-
-            var overlayDuration = TimeSpan.FromMilliseconds(OverlayAnimationMs);
-            var panelDuration = TimeSpan.FromMilliseconds(PanelAnimationMs);
-            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            var openOverlay = new DoubleAnimation(0, 1, overlayDuration)
-            {
-                EasingFunction = easeOut
-            };
-            var openPanelOpacity = new DoubleAnimation(0, 1, panelDuration)
-            {
-                EasingFunction = easeOut
-            };
-            var openPanelShift = new DoubleAnimation(PanelOffsetY, 0, panelDuration)
-            {
-                EasingFunction = easeOut
-            };
-            openPanelShift.Completed += (_, _) =>
-            {
-                OverlayRoot.Opacity = 1;
-                PanelCard.Opacity = 1;
-                translate.Y = 0;
-            };
-
-            OverlayRoot.BeginAnimation(OpacityProperty, openOverlay);
-            PanelCard.BeginAnimation(OpacityProperty, openPanelOpacity);
-            translate.BeginAnimation(TranslateTransform.YProperty, openPanelShift);
-
+        private void PopulatePanelContent()
+        {
             var settings = AppSettingsService.Load();
             var machineMemoryBytes = BundledModelHostService.GetTotalPhysicalMemoryBytesForCurrentMachine();
             var recommendedModelKey = BundledModelHostService.GetRecommendedFlashcardModelKey(machineMemoryBytes);
@@ -129,8 +105,6 @@ namespace NoteCards.Views
             UpdateAutoSaveIntervalControls(settings.AutoSaveIntervalSeconds);
 
             UpdateAutoSaveCheckboxAvailability();
-            if (FindName("FlashcardFlipSpeedSlider") is Slider flipSpeedSlider)
-                flipSpeedSlider.Value = settings.FlashcardFlipDelayMilliseconds;
             LoadManagedAiTools(settings);
             RefreshFlashcardModelOptions(machineMemoryBytes, settings);
             RefreshManagedAiToolDownloadState();
@@ -140,24 +114,14 @@ namespace NoteCards.Views
             _lastSelectedFlashcardModelKey = GetSelectedFlashcardModelKey() ?? recommendedModelKey;
             UpdateFlashcardModelWarning(_lastSelectedFlashcardModelKey, machineMemoryBytes);
 
-            var selectedViewMode = string.Equals(settings.DefaultViewMode, "List", StringComparison.OrdinalIgnoreCase)
-                ? "List"
-                : "Grid";
-            foreach (var comboBoxItem in ViewModeBox.Items.OfType<ComboBoxItem>())
-            {
-                if (string.Equals(comboBoxItem.Tag?.ToString(), selectedViewMode, StringComparison.OrdinalIgnoreCase))
-                {
-                    ViewModeBox.SelectedItem = comboBoxItem;
-                    break;
-                }
-            }
-
             SelectComboBoxItemByTag(
                 MeasurementUnitSystemBox,
                 AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem),
                 AppSettings.UnitSystemImperial);
+            UpdateRecentItemsLimitControls(settings.RecentItemsLimit);
+            if (ReduceAnimationsCheckBox is not null)
+                ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
             _isApplyingSettings = false;
-
         }
 
         private void LoadManagedAiTools(AppSettings settings)
@@ -393,15 +357,17 @@ namespace NoteCards.Views
             var isCompatible = BundledModelHostService.IsFlashcardModelCompatibleWithMemory(selectedKey, machineMemoryBytes);
             if (isCompatible)
             {
-                warningTextBlock.Visibility = Visibility.Collapsed;
-                warningTextBlock.Text = string.Empty;
+                UiMotion.AnimateInlineReveal(
+                    warningTextBlock,
+                    false,
+                    () => warningTextBlock.Text = string.Empty);
                 return;
             }
 
             warningTextBlock.Text = string.Format(
                 LocalizationService.GetString("FlashcardModelWarningText"),
                 BundledModelHostService.GetFlashcardModelDisplayName(selectedKey));
-            warningTextBlock.Visibility = Visibility.Visible;
+            UiMotion.AnimateInlineReveal(warningTextBlock, true);
         }
 
         private static void SelectComboBoxItemByTag(ComboBox comboBox, string? tag, string fallbackTag)
@@ -946,62 +912,7 @@ namespace NoteCards.Views
 
         public void HideAnimated()
         {
-            if (_isClosing || Visibility != Visibility.Visible)
-                return;
-
-            _isClosing = true;
-            IsHitTestVisible = false;
-
-            var translate = EnsurePanelTranslate();
-            var startOverlayOpacity = OverlayRoot.Opacity;
-            var startPanelOpacity = PanelCard.Opacity;
-            var startY = translate.Y;
-
-            if (startOverlayOpacity <= 0)
-                startOverlayOpacity = 1;
-
-            if (startPanelOpacity <= 0)
-                startPanelOpacity = 1;
-
-            var overlayDuration = TimeSpan.FromMilliseconds(OverlayAnimationMs);
-            var panelDuration = TimeSpan.FromMilliseconds(PanelAnimationMs);
-            var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
-
-            var closeOverlay = new DoubleAnimation(startOverlayOpacity, 0, overlayDuration)
-            {
-                EasingFunction = easeIn
-            };
-            var closePanelOpacity = new DoubleAnimation(startPanelOpacity, 0, panelDuration)
-            {
-                EasingFunction = easeIn
-            };
-            var closePanelShift = new DoubleAnimation(startY, PanelOffsetY, panelDuration)
-            {
-                EasingFunction = easeIn
-            };
-
-            closePanelShift.Completed += (_, _) =>
-            {
-                Visibility = Visibility.Collapsed;
-                OverlayRoot.Opacity = 0;
-                PanelCard.Opacity = 0;
-                translate.Y = PanelOffsetY;
-                _isClosing = false;
-            };
-
-            OverlayRoot.BeginAnimation(OpacityProperty, closeOverlay);
-            PanelCard.BeginAnimation(OpacityProperty, closePanelOpacity);
-            translate.BeginAnimation(TranslateTransform.YProperty, closePanelShift);
-        }
-
-        private TranslateTransform EnsurePanelTranslate()
-        {
-            if (PanelCard.RenderTransform is TranslateTransform translate)
-                return translate;
-
-            translate = new TranslateTransform();
-            PanelCard.RenderTransform = translate;
-            return translate;
+            _overlayAnimator.Hide();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -1009,10 +920,9 @@ namespace NoteCards.Views
             HideAnimated();
         }
 
-        private void OverlayRoot_MouseDown(object sender, MouseButtonEventArgs e)
+        private void OverlayDim_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.OriginalSource == sender)
-                HideAnimated();
+            HideAnimated();
         }
 
         private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
@@ -1124,26 +1034,88 @@ namespace NoteCards.Views
             }
         }
 
-        private void ViewModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void RecentItemsLimitTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (_isApplyingSettings)
+            if (_isApplyingSettings || sender is not TextBox textBox)
                 return;
 
-            if (ViewModeBox.SelectedItem is ComboBoxItem item)
+            var digitsOnly = new string(textBox.Text.Where(char.IsDigit).ToArray());
+            if (textBox.Text != digitsOnly)
             {
-                var selected = string.Equals(item.Tag?.ToString(), "List", StringComparison.OrdinalIgnoreCase)
-                    ? "List"
-                    : "Grid";
-
-                var settings = AppSettingsService.Load();
-                settings.DefaultViewMode = selected;
-                AppSettingsService.Save(settings);
-
-                if (Application.Current.MainWindow.DataContext is MainViewModel vm)
-                {
-                    vm.ViewMode = selected;
-                }
+                var caretIndex = Math.Min(textBox.CaretIndex, digitsOnly.Length);
+                textBox.Text = digitsOnly;
+                textBox.CaretIndex = caretIndex;
             }
+        }
+
+        private void RecentItemsLimitTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            CommitRecentItemsLimitTextBox();
+        }
+
+        private void RecentItemsLimitTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            CommitRecentItemsLimitTextBox();
+            e.Handled = true;
+        }
+
+        private void CommitRecentItemsLimitTextBox()
+        {
+            if (_isApplyingSettings || RecentItemsLimitTextBox is null)
+                return;
+
+            if (!int.TryParse(RecentItemsLimitTextBox.Text, out var limit))
+                limit = AppSettingsService.Load().RecentItemsLimit;
+
+            ApplyRecentItemsLimit(limit);
+        }
+
+        private void ApplyRecentItemsLimit(int limit)
+        {
+            limit = AppSettings.NormalizeRecentItemsLimit(limit);
+            UpdateRecentItemsLimitControls(limit);
+
+            var settings = AppSettingsService.Load();
+            settings.RecentItemsLimit = limit;
+            AppSettingsService.Save(settings);
+
+            if (Application.Current?.MainWindow?.DataContext is MainViewModel mainVm)
+                mainVm.RefreshRecentItemsFromSettings();
+        }
+
+        private void UpdateRecentItemsLimitControls(int limit)
+        {
+            limit = AppSettings.NormalizeRecentItemsLimit(limit);
+
+            var wasApplyingSettings = _isApplyingSettings;
+            _isApplyingSettings = true;
+
+            if (RecentItemsLimitTextBox is not null)
+            {
+                RecentItemsLimitTextBox.Text = limit.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            _isApplyingSettings = wasApplyingSettings;
+        }
+
+        private void ReduceAnimationsCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings || ReduceAnimationsCheckBox is null)
+                return;
+
+            ApplyReduceAnimations(ReduceAnimationsCheckBox.IsChecked == true);
+        }
+
+        private static void ApplyReduceAnimations(bool reduceAnimations)
+        {
+            var settings = AppSettingsService.Load();
+            settings.ReduceAnimations = reduceAnimations;
+            AppSettingsService.Save(settings);
+            ReducedMotionPreferences.Configure(reduceAnimations);
+            ReducedMotionPreferences.Refresh();
         }
 
         private void MeasurementUnitSystemBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

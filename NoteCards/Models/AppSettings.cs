@@ -20,6 +20,12 @@ public class AppSettings
     public bool EnableHorizontalScrollbar { get; set; } = true;
     
     public bool EnableAutoSave { get; set; } = true;
+
+    /// <summary>
+    /// When true, UI motion is minimized regardless of Windows accessibility settings.
+    /// When false, Windows system animation preferences are respected.
+    /// </summary>
+    public bool ReduceAnimations { get; set; }
     
     public int AutoSaveIntervalSeconds { get; set; } = 30;
 
@@ -95,6 +101,8 @@ public class AppSettings
 
     public string DefaultViewMode { get; set; } = "Grid";
 
+    public int RecentItemsLimit { get; set; } = 20;
+
     public bool IsGroupsFirst { get; set; } = true;
 
     public string PreferredFontFamily { get; set; } = "Calibri";
@@ -113,7 +121,14 @@ public class AppSettings
     public List<AiToolSettingsItem> AiTools { get; set; } = new();
     public string? LastView { get; set; }
 
-    public int FlashcardFlipDelayMilliseconds { get; set; } = 300;
+    public const int MinFlashcardFlipDelayMilliseconds = 120;
+    public const int MaxFlashcardFlipDelayMilliseconds = 1000;
+    public const int DefaultFlashcardFlipDelayMilliseconds = 380;
+
+    public int FlashcardFlipDelayMilliseconds { get; set; } = DefaultFlashcardFlipDelayMilliseconds;
+
+    public static int NormalizeFlashcardFlipDelayMilliseconds(int milliseconds)
+        => Math.Clamp(milliseconds, MinFlashcardFlipDelayMilliseconds, MaxFlashcardFlipDelayMilliseconds);
 
     // Activity Tracking
     public long TotalTimeSpentSeconds { get; set; } = 0;
@@ -121,10 +136,17 @@ public class AppSettings
     public long TotalCharactersTyped { get; set; } = 0;
     public DateTime? LastActiveDate { get; set; }
 
+    public const int MinRecentItemsLimit = 1;
+    public const int MaxRecentItemsLimit = 50;
+    public const int DefaultRecentItemsLimit = 20;
+
     public static string NormalizeMeasurementUnitSystem(string? unitSystem)
         => string.Equals(unitSystem, UnitSystemMetric, StringComparison.OrdinalIgnoreCase)
             ? UnitSystemMetric
             : UnitSystemImperial;
+
+    public static int NormalizeRecentItemsLimit(int limit)
+        => Math.Clamp(limit, MinRecentItemsLimit, MaxRecentItemsLimit);
 }
 
 public class AiToolSettingsItem

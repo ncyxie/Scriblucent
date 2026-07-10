@@ -3,11 +3,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:behaviors="clr-namespace:NoteCards.Behaviors"
              mc:Ignorable="d"
              d:DesignHeight="520"
              d:DesignWidth="960">
     <UserControl.Resources>
         <Style x:Key="SettingsCloseIconButtonStyle" TargetType="Button">
+            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
+            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="CloseButtonBorder"/>
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
@@ -80,7 +83,7 @@
                                    IsOpen="{TemplateBinding IsDropDownOpen}"
                                    AllowsTransparency="True"
                                    Focusable="False"
-                                   PopupAnimation="Slide">
+                                   PopupAnimation="None">
                                 <Border x:Name="DropDownBorder"
                                         Background="{DynamicResource CardBackground}"
                                         BorderBrush="{DynamicResource BorderColor}"
@@ -172,92 +175,40 @@
             </ControlTemplate.Triggers>
         </ControlTemplate>
 
-        <!-- CheckBox Style with Theme Support -->
-        <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="4,0,0,0"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <Grid Background="Transparent">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="18"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- CheckBox Box -->
-                            <Border x:Name="CheckBoxBorder"
-                                    Grid.Column="0"
-                                    Width="18"
-                                    Height="18"
-                                    Background="{DynamicResource CardBackground}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="3">
-                                <TextBlock x:Name="CheckMark"
-                                           Text="✓"
-                                           Foreground="{DynamicResource TextColor}"
-                                           FontSize="12"
-                                           FontWeight="Bold"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Visibility="Collapsed"/>
-                            </Border>
-
-                            <!-- CheckBox Content/Label -->
-                            <TextBlock Grid.Column="1"
-                                       Margin="6,0,0,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       Text="{TemplateBinding Content}"/>
-                        </Grid>
-
-                        <ControlTemplate.Triggers>
-                            <!-- Checked State -->
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
-                                <Setter TargetName="CheckBoxBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                                <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-
-                            <!-- Hover State -->
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CheckBoxBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                                <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-
-                            <!-- Disabled State -->
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.6"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </UserControl.Resources>
-    <Grid x:Name="OverlayRoot" Background="#66000000" MouseDown="OverlayRoot_MouseDown">
-        <Border x:Name="PanelCard"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="16"
-                Padding="24"
-                Width="Auto"
-                MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
-                MaxWidth="560"
+    <Grid x:Name="OverlayRoot">
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"
+                           MouseDown="OverlayDim_MouseDown"/>
+            </Grid>
+        </Viewbox>
+        <Border x:Name="PanelMotionHost"
                 Margin="20"
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.20" BlurRadius="24" ShadowDepth="0"/>
-            </Border.Effect>
-
+                VerticalAlignment="Center"
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="PanelCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="24"
+                    Width="Auto"
+                    MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
+                    MaxWidth="560">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.20" BlurRadius="24" ShadowDepth="0"/>
+                </Border.Effect>
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -288,6 +239,8 @@
                               CanContentScroll="True">
                 <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -543,21 +496,7 @@
         Padding="16,12">
 
                     <StackPanel>
-                        <TextBlock Text="{Binding [ViewMode], Source={StaticResource Loc}}"
-                   FontWeight="SemiBold"
-                   Foreground="{DynamicResource TextColor}"/>
-
-                        <ComboBox x:Name="ViewModeBox"
-                  Margin="0,8,0,0"
-                  SelectionChanged="ViewModeBox_SelectionChanged">
-
-                            <ComboBoxItem Tag="Grid" Content="{Binding [ViewModeGrid], Source={StaticResource Loc}}"/>
-                            <ComboBoxItem Tag="List" Content="{Binding [ViewModeList], Source={StaticResource Loc}}"/>
-
-                        </ComboBox>
-
                         <TextBlock Text="{Binding [MeasurementUnitSystem], Source={StaticResource Loc}}"
-                                   Margin="0,14,0,0"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextColor}"/>
 
@@ -569,8 +508,91 @@
                         </ComboBox>
                     </StackPanel>
                 </Border>
-                <!-- Scrollbar and Auto-Save Settings -->
+
                 <Border Grid.Row="3"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderBrush="{DynamicResource BorderColor}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="16,12">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding [RecentItemsLimit], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"/>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right">
+                            <Border Background="{DynamicResource CardBackground}"
+                                    BorderBrush="{DynamicResource BorderColor}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="8,0">
+                                <TextBox x:Name="RecentItemsLimitTextBox"
+                                         Width="48"
+                                         Height="30"
+                                         Padding="0"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         TextAlignment="Right"
+                                         TextChanged="RecentItemsLimitTextBox_TextChanged"
+                                         LostFocus="RecentItemsLimitTextBox_LostFocus"
+                                         PreviewKeyDown="RecentItemsLimitTextBox_PreviewKeyDown"/>
+                            </Border>
+                            <TextBlock Text="{Binding [RecentItemsLimitUnit], Source={StaticResource Loc}}"
+                                       Margin="8,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextColorSecondary}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="4"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderBrush="{DynamicResource BorderColor}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="16,12">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{Binding [Animations], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"/>
+
+                            <CheckBox x:Name="ReduceAnimationsCheckBox"
+                                      Grid.Column="1"
+                                      Content="{Binding [ReduceAnimations], Source={StaticResource Loc}}"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Center"
+                                      Checked="ReduceAnimationsCheckBox_Changed"
+                                      Unchecked="ReduceAnimationsCheckBox_Changed"/>
+                        </Grid>
+
+                        <TextBlock Text="{Binding [ReduceAnimationsDescription], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource TextColorSecondary}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Scrollbar and Auto-Save Settings -->
+                <Border Grid.Row="5"
         Margin="0,14,0,0"
         Background="{DynamicResource SidebarBackground}"
         BorderBrush="{DynamicResource BorderColor}"
@@ -617,7 +639,7 @@
 
                     <!-- Auto-Save Setting -->
                     <Border x:Name="AutoSaveSettingsCard"
-                            Grid.Row="4"
+                            Grid.Row="6"
                             Margin="0,14,0,0"
                             Background="{DynamicResource SidebarBackground}"
                             BorderBrush="{DynamicResource BorderColor}"
@@ -703,7 +725,7 @@
                     </Border>
 
                     <!-- Activity Summary Settings -->
-                <Border Grid.Row="5"
+                <Border Grid.Row="7"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
@@ -735,7 +757,7 @@
                 </Border>
 
                 <!-- Reset Factory Settings Section -->
-                <Border Grid.Row="6"
+                <Border Grid.Row="8"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
@@ -762,7 +784,7 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Grid.Row="7" Margin="0,20,0,0">
+                <Grid Grid.Row="9" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -786,6 +808,7 @@
                 </Grid>
             </ScrollViewer>
             </Grid>
+            </Border>
         </Border>
     </Grid>
 </UserControl>

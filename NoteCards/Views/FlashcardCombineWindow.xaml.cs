@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Models;
 using NoteCards.ViewModels;
 using System.Collections.ObjectModel;
@@ -69,6 +70,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         UpdateFilteredVisibility();
         UpdateStatusText();
         _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     public ObservableCollection<FlashcardCombineItem> Sets => _sets;

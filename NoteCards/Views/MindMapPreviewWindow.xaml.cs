@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Localization;
 using NoteCards.Models;
 using NoteCards;
@@ -49,11 +50,21 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private MindMapLayoutMode _selectedLayoutMode = MindMapLayoutMode.BalancedTree;
     private bool _suppressLayoutModeSelectionChanged;
     private bool _suppressManualPositioningToggleChanged;
+    private const double ManualDragThreshold = 4;
+    private const int ConnectionZIndex = 0;
+    private const int NodeZIndex = 1;
+    private const int DraggingNodeZIndex = 2;
+
     private bool _isDraggingNode;
+    private bool _isManualDragPending;
+    private bool _connectionRedrawQueued;
+    private bool _mapViewportRefreshQueued;
     private MindMapNode? _draggedNode;
+    private MindMapNode? _pendingDragNode;
     private Point _dragStartMousePos;
     private Point _dragStartNodePos;
     private Border? _draggedBorder;
+    private Border? _pendingDragBorder;
     private bool _isManualPositioningMode;
     private bool _suppressManualPositionCapture;
     private readonly Dictionary<MindMapNode, Point> _manualPositions = new();
@@ -139,12 +150,18 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         Loaded += (_, _) =>
         {
-            RebuildMap();
+            MapCanvas.PreviewMouseMove += MapCanvas_PreviewMouseMove;
+            MapCanvas.MouseMove += MapCanvas_MouseMove;
+            MapCanvas.PreviewMouseLeftButtonUp += MapCanvas_PreviewMouseLeftButtonUp;
+            MapCanvas.LostMouseCapture += MapCanvas_LostMouseCapture;
+            RebuildMap(animate: false);
             MarkCurrentStateSaved();
             _isInitializing = false;
             UpdateEditedIndicator();
         };
-        SizeChanged += (_, _) => RebuildMap();
+        WindowContentEnterHelper.AnimateOnLoaded(this);
+        SizeChanged += (_, _) => QueueMapViewportRefresh();
+        StateChanged += (_, _) => QueueMapViewportRefresh();
     }
 
     public string EditorTitle => TitleTextBox.Text.Trim();
@@ -220,9 +237,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (_isInitializing || EditedIndicatorText is null)
             return;
 
-        EditedIndicatorText.Visibility = HasUnsavedChanges()
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
     }
 
     private string GetEditorSnapshot()
@@ -450,18 +465,53 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         if (string.IsNullOrWhiteSpace(_modelDisplayName))
         {
-            AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
             AiGeneratedInfoBadge.ToolTip = null;
+            if (_isInitializing)
+            {
+                AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
             return;
         }
 
-        AiGeneratedInfoBadge.Visibility = Visibility.Visible;
         AiGeneratedInfoBadge.ToolTip = string.Format(
             LocalizationService.GetString("MindMapGeneratedWithModel"),
             _modelDisplayName);
+
+        if (_isInitializing)
+        {
+            AiGeneratedInfoBadge.Visibility = Visibility.Visible;
+            return;
+        }
+
+        UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
     }
 
-    private void RebuildMap()
+    private void RebuildMap(bool animate = true)
+    {
+        if (animate && !_isInitializing && IsLoaded && !UiMotion.PrefersReducedMotion)
+        {
+            UiMotion.Stop(MapCanvas);
+            UiMotion.Fade(
+                MapCanvas,
+                0,
+                UiMotion.NavFadeOutMs,
+                UiMotion.InCubic,
+                () =>
+                {
+                    RebuildMapCore();
+                    MapCanvas.Opacity = 0;
+                    UiMotion.Fade(MapCanvas, 1, UiMotion.QuickMs, UiMotion.OutCubic);
+                });
+            return;
+        }
+
+        RebuildMapCore();
+    }
+
+    private void RebuildMapCore()
     {
         RefreshSearchMatches(resetIndex: false);
 
@@ -811,17 +861,50 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             CenterViewOnLayout(layout);
     }
 
-    private void UpdateMapCanvasSize()
+    private void QueueMapViewportRefresh()
     {
-        if (_layouts.Count == 0)
+        if (_mapViewportRefreshQueued)
             return;
 
-        var zoom = Math.Max(ZoomSlider.Value, 0.1);
+        _mapViewportRefreshQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _mapViewportRefreshQueued = false;
+            if (!IsLoaded)
+                return;
+
+            RefreshMapViewportSize();
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void MapScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+        => QueueMapViewportRefresh();
+
+    private void RefreshMapViewportSize()
+    {
+        MapScrollViewer?.UpdateLayout();
+        UpdateMapCanvasSize();
+    }
+
+    private void UpdateMapCanvasSize()
+    {
+        if (_layouts.Count == 0 || MapScrollViewer is null || MapCanvas is null)
+            return;
+
+        var zoom = Math.Max(ZoomSlider?.Value ?? 1, 0.1);
         var maxRight = _layouts.Values.Max(layout => layout.X + layout.Width);
         var maxBottom = _layouts.Values.Max(layout => layout.Y + layout.Height);
 
-        MapCanvas.Width = Math.Max(MapScrollViewer.ViewportWidth / zoom, maxRight + CanvasPadding);
-        MapCanvas.Height = Math.Max(MapScrollViewer.ViewportHeight / zoom, maxBottom + CanvasPadding);
+        var viewportWidth = MapScrollViewer.ViewportWidth;
+        var viewportHeight = MapScrollViewer.ViewportHeight;
+        if (viewportWidth <= 0 || viewportHeight <= 0)
+        {
+            viewportWidth = MapScrollViewer.ActualWidth;
+            viewportHeight = MapScrollViewer.ActualHeight;
+        }
+
+        MapCanvas.Width = Math.Max(viewportWidth / zoom, maxRight + CanvasPadding);
+        MapCanvas.Height = Math.Max(viewportHeight / zoom, maxBottom + CanvasPadding);
     }
 
     private void QueueInitialCenterOnRoot()
@@ -995,6 +1078,207 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             _layouts[node] = layout with { X = layout.X + offsetX, Y = layout.Y + offsetY };
     }
 
+    private void RedrawConnections()
+    {
+        foreach (var path in MapCanvas.Children.OfType<ShapePath>().ToList())
+            MapCanvas.Children.Remove(path);
+
+        DrawConnections(_root);
+    }
+
+    private void QueueConnectionRedraw()
+    {
+        if (_connectionRedrawQueued)
+            return;
+
+        _connectionRedrawQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _connectionRedrawQueued = false;
+            RedrawConnections();
+            if (_isDraggingNode)
+                UpdateMapCanvasSize();
+        }, DispatcherPriority.Render);
+    }
+
+    private void BeginManualNodeDrag(MindMapNode node, Border border)
+    {
+        _isManualDragPending = false;
+        _pendingDragNode = null;
+        _pendingDragBorder = null;
+        _isDraggingNode = true;
+        _draggedNode = node;
+        _draggedBorder = border;
+
+        MapCanvas.CaptureMouse();
+        Panel.SetZIndex(border, DraggingNodeZIndex);
+        ApplyNodeDragChrome(border, isDragging: true);
+        SelectSingleNode(node);
+        ApplyNodeSelectionVisuals();
+    }
+
+    private void UpdateManualNodeDragPosition(Point currentCanvasPos)
+    {
+        if (!_isDraggingNode || _draggedNode is null || _draggedBorder is null)
+            return;
+
+        if (!_layouts.TryGetValue(_draggedNode, out var layout))
+            return;
+
+        var dx = currentCanvasPos.X - _dragStartMousePos.X;
+        var dy = currentCanvasPos.Y - _dragStartMousePos.Y;
+        var newX = Math.Max(CanvasPadding, _dragStartNodePos.X + dx);
+        var newY = Math.Max(CanvasPadding, _dragStartNodePos.Y + dy);
+
+        SetManualPosition(_draggedNode, new Point(newX, newY));
+        _layouts[_draggedNode] = layout with { X = newX, Y = newY };
+        Canvas.SetLeft(_draggedBorder, newX);
+        Canvas.SetTop(_draggedBorder, newY);
+        QueueConnectionRedraw();
+    }
+
+    private static void ApplyNodeDragChrome(Border border, bool isDragging)
+    {
+        if (isDragging)
+        {
+            border.Cursor = Cursors.SizeAll;
+            border.Effect = new DropShadowEffect
+            {
+                Color = Colors.Black,
+                Opacity = 0.28,
+                BlurRadius = 18,
+                ShadowDepth = 4
+            };
+            return;
+        }
+
+        border.Cursor = Cursors.Hand;
+    }
+
+    private void CancelManualDragPending()
+    {
+        _isManualDragPending = false;
+        _pendingDragNode = null;
+        _pendingDragBorder = null;
+    }
+
+    private void MapCanvas_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isManualPositioningMode || _isDraggingNode)
+            return;
+
+        if (!_isManualDragPending || _pendingDragNode is null || _pendingDragBorder is null)
+            return;
+
+        var currentPos = e.GetPosition(MapCanvas);
+        var dx = currentPos.X - _dragStartMousePos.X;
+        var dy = currentPos.Y - _dragStartMousePos.Y;
+        if (Math.Abs(dx) < ManualDragThreshold && Math.Abs(dy) < ManualDragThreshold)
+            return;
+
+        BeginManualNodeDrag(_pendingDragNode, _pendingDragBorder);
+        UpdateManualNodeDragPosition(currentPos);
+        e.Handled = true;
+    }
+
+    private void MapCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isDraggingNode)
+            return;
+
+        UpdateManualNodeDragPosition(e.GetPosition(MapCanvas));
+        e.Handled = true;
+    }
+
+    private void MapCanvas_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_isDraggingNode && _draggedNode is not null && _draggedBorder is not null)
+        {
+            FinalizeManualNodeDrag(_draggedNode, _draggedBorder);
+            CancelManualDragPending();
+            e.Handled = true;
+            return;
+        }
+
+        CancelManualDragPending();
+    }
+
+    private void MapCanvas_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (!_isDraggingNode || _draggedNode is null || _draggedBorder is null)
+        {
+            CancelManualDragPending();
+            return;
+        }
+
+        FinalizeManualNodeDrag(_draggedNode, _draggedBorder);
+        CancelManualDragPending();
+    }
+
+    private void ApplyNodeBorderChrome(Border border, MindMapNode node)
+    {
+        var isRoot = ReferenceEquals(node, _root);
+        var defaultThickness = node.BorderThickness > 0 ? node.BorderThickness : 1;
+        border.BorderThickness = new Thickness(defaultThickness);
+        border.BorderBrush = new SolidColorBrush(
+            !string.IsNullOrWhiteSpace(node.BorderColor)
+                ? (Color)ColorConverter.ConvertFromString(node.BorderColor)
+                : isRoot ? Color.FromRgb(47, 92, 208) : Color.FromRgb(194, 203, 220));
+        border.Effect = null;
+
+        if (_searchMatches.Contains(node))
+        {
+            border.BorderBrush = GetThemeBrush("MindMapSearchMatchBorderBrush", Color.FromRgb(245, 158, 11));
+            border.BorderThickness = new Thickness(2);
+        }
+
+        if (ReferenceEquals(node, CurrentSearchMatch))
+        {
+            border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(245, 114, 11));
+            border.BorderThickness = new Thickness(3);
+            border.Effect = new DropShadowEffect
+            {
+                Color = Colors.Black,
+                Opacity = 0.2,
+                BlurRadius = 14,
+                ShadowDepth = 0
+            };
+        }
+
+        if (_selectedNodes.Contains(node))
+        {
+            border.BorderBrush = GetThemeBrush("MindMapSelectedBorderBrush", Color.FromRgb(63, 111, 232));
+            border.BorderThickness = new Thickness(3);
+        }
+    }
+
+    private void ApplyNodeSelectionVisuals()
+    {
+        foreach (var border in MapCanvas.Children.OfType<Border>())
+        {
+            if (border.Tag is MindMapNode node)
+                ApplyNodeBorderChrome(border, node);
+        }
+    }
+
+    private void FinalizeManualNodeDrag(MindMapNode node, Border border)
+    {
+        _isDraggingNode = false;
+        _draggedNode = null;
+        _draggedBorder = null;
+
+        if (MapCanvas.IsMouseCaptured)
+            MapCanvas.ReleaseMouseCapture();
+
+        Panel.SetZIndex(border, NodeZIndex);
+        ApplyNodeDragChrome(border, isDragging: false);
+        SelectSingleNode(node);
+        ApplyNodeBorderChrome(border, node);
+        RedrawConnections();
+        UpdateMapCanvasSize();
+        UpdateEditedIndicator();
+    }
+
     private void DrawConnections(MindMapNode node)
     {
         if (!node.IsExpanded || node.Children.Count == 0)
@@ -1024,6 +1308,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                     Opacity = 0.78
                 };
 
+                Panel.SetZIndex(path, ConnectionZIndex);
                 MapCanvas.Children.Add(path);
             }
 
@@ -1089,43 +1374,16 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         var nodeBackground = GetNodeBackground(node, layout.Depth);
         var border = new Border
         {
+            Tag = node,
             Width = layout.Width,
             Height = layout.Height,
             CornerRadius = GetCornerRadius(node.NodeShape, isRoot),
-            BorderThickness = new Thickness(node.BorderThickness > 0 ? node.BorderThickness : 1),
-            BorderBrush = new SolidColorBrush(
-            !string.IsNullOrWhiteSpace(node.BorderColor)
-                ? (Color)ColorConverter.ConvertFromString(node.BorderColor)
-                : isRoot ? Color.FromRgb(47, 92, 208) : Color.FromRgb(194, 203, 220)),
             Background = nodeBackground,
             Padding = new Thickness(12, 8, 12, 8),
             Cursor = Cursors.Hand
         };
 
-        if (_searchMatches.Contains(node))
-        {
-            border.BorderBrush = GetThemeBrush("MindMapSearchMatchBorderBrush", Color.FromRgb(245, 158, 11));
-            border.BorderThickness = new Thickness(2);
-        }
-
-        if (ReferenceEquals(node, CurrentSearchMatch))
-        {
-            border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(245, 114, 11));
-            border.BorderThickness = new Thickness(3);
-            border.Effect = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                Opacity = 0.2,
-                BlurRadius = 14,
-                ShadowDepth = 0
-            };
-        }
-
-        if (_selectedNodes.Contains(node))
-        {
-            border.BorderBrush = GetThemeBrush("MindMapSelectedBorderBrush", Color.FromRgb(63, 111, 232));
-            border.BorderThickness = new Thickness(3);
-        }
+        ApplyNodeBorderChrome(border, node);
 
         var mainPanel = new Grid();
 
@@ -1191,61 +1449,31 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
                 if (_isManualPositioningMode)
                 {
-                    _isDraggingNode = true;
-                    _draggedNode = node;
-                    _draggedBorder = border;
+                    _isManualDragPending = true;
+                    _pendingDragNode = node;
+                    _pendingDragBorder = border;
                     _dragStartMousePos = e.GetPosition(MapCanvas);
-                    _dragStartNodePos = new Point(layout.X, layout.Y);
-                    border.CaptureMouse();
+                    _dragStartNodePos = new Point(_layouts[node].X, _layouts[node].Y);
                     e.Handled = true;
                 }
-            };
-
-            border.MouseMove += (_, e) =>
-            {
-                if (!_isDraggingNode || _draggedNode != node || _draggedBorder != border)
-                    return;
-
-                var currentPos = e.GetPosition(MapCanvas);
-                var dx = currentPos.X - _dragStartMousePos.X;
-                var dy = currentPos.Y - _dragStartMousePos.Y;
-                var newX = Math.Max(CanvasPadding, _dragStartNodePos.X + dx);
-                var newY = Math.Max(CanvasPadding, _dragStartNodePos.Y + dy);
-
-                SetManualPosition(node, new Point(newX, newY));
-                _layouts[node] = _layouts[node] with { X = newX, Y = newY };
-
-                Canvas.SetLeft(border, newX);
-                Canvas.SetTop(border, newY);
-
-                foreach (var path in MapCanvas.Children.OfType<ShapePath>().ToList())
-                    MapCanvas.Children.Remove(path);
-                DrawConnections(_root);
             };
 
             border.MouseLeftButtonUp += (_, e) =>
             {
-                if (_isDraggingNode && _draggedNode == node)
-                {
-                    _isDraggingNode = false;
-                    _draggedNode = null;
-                    _draggedBorder = null;
-                    border.ReleaseMouseCapture();
-                    SelectSingleNode(node);
-                    RebuildMap();
-                    e.Handled = true;
+                if (_isDraggingNode)
                     return;
-                }
+
+                CancelManualDragPending();
 
                 if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                 {
                     ToggleNodeSelection(node);
-                    RebuildMap();
+                    ApplyNodeSelectionVisuals();
                 }
                 else if (!ReferenceEquals(_selectedNode, node) || _selectedNodes.Count != 1)
                 {
                     SelectSingleNode(node);
-                    RebuildMap();
+                    ApplyNodeSelectionVisuals();
                 }
 
                 e.Handled = true;
@@ -1314,6 +1542,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         Canvas.SetLeft(border, layout.X);
         Canvas.SetTop(border, layout.Y);
+        Panel.SetZIndex(border, NodeZIndex);
         MapCanvas.Children.Add(border);
         }
 
@@ -1686,16 +1915,21 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void ExpandAllButton_Click(object sender, RoutedEventArgs e)
     {
         SetExpanded(_root, true);
-        RebuildMap();
+        RebuildMap(animate: false);
+        Dispatcher.BeginInvoke(CenterViewOnRoot, DispatcherPriority.Loaded);
     }
 
     private void CollapseAllButton_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var child in _root.Children)
-            SetExpanded(child, false);
+        foreach (var node in EnumerateAllNodes(_root))
+        {
+            if (!ReferenceEquals(node, _root))
+                node.IsExpanded = false;
+        }
 
-        _root.IsExpanded = true;
-        RebuildMap();
+        _root.IsExpanded = false;
+        RebuildMap(animate: false);
+        Dispatcher.BeginInvoke(CenterViewOnRoot, DispatcherPriority.Loaded);
     }
 
     private void LayoutModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

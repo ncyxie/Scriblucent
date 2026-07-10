@@ -50,24 +50,37 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Grid Background="#66000000">
-        <Border x:Name="DialogCard"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="16"
-                Padding="28,26,28,22"
+    <Grid x:Name="OverlayRoot">
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"/>
+            </Grid>
+        </Viewbox>
+        <Border x:Name="PanelMotionHost"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Width="640"
-                Height="560"
-                ClipToBounds="True">
-            <Border.Effect>
-                <DropShadowEffect Color="#000000" Opacity="0.30" BlurRadius="36" ShadowDepth="0"/>
-            </Border.Effect>
-            <Border.RenderTransform>
-                <TranslateTransform/>
-            </Border.RenderTransform>
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="DialogCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="28,26,28,22"
+                    Width="640"
+                    Height="560"
+                    ClipToBounds="True">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.30" BlurRadius="36" ShadowDepth="0"/>
+                </Border.Effect>
 
             <Grid>
                 <Grid.RowDefinitions>
@@ -160,6 +173,7 @@
                         Margin="0,20,0,0"
                         Click="OkButton_Click"/>
             </Grid>
+            </Border>
         </Border>
     </Grid>
 </Window>

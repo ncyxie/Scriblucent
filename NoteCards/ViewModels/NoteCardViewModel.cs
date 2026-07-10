@@ -13,8 +13,8 @@ namespace NoteCards.ViewModels;
 public class NoteCardViewModel : ViewModelBase
 {
     private bool _isMenuVisible;
-    private bool _isDeleting;
     private bool _isSelectedInMassSelect;
+    private string? _cachedContentPreview;
     private readonly Action<NoteCardViewModel> _deleteAction;
     private readonly Action<NoteCardViewModel>? _removeFromGroupAction;
     private readonly Action<NoteCardViewModel>? _duplicateAction;
@@ -41,6 +41,8 @@ public class NoteCardViewModel : ViewModelBase
     public bool HasTags => Document.Tags?.Count > 0;
 
     public bool HasSchedule => Document.ScheduledAt.HasValue || (Document.Schedules?.Count ?? 0) > 0;
+
+    public bool IsPinned => Document.IsPinned;
 
     public string TagsDisplay
     {
@@ -79,51 +81,67 @@ public class NoteCardViewModel : ViewModelBase
     {
         get
         {
-            var raw = Document.Content;
-            if (string.IsNullOrEmpty(raw))
-                return string.Empty;
+            if (_cachedContentPreview is not null)
+                return _cachedContentPreview;
 
-            try
+            _cachedContentPreview = BuildContentPreview();
+            return _cachedContentPreview;
+        }
+    }
+
+    /// <summary>
+    /// Builds and caches the preview eagerly so scrolling the dashboard never pays the
+    /// RTF decode on the UI thread while cards realize.
+    /// </summary>
+    internal void WarmContentPreview() => _ = Content;
+
+    /// <summary>Cards render at most a few wrapped lines; formatting the full document text is wasted layout work.</summary>
+    private const int ContentPreviewMaxLength = 600;
+
+    private static string CapPreviewLength(string preview)
+        => preview.Length <= ContentPreviewMaxLength ? preview : preview[..ContentPreviewMaxLength];
+
+    private string BuildContentPreview()
+    {
+        var raw = Document.Content;
+        if (string.IsNullOrEmpty(raw))
+            return string.Empty;
+
+        try
+        {
+            var bytes = Convert.FromBase64String(raw);
+
+            var dataFormat = DataFormats.Rtf;
+            if (bytes.Length >= 5)
             {
-                // Try to treat stored content as Base64-encoded RTF/XamlPackage.
-                byte[] bytes = Convert.FromBase64String(raw);
-
-                var dataFormat = DataFormats.Rtf;
-                if (bytes.Length >= 5)
+                var hdr = Encoding.ASCII.GetString(bytes, 0, Math.Min(5, bytes.Length));
+                if (hdr.StartsWith("{\\rtf"))
                 {
-                    var hdr = System.Text.Encoding.ASCII.GetString(bytes, 0, Math.Min(5, bytes.Length));
-                    if (hdr.StartsWith("{\\rtf"))
-                    {
-                        dataFormat = DataFormats.Rtf;
-                    }
-                    else if (bytes.Length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B)
-                    {
-                        dataFormat = DataFormats.XamlPackage;
-                    }
-                    else
-                    {
-                        throw new FormatException();
-                    }
+                    dataFormat = DataFormats.Rtf;
                 }
-
-                using (var ms = new MemoryStream(bytes))
+                else if (bytes.Length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B)
                 {
-                    var flowDoc = new FlowDocument();
-                    var tr = new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd);
-                    tr.Load(ms, dataFormat);
-                    return ReplaceImageMarkers(BuildOrderedContentPreview(flowDoc), Document.Images);
+                    dataFormat = DataFormats.XamlPackage;
+                }
+                else
+                {
+                    throw new FormatException();
                 }
             }
-            catch (FormatException)
-            {
-                // Not Base64 -> assume plain text
-                return ReplaceImageMarkers(raw, Document.Images);
-            }
-            catch
-            {
-                // Any other failure (e.g. malformed RTF): return empty rather than raw Base64 garbage
-                return string.Empty;
-            }
+
+            using var ms = new MemoryStream(bytes);
+            var flowDoc = new FlowDocument();
+            var tr = new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd);
+            tr.Load(ms, dataFormat);
+            return CapPreviewLength(ReplaceImageMarkers(BuildOrderedContentPreview(flowDoc), Document.Images));
+        }
+        catch (FormatException)
+        {
+            return CapPreviewLength(ReplaceImageMarkers(raw, Document.Images));
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 
@@ -131,12 +149,6 @@ public class NoteCardViewModel : ViewModelBase
     {
         get => _isMenuVisible;
         set => SetProperty(ref _isMenuVisible, value);
-    }
-
-    public bool IsDeleting
-    {
-        get => _isDeleting;
-        set => SetProperty(ref _isDeleting, value);
     }
 
     public bool IsSelectedInMassSelect
@@ -154,9 +166,7 @@ public class NoteCardViewModel : ViewModelBase
             LocalizationService.GetString("Confirm"));
 
         if (confirmed)
-        {
-            ExecuteDelete();
-        }
+            _deleteAction(this);
     }
 
     public bool IsGrouped => Document.GroupId.HasValue;
@@ -169,12 +179,11 @@ public class NoteCardViewModel : ViewModelBase
 
     public ICommand TogglePinCommand { get; }
 
-    internal void ExecuteDelete() => _deleteAction(this);
-
     private void DuplicateNote() => _duplicateAction?.Invoke(this);
 
     public void NotifyContentChanged()
     {
+        _cachedContentPreview = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Content));
         OnPropertyChanged(nameof(HasTags));
@@ -188,6 +197,12 @@ public class NoteCardViewModel : ViewModelBase
     public void NotifyGroupChanged()
     {
         OnPropertyChanged(nameof(IsGrouped));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    public void NotifyPinChanged()
+    {
+        OnPropertyChanged(nameof(IsPinned));
         CommandManager.InvalidateRequerySuggested();
     }
 

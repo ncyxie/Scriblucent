@@ -34,6 +34,7 @@
   <ItemGroup>
     <PackageReference Include="LLamaSharp" Version="0.26.0" />
     <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.26.0" />
+    <PackageReference Include="VirtualizingWrapPanel" Version="2.5.2" />
   </ItemGroup>
 
 </Project>

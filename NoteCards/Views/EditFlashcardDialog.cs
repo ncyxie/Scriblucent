@@ -1,16 +1,15 @@
+using NoteCards.Animations;
 using NoteCards.Localization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace NoteCards.Views
 {
     public partial class EditFlashcardDialog : Window
     {
-        private bool _isClosingAnimationRunning;
+        private readonly OverlayDialogAnimator _overlayAnimator;
         private bool _pendingDialogResult;
 
         public string DialogTitle { get; }
@@ -48,6 +47,7 @@ namespace NoteCards.Views
                     .OrderBy(category => category, StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
             InitializeComponent();
+            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
             NoteCards.Services.WindowThemeService.Register(this);
             DataContext = this;
             Loaded += EditFlashcardDialog_Loaded;
@@ -66,8 +66,9 @@ namespace NoteCards.Views
 
         private void EditFlashcardDialog_Loaded(object sender, RoutedEventArgs e)
         {
+            UiMotion.ConfigurePopupsForWindow(this);
             ApplyOwnerBounds();
-            BeginOpenAnimation();
+            _overlayAnimator.BeginOpen();
         }
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -100,51 +101,14 @@ namespace NoteCards.Views
             }
         }
 
-        private void BeginOpenAnimation()
-        {
-            Opacity = 0;
-
-            if (DialogCard.RenderTransform is not TranslateTransform translate)
-            {
-                translate = new TranslateTransform();
-                DialogCard.RenderTransform = translate;
-            }
-
-            translate.Y = 12;
-
-            var duration = TimeSpan.FromMilliseconds(190);
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
-            translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(12, 0, duration) { EasingFunction = ease });
-        }
-
         private void BeginCloseAnimation(bool dialogResult)
         {
-            if (_isClosingAnimationRunning)
-                return;
-
-            _isClosingAnimationRunning = true;
             _pendingDialogResult = dialogResult;
-
-            if (DialogCard.RenderTransform is not TranslateTransform translate)
-            {
-                translate = new TranslateTransform();
-                DialogCard.RenderTransform = translate;
-            }
-
-            var duration = TimeSpan.FromMilliseconds(150);
-            var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
-
-            var fadeOut = new DoubleAnimation(Opacity, 0, duration) { EasingFunction = ease };
-            fadeOut.Completed += (_, _) =>
+            _overlayAnimator.BeginClose(() =>
             {
                 DialogResult = _pendingDialogResult;
                 Close();
-            };
-
-            BeginAnimation(OpacityProperty, fadeOut);
-            translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(translate.Y, 8, duration) { EasingFunction = ease });
+            });
         }
     }
 }

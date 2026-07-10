@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
+using NoteCards.Animations;
 using NoteCards.Localization;
 using PrintDialog = System.Windows.Controls.PrintDialog;
 
@@ -22,6 +23,7 @@ namespace NoteCards
             // Load preview
             PreviewTitle.Text = _title;
             PreviewContent.Text = _content;
+            WindowContentEnterHelper.AnimateOnLoaded(this);
         }
 
         private void PrintButton_Click(object sender, RoutedEventArgs e)

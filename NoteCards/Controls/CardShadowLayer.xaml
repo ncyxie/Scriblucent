@@ -1,0 +1,48 @@
+<UserControl x:Class="NoteCards.Controls.CardShadowLayer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:anim="clr-namespace:NoteCards.Animations"
+             IsHitTestVisible="False"
+             Focusable="False"
+             Margin="-10,-6,-10,-14">
+    <!--
+        Nine-slice shadow: a soft Gaussian-blurred shadow texture baked ONCE (see
+        CardShadowAsset) and reused as eight stretched image slices per card, instead of a
+        live DropShadowEffect. A DropShadowEffect forces every dirty repaint of the card
+        through an offscreen blur pass; a crowded dashboard scroll repaints many cards a
+        frame, and that per-card blur cost is what made scrolling choppy. Slicing/stretching
+        a shared pre-baked bitmap needs no blur pass at all, cached or not, so this layer is
+        cheap unconditionally - there is nothing to suspend during scroll, while still
+        looking like a real soft shadow rather than flat opacity bands. BitmapCache bakes
+        the eight image draws into one cached texture per card since this layer never changes.
+
+        The default margin above (negative, so the halo bleeds outward past a full-scale card)
+        is overridden per-instance for card templates that render at a fixed sub-1.0 scale via
+        a static RenderTransform on the card border - see MainWindow.xaml's ungrouped
+        Flashcard/Quiz/MindMap templates. This is plain layout (Margin), not a transform, so it
+        composes with the card's own transform predictably instead of needing to match it.
+    -->
+    <Grid Opacity="0.6">
+        <Grid.CacheMode>
+            <BitmapCache EnableClearType="False" SnapsToDevicePixels="True"/>
+        </Grid.CacheMode>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="22"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="22"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="22"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="22"/>
+        </Grid.RowDefinitions>
+        <Image Grid.Row="0" Grid.Column="0" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.TopLeft}"/>
+        <Image Grid.Row="0" Grid.Column="1" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.TopEdge}"/>
+        <Image Grid.Row="0" Grid.Column="2" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.TopRight}"/>
+        <Image Grid.Row="1" Grid.Column="0" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.LeftEdge}"/>
+        <Image Grid.Row="1" Grid.Column="2" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.RightEdge}"/>
+        <Image Grid.Row="2" Grid.Column="0" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.BottomLeft}"/>
+        <Image Grid.Row="2" Grid.Column="1" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.BottomEdge}"/>
+        <Image Grid.Row="2" Grid.Column="2" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.BottomRight}"/>
+    </Grid>
+</UserControl>

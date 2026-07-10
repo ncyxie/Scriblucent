@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Localization;
 using NoteCards.Models;
 using System.Globalization;
@@ -26,6 +27,8 @@ public partial class EditHistoryWindow : Window
         HistoryListBox.ItemsSource = items;
         if (items.Count > 0)
             HistoryListBox.SelectedIndex = 0;
+
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     private void RestoreButton_Click(object sender, RoutedEventArgs e)

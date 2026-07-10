@@ -1,3 +1,4 @@
+using NoteCards.Animations;
 using NoteCards.Models;
 using NoteCards.ViewModels;
 using System.Collections.Generic;
@@ -33,6 +34,7 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
         NoteCards.Services.WindowThemeService.Register(this);
         DataContext = this;
         RefreshList();
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     public QuizAttemptHistoryWindow(QuizDocument quizDocument)
@@ -43,6 +45,7 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
         NoteCards.Services.WindowThemeService.Register(this);
         DataContext = this;
         RefreshList();
+        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     public ObservableCollection<AttemptDisplayItem> Attempts => _attempts;
