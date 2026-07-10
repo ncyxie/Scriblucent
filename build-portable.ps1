@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$project = Join-Path $PSScriptRoot "NoteCards\NoteCards.csproj"
+$project = Join-Path $PSScriptRoot "Scriblucent\Scriblucent.csproj"
 $outputRoot = Join-Path $PSScriptRoot "artifacts\portable"
 
 Write-Host "==> Cleaning old portable artifacts" -ForegroundColor Cyan

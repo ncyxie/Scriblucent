@@ -1,7 +1,7 @@
 <div align="center">
-<img src="NoteCards/Assets/logo.png" width="80" alt="NoteCards logo"/>
+<img src="Scriblucent/Assets/logo.png" width="80" alt="Scriblucent logo"/>
 
-<h1>NoteCards</h1>
+<h1>Scriblucent</h1>
 
 **Notes. Flashcards. Mind Maps. Quizzes.**
 
@@ -14,11 +14,11 @@
 
 ---
 
-**NoteCards** is a modern Windows desktop application designed to help you study more effectively. Write notes and instantly convert them into flashcards, mind maps, or quizzes using a **local AI model** — no internet connection required after the initial download.
+**Scriblucent** is a modern Windows desktop application designed to help you study more effectively. Write notes and instantly convert them into flashcards, mind maps, or quizzes using a **local AI model** — no internet connection required after the initial download.
 
-## Why NoteCards?
+## Why Scriblucent?
 
-Most learning tools either require an internet connection or charge extra for AI features. NoteCards runs **completely offline** after downloading the model once. All your data stays on your device. You get everything you need — from note-taking to AI-generated quizzes — in one clean, privacy-focused application.
+Most learning tools either require an internet connection or charge extra for AI features. Scriblucent runs **completely offline** after downloading the model once. All your data stays on your device. You get everything you need — from note-taking to AI-generated quizzes — in one clean, privacy-focused application.
 
 ## Screenshots
 
@@ -36,7 +36,7 @@ Most learning tools either require an internet connection or charge extra for AI
 
 ## Supported AI Models
 
-NoteCards supports three local models you can choose from in Settings:
+Scriblucent supports three local models you can choose from in Settings:
 - **Qwen3.5-0.8B** — Fastest
 - **Qwen3.5-2B** — Balanced
 - **Qwen3.5-4B** — Most capable
@@ -45,7 +45,7 @@ The model is downloaded only the first time you use an AI feature — not on app
 
 ## Architecture
 
-NoteCards follows the **MVVM** (Model–View–ViewModel) architecture:
+Scriblucent follows the **MVVM** (Model–View–ViewModel) architecture:
 
 ```
 View (XAML / WPF)
@@ -63,23 +63,23 @@ ViewModel
           ├── BundledModelHostService   ← Local LLM (user-selected)
           └── NoteFileService / AppSettingsService
 
-Local JSON Storage (%LocalAppData%\NoteCards\)
+Local JSON Storage (%LocalAppData%\Scriblucent\)
 ```
 
-All data is stored locally in: `%LocalAppData%\NoteCards\`
+All data is stored locally in: `%LocalAppData%\Scriblucent\`
 
 ## Quick Start
 
 **Requirements:** Windows 10/11 (64-bit), .NET 10, ≥ 4 GB RAM (8 GB+ recommended for AI features)
 
 ### Option 1: Download the executable (recommended)
-Download the latest `NoteCards.exe` from the [Releases](https://github.com/Dovydo-Komanda/NoteCards/releases) page and run it.
+Download the latest `Scriblucent.exe` from the [Releases](https://github.com/ncyxie/Scriblucent/releases) page and run it.
 
 ### Option 2: Build from source
 ```bash
-git clone https://github.com/Dovydo-Komanda/NoteCards.git
-cd NoteCards
-dotnet run --project NoteCards
+git clone https://github.com/ncyxie/Scriblucent.git
+cd Scriblucent
+dotnet run --project Scriblucent
 ```
 
 ## How to Use
@@ -111,4 +111,4 @@ Distributed under the [MIT License](LICENSE).
 
 ---
 
-<div align="center"><i>NoteCards – Dovydo Komanda, 2026</i></div>
+<div align="center"><i>Scriblucent – Dovydo Komanda, 2026</i></div>

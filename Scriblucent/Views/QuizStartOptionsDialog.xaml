@@ -1,0 +1,362 @@
+<Window x:Class="Scriblucent.Views.QuizStartOptionsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding [QuizStartOptionsTitle], Source={StaticResource Loc}}"
+        Height="420"
+        Width="600"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <Style x:Key="QuizStartOptionTextBoxStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Padding" Value="11,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBackground}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TextBox}">
+                        <Border x:Name="InputBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="InputBorder" Property="BorderBrush" Value="#3F6FE8"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <ControlTemplate x:Key="QuizStartComboBoxToggleButtonTemplate" TargetType="ToggleButton">
+            <Border x:Name="ComboBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="8"
+                    Padding="{TemplateBinding Padding}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="1"
+                               Text="▾"
+                               FontSize="11"
+                               Foreground="{TemplateBinding Foreground}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                    <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="QuizStartComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="11,7"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          ClickMode="Press"
+                                          Template="{StaticResource QuizStartComboBoxToggleButtonTemplate}"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          Padding="{TemplateBinding Padding}"/>
+                            <TextBlock IsHitTestVisible="False"
+                                       Text="{TemplateBinding SelectionBoxItem}"
+                                       Margin="11,0,30,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                            <Popup Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="None">
+                                <Border Background="{DynamicResource CardBackground}"
+                                        BorderBrush="{DynamicResource BorderColor}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        MinWidth="{TemplateBinding ActualWidth}">
+                                    <ScrollViewer MaxHeight="180">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="QuizStartComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="OverlayRoot">
+        <Viewbox x:Name="ScrimViewbox"
+                 Stretch="Fill"
+                 RenderOptions.BitmapScalingMode="Linear">
+            <Grid x:Name="ScrimHost">
+                <Image x:Name="BackdropSnapshot"
+                       Stretch="Fill"
+                       Visibility="Collapsed"
+                       IsHitTestVisible="False"/>
+                <Rectangle x:Name="OverlayDim"
+                           Fill="#66000000"/>
+            </Grid>
+        </Viewbox>
+        <Border x:Name="PanelMotionHost"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                RenderTransformOrigin="0.5,1"
+                UseLayoutRounding="True"
+                SnapsToDevicePixels="True">
+            <Border x:Name="DialogCard"
+                    Background="{DynamicResource CardBackground}"
+                    BorderBrush="{DynamicResource BorderColor}"
+                    BorderThickness="1"
+                    CornerRadius="16"
+                    Padding="30,28,30,24"
+                    MaxWidth="520">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.30" BlurRadius="36" ShadowDepth="0"/>
+                </Border.Effect>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Width="48"
+                            Height="48"
+                            Background="{DynamicResource FlashcardKnownChipBackground}"
+                            BorderBrush="{DynamicResource FlashcardKnownChipBorder}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top">
+                        <TextBlock Text="▶"
+                                   FontSize="19"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource FlashcardKnownChipForeground}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Margin="2,0,0,0"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="16,1,0,0">
+                        <TextBlock Text="{Binding [QuizStartOptionsTitle], Source={StaticResource Loc}}"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"
+                                   TextWrapping="Wrap"
+                                   LineHeight="26"/>
+                        <TextBlock Text="{Binding [QuizStartOptionsMessage], Source={StaticResource Loc}}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextColorSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,6,0,0"
+                                   LineHeight="19"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Grid.Row="1"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderBrush="{DynamicResource BorderColor}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="14,12"
+                        Margin="64,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [QuizStartTimeLimitQuestion], Source={StaticResource Loc}}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"
+                                   Margin="0,0,0,7"/>
+                        <ComboBox x:Name="TimeLimitComboBox"
+                                  Style="{StaticResource QuizStartComboBoxStyle}"
+                                  SelectedValuePath="Tag"
+                                  SelectionChanged="TimeLimitComboBox_SelectionChanged">
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitNone], Source={StaticResource Loc}}" Tag="0"/>
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitOneMinute], Source={StaticResource Loc}}" Tag="60"/>
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitFiveMinutes], Source={StaticResource Loc}}" Tag="300"/>
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitTenMinutes], Source={StaticResource Loc}}" Tag="600"/>
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitFifteenMinutes], Source={StaticResource Loc}}" Tag="900"/>
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitThirtyMinutes], Source={StaticResource Loc}}" Tag="1800"/>
+                            <ComboBoxItem Style="{StaticResource QuizStartComboBoxItemStyle}" Content="{Binding [QuizTimeLimitCustom], Source={StaticResource Loc}}" Tag="custom"/>
+                        </ComboBox>
+                        <Grid x:Name="CustomTimePanel"
+                              Margin="0,10,0,0"
+                              Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="CustomTimeTextBox"
+                                     Grid.Column="0"
+                                     Style="{StaticResource QuizStartOptionTextBoxStyle}"
+                                     PreviewTextInput="NumberTextBox_PreviewTextInput"
+                                     PreviewKeyDown="NumberTextBox_PreviewKeyDown"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding [QuizTimeLimitCustomUnit], Source={StaticResource Loc}}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                            <TextBlock Grid.Column="2"
+                                       x:Name="TimeValidationText"
+                                       Text="{Binding [QuizTimeLimitValidation], Source={StaticResource Loc}}"
+                                       Foreground="#DC2626"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"
+                                       Margin="14,0,0,0"
+                                       Visibility="Collapsed"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="2"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderBrush="{DynamicResource BorderColor}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="14,12"
+                        Margin="64,0,0,20">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [QuizStartPassingScoreQuestion], Source={StaticResource Loc}}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"
+                                   Margin="0,0,0,7"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="PassingScoreTextBox"
+                                     Grid.Column="0"
+                                     Style="{StaticResource QuizStartOptionTextBoxStyle}"
+                                     VerticalContentAlignment="Center"
+                                     TextAlignment="Center"
+                                     PreviewTextInput="NumberTextBox_PreviewTextInput"
+                                     PreviewKeyDown="NumberTextBox_PreviewKeyDown"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="%"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"
+                                       VerticalAlignment="Center"
+                                       Margin="8,0,0,0"/>
+                            <TextBlock Grid.Column="2"
+                                       x:Name="ValidationText"
+                                       Text="{Binding [QuizPassingScoreValidation], Source={StaticResource Loc}}"
+                                       Foreground="#DC2626"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"
+                                       Margin="14,0,0,0"
+                                       Visibility="Collapsed"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Row="3"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button Content="{Binding [Cancel], Source={StaticResource Loc}}"
+                            Style="{StaticResource DialogSecondaryButtonStyle}"
+                            Padding="20,10"
+                            MinWidth="110"
+                            Click="CancelButton_Click"/>
+
+                    <Button Content="{Binding [QuizStartConfirm], Source={StaticResource Loc}}"
+                            Style="{StaticResource DialogPrimaryButtonStyle}"
+                            Padding="20,10"
+                            MinWidth="120"
+                            Margin="12,0,0,0"
+                            Click="StartButton_Click"/>
+                </StackPanel>
+            </Grid>
+            </Border>
+        </Border>
+    </Grid>
+</Window>

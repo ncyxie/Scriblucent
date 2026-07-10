@@ -1,0 +1,130 @@
+using Scriblucent.Localization;
+using Scriblucent.Models;
+
+namespace Scriblucent.ViewModels;
+
+public sealed class MindMapViewModel : ViewModelBase
+{
+    private const int MaxPreviewItems = 7;
+    private const int MaxHoverPreviewItems = 20;
+    private bool _isSelectedInMassSelect;
+
+    public MindMapViewModel(MindMapDocument document)
+    {
+        Document = document;
+    }
+
+    public MindMapDocument Document { get; }
+
+    public string Title => string.IsNullOrWhiteSpace(Document.Title)
+        ? LocalizationService.GetString("MindMapUntitled")
+        : Document.Title.Trim();
+
+    public int NodeCount => CountNodes(Document.Root);
+
+    public string NodeCountText => string.Format(LocalizationService.GetString("MindMapNodeCountFormat"), NodeCount);
+
+    public int BranchCount => Document.Root?.Children?.Count ?? 0;
+
+    public string BranchCountText => string.Format(LocalizationService.GetString("MindMapBranchCountFormat"), BranchCount);
+
+    public IReadOnlyList<string> ContentPreviewItems => BuildContentPreviewItems(Document.Root, MaxPreviewItems);
+
+    public IReadOnlyList<string> HoverContentPreviewItems => BuildContentPreviewItems(Document.Root, MaxHoverPreviewItems);
+
+    public bool HasContentPreview => ContentPreviewItems.Count > 0;
+
+    public bool HasHoverContentPreview => HoverContentPreviewItems.Count > 0;
+
+    public bool HasTags => Document.Tags?.Any(tag => !string.IsNullOrWhiteSpace(tag)) == true;
+
+    public string TagsDisplay => HasTags
+        ? string.Join("   ", Document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => $"#{tag.Trim()}"))
+        : string.Empty;
+
+    public bool IsPinned => Document.IsPinned;
+
+    public bool IsSelectedInMassSelect
+    {
+        get => _isSelectedInMassSelect;
+        set => SetProperty(ref _isSelectedInMassSelect, value);
+    }
+
+    public bool HasSchedule => Document.Schedules?.Any() == true;
+
+    public string NextScheduleDisplay => HasSchedule
+        ? Document.Schedules
+            .OrderBy(schedule => schedule.ScheduledAt)
+            .First()
+            .ScheduledAt.ToString("yyyy-MM-dd HH:mm")
+        : string.Empty;
+
+    public bool IsAiGenerated => !string.IsNullOrWhiteSpace(Document.AiModelDisplayName);
+
+    public string AiGeneratedTooltip => IsAiGenerated
+        ? string.Format(LocalizationService.GetString("MindMapGeneratedWithModel"), Document.AiModelDisplayName.Trim())
+        : string.Empty;
+
+    public void NotifyChanged()
+    {
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(NodeCount));
+        OnPropertyChanged(nameof(NodeCountText));
+        OnPropertyChanged(nameof(BranchCount));
+        OnPropertyChanged(nameof(BranchCountText));
+        OnPropertyChanged(nameof(ContentPreviewItems));
+        OnPropertyChanged(nameof(HoverContentPreviewItems));
+        OnPropertyChanged(nameof(HasContentPreview));
+        OnPropertyChanged(nameof(HasHoverContentPreview));
+        OnPropertyChanged(nameof(HasTags));
+        OnPropertyChanged(nameof(TagsDisplay));
+        OnPropertyChanged(nameof(IsPinned));
+        OnPropertyChanged(nameof(HasSchedule));
+        OnPropertyChanged(nameof(NextScheduleDisplay));
+        OnPropertyChanged(nameof(IsAiGenerated));
+        OnPropertyChanged(nameof(AiGeneratedTooltip));
+    }
+
+    private static int CountNodes(MindMapNode? node)
+    {
+        if (node is null)
+            return 0;
+
+        return 1 + node.Children.Sum(CountNodes);
+    }
+
+    private static IReadOnlyList<string> BuildContentPreviewItems(MindMapNode? root, int maxItems)
+    {
+        if (root is null || maxItems <= 0)
+            return Array.Empty<string>();
+
+        var result = new List<string>(maxItems);
+        AppendPreviewItems(root, depth: 0, result, maxItems);
+        return result;
+    }
+
+    private static void AppendPreviewItems(MindMapNode node, int depth, List<string> result, int maxItems)
+    {
+        if (result.Count >= maxItems)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(node.Text))
+        {
+            var level = Math.Clamp(depth, 0, 3);
+            var prefix = level == 0
+                ? "• "
+                : string.Concat(Enumerable.Repeat("› ", level));
+
+            result.Add($"{prefix}{node.Text.Trim()}");
+        }
+
+        foreach (var child in node.Children)
+        {
+            if (result.Count >= maxItems)
+                return;
+
+            AppendPreviewItems(child, depth + 1, result, maxItems);
+        }
+    }
+
+}
