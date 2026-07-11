@@ -11,7 +11,7 @@
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="Scriblucent" Height="600" Width="900"
         WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource WindowBackground}"
+        Background="{DynamicResource SidebarBackground}"
 		UseLayoutRounding="True"
 		SnapsToDevicePixels="True"
 		TextOptions.TextFormattingMode="Ideal"
@@ -21,8 +21,11 @@
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
         <SolidColorBrush x:Key="DashboardGroupNameForeground" Color="#1C1C1C"/>
+        <Thickness x:Key="Shell.DashboardPadding">20,12,20,20</Thickness>
+        <Thickness x:Key="Shell.RecentPadding">20,14,20,12</Thickness>
+        <Thickness x:Key="Shell.TopBarPadding">20,12,20,12</Thickness>
         <ItemsPanelTemplate x:Key="RecentItemsStripPanelTemplate">
-            <StackPanel Orientation="Horizontal" Margin="4,2,4,4"/>
+            <StackPanel Orientation="Horizontal" Margin="0,2,0,2"/>
         </ItemsPanelTemplate>
         <Style x:Key="RecentStripItemsStyle" TargetType="ItemsControl">
             <Setter Property="behaviors:RecentStripEnterMotionBehavior.IsEnabled" Value="True"/>
@@ -34,16 +37,23 @@
             <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="CanContentScroll" Value="True"/>
             <Setter Property="PanningMode" Value="HorizontalOnly"/>
-            <Setter Property="Padding" Value="8,2,8,3"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="ClipToBounds" Value="False"/>
             <Setter Property="behaviors:MiddleClickScrollBehavior.IsEnabled" Value="True"/>
         </Style>
         <Style x:Key="DashboardListingScrollViewerStyle"
                TargetType="ScrollViewer"
                BasedOn="{StaticResource {x:Type ScrollViewer}}">
+            <!-- Padding scrolls away with content; margin + rounded clip keep a sticky viewport frame. -->
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="{StaticResource Shell.DashboardPadding}"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="behaviors:RoundedClipBehavior.IsEnabled" Value="True"/>
+            <Setter Property="behaviors:RoundedClipBehavior.CornerRadius" Value="{StaticResource Radius.Card}"/>
             <Setter Property="behaviors:MiddleClickScrollBehavior.IsEnabled" Value="True"/>
         </Style>
         <Style x:Key="RecentNoteCardStyle" TargetType="Button">
+			<Setter Property="FocusVisualStyle" Value="{x:Null}"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="RecentCard"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.MotionHostName" Value="CardBorder"/>
@@ -56,7 +66,7 @@
 			<Setter Property="Padding" Value="11,8"/>
 			<Setter Property="Margin" Value="0,5,7,5"/>
 			<Setter Property="VerticalAlignment" Value="Center"/>
-			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
 			<Setter Property="Template">
 				<Setter.Value>
@@ -65,10 +75,11 @@
 							<controls:CardShadowLayer x:Name="CardShadow"/>
 							<Border x:Name="CardBorder"
 									Background="{TemplateBinding Background}"
-									BorderBrush="{DynamicResource BorderColor}"
+									BorderBrush="{DynamicResource InputRestBorder}"
 									BorderThickness="1"
-									CornerRadius="8"
-									Padding="{TemplateBinding Padding}">
+									CornerRadius="{StaticResource Radius.Control}"
+									Padding="{TemplateBinding Padding}"
+									behaviors:RoundedClipBehavior.IsEnabled="True">
 								<ContentPresenter Content="{TemplateBinding Content}"
 												  ContentTemplate="{TemplateBinding ContentTemplate}"
 												  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -81,6 +92,9 @@
 							</Trigger>
 							<Trigger Property="IsPressed" Value="True">
 								<Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+							</Trigger>
+							<Trigger Property="IsKeyboardFocused" Value="True">
+								<Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
 							</Trigger>
 						</ControlTemplate.Triggers>
 					</ControlTemplate>
@@ -98,14 +112,14 @@
 			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 			<Setter Property="BorderThickness" Value="1"/>
-			<Setter Property="CornerRadius" Value="12"/>
+			<Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
 			<Setter Property="Padding" Value="11"/>
 			<Setter Property="Margin" Value="0,0,0,8"/>
 			<Setter Property="Cursor" Value="Hand"/>
 			<Setter Property="SnapsToDevicePixels" Value="True"/>
 			<Setter Property="Effect">
 				<Setter.Value>
-					<DropShadowEffect Color="#000000" Opacity="0.06" BlurRadius="10" ShadowDepth="1" Direction="270"/>
+					<DropShadowEffect Color="#000000" Opacity="0.04" BlurRadius="10" ShadowDepth="1" Direction="270"/>
 				</Setter.Value>
 			</Setter>
 			<Style.Triggers>
@@ -128,7 +142,7 @@
            <Setter Property="Padding" Value="12,10"/>
 			<Setter Property="Cursor" Value="Hand"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="Button">
@@ -136,12 +150,9 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10"
+                                CornerRadius="{StaticResource Radius.Card}"
 								Padding="{TemplateBinding Padding}"
 								Margin="1">
-                            <Border.Effect>
-								<DropShadowEffect Color="#000000" Opacity="0.06" BlurRadius="8" ShadowDepth="1" Direction="270"/>
-							</Border.Effect>
 							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
 											  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
 						</Border>
@@ -181,10 +192,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="9">
-							<Border.Effect>
-								<DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08"/>
-							</Border.Effect>
+								CornerRadius="{StaticResource Radius.Control}">
 							<ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
 						</Border>
 						<ControlTemplate.Triggers>
@@ -232,10 +240,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="8">
-							<Border.Effect>
-								<DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08"/>
-							</Border.Effect>
+								CornerRadius="{StaticResource Radius.Control}">
 							<ContentPresenter HorizontalAlignment="Center"
 											  VerticalAlignment="Center"/>
 						</Border>
@@ -268,6 +273,7 @@
 			<Setter Property="Width" Value="36"/>
 			<Setter Property="Height" Value="34"/>
 			<Setter Property="FontSize" Value="15"/>
+			<Setter Property="BorderThickness" Value="1"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="Button">
@@ -275,9 +281,9 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="10">
+								CornerRadius="{StaticResource Radius.Control}">
 							<Border.Effect>
-								<DropShadowEffect Color="#000000" Opacity="0.20" BlurRadius="16" ShadowDepth="3" Direction="270"/>
+								<DropShadowEffect Color="#000000" Opacity="0.14" BlurRadius="12" ShadowDepth="2" Direction="270"/>
 							</Border.Effect>
 							<ContentPresenter HorizontalAlignment="Center"
 											  VerticalAlignment="Center"/>
@@ -285,11 +291,9 @@
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="FloatingSecondaryBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-								<Setter TargetName="FloatingSecondaryBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 							</Trigger>
 							<Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="FloatingSecondaryBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-								<Setter TargetName="FloatingSecondaryBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 							</Trigger>
 						</ControlTemplate.Triggers>
 					</ControlTemplate>
@@ -315,7 +319,7 @@
 			<Setter Property="BorderThickness" Value="1"/>
 			<Setter Property="HorizontalContentAlignment" Value="Stretch"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="Button">
@@ -324,13 +328,13 @@
 									Background="{DynamicResource SelectionBackground}"
 									BorderBrush="{DynamicResource BorderColor}"
 									BorderThickness="1"
-									CornerRadius="10"
+									CornerRadius="{StaticResource Radius.Card}"
 									Opacity="0"/>
 							<Border x:Name="SidebarButtonBorder"
 									Background="{TemplateBinding Background}"
 									BorderBrush="{TemplateBinding BorderBrush}"
 									BorderThickness="{TemplateBinding BorderThickness}"
-									CornerRadius="10"
+									CornerRadius="{StaticResource Radius.Card}"
 									Padding="{TemplateBinding Padding}">
 								<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
 												  VerticalAlignment="Center"/>
@@ -414,13 +418,13 @@
 			<Setter Property="FontSize" Value="14"/>
 			<Setter Property="Cursor" Value="Hand"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="{x:Type Button}">
 						<Border x:Name="PopupItemBorder"
 								Background="{TemplateBinding Background}"
-								CornerRadius="6"
+								CornerRadius="{StaticResource Radius.Control}"
 								Padding="{TemplateBinding Padding}"
 								Margin="2">
 							<TextBlock Text="{TemplateBinding Content}"
@@ -457,7 +461,7 @@
 			<Setter Property="OverridesDefaultStyle" Value="True"/>
 			<Setter Property="SnapsToDevicePixels" Value="True"/>
 			<Setter Property="Cursor" Value="Hand"/>
-			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
 			<Setter Property="FontSize" Value="26"/>
 			<Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
 			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
@@ -465,6 +469,7 @@
 			<Setter Property="BorderThickness" Value="1"/>
 			<Setter Property="Width" Value="52"/>
 			<Setter Property="Height" Value="52"/>
+			<Setter Property="Margin" Value="0,0,40,36"/>
 			<Setter Property="HorizontalContentAlignment" Value="Center"/>
 			<Setter Property="VerticalContentAlignment" Value="Center"/>
 			<Setter Property="Template">
@@ -474,10 +479,10 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="14">
+								CornerRadius="{StaticResource Radius.Card}">
 							<Border.Effect>
-								<DropShadowEffect Color="#000000" Opacity="0.20"
-												  BlurRadius="16" ShadowDepth="3"
+								<DropShadowEffect Color="#000000" Opacity="0.14"
+												  BlurRadius="12" ShadowDepth="2"
 												  Direction="270"/>
 							</Border.Effect>
 							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -487,16 +492,13 @@
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
 								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-								<Setter TargetName="FabBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 							</Trigger>
 							<Trigger Property="IsPressed" Value="True">
 								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-								<Setter TargetName="FabBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 							</Trigger>
 						   <Trigger Property="IsEnabled" Value="False">
 								<Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
 								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-								<Setter TargetName="FabBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 								<Setter TargetName="FabBorder" Property="Opacity" Value="0.62"/>
 							</Trigger>
 						</ControlTemplate.Triggers>
@@ -543,7 +545,7 @@
 			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 			<Setter Property="BorderThickness" Value="1"/>
-			<Setter Property="CornerRadius" Value="12"/>
+			<Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
 			<Setter Property="Padding" Value="12"/>
 			<Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
 			<!-- No Effect setter: the shadow is a nine-slice CardShadowAsset layer wrapped
@@ -581,10 +583,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="9">
-							<Border.Effect>
-								<DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08"/>
-							</Border.Effect>
+								CornerRadius="{StaticResource Radius.Control}">
 							<icons:AppIcon Kind="ChevronDown"
 										   Width="12"
 										   Height="12"
@@ -632,10 +631,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="8">
-							<Border.Effect>
-								<DropShadowEffect BlurRadius="7" ShadowDepth="1" Opacity="0.07"/>
-							</Border.Effect>
+								CornerRadius="{StaticResource Radius.Control}">
 							<ContentPresenter HorizontalAlignment="Center"
 											  VerticalAlignment="Center"
 											  RecognizesAccessKey="True"/>
@@ -681,10 +677,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="8">
-							<Border.Effect>
-								<DropShadowEffect BlurRadius="7" ShadowDepth="1" Opacity="0.07"/>
-							</Border.Effect>
+								CornerRadius="{StaticResource Radius.Control}">
 							<ContentPresenter HorizontalAlignment="Center"
 											  VerticalAlignment="Center"/>
 						</Border>
@@ -724,7 +717,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="8">
+								CornerRadius="{StaticResource Radius.Control}">
 							<ContentPresenter HorizontalAlignment="Center"
 											  VerticalAlignment="Center"/>
 						</Border>
@@ -760,7 +753,7 @@
 			<Setter Property="BorderThickness" Value="1"/>
 			<Setter Property="HorizontalContentAlignment" Value="Center"/>
 			<Setter Property="VerticalContentAlignment" Value="Center"/>
-           <Setter Property="Margin" Value="1"/>
+           <Setter Property="Margin" Value="0"/>
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="CalendarDayButton">
@@ -768,8 +761,10 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
-								Padding="3">
+								CornerRadius="{StaticResource Radius.CalendarDay}"
+								Padding="2"
+								Margin="1"
+								SnapsToDevicePixels="True">
 							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
 											  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
 						</Border>
@@ -779,8 +774,9 @@
 								<Setter TargetName="DayBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
 							</Trigger>
 							<Trigger Property="IsSelected" Value="True">
-                              <Setter TargetName="DayBorder" Property="Background" Value="#3F6FE8"/>
-								<Setter TargetName="DayBorder" Property="BorderBrush" Value="#2F5CD0"/>
+								<Setter TargetName="DayBorder" Property="Background" Value="#3F6FE8"/>
+								<Setter TargetName="DayBorder" Property="BorderBrush" Value="Transparent"/>
+								<Setter TargetName="DayBorder" Property="BorderThickness" Value="0"/>
 								<Setter Property="Foreground" Value="White"/>
 							</Trigger>
 							<Trigger Property="IsInactive" Value="True">
@@ -812,7 +808,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="8">
+								CornerRadius="{StaticResource Radius.Control}">
 							<ContentPresenter HorizontalAlignment="Center"
 											  VerticalAlignment="Center"
 											  RecognizesAccessKey="True"/>
@@ -852,7 +848,7 @@
 								Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="{TemplateBinding BorderThickness}"
-								CornerRadius="9"
+								CornerRadius="{StaticResource Radius.Control}"
 								Padding="4">
 							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
 											  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -872,8 +868,8 @@
 		</Style>
 
 		<Style x:Key="DashboardCalendarItemStyle" TargetType="CalendarItem">
-			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-			<Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="BorderBrush" Value="Transparent"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
 			<Setter Property="Template">
 				<Setter.Value>
@@ -881,7 +877,7 @@
 						<Border Background="{TemplateBinding Background}"
 								BorderBrush="{TemplateBinding BorderBrush}"
 								BorderThickness="0"
-								CornerRadius="10"
+								CornerRadius="{StaticResource Radius.Card}"
 								Padding="2"
 								SnapsToDevicePixels="True">
 							<Grid x:Name="PART_Root">
@@ -1001,10 +997,10 @@
 		</Style>
 
 		<Style x:Key="DashboardCalendarControlStyle" TargetType="Calendar">
-			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+			<Setter Property="Background" Value="Transparent"/>
 			<Setter Property="BorderThickness" Value="0"/>
 			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-			<Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
                <Setter Property="Padding" Value="4"/>
 			<Setter Property="CalendarDayButtonStyle" Value="{StaticResource DashboardCalendarDayButtonStyle}"/>
 			<Setter Property="CalendarButtonStyle" Value="{StaticResource DashboardCalendarButtonStyle}"/>
@@ -1012,22 +1008,21 @@
             <Setter Property="FontSize" Value="13"/>
 		</Style>
 	</Window.Resources>
-	<Grid>
+	<Grid Background="{DynamicResource SidebarBackground}">
 
 		<Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="SidebarColumn" Width="64"/>
 			<ColumnDefinition Width="*"/>
 		</Grid.ColumnDefinitions>
 
-		<!-- Sidebar -->
+		<!-- Sidebar: borderless chrome -->
      <Border x:Name="SidebarChrome"
 				Grid.Column="0"
-				Background="{DynamicResource SidebarBackground}"
-				BorderBrush="{DynamicResource BorderColor}"
-				BorderThickness="0,0,1,0"
+				Background="Transparent"
+				BorderThickness="0"
              ClipToBounds="True"
              IsEnabled="{Binding IsNotMassSelectMode}"
-				Padding="8,10">
+				Padding="8,14,8,14">
 			<Grid>
 				<Grid.RowDefinitions>
 					<RowDefinition Height="Auto"/>
@@ -1054,7 +1049,9 @@
 							  VerticalScrollBarVisibility="Auto"
 							  HorizontalScrollBarVisibility="Disabled">
 					<StackPanel>
-						<Separator Margin="6,10,6,10"/>
+						<Separator Margin="8,12,8,12"
+								   Background="{DynamicResource SidebarSeparator}"
+								   Opacity="1"/>
 						<Button Style="{StaticResource SidebarNotesDashboardButtonStyle}"
 								behaviors:SidebarNavMotionBehavior.IsActive="{Binding IsNotesView}"
 								Command="{Binding ShowNotesCommand}"
@@ -1118,7 +1115,9 @@
 										   Text="{Binding [QuizzesDashboard], Source={StaticResource Loc}}"/>
 							</Grid>
 						</Button>
-                        <Separator Margin="6,10,6,10"/>
+                        <Separator Margin="8,12,8,12"
+								   Background="{DynamicResource SidebarSeparator}"
+								   Opacity="1"/>
 
                         <Button Style="{StaticResource SidebarActionButtonStyle}"
 								Click="SidebarSettingsButton_Click"
@@ -1153,40 +1152,61 @@
 		</Border>
 
 
+		<!-- Fluent-style inset content stage: rounded where it meets the sidebar -->
+		<Grid Grid.Column="1" Margin="0,10,10,10">
+			<Border CornerRadius="{StaticResource Radius.Overlay}"
+					Background="{DynamicResource WindowBackground}"
+					Margin="1"
+					IsHitTestVisible="False">
+				<Border.Effect>
+					<DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="20" ShadowDepth="0"/>
+				</Border.Effect>
+			</Border>
+			<Border x:Name="ContentStage"
+					CornerRadius="{StaticResource Radius.Overlay}"
+					Background="{DynamicResource WindowBackground}"
+					behaviors:RoundedClipBehavior.IsEnabled="True"
+					ClipToBounds="True"
+					SnapsToDevicePixels="True">
 		<Grid x:Name="MainContentRoot"
-			  Grid.Column="1"
-			  Background="{DynamicResource WindowBackground}">
+			  Background="Transparent">
 
 			<Grid.RowDefinitions>
 				<RowDefinition Height="Auto"/>
 				<RowDefinition Height="*"/>
 			</Grid.RowDefinitions>
 
-			<!-- Top Bar -->
+			<!-- Top Bar: no hairline divider -->
 			<Border Grid.Row="0"
-					Background="{DynamicResource SidebarBackground}"
-					BorderBrush="{DynamicResource BorderColor}"
-					BorderThickness="0,0,0,1"
-					Padding="16,10">
-				<Grid>
-					<StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+					Background="Transparent"
+					BorderThickness="0"
+					Padding="{StaticResource Shell.TopBarPadding}">
+				<Grid Height="32" VerticalAlignment="Center">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="*"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
 
-                     <Image Source="/Scriblucent;component/Assets/logo.png"
-                               Width="28"
-                               Height="28"
-                               Margin="0,0,8,0"
-                               VerticalAlignment="Center"
-                               RenderOptions.BitmapScalingMode="HighQuality"
-                               SnapsToDevicePixels="True"/>
-
+					<StackPanel Grid.Column="0"
+								Orientation="Horizontal"
+								VerticalAlignment="Center">
+						<Image Source="/Scriblucent;component/Assets/logo.png"
+							   Width="24"
+							   Height="24"
+							   Margin="0,0,8,0"
+							   VerticalAlignment="Center"
+							   RenderOptions.BitmapScalingMode="HighQuality"
+							   SnapsToDevicePixels="True"/>
 						<TextBlock Text="Scriblucent"
-                                   FontSize="22"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"
-                                   VerticalAlignment="Center"/>
-
+								   FontSize="18"
+								   FontWeight="SemiBold"
+								   LineHeight="32"
+								   Foreground="{DynamicResource TextColor}"
+								   VerticalAlignment="Center"/>
 					</StackPanel>
-					<Grid HorizontalAlignment="Right"
+
+					<Grid Grid.Column="2"
 						  VerticalAlignment="Center">
 						<Grid.ColumnDefinitions>
 							<ColumnDefinition Width="Auto"/>
@@ -1203,22 +1223,30 @@
 								Margin="0,0,8,0"
 								Padding="10,0"
 								Visibility="Collapsed"
-								ClipToBounds="True"
 								VerticalAlignment="Center"
-                                Background="{DynamicResource CardBackground}"
-								BorderBrush="{DynamicResource BorderColor}"
-								BorderThickness="1"
-								CornerRadius="8"
+								CornerRadius="{StaticResource Radius.Control}"
 								Opacity="0"
+								SnapsToDevicePixels="True"
 								RenderTransformOrigin="1,0.5">
+							<Border.Style>
+								<Style TargetType="Border">
+									<Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+									<Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
+									<Setter Property="BorderThickness" Value="1"/>
+									<Setter Property="behaviors:RoundedClipBehavior.IsEnabled" Value="True"/>
+									<Style.Triggers>
+										<Trigger Property="IsKeyboardFocusWithin" Value="True">
+											<Setter Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
+										</Trigger>
+									</Style.Triggers>
+								</Style>
+							</Border.Style>
 							<DockPanel LastChildFill="True">
                               <icons:AppIcon Kind="Search" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" Margin="0,0,8,0" VerticalAlignment="Center"/>
 								<TextBox x:Name="TopSearchTextBox"
-										 BorderThickness="0"
-										 Background="Transparent"
-										 Foreground="{DynamicResource TextColor}"
-										 CaretBrush="{DynamicResource TextColor}"
- 										 VerticalContentAlignment="Center"
+										 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+										 VerticalAlignment="Center"
+										 VerticalContentAlignment="Center"
  										 Text="{Binding ActiveSearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
  										 ToolTip="{Binding [SearchNotesHint], Source={StaticResource Loc}}"
 										 KeyDown="TopSearchTextBox_KeyDown"/>
@@ -1268,40 +1296,45 @@
 				   StaysOpen="False"
 				   AllowsTransparency="True"
 				   PopupAnimation="None">
-				<Border Background="{DynamicResource SidebarBackground}"
-						BorderBrush="{DynamicResource BorderColor}"
-						BorderThickness="1"
-						CornerRadius="10"
-						MinWidth="260"
-						MaxWidth="320"
-						Padding="8"
-						Margin="12,10,12,14">
-					<Border.Effect>
-						<DropShadowEffect Color="#000000" Opacity="0.14" BlurRadius="14" ShadowDepth="1" Direction="270"/>
-					</Border.Effect>
-					<StackPanel>
-						<TextBlock Text="{Binding ActiveSortButtonText}"
-								   FontWeight="SemiBold"
-								   Foreground="{DynamicResource TextColor}"
-								   Margin="6,3,6,8"/>
-						<Border Background="{DynamicResource CardBackground}"
-								CornerRadius="8"
-								Padding="8,8">
+				<Grid Margin="0,4,8,8"
+					  MinWidth="260"
+					  MaxWidth="320">
+					<Border Margin="2,3,2,0"
+							Background="#000000"
+							Opacity="0.18"
+							CornerRadius="{StaticResource Radius.Card}"
+							IsHitTestVisible="False">
+						<Border.Effect>
+							<BlurEffect Radius="12" KernelType="Gaussian"/>
+						</Border.Effect>
+					</Border>
+					<Border Background="{DynamicResource CardBackground}"
+							BorderBrush="{DynamicResource BorderColor}"
+							BorderThickness="1"
+							CornerRadius="{StaticResource Radius.Card}"
+							Padding="12"
+							behaviors:RoundedClipBehavior.IsEnabled="True"
+							SnapsToDevicePixels="True">
+						<StackPanel>
+							<TextBlock Text="{Binding ActiveSortButtonText}"
+									   FontWeight="SemiBold"
+									   Foreground="{DynamicResource TextColor}"
+									   Margin="0,0,0,8"/>
 							<ItemsControl ItemsSource="{Binding ActiveSortOptions}">
 								<ItemsControl.ItemTemplate>
-                                   <DataTemplate>
+									<DataTemplate>
 										<RadioButton Style="{StaticResource SortOptionRadioButtonStyle}"
-												 GroupName="NoteSortOptionGroup"
-												 Content="{Binding DisplayName}"
-												 IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-												 Margin="2,4"
-												 Foreground="{DynamicResource TextColor}"/>
+													 GroupName="NoteSortOptionGroup"
+													 Content="{Binding DisplayName}"
+													 IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+													 Margin="2,4"
+													 Foreground="{DynamicResource TextColor}"/>
 									</DataTemplate>
 								</ItemsControl.ItemTemplate>
 							</ItemsControl>
-						</Border>
-					</StackPanel>
-				</Border>
+						</StackPanel>
+					</Border>
+				</Grid>
 			</Popup>
 
 			<Popup x:Name="DashboardSectionsPopup"
@@ -1311,26 +1344,31 @@
 				   StaysOpen="False"
 				   AllowsTransparency="True"
 				   PopupAnimation="None">
-				<Border Background="{DynamicResource SidebarBackground}"
-						BorderBrush="{DynamicResource BorderColor}"
-						BorderThickness="1"
-						CornerRadius="10"
-						MinWidth="220"
-						MaxWidth="300"
-						Padding="8"
-						Margin="12,10,12,14">
-					<Border.Effect>
-						<DropShadowEffect Color="#000000" Opacity="0.14" BlurRadius="14" ShadowDepth="1" Direction="270"/>
-					</Border.Effect>
-					<StackPanel>
-						<TextBlock Text="{Binding [DashboardSections], Source={StaticResource Loc}}"
-								   FontWeight="SemiBold"
-								   Foreground="{DynamicResource TextColor}"
-								   Margin="6,3,6,8"/>
-						<Border Background="{DynamicResource CardBackground}"
-								CornerRadius="8"
-								Padding="10,10">
-                            <Grid>
+				<Grid Margin="0,4,8,8"
+					  MinWidth="220"
+					  MaxWidth="300">
+					<Border Margin="2,3,2,0"
+							Background="#000000"
+							Opacity="0.18"
+							CornerRadius="{StaticResource Radius.Card}"
+							IsHitTestVisible="False">
+						<Border.Effect>
+							<BlurEffect Radius="12" KernelType="Gaussian"/>
+						</Border.Effect>
+					</Border>
+					<Border Background="{DynamicResource CardBackground}"
+							BorderBrush="{DynamicResource BorderColor}"
+							BorderThickness="1"
+							CornerRadius="{StaticResource Radius.Card}"
+							Padding="12"
+							behaviors:RoundedClipBehavior.IsEnabled="True"
+							SnapsToDevicePixels="True">
+						<StackPanel>
+							<TextBlock Text="{Binding [DashboardSections], Source={StaticResource Loc}}"
+									   FontWeight="SemiBold"
+									   Foreground="{DynamicResource TextColor}"
+									   Margin="0,0,0,8"/>
+							<Grid>
 							<StackPanel Visibility="{Binding IsNotesView, Converter={StaticResource BoolToVis}}">
 								<CheckBox Content="{Binding [RecentNotes], Source={StaticResource Loc}}"
 										  IsChecked="{Binding IsRecentSectionVisible, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -1423,10 +1461,10 @@
                                           IsEnabled="{Binding IsMindMapGroupsSectionVisible}"
                                           Foreground="{DynamicResource TextColor}"/>
                             </StackPanel>
-                            </Grid>
-						</Border>
-					</StackPanel>
-				</Border>
+							</Grid>
+						</StackPanel>
+					</Border>
+				</Grid>
 			</Popup>
 
 			<Popup x:Name="TagsFilterPopup"
@@ -1436,38 +1474,44 @@
 				   StaysOpen="False"
 				   AllowsTransparency="True"
 				   PopupAnimation="None">
-				<Border Background="{DynamicResource SidebarBackground}"
-						BorderBrush="{DynamicResource BorderColor}"
-						BorderThickness="1"
-						CornerRadius="10"
-						MinWidth="260"
-						MaxWidth="320"
-						Padding="8"
-						Margin="12,10,12,14">
-					<Border.Effect>
-						<DropShadowEffect Color="#000000" Opacity="0.14" BlurRadius="14" ShadowDepth="1" Direction="270"/>
-					</Border.Effect>
-					<StackPanel>
-						<Grid Margin="4,2,4,8">
-							<Grid.ColumnDefinitions>
-								<ColumnDefinition Width="*"/>
-								<ColumnDefinition Width="Auto"/>
-							</Grid.ColumnDefinitions>
-							<TextBlock Text="{Binding [FilterTags], Source={StaticResource Loc}}"
-									   FontWeight="SemiBold"
-									   Foreground="{DynamicResource TextColor}"
-									   VerticalAlignment="Center"/>
-							<Button Grid.Column="1"
-									Style="{StaticResource PopupMenuButtonStyle}"
-									Padding="8,4"
-									Content="{Binding [ClearFilters], Source={StaticResource Loc}}"
-									Command="{Binding ClearTagFiltersCommand}"/>
-						</Grid>
-						<Border Background="{DynamicResource CardBackground}"
-								CornerRadius="8"
-								Padding="10,14"
-								Visibility="{Binding ActiveHasTagFilters, Converter={StaticResource BoolToVis}}">
-							<ScrollViewer MaxHeight="230" VerticalScrollBarVisibility="Auto">
+				<Grid Margin="0,4,8,8"
+					  MinWidth="260"
+					  MaxWidth="320">
+					<Border Margin="2,3,2,0"
+							Background="#000000"
+							Opacity="0.18"
+							CornerRadius="{StaticResource Radius.Card}"
+							IsHitTestVisible="False">
+						<Border.Effect>
+							<BlurEffect Radius="12" KernelType="Gaussian"/>
+						</Border.Effect>
+					</Border>
+					<Border Background="{DynamicResource CardBackground}"
+							BorderBrush="{DynamicResource BorderColor}"
+							BorderThickness="1"
+							CornerRadius="{StaticResource Radius.Card}"
+							Padding="12"
+							behaviors:RoundedClipBehavior.IsEnabled="True"
+							SnapsToDevicePixels="True">
+						<StackPanel>
+							<Grid Margin="0,0,0,8">
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition Width="*"/>
+									<ColumnDefinition Width="Auto"/>
+								</Grid.ColumnDefinitions>
+								<TextBlock Text="{Binding [FilterTags], Source={StaticResource Loc}}"
+										   FontWeight="SemiBold"
+										   Foreground="{DynamicResource TextColor}"
+										   VerticalAlignment="Center"/>
+								<Button Grid.Column="1"
+										Style="{StaticResource PopupMenuButtonStyle}"
+										Padding="8,4"
+										Content="{Binding [ClearFilters], Source={StaticResource Loc}}"
+										Command="{Binding ClearTagFiltersCommand}"/>
+							</Grid>
+							<ScrollViewer MaxHeight="230"
+										  VerticalScrollBarVisibility="Auto"
+										  Visibility="{Binding ActiveHasTagFilters, Converter={StaticResource BoolToVis}}">
 								<ItemsControl ItemsSource="{Binding ActiveTagFilters}">
 									<ItemsControl.ItemTemplate>
 										<DataTemplate DataType="{x:Type vm:TagFilterItemViewModel}">
@@ -1479,24 +1523,24 @@
 									</ItemsControl.ItemTemplate>
 								</ItemsControl>
 							</ScrollViewer>
-						</Border>
-                      <TextBlock Text="{Binding [NoTagsFound], Source={StaticResource Loc}}"
-								   Margin="4,8,4,6"
-								   FontStyle="Italic"
-								   Foreground="{DynamicResource TextColorSecondary}">
-							<TextBlock.Style>
-								<Style TargetType="TextBlock">
-									<Setter Property="Visibility" Value="Collapsed"/>
-									<Style.Triggers>
-										<DataTrigger Binding="{Binding ActiveHasTagFilters}" Value="False">
-											<Setter Property="Visibility" Value="Visible"/>
-										</DataTrigger>
-									</Style.Triggers>
-								</Style>
-							</TextBlock.Style>
-						</TextBlock>
-					</StackPanel>
-				</Border>
+							<TextBlock Text="{Binding [NoTagsFound], Source={StaticResource Loc}}"
+									   Margin="0,4,0,0"
+									   FontStyle="Italic"
+									   Foreground="{DynamicResource TextColorSecondary}">
+								<TextBlock.Style>
+									<Style TargetType="TextBlock">
+										<Setter Property="Visibility" Value="Collapsed"/>
+										<Style.Triggers>
+											<DataTrigger Binding="{Binding ActiveHasTagFilters}" Value="False">
+												<Setter Property="Visibility" Value="Visible"/>
+											</DataTrigger>
+										</Style.Triggers>
+									</Style>
+								</TextBlock.Style>
+							</TextBlock>
+						</StackPanel>
+					</Border>
+				</Grid>
 			</Popup>
 
 			<!-- Dashboard + FAB overlay -->
@@ -1517,10 +1561,9 @@
                     <!-- Recent Notes strip -->
                     <Border Grid.Row="0"
                         Visibility="{Binding IsRecentSectionVisible, Converter={StaticResource BoolToVis}}"
-						Background="{DynamicResource SidebarBackground}"
-						BorderBrush="{DynamicResource BorderColor}"
-                       BorderThickness="0,0,0,1"
-						Padding="16,8"
+						Background="Transparent"
+						BorderThickness="0"
+						Padding="{StaticResource Shell.RecentPadding}"
                         ClipToBounds="False">
                         <StackPanel>
                             <Grid>
@@ -1538,11 +1581,11 @@
 						behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsRecentSectionExpanded}" />
                                 <TextBlock Grid.Column="1"
 									   Text="{Binding [RecentNotes], Source={StaticResource Loc}}"
-									   FontSize="13"
+									   FontSize="{StaticResource Type.SectionTitle}"
 									   FontWeight="SemiBold"
 									   Foreground="{DynamicResource TextColor}"
 									Margin="8,0,0,0"
-									   FontFamily="Segoe UI, sans-serif"
+									   FontFamily="{StaticResource FontFamily.UI}"
 									   VerticalAlignment="Center"/>
                             </Grid>
                             <Border x:Name="RecentSectionBody"
@@ -1567,11 +1610,11 @@
                                                     <StackPanel MinWidth="118" MaxWidth="176">
                                                         <TextBlock Text="{Binding Document.Title}"
 															   FontWeight="SemiBold"
-															   FontSize="13"
+															   FontSize="{StaticResource Type.CardTitle}"
 															   TextTrimming="CharacterEllipsis"
 															   Foreground="{DynamicResource TextColor}"/>
                                                         <TextBlock Text="{Binding Document.LastModified, StringFormat='{}{0:dd MMM, HH:mm}'}"
-															   FontSize="11"
+															   FontSize="{StaticResource Type.Meta}"
 															   Foreground="{DynamicResource TextColor}"
 															   Margin="0,3,0,0"/>
                                                     </StackPanel>
@@ -1589,8 +1632,7 @@
                                       Style="{StaticResource DashboardListingScrollViewerStyle}"
 								 VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Disabled"
-                                 Background="{DynamicResource WindowBackground}"
-								 Padding="8"
+                                 Background="Transparent"
 								 AllowDrop="True"
 								 PreviewDragOver="NotesScrollViewer_PreviewDragOver"
 								 PreviewDragLeave="NotesScrollViewer_PreviewDragLeave"
@@ -1604,12 +1646,12 @@
 
                                 <Border x:Name="CalendarSectionContainer"
 									Visibility="{Binding IsCalendarSectionVisible, Converter={StaticResource BoolToVis}}"
-                                    Background="{DynamicResource SidebarBackground}"
+                                    Background="{DynamicResource CardBackground}"
 									BorderBrush="{DynamicResource BorderColor}"
 									BorderThickness="0"
-                                    CornerRadius="14"
+                                    CornerRadius="{StaticResource Radius.Card}"
 									Padding="12"
-									Margin="8,0,8,10"
+									Margin="0,0,0,14"
 									RenderTransformOrigin="0.5,0.5">
                                     <Border.Effect>
                                         <DropShadowEffect Color="#000000" Opacity="0.08" BlurRadius="14" ShadowDepth="1" Direction="270"/>
@@ -1652,7 +1694,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsCalendarSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
 												   Text="{Binding [CalendarSection], Source={StaticResource Loc}}"
-												   FontSize="14"
+												   FontSize="{StaticResource Type.SectionTitle}"
 												   FontWeight="SemiBold"
 												   Foreground="{DynamicResource TextColor}"
 												   Margin="8,0,0,0"
@@ -1660,15 +1702,16 @@
                                         </Grid>
                                         <Grid x:Name="CalendarSectionBody" Margin="2,0,2,2" Height="220">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="210"/>
-                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="214"/>
+                                                <ColumnDefinition Width="12"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0"
-												Background="{DynamicResource CardBackground}"
-												BorderBrush="{DynamicResource BorderColor}"
+												Background="{DynamicResource WindowBackground}"
+												BorderBrush="Transparent"
                                              BorderThickness="0"
-                                               CornerRadius="12"
+                                               CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                Padding="8">
                                                 <Calendar x:Name="DashboardCalendar"
                                               Style="{StaticResource DashboardCalendarControlStyle}"
@@ -1677,10 +1720,11 @@
 													 SelectedDatesChanged="DashboardCalendar_SelectedDatesChanged"/>
                                             </Border>
                                             <Border Grid.Column="2"
-												Background="{DynamicResource CardBackground}"
-												BorderBrush="{DynamicResource BorderColor}"
+												Background="{DynamicResource WindowBackground}"
+												BorderBrush="Transparent"
 												BorderThickness="0"
-                                               CornerRadius="12"
+                                               CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                 Padding="8"
                                                ClipToBounds="True"
                                                Height="220">
@@ -1745,7 +1789,7 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
 																BorderBrush="{DynamicResource BorderColor}"
 																BorderThickness="1"
-																CornerRadius="8"
+																CornerRadius="{StaticResource Radius.Control}"
 																Padding="6,2"
 																Margin="0,0,4,0"
 																VerticalAlignment="Center">
@@ -1754,12 +1798,12 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
 																BorderBrush="{DynamicResource BorderColor}"
 																BorderThickness="1"
-																CornerRadius="8"
+																CornerRadius="{StaticResource Radius.Control}"
 																Padding="8,2"
 																VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                                             <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                 </StackPanel>
@@ -1801,12 +1845,12 @@
                                 </Border>
 
                                 <Border x:Name="NotesDashboardContentHost"
-                                    Background="{DynamicResource SidebarBackground}"
+                                    Background="{DynamicResource CardBackground}"
                                     BorderBrush="{DynamicResource BorderColor}"
-                                    BorderThickness="1"
-                                    CornerRadius="14"
+                                    BorderThickness="0"
+                                    CornerRadius="{StaticResource Radius.Card}"
                                     Padding="14"
-                                    Margin="8,0,8,10">
+                                    Margin="0,0,0,14">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Grid.Row" Value="1"/>
@@ -1912,7 +1956,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsGroupsSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
 												   Text="{Binding [Groups], Source={StaticResource Loc}}"
-												   FontSize="14"
+												   FontSize="{StaticResource Type.SectionTitle}"
 												   FontWeight="SemiBold"
 												   Foreground="{DynamicResource TextColor}"
 												Margin="8,0,0,0"
@@ -1925,10 +1969,10 @@
                                                         <Border Style="{StaticResource GroupCardStyle}"
 													Background="{Binding BackgroundBrush}"
 													BorderBrush="{DynamicResource BorderColor}"
-													BorderThickness="1"
-													CornerRadius="12"
+													BorderThickness="0"
+													CornerRadius="{StaticResource Radius.Card}"
 													Padding="10"
-													Margin="8,0,8,10"
+													Margin="0,0,0,14"
 													AllowDrop="True"
 													DragOver="GroupBorder_DragOver"
 													DragLeave="GroupBorder_DragLeave"
@@ -2028,7 +2072,7 @@
 
 								<Border x:Name="UngroupedSectionContainer"
 									Background="Transparent"
-									CornerRadius="16"
+									CornerRadius="{StaticResource Radius.Overlay}"
 									AllowDrop="True"
 									DragOver="UngroupedDropZone_DragOver"
 									DragLeave="UngroupedDropZone_DragLeave"
@@ -2071,7 +2115,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsUngroupedSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
 												   Text="{Binding [UngroupedItems], Source={StaticResource Loc}}"
-												   FontSize="14"
+												   FontSize="{StaticResource Type.SectionTitle}"
 												   FontWeight="SemiBold"
 												   Foreground="{DynamicResource TextColor}"
 												Margin="8,0,0,0"
@@ -2101,7 +2145,7 @@
                                             Margin="0,32,0,0"
                                             Visibility="{Binding ShowNotesEmptyDashboard, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding [NotesEmptyDashboardPrompt], Source={StaticResource Loc}}"
-                                               FontSize="18"
+                                               FontSize="{StaticResource Type.EmptyState}"
                                                FontStyle="Italic"
                                                Foreground="{DynamicResource TextColorSecondary}"
                                                HorizontalAlignment="Center"
@@ -2127,7 +2171,7 @@
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
                             Content="{icons:Icon Import}"
-                            Margin="0,0,37,84"
+                            Margin="0,0,49,96"
                             ToolTip="{Binding [ImportNotes], Source={StaticResource Loc}}"
                             Click="ImportButton_Click"/>
                     <Button Style="{StaticResource FabStyle}"
@@ -2135,7 +2179,6 @@
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
                             Content="{icons:Icon Kind=Plus, Size=22}"
-                            Margin="0,0,28,24"
                             ToolTip="{Binding [AddNote], Source={StaticResource Loc}}"
                             Command="{Binding AddNoteCommand}"/>
                 </Grid>
@@ -2153,10 +2196,9 @@
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
                                 Visibility="{Binding IsRecentSectionVisible, Converter={StaticResource BoolToVis}}"
-                                Background="{DynamicResource SidebarBackground}"
-                                BorderBrush="{DynamicResource BorderColor}"
-                                BorderThickness="0,0,0,1"
-                                Padding="16,8"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="{StaticResource Shell.RecentPadding}"
                                 ClipToBounds="False">
                             <StackPanel>
                                 <Grid>
@@ -2172,11 +2214,11 @@
                     behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsRecentSectionExpanded}" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding [RecentFlashcards], Source={StaticResource Loc}}"
-                                               FontSize="13"
+                                               FontSize="{StaticResource Type.SectionTitle}"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColor}"
                                                Margin="8,0,0,0"
-                                               FontFamily="Segoe UI, sans-serif"
+                                               FontFamily="{StaticResource FontFamily.UI}"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <Border x:Name="FlashcardRecentSectionBody"
@@ -2204,11 +2246,11 @@
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Foreground="{DynamicResource TextColor}"/>
                                                             <TextBlock Text="{Binding SetCountText}"
-                                                                       FontSize="11"
+                                                                       FontSize="{StaticResource Type.Meta}"
                                                                        Foreground="{DynamicResource TextColorSecondary}"
                                                                        Margin="0,3,0,0"/>
                                                             <TextBlock Text="{Binding Document.LastModified, StringFormat='{}{0:dd MMM, HH:mm}'}"
-                                                                       FontSize="11"
+                                                                       FontSize="{StaticResource Type.Meta}"
                                                                        Foreground="{DynamicResource TextColor}"
                                                                        Margin="0,2,0,0"/>
                                                         </StackPanel>
@@ -2224,12 +2266,11 @@
                                       Grid.Row="1"
                                       Style="{StaticResource DashboardListingScrollViewerStyle}"
                                       VerticalScrollBarVisibility="Auto"
-                                      Background="{DynamicResource WindowBackground}"
+                                      Background="Transparent"
                                       PreviewDragOver="DashboardScrollViewer_PreviewDragOver"
                                       PreviewDragLeave="DashboardScrollViewer_PreviewDragLeave"
                                       Drop="DashboardScrollViewer_Drop"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      Padding="8">
+                                      HorizontalScrollBarVisibility="Disabled">
                             <Grid Margin="0,0,0,32">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -2239,12 +2280,12 @@
 
                                 <Border x:Name="FlashcardCalendarSectionContainer"
                                         Visibility="{Binding IsCalendarSectionVisible, Converter={StaticResource BoolToVis}}"
-                                        Background="{DynamicResource SidebarBackground}"
+                                        Background="{DynamicResource CardBackground}"
                                         BorderBrush="{DynamicResource BorderColor}"
                                         BorderThickness="0"
-                                        CornerRadius="14"
+                                        CornerRadius="{StaticResource Radius.Card}"
                                         Padding="12"
-                                        Margin="8,0,8,10"
+                                        Margin="0,0,0,14"
                                         RenderTransformOrigin="0.5,0.5">
                                     <Border.Effect>
                                         <DropShadowEffect Color="#000000" Opacity="0.08" BlurRadius="14" ShadowDepth="1" Direction="270"/>
@@ -2287,7 +2328,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsCalendarSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding [CalendarSection], Source={StaticResource Loc}}"
-                                                       FontSize="14"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
                                                        Margin="8,0,0,0"
@@ -2295,15 +2336,16 @@
                                         </Grid>
                                         <Grid x:Name="FlashcardCalendarSectionBody" Margin="2,0,2,2" Height="220">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="210"/>
-                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="214"/>
+                                                <ColumnDefinition Width="12"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
                                                     BorderThickness="0"
-                                                    CornerRadius="12"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                     Padding="8">
                                                 <Calendar x:Name="FlashcardDashboardCalendar"
                                                           Style="{StaticResource DashboardCalendarControlStyle}"
@@ -2312,10 +2354,11 @@
                                                           SelectedDatesChanged="DashboardCalendar_SelectedDatesChanged"/>
                                             </Border>
                                             <Border Grid.Column="2"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
                                                     BorderThickness="0"
-                                                    CornerRadius="12"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                     Padding="8"
                                                     ClipToBounds="True"
                                                     Height="220">
@@ -2380,7 +2423,7 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
                                                                                             BorderThickness="1"
-                                                                                            CornerRadius="8"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
                                                                                             Padding="6,2"
                                                                                             Margin="0,0,4,0"
                                                                                             VerticalAlignment="Center">
@@ -2389,12 +2432,12 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
                                                                                             BorderThickness="1"
-                                                                                            CornerRadius="8"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
                                                                                             Padding="8,2"
                                                                                             VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                                             <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                 </StackPanel>
@@ -2436,12 +2479,12 @@
                                 </Border>
 
                                 <Border x:Name="FlashcardsDashboardContentHost"
-                                        Background="{DynamicResource SidebarBackground}"
+                                        Background="{DynamicResource CardBackground}"
                                         BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        CornerRadius="14"
-                                        Padding="18"
-                                        Margin="8,0,8,10">
+                                        BorderThickness="0"
+                                        CornerRadius="{StaticResource Radius.Card}"
+                                        Padding="14"
+                                        Margin="0,0,0,14">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Grid.Row" Value="1"/>
@@ -2567,7 +2610,7 @@
                                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardDashboardGroupsSectionExpanded}" />
                                                             <TextBlock Grid.Column="3"
                                                                        Text="{Binding [Groups], Source={StaticResource Loc}}"
-                                                                       FontSize="14"
+                                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{DynamicResource TextColor}"
                                                                        Margin="8,0,0,0"
@@ -2582,10 +2625,10 @@
                                                     <Border Style="{StaticResource GroupCardStyle}"
                                                             Background="{Binding BackgroundBrush}"
                                                             BorderBrush="{DynamicResource BorderColor}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="12"
+                                                            BorderThickness="0"
+                                                            CornerRadius="{StaticResource Radius.Card}"
                                                             Padding="10"
-                                                            Margin="8,0,8,10"
+                                                            Margin="0,0,0,14"
                                                             AllowDrop="True"
                                                             PreviewDragOver="DashboardGroupBorder_PreviewDragOver"
                                                             PreviewDragLeave="DashboardGroupBorder_PreviewDragLeave"
@@ -2735,7 +2778,7 @@
                                                                                                 Width="24"
                                                                                                 Height="24"
                                                                                                 Margin="0,0,6,0"
-                                                                                                CornerRadius="12"
+                                                                                                CornerRadius="{StaticResource Radius.Card}"
                                                                                                 Background="{DynamicResource IconButtonBackground}"
                                                                                                 BorderBrush="{DynamicResource IconButtonBorder}"
                                                                                                 BorderThickness="1"
@@ -2750,7 +2793,7 @@
                                                                                             <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
                                                                                             <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                                             <TextBlock Text="{Binding Title}"
-                                                                                                       FontSize="14"
+                                                                                                       FontSize="{StaticResource Type.CardTitle}"
                                                                                                        FontWeight="SemiBold"
                                                                                                        Foreground="{DynamicResource TextColor}"
                                                                                                        TextTrimming="CharacterEllipsis"
@@ -2795,7 +2838,7 @@
                                                 Margin="0,0,0,10"
                                                 MinHeight="96"
                                                 Background="Transparent"
-                                                CornerRadius="16"
+                                                CornerRadius="{StaticResource Radius.Overlay}"
                                                 AllowDrop="True"
                                                 DragOver="DashboardUngroupedDropZone_DragOver"
                                                 DragLeave="DashboardUngroupedDropZone_DragLeave"
@@ -2839,7 +2882,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardDashboardUngroupedSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding [UngroupedItems], Source={StaticResource Loc}}"
-                                                       FontSize="14"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
                                                        Margin="8,0,0,0"
@@ -2908,7 +2951,7 @@
                         <controls:CardShadowLayer Margin="9,5,9,-3"/>
                                                         <Border x:Name="FlashcardSetCardBorder"
                                                                 Style="{StaticResource DashboardListingCardSelectionStyle}"
-                                                                CornerRadius="14"
+                                                                CornerRadius="{StaticResource Radius.Card}"
                                                                 Padding="16"
                                                                 RenderTransformOrigin="0.5,0.5">
                                                             <Border.RenderTransform>
@@ -2941,7 +2984,7 @@
 																			Width="24"
 																			Height="24"
 																			Margin="0,0,6,0"
-																			CornerRadius="12"
+																			CornerRadius="{StaticResource Radius.Card}"
 																			Background="{DynamicResource IconButtonBackground}"
 																			BorderBrush="{DynamicResource IconButtonBorder}"
                                                                             BorderThickness="1"
@@ -3012,7 +3055,7 @@
                                             Margin="0,32,0,0"
                                             Visibility="{Binding ShowFlashcardsEmptyDashboard, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
-                                               FontSize="18"
+                                               FontSize="{StaticResource Type.EmptyState}"
                                                FontStyle="Italic"
                                                Foreground="{DynamicResource TextColorSecondary}"
                                                HorizontalAlignment="Center"
@@ -3030,7 +3073,6 @@
                                 Style="{StaticResource FabStyle}"
                                 VerticalAlignment="Bottom"
                                 HorizontalAlignment="Right"
-                                Margin="0,0,28,24"
                                 Content="{icons:Icon Kind=Plus, Size=22}"
                                 ToolTip="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
                                 Click="CreateFlashcardsButton_Click"/>
@@ -3051,10 +3093,9 @@
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
                                 Visibility="{Binding IsRecentSectionVisible, Converter={StaticResource BoolToVis}}"
-                                Background="{DynamicResource SidebarBackground}"
-                                BorderBrush="{DynamicResource BorderColor}"
-                                BorderThickness="0,0,0,1"
-                                Padding="16,8"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="{StaticResource Shell.RecentPadding}"
                                 ClipToBounds="False">
                             <StackPanel>
                                 <Grid>
@@ -3070,11 +3111,11 @@
                                     behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsRecentSectionExpanded}" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding [RecentQuizzes], Source={StaticResource Loc}}"
-                                               FontSize="13"
+                                               FontSize="{StaticResource Type.SectionTitle}"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColor}"
                                                Margin="8,0,0,0"
-                                               FontFamily="Segoe UI, sans-serif"
+                                               FontFamily="{StaticResource FontFamily.UI}"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <Border x:Name="QuizRecentSectionBody"
@@ -3102,11 +3143,11 @@
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Foreground="{DynamicResource TextColor}"/>
                                                             <TextBlock Text="{Binding QuestionCountText}"
-                                                                       FontSize="11"
+                                                                       FontSize="{StaticResource Type.Meta}"
                                                                        Foreground="{DynamicResource TextColorSecondary}"
                                                                        Margin="0,3,0,0"/>
                                                             <TextBlock Text="{Binding Document.LastModified, StringFormat='{}{0:dd MMM, HH:mm}'}"
-                                                                       FontSize="11"
+                                                                       FontSize="{StaticResource Type.Meta}"
                                                                        Foreground="{DynamicResource TextColor}"
                                                                        Margin="0,2,0,0"/>
                                                         </StackPanel>
@@ -3122,12 +3163,11 @@
                                       Grid.Row="1"
                                       Style="{StaticResource DashboardListingScrollViewerStyle}"
                                       VerticalScrollBarVisibility="Auto"
-                                      Background="{DynamicResource WindowBackground}"
+                                      Background="Transparent"
                                       PreviewDragOver="DashboardScrollViewer_PreviewDragOver"
                                       PreviewDragLeave="DashboardScrollViewer_PreviewDragLeave"
                                       Drop="DashboardScrollViewer_Drop"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      Padding="8">
+                                      HorizontalScrollBarVisibility="Disabled">
                             <Grid Margin="0,0,0,32">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -3137,12 +3177,12 @@
 
                                 <Border x:Name="QuizCalendarSectionContainer"
                                         Visibility="{Binding IsCalendarSectionVisible, Converter={StaticResource BoolToVis}}"
-                                        Background="{DynamicResource SidebarBackground}"
+                                        Background="{DynamicResource CardBackground}"
                                         BorderBrush="{DynamicResource BorderColor}"
                                         BorderThickness="0"
-                                        CornerRadius="14"
+                                        CornerRadius="{StaticResource Radius.Card}"
                                         Padding="12"
-                                        Margin="8,0,8,10"
+                                        Margin="0,0,0,14"
                                         RenderTransformOrigin="0.5,0.5">
                                     <Border.Effect>
                                         <DropShadowEffect Color="#000000" Opacity="0.08" BlurRadius="14" ShadowDepth="1" Direction="270"/>
@@ -3185,7 +3225,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsCalendarSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding [CalendarSection], Source={StaticResource Loc}}"
-                                                       FontSize="14"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
                                                        Margin="8,0,0,0"
@@ -3193,15 +3233,16 @@
                                         </Grid>
                                         <Grid x:Name="QuizCalendarSectionBody" Margin="2,0,2,2" Height="220">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="210"/>
-                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="214"/>
+                                                <ColumnDefinition Width="12"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
                                                     BorderThickness="0"
-                                                    CornerRadius="12"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                     Padding="8">
                                                 <Calendar x:Name="QuizDashboardCalendar"
                                                           Style="{StaticResource DashboardCalendarControlStyle}"
@@ -3210,10 +3251,11 @@
                                                           SelectedDatesChanged="DashboardCalendar_SelectedDatesChanged"/>
                                             </Border>
                                             <Border Grid.Column="2"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
                                                     BorderThickness="0"
-                                                    CornerRadius="12"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                     Padding="8"
                                                     ClipToBounds="True"
                                                     Height="220">
@@ -3278,7 +3320,7 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
                                                                                             BorderThickness="1"
-                                                                                            CornerRadius="8"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
                                                                                             Padding="6,2"
                                                                                             Margin="0,0,4,0"
                                                                                             VerticalAlignment="Center">
@@ -3287,12 +3329,12 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
                                                                                             BorderThickness="1"
-                                                                                            CornerRadius="8"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
                                                                                             Padding="8,2"
                                                                                             VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                                             <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                 </StackPanel>
@@ -3337,12 +3379,12 @@
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Grid.Row" Value="1"/>
-                                            <Setter Property="Background" Value="{DynamicResource SidebarBackground}"/>
+                                            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
                                             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                                            <Setter Property="BorderThickness" Value="1"/>
-                                            <Setter Property="CornerRadius" Value="14"/>
-                                            <Setter Property="Padding" Value="18"/>
-                                            <Setter Property="Margin" Value="8,0,8,10"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
+                                            <Setter Property="Padding" Value="14"/>
+                                            <Setter Property="Margin" Value="0,0,0,14"/>
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                             <Style.Triggers>
                                                 <MultiDataTrigger>
@@ -3466,7 +3508,7 @@
                                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsQuizDashboardGroupsSectionExpanded}" />
                                                             <TextBlock Grid.Column="3"
                                                                        Text="{Binding [Groups], Source={StaticResource Loc}}"
-                                                                       FontSize="14"
+                                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{DynamicResource TextColor}"
                                                                        Margin="8,0,0,0"
@@ -3481,10 +3523,10 @@
                                                     <Border Style="{StaticResource GroupCardStyle}"
                                                             Background="{Binding BackgroundBrush}"
                                                             BorderBrush="{DynamicResource BorderColor}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="12"
+                                                            BorderThickness="0"
+                                                            CornerRadius="{StaticResource Radius.Card}"
                                                             Padding="10"
-                                                            Margin="8,0,8,10"
+                                                            Margin="0,0,0,14"
                                                             AllowDrop="True"
                                                             PreviewDragOver="DashboardGroupBorder_PreviewDragOver"
                                                             PreviewDragLeave="DashboardGroupBorder_PreviewDragLeave"
@@ -3634,7 +3676,7 @@
                                                                                                 Width="24"
                                                                                                 Height="24"
                                                                                                 Margin="0,0,6,0"
-                                                                                                CornerRadius="12"
+                                                                                                CornerRadius="{StaticResource Radius.Card}"
                                                                                                 Background="{DynamicResource IconButtonBackground}"
                                                                                                 BorderBrush="{DynamicResource IconButtonBorder}"
                                                                                                 BorderThickness="1"
@@ -3649,7 +3691,7 @@
                                                                                             <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
                                                                                             <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                                             <TextBlock Text="{Binding Title}"
-                                                                                                       FontSize="14"
+                                                                                                       FontSize="{StaticResource Type.CardTitle}"
                                                                                                        FontWeight="SemiBold"
                                                                                                        Foreground="{DynamicResource TextColor}"
                                                                                                        TextTrimming="CharacterEllipsis"
@@ -3694,7 +3736,7 @@
                                                 Margin="0,0,0,10"
                                                 MinHeight="96"
                                                 Background="Transparent"
-                                                CornerRadius="16"
+                                                CornerRadius="{StaticResource Radius.Overlay}"
                                                 AllowDrop="True"
                                                 DragOver="DashboardUngroupedDropZone_DragOver"
                                                 DragLeave="DashboardUngroupedDropZone_DragLeave"
@@ -3738,7 +3780,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsQuizDashboardUngroupedSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding [UngroupedItems], Source={StaticResource Loc}}"
-                                                       FontSize="14"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
                                                        Margin="8,0,0,0"
@@ -3807,7 +3849,7 @@
                         <controls:CardShadowLayer Margin="9,5,9,-3"/>
                                                         <Border x:Name="QuizCardBorder"
                                                                 Style="{StaticResource DashboardListingCardSelectionStyle}"
-                                                                CornerRadius="14"
+                                                                CornerRadius="{StaticResource Radius.Card}"
                                                                 Padding="16"
                                                                 RenderTransformOrigin="0.5,0.5">
                                                             <Border.RenderTransform>
@@ -3841,7 +3883,7 @@
 																			Width="24"
 																			Height="24"
 																			Margin="0,0,6,0"
-																			CornerRadius="12"
+																			CornerRadius="{StaticResource Radius.Card}"
 																			Background="{DynamicResource IconButtonBackground}"
 																			BorderBrush="{DynamicResource IconButtonBorder}"
                                                                             BorderThickness="1"
@@ -3906,7 +3948,7 @@
                                             Margin="0,32,0,0"
                                             Visibility="{Binding ShowQuizzesEmptyDashboard, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding [QuizzesEmptyDashboardPrompt], Source={StaticResource Loc}}"
-                                               FontSize="18"
+                                               FontSize="{StaticResource Type.EmptyState}"
                                                FontStyle="Italic"
                                                Foreground="{DynamicResource TextColorSecondary}"
                                                HorizontalAlignment="Center"
@@ -3924,7 +3966,6 @@
                                 Style="{StaticResource FabStyle}"
                                 VerticalAlignment="Bottom"
                                 HorizontalAlignment="Right"
-                                Margin="0,0,28,24"
                                 Content="{icons:Icon Kind=Plus, Size=22}"
                                 ToolTip="{Binding [CreateQuiz], Source={StaticResource Loc}}"
                                 Click="CreateQuizButton_Click"/>
@@ -3945,10 +3986,9 @@
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
                                 Visibility="{Binding IsRecentSectionVisible, Converter={StaticResource BoolToVis}}"
-                                Background="{DynamicResource SidebarBackground}"
-                                BorderBrush="{DynamicResource BorderColor}"
-                                BorderThickness="0,0,0,1"
-                                Padding="16,8"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="{StaticResource Shell.RecentPadding}"
                                 ClipToBounds="False">
                             <StackPanel>
                                 <Grid>
@@ -3964,11 +4004,11 @@
                                     behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsRecentSectionExpanded}" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding [RecentMindMaps], Source={StaticResource Loc}}"
-                                               FontSize="13"
+                                               FontSize="{StaticResource Type.SectionTitle}"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColor}"
                                                Margin="8,0,0,0"
-                                               FontFamily="Segoe UI, sans-serif"
+                                               FontFamily="{StaticResource FontFamily.UI}"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                                 <Border x:Name="MindMapRecentSectionBody"
@@ -3996,11 +4036,11 @@
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Foreground="{DynamicResource TextColor}"/>
                                                             <TextBlock Text="{Binding NodeCountText}"
-                                                                       FontSize="11"
+                                                                       FontSize="{StaticResource Type.Meta}"
                                                                        Foreground="{DynamicResource TextColorSecondary}"
                                                                        Margin="0,3,0,0"/>
                                                             <TextBlock Text="{Binding Document.LastModified, StringFormat='{}{0:dd MMM, HH:mm}'}"
-                                                                       FontSize="11"
+                                                                       FontSize="{StaticResource Type.Meta}"
                                                                        Foreground="{DynamicResource TextColor}"
                                                                        Margin="0,2,0,0"/>
                                                         </StackPanel>
@@ -4016,12 +4056,11 @@
                                       Grid.Row="1"
                                       Style="{StaticResource DashboardListingScrollViewerStyle}"
                                       VerticalScrollBarVisibility="Auto"
-                                      Background="{DynamicResource WindowBackground}"
+                                      Background="Transparent"
                                       PreviewDragOver="DashboardScrollViewer_PreviewDragOver"
                                       PreviewDragLeave="DashboardScrollViewer_PreviewDragLeave"
                                       Drop="DashboardScrollViewer_Drop"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      Padding="8">
+                                      HorizontalScrollBarVisibility="Disabled">
                             <Grid Margin="0,0,0,32">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -4031,12 +4070,12 @@
 
                                 <Border x:Name="MindMapCalendarSectionContainer"
                                         Visibility="{Binding IsCalendarSectionVisible, Converter={StaticResource BoolToVis}}"
-                                        Background="{DynamicResource SidebarBackground}"
+                                        Background="{DynamicResource CardBackground}"
                                         BorderBrush="{DynamicResource BorderColor}"
                                         BorderThickness="0"
-                                        CornerRadius="14"
+                                        CornerRadius="{StaticResource Radius.Card}"
                                         Padding="12"
-                                        Margin="8,0,8,10"
+                                        Margin="0,0,0,14"
                                         RenderTransformOrigin="0.5,0.5">
                                     <Border.Effect>
                                         <DropShadowEffect Color="#000000" Opacity="0.08" BlurRadius="14" ShadowDepth="1" Direction="270"/>
@@ -4079,7 +4118,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsCalendarSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding [CalendarSection], Source={StaticResource Loc}}"
-                                                       FontSize="14"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
                                                        Margin="8,0,0,0"
@@ -4087,15 +4126,16 @@
                                         </Grid>
                                         <Grid x:Name="MindMapCalendarSectionBody" Margin="2,0,2,2" Height="220">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="210"/>
-                                                <ColumnDefinition Width="8"/>
+                                                <ColumnDefinition Width="214"/>
+                                                <ColumnDefinition Width="12"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <Border Grid.Column="0"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
                                                     BorderThickness="0"
-                                                    CornerRadius="12"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                     Padding="8">
                                                 <Calendar x:Name="MindMapDashboardCalendar"
                                                           Style="{StaticResource DashboardCalendarControlStyle}"
@@ -4104,10 +4144,11 @@
                                                           SelectedDatesChanged="DashboardCalendar_SelectedDatesChanged"/>
                                             </Border>
                                             <Border Grid.Column="2"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderBrush="{DynamicResource BorderColor}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
                                                     BorderThickness="0"
-                                                    CornerRadius="12"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
                                                     Padding="8"
                                                     ClipToBounds="True"
                                                     Height="220">
@@ -4172,7 +4213,7 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
                                                                                             BorderThickness="1"
-                                                                                            CornerRadius="8"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
                                                                                             Padding="6,2"
                                                                                             Margin="0,0,4,0"
                                                                                             VerticalAlignment="Center">
@@ -4181,12 +4222,12 @@
                                                                                     <Border Background="{DynamicResource SelectionBackground}"
                                                                                             BorderBrush="{DynamicResource BorderColor}"
                                                                                             BorderThickness="1"
-                                                                                            CornerRadius="8"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
                                                                                             Padding="8,2"
                                                                                             VerticalAlignment="Center">
                                                                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                                                             <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                                                                                         </StackPanel>
                                                                                     </Border>
                                                                                 </StackPanel>
@@ -4228,12 +4269,12 @@
                                 </Border>
 
                                 <Border x:Name="MindMapsDashboardContentHost"
-                                        Background="{DynamicResource SidebarBackground}"
+                                        Background="{DynamicResource CardBackground}"
                                         BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        CornerRadius="14"
-                                        Padding="18"
-                                        Margin="8,0,8,10">
+                                        BorderThickness="0"
+                                        CornerRadius="{StaticResource Radius.Card}"
+                                        Padding="14"
+                                        Margin="0,0,0,14">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Grid.Row" Value="1"/>
@@ -4340,7 +4381,7 @@
                                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsMindMapDashboardGroupsSectionExpanded}" />
                                                             <TextBlock Grid.Column="3"
                                                                        Text="{Binding [Groups], Source={StaticResource Loc}}"
-                                                                       FontSize="14"
+                                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{DynamicResource TextColor}"
                                                                        Margin="8,0,0,0"
@@ -4356,10 +4397,10 @@
                                                     <Border Style="{StaticResource GroupCardStyle}"
                     Background="{Binding BackgroundBrush}"
                     BorderBrush="{DynamicResource BorderColor}"
-                    BorderThickness="1"
-                    CornerRadius="12"
+                    BorderThickness="0"
+                    CornerRadius="{StaticResource Radius.Card}"
                     Padding="10"
-                    Margin="8,0,8,10"
+                    Margin="0,0,0,14"
                     AllowDrop="True"
                     PreviewDragOver="DashboardGroupBorder_PreviewDragOver"
                     PreviewDragLeave="DashboardGroupBorder_PreviewDragLeave"
@@ -4517,7 +4558,7 @@
                                                                                                 Width="24"
                                                                                                 Height="24"
                                                                                                 Margin="0,0,6,0"
-                                                                                                CornerRadius="12"
+                                                                                                CornerRadius="{StaticResource Radius.Card}"
                                                                                                 Background="{DynamicResource IconButtonBackground}"
                                                                                                 BorderBrush="{DynamicResource IconButtonBorder}"
                                                                                                 BorderThickness="1"
@@ -4532,7 +4573,7 @@
                                                                                             <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
                                                                                             <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
                                                                                             <TextBlock Text="{Binding Title}"
-                                                                                                       FontSize="14"
+                                                                                                       FontSize="{StaticResource Type.CardTitle}"
                                                                                                        FontWeight="SemiBold"
                                                                                                        Foreground="{DynamicResource TextColor}"
                                                                                                        TextTrimming="CharacterEllipsis"
@@ -4577,7 +4618,7 @@
                                                 Margin="0,0,0,10"
                                                 MinHeight="96"
                                                 Background="Transparent"
-                                                CornerRadius="16"
+                                                CornerRadius="{StaticResource Radius.Overlay}"
                                                 AllowDrop="True"
                                                 DragOver="DashboardUngroupedDropZone_DragOver"
                                                 DragLeave="DashboardUngroupedDropZone_DragLeave"
@@ -4621,7 +4662,7 @@
                                             behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsMindMapDashboardUngroupedSectionExpanded}" />
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding [UngroupedItems], Source={StaticResource Loc}}"
-                                                       FontSize="14"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
                                                        Margin="8,0,0,0"
@@ -4689,7 +4730,7 @@
                         <controls:CardShadowLayer Margin="9,5,9,-3"/>
                                                         <Border x:Name="MindMapCardBorder"
                                                                 Style="{StaticResource DashboardListingCardSelectionStyle}"
-                                                                CornerRadius="14"
+                                                                CornerRadius="{StaticResource Radius.Card}"
                                                                 Padding="16"
                                                                 RenderTransformOrigin="0.5,0.5">
                                                             <Border.RenderTransform>
@@ -4737,14 +4778,14 @@
 																			Background="{DynamicResource CardBackground}"
 																			BorderBrush="{DynamicResource BorderColor}"
 																			BorderThickness="1"
-																			CornerRadius="10"
+																			CornerRadius="{StaticResource Radius.Card}"
 																			Padding="12"
 																			MinWidth="360"
 																			MaxWidth="480"
 																			MaxHeight="360">
 																		<StackPanel>
 																			<TextBlock Text="{Binding Title}"
-																					   FontSize="14"
+																					   FontSize="{StaticResource Type.CardTitle}"
 																					   FontWeight="SemiBold"
 																					   Foreground="{DynamicResource TextColor}"
 																					   Margin="0,0,0,8"
@@ -4776,7 +4817,7 @@
                                                                             Width="24"
                                                                             Height="24"
                                                                             Margin="0,0,6,0"
-                                                                            CornerRadius="12"
+                                                                            CornerRadius="{StaticResource Radius.Card}"
                                                                             Background="{DynamicResource IconButtonBackground}"
                                                                             BorderBrush="{DynamicResource IconButtonBorder}"
                                                                             BorderThickness="1"
@@ -4825,7 +4866,7 @@
 																			Background="{DynamicResource WindowBackground}"
 																			BorderBrush="{DynamicResource BorderColor}"
 																			BorderThickness="1"
-																			CornerRadius="8"
+																			CornerRadius="{StaticResource Radius.Control}"
 													Padding="10,8"
 																			Margin="8,0,0,0"
 													MinHeight="82">
@@ -4888,7 +4929,7 @@
                                             Margin="0,32,0,0"
                                             Visibility="{Binding ShowMindMapsEmptyDashboard, Converter={StaticResource BoolToVis}}">
                                     <TextBlock Text="{Binding [MindMapsEmptyDashboardPrompt], Source={StaticResource Loc}}"
-                                               FontSize="18"
+                                               FontSize="{StaticResource Type.EmptyState}"
                                                FontStyle="Italic"
                                                Foreground="{DynamicResource TextColorSecondary}"
                                                HorizontalAlignment="Center"
@@ -4909,7 +4950,6 @@
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
                             Content="{icons:Icon Kind=Plus, Size=22}"
-                            Margin="0,0,28,24"
                             ToolTip="{Binding [CreateMindMap], Source={StaticResource Loc}}"
                             Click="CreateMindMapButton_Click"/>
                 </Grid>
@@ -4923,11 +4963,11 @@
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Margin="0,10,14,0"
-                    Background="{DynamicResource SidebarBackground}"
+                    Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderColor}"
                     BorderThickness="1"
                     Padding="6"
-                    CornerRadius="12"
+                    CornerRadius="{StaticResource Radius.Card}"
                     MaxWidth="620">
                 <Border.RenderTransform>
                     <TranslateTransform Y="-12"/>
@@ -4945,7 +4985,7 @@
                             Background="{DynamicResource CardBackground}"
                             BorderBrush="{DynamicResource BorderColor}"
                             BorderThickness="1"
-                            CornerRadius="10"
+                            CornerRadius="{StaticResource Radius.Card}"
                             Padding="8,5"
                             Margin="0,0,6,0"
                             VerticalAlignment="Center">
@@ -4959,7 +4999,7 @@
                             <StackPanel>
                                 <TextBlock Text="{Binding [MassSelectModeTitle], Source={StaticResource Loc}}"
                                            FontWeight="SemiBold"
-                                           FontSize="11"
+                                           FontSize="{StaticResource Type.Meta}"
                                            Foreground="{DynamicResource TextColor}"/>
                                 <TextBlock Text="{Binding MassSelectSelectionText}"
                                            Foreground="{DynamicResource TextColorSecondary}"
@@ -4972,7 +5012,7 @@
                         <Border Background="{DynamicResource CardBackground}"
                                 BorderBrush="{DynamicResource BorderColor}"
                                 BorderThickness="1"
-                                CornerRadius="10"
+                                CornerRadius="{StaticResource Radius.Card}"
                                 Padding="4,4,1,4"
                                 Margin="0,0,6,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -5002,7 +5042,7 @@
                                 Background="{DynamicResource CardBackground}"
                                 BorderBrush="{DynamicResource BorderColor}"
                                 BorderThickness="1"
-                                CornerRadius="10"
+                                CornerRadius="{StaticResource Radius.Card}"
                                 Visibility="Collapsed"
                                 Opacity="0"
                                 RenderTransformOrigin="0,0.5">
@@ -5053,6 +5093,8 @@
                 </Grid>
             </Border>
         </Grid>
+			</Border>
+		</Grid>
 
 		<Views:SettingsPanel x:Name="SettingsPanelControl"
 						 x:FieldModifier="public"

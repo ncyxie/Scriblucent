@@ -2,10 +2,14 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Window and Container Colors -->
-    <SolidColorBrush x:Key="WindowBackground" Color="#EBEBEF"/>
-    <SolidColorBrush x:Key="SidebarBackground" Color="#F3F3F3"/>
+    <SolidColorBrush x:Key="WindowBackground" Color="#F7F7FA"/>
+    <SolidColorBrush x:Key="SidebarBackground" Color="#ECECF1"/>
     <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="BorderColor" Color="#D9D9DF"/>
+    <SolidColorBrush x:Key="InputSurface" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="BorderColor" Color="#E0E0E6"/>
+    <!-- Shadow-first inputs: invisible rest edge in light; focus uses NoteCardSelectionBorder. -->
+    <SolidColorBrush x:Key="InputRestBorder" Color="#00000000"/>
+    <SolidColorBrush x:Key="SidebarSeparator" Color="#B4B4C0"/>
 
     <!-- Text Colors -->
     <SolidColorBrush x:Key="TextColor" Color="#1C1C1C"/>
@@ -23,8 +27,8 @@
     <SolidColorBrush x:Key="FlashcardCardHoverBackground" Color="#F8FAFF"/>
     <SolidColorBrush x:Key="FlashcardCardSelectedBackground" Color="#F2F6FF"/>
     <SolidColorBrush x:Key="FlashcardCardSelectedHoverBackground" Color="#EEF4FF"/>
-    <SolidColorBrush x:Key="FlashcardCardBorder" Color="#E1E5EC"/>
-    <SolidColorBrush x:Key="FlashcardCardHoverBorder" Color="#AFC1EA"/>
+    <SolidColorBrush x:Key="FlashcardCardBorder" Color="#C9D0DB"/>
+    <SolidColorBrush x:Key="FlashcardCardHoverBorder" Color="#A0B4E0"/>
     <SolidColorBrush x:Key="FlashcardCardSelectedBorder" Color="#3F6FE8"/>
     <SolidColorBrush x:Key="FlashcardSideChipBackground" Color="#F5F7FB"/>
     <SolidColorBrush x:Key="FlashcardSideChipBorder" Color="#DDE4F3"/>
@@ -43,18 +47,18 @@
     <SolidColorBrush x:Key="FlashcardNewChipForeground" Color="#485365"/>
 
     <!-- Button Colors -->
-    <SolidColorBrush x:Key="ButtonBackground" Color="#F5F7FB"/>
-    <SolidColorBrush x:Key="ButtonBorder" Color="#DDE4F3"/>
+    <SolidColorBrush x:Key="ButtonBackground" Color="#E4E8F2"/>
+    <SolidColorBrush x:Key="ButtonBorder" Color="#C5CDDC"/>
     <SolidColorBrush x:Key="ButtonForeground" Color="#2B3650"/>
-    <SolidColorBrush x:Key="ButtonHoverBackground" Color="#EAF0FD"/>
-    <SolidColorBrush x:Key="ButtonPressedBackground" Color="#DCE7FB"/>
+    <SolidColorBrush x:Key="ButtonHoverBackground" Color="#D7DEF0"/>
+    <SolidColorBrush x:Key="ButtonPressedBackground" Color="#C9D3E8"/>
 
     <!-- Icon Button Colors -->
-    <SolidColorBrush x:Key="IconButtonBackground" Color="#F5F7FB"/>
-    <SolidColorBrush x:Key="IconButtonBorder" Color="#DDE4F3"/>
+    <SolidColorBrush x:Key="IconButtonBackground" Color="#E4E8F2"/>
+    <SolidColorBrush x:Key="IconButtonBorder" Color="#C5CDDC"/>
     <SolidColorBrush x:Key="IconButtonForeground" Color="#2B3650"/>
-    <SolidColorBrush x:Key="IconButtonHoverBackground" Color="#EAF0FD"/>
-    <SolidColorBrush x:Key="IconButtonPressedBackground" Color="#DCE7FB"/>
+    <SolidColorBrush x:Key="IconButtonHoverBackground" Color="#D7DEF0"/>
+    <SolidColorBrush x:Key="IconButtonPressedBackground" Color="#C9D3E8"/>
     <SolidColorBrush x:Key="EditorToolActiveBackground" Color="#EAF2FF"/>
     <SolidColorBrush x:Key="EditorToolActiveBorder" Color="#8FB1FF"/>
     <SolidColorBrush x:Key="EditorToolActiveForeground" Color="#1F4EA8"/>
@@ -69,6 +73,8 @@
     <!-- Selection/Hover Colors -->
     <SolidColorBrush x:Key="SelectionBackground" Color="#F5F5F8"/>
     <SolidColorBrush x:Key="HoverBackground" Color="#FAFBFC"/>
+    <SolidColorBrush x:Key="DropdownItemHoverBackground" Color="#E8EEFF"/>
+    <SolidColorBrush x:Key="DropdownItemHoverBorder" Color="#C5D4F5"/>
 
     <!-- Scrollbar Colors -->
     <SolidColorBrush x:Key="ScrollBarTrackBackground" Color="#EBEBEF"/>

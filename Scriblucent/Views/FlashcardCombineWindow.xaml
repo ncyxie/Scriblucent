@@ -19,47 +19,14 @@
             <Setter Property="Margin" Value="0,0,8,8"/>
         </Style>
 
-        <Style x:Key="CombinePanelStyle" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="12"/>
+        <Style x:Key="CombinePanelStyle" TargetType="Border" BasedOn="{StaticResource ChromePanelBorderStyle}">
             <Setter Property="Padding" Value="14"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
 
-        <Style x:Key="CombineTextBoxStyle" TargetType="{x:Type TextBox}">
+        <Style x:Key="CombineTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="MinHeight" Value="34"/>
             <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type TextBox}">
-                        <Border x:Name="TextBoxBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="TextBoxBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style x:Key="CombineOptionCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
@@ -70,18 +37,19 @@
 
         <Style x:Key="CombineItemBorderStyle" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Control}"/>
             <Setter Property="Padding" Value="12"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Effect" Value="{StaticResource ChromeFieldShadow}"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
                 </Trigger>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
                     <Setter Property="BorderThickness" Value="2"/>
                 </DataTrigger>
@@ -98,11 +66,8 @@
 
         <Border Grid.Row="0"
                 Margin="14,14,14,10"
-                Padding="14"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="12">
+                Style="{StaticResource ChromePanelBorderStyle}"
+                Padding="14">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -302,9 +267,8 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="{DynamicResource HoverBackground}"
-                                                BorderBrush="{DynamicResource BorderColor}"
-                                                BorderThickness="1"
-                                                CornerRadius="8"
+                                                BorderThickness="0"
+                                                CornerRadius="{StaticResource Radius.Control}"
                                                 Padding="10"
                                                 Margin="0,0,0,8"
                                                 Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
@@ -374,11 +338,8 @@
 
         <Border Grid.Row="2"
                 Margin="14,0,14,14"
-                Padding="12"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
-                CornerRadius="12">
+                Style="{StaticResource ChromePanelBorderStyle}"
+                Padding="12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

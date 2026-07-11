@@ -11,11 +11,11 @@
              d:DesignWidth="960">
     <UserControl.Resources>
         <Style x:Key="AuthorLineStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="Opacity" Value="0.86"/>
             <Setter Property="Margin" Value="0,5,0,0"/>
-            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
         </Style>
 
         <Style x:Key="AboutCloseIconButtonStyle" TargetType="Button">
@@ -39,7 +39,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -60,10 +60,9 @@
     </UserControl.Resources>
 
     <Grid x:Name="OverlayRoot">
-        <Viewbox x:Name="ScrimViewbox"
-                 Stretch="Fill"
-                 RenderOptions.BitmapScalingMode="Linear">
-            <Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
                 <Image x:Name="BackdropSnapshot"
                        Stretch="Fill"
                        Visibility="Collapsed"
@@ -71,8 +70,7 @@
                 <Rectangle x:Name="OverlayDim"
                            Fill="#66000000"
                            MouseDown="OverlayDim_MouseDown"/>
-            </Grid>
-        </Viewbox>
+        </Grid>
         <Border x:Name="PanelMotionHost"
                 Margin="20"
                 HorizontalAlignment="Center"
@@ -84,7 +82,7 @@
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderColor}"
                     BorderThickness="1"
-                    CornerRadius="16"
+                    CornerRadius="{StaticResource Radius.Overlay}"
                     Width="Auto"
                     MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
                     MaxWidth="500">
@@ -144,13 +142,13 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"
                                        HorizontalAlignment="Center"
-                                       FontFamily="Segoe UI, sans-serif"/>
+                                       FontFamily="{StaticResource FontFamily.UI}"/>
                             <TextBlock Text="{x:Static services:AppVersionInfo.DisplayVersion}"
                                        FontSize="11"
                                        Foreground="{DynamicResource TextColorSecondary}"
                                        HorizontalAlignment="Center"
                                        Margin="0,4,0,0"
-                                       FontFamily="Segoe UI, sans-serif"/>
+                                       FontFamily="{StaticResource FontFamily.UI}"/>
                         </StackPanel>
                     </Border>
 
@@ -162,7 +160,7 @@
                                    Foreground="{DynamicResource TextColor}"
                                    Opacity="0.86"
                                    Margin="0,0,0,10"
-                                   FontFamily="Segoe UI, sans-serif"/>
+                                   FontFamily="{StaticResource FontFamily.UI}"/>
 
                         <Separator Background="{DynamicResource BorderColor}" Margin="0,0,0,10"/>
 
@@ -171,7 +169,7 @@
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource TextColorSecondary}"
                                    Margin="0,0,0,6"
-                                   FontFamily="Segoe UI, sans-serif"/>
+                                   FontFamily="{StaticResource FontFamily.UI}"/>
 
                         <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Mantas Gaižutis"/>
                         <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Jaunius Pigaga"/>

@@ -47,7 +47,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -78,7 +78,8 @@
         <controls:CardShadowLayer/>
         <Border x:Name="CardBorder"
             behaviors:MassSelectHighlightBehavior.IsEnabled="True"
-            CornerRadius="12"
+            behaviors:RoundedClipBehavior.IsEnabled="True"
+            CornerRadius="{StaticResource Radius.Card}"
             Padding="14">
         <Border.Style>
             <Style TargetType="Border">
@@ -96,7 +97,7 @@
             <Border x:Name="DragDimOverlay"
                     Background="#000000"
                     Opacity="0.82"
-                    CornerRadius="12"
+                    CornerRadius="{StaticResource Radius.Card}"
                     Grid.RowSpan="3"
                     Margin="-14"
                     Panel.ZIndex="45"
@@ -106,7 +107,7 @@
                     Background="Transparent"
                     BorderBrush="#5B7FED"
                     BorderThickness="0"
-                    CornerRadius="12"
+                    CornerRadius="{StaticResource Radius.Card}"
                     Opacity="0"
                     Grid.RowSpan="3"
                     Margin="-14"
@@ -124,7 +125,7 @@
                     <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource NoteCardTitle}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
                     <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="14" Height="14" Foreground="{DynamicResource NoteCardTitle}" Margin="0,0,6,0" ToolTip="{Binding Document.ScheduledAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"/>
                     <TextBlock Text="{Binding Title}"
-                               FontSize="15" FontWeight="SemiBold"
+                               FontSize="{StaticResource Type.CardTitle}" FontWeight="SemiBold"
                                Foreground="{DynamicResource NoteCardTitle}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
@@ -151,7 +152,7 @@
                                         <Border Background="{TemplateBinding Background}"
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="10"
+                                                CornerRadius="{StaticResource Radius.Card}"
                                                 Padding="4"
                                                 ClipToBounds="False">
                                             <Border.Effect>
@@ -201,7 +202,7 @@
             </Grid>
             <TextBlock x:Name="ContentPreview"
                        Grid.Row="1"
-                       FontSize="13" TextWrapping="Wrap"
+                       FontSize="{StaticResource Type.Body}" TextWrapping="Wrap"
                        MaxHeight="100"
                        TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource TextColor}"/>

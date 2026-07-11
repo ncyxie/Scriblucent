@@ -1,6 +1,8 @@
 <Window x:Class="Scriblucent.Views.EditFlashcardDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [EditFlashcard], Source={StaticResource Loc}}"
         Height="560"
@@ -61,7 +63,7 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsHighlighted" Value="True">
-                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
                                     <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
@@ -86,8 +88,8 @@
                 <Setter Property="Padding" Value="12,0"/>
                 <Setter Property="FontSize" Value="14"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-                <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -99,16 +101,19 @@
                                         Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                        CornerRadius="10"
-                                        SnapsToDevicePixels="True"/>
+                                        CornerRadius="{StaticResource Radius.Control}"
+                                        SnapsToDevicePixels="True">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
+                                    </Border.Effect>
+                                </Border>
 
                                 <TextBox x:Name="PART_EditableTextBox"
+                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
                                          Margin="12,0,38,0"
                                          Padding="0"
                                          Background="Transparent"
-                                         BorderThickness="0"
                                          Foreground="{TemplateBinding Foreground}"
-                                         CaretBrush="{DynamicResource TextColor}"
                                          FontSize="{TemplateBinding FontSize}"
                                          VerticalContentAlignment="Center"
                                          HorizontalContentAlignment="Left"
@@ -130,22 +135,31 @@
                                        AllowsTransparency="True"
                                        Focusable="False"
                                        PopupAnimation="None">
-                                    <Border Margin="0,6,0,0"
-                                            MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                            MaxHeight="180"
-                                            Background="{DynamicResource CardBackground}"
-                                            BorderBrush="{DynamicResource BorderColor}"
-                                            BorderThickness="1"
-                                            CornerRadius="10"
-                                            Padding="4">
-                                        <Border.Effect>
-                                            <DropShadowEffect Color="#000000" Opacity="0.18" BlurRadius="18" ShadowDepth="3" Direction="270"/>
-                                        </Border.Effect>
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                                      HorizontalScrollBarVisibility="Disabled">
-                                            <ItemsPresenter/>
-                                        </ScrollViewer>
-                                    </Border>
+                                    <Grid Margin="0,6,8,8"
+                                          MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                          MaxHeight="180">
+                                                                                <Border Margin="2,3,2,0"
+                                                Background="#000000"
+                                                Opacity="0.18"
+                                                CornerRadius="{StaticResource Radius.Control}"
+                                                IsHitTestVisible="False">
+                                            <Border.Effect>
+                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
+                                            </Border.Effect>
+                                        </Border>
+                                        <Border Background="{DynamicResource CardBackground}"
+                                                BorderBrush="{DynamicResource BorderColor}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource Radius.Control}"
+                                                Padding="4"
+                                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                SnapsToDevicePixels="True">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                          HorizontalScrollBarVisibility="Disabled">
+                                                <ItemsPresenter/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Grid>
                                 </Popup>
                             </Grid>
                             <ControlTemplate.Triggers>
@@ -178,19 +192,16 @@
                 <Setter Property="MinWidth" Value="110"/>
             </Style>
         </Grid.Resources>
-
-        <Viewbox x:Name="ScrimViewbox"
-                 Stretch="Fill"
-                 RenderOptions.BitmapScalingMode="Linear">
-            <Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
                 <Image x:Name="BackdropSnapshot"
                        Stretch="Fill"
                        Visibility="Collapsed"
                        IsHitTestVisible="False"/>
                 <Rectangle x:Name="OverlayDim"
                            Fill="#66000000"/>
-            </Grid>
-        </Viewbox>
+        </Grid>
         <Border x:Name="PanelMotionHost"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"

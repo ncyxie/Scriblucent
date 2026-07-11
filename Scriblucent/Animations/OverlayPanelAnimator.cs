@@ -286,20 +286,12 @@ public sealed class OverlayPanelAnimator
 
     private void ConfigureScrim(BitmapSource? snapshot)
     {
-        if (snapshot != null)
-        {
-            _scrimHost.Width = snapshot.PixelWidth;
-            _scrimHost.Height = snapshot.PixelHeight;
-            return;
-        }
-
-        var window = Window.GetWindow(_host);
-        var (width, height) = OverlayBackdropCapture.GetScrimLogicalSize(
-            window?.ActualWidth ?? 1280,
-            window?.ActualHeight ?? 720);
-
-        _scrimHost.Width = width;
-        _scrimHost.Height = height;
+        // Scrim fills the overlay host 1:1 — never pin Width/Height to bitmap pixels
+        // (that forced Viewbox Stretch=Fill to zoom/shift the backdrop).
+        _scrimHost.ClearValue(FrameworkElement.WidthProperty);
+        _scrimHost.ClearValue(FrameworkElement.HeightProperty);
+        _scrimHost.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _scrimHost.VerticalAlignment = VerticalAlignment.Stretch;
     }
 
     private void InstallBackdrop(BitmapSource? snapshot)

@@ -67,7 +67,7 @@
                                FontSize="12"
                                Foreground="#333333"
                                TextWrapping="Wrap"
-                               FontFamily="Segoe UI"/>
+                               FontFamily="{StaticResource FontFamily.UI}"/>
                 </StackPanel>
             </Border>
         </ScrollViewer>

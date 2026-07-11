@@ -9,7 +9,7 @@
         MinHeight="520"
         MinWidth="760"
         WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource WindowBackground}"
+        Background="{DynamicResource SidebarBackground}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
@@ -21,7 +21,7 @@
             <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ButtonBorder"/>
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
             <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
             <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
@@ -37,7 +37,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                               Margin="0"
@@ -80,7 +80,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                               Margin="0"
@@ -120,7 +120,7 @@
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
+                                CornerRadius="{StaticResource Radius.Control}"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost"/>
                         </Border>
@@ -130,6 +130,8 @@
         </Style>
 
         <Style x:Key="EditorPrimarySaveButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorToolButtonBaseStyle}">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Focusable" Value="True"/>
             <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="SaveButtonBorder"/>
             <Setter Property="Width" Value="38"/>
             <Setter Property="Height" Value="32"/>
@@ -145,7 +147,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"/>
@@ -156,6 +158,10 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="SaveButtonBorder" Property="Background" Value="#294CB2"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="SaveButtonBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
+                                <Setter TargetName="SaveButtonBorder" Property="BorderThickness" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.55"/>
@@ -185,8 +191,11 @@
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="8"
+                    CornerRadius="{StaticResource Radius.Control}"
                     Padding="{TemplateBinding Padding}">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
+                </Border.Effect>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -211,9 +220,9 @@
         </ControlTemplate>
 
         <Style x:Key="EditorFontComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Height" Value="32"/>
@@ -244,15 +253,29 @@
                                    AllowsTransparency="True"
                                    Focusable="False"
                                    PopupAnimation="None">
-                                <Border Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        MinWidth="{TemplateBinding ActualWidth}">
-                                    <ScrollViewer MaxHeight="180">
-                                        <ItemsPresenter/>
-                                    </ScrollViewer>
-                                </Border>
+                                <Grid Margin="0,4,8,8"
+                                      MinWidth="{TemplateBinding ActualWidth}">
+                                    <Border Margin="2,3,2,0"
+                                            Background="#000000"
+                                            Opacity="0.18"
+                                            CornerRadius="{StaticResource Radius.Control}"
+                                            IsHitTestVisible="False">
+                                        <Border.Effect>
+                                            <BlurEffect Radius="12" KernelType="Gaussian"/>
+                                        </Border.Effect>
+                                    </Border>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource BorderColor}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Control}"
+                                            behaviors:RoundedClipBehavior.IsEnabled="True"
+                                            SnapsToDevicePixels="True">
+                                        <ScrollViewer Style="{StaticResource PopupListScrollViewerStyle}"
+                                                      MaxHeight="180">
+                                            <ItemsPresenter/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
                             </Popup>
                         </Grid>
                     </ControlTemplate>
@@ -276,7 +299,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
@@ -287,7 +310,21 @@
             </Setter>
         </Style>
     </Window.Resources>
-    <Grid x:Name="RootGrid">
+    <Grid Margin="10">
+    <Border CornerRadius="{StaticResource Radius.Overlay}"
+            Background="{DynamicResource WindowBackground}"
+            Margin="1"
+            IsHitTestVisible="False">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="20" ShadowDepth="0"/>
+        </Border.Effect>
+    </Border>
+    <Border CornerRadius="{StaticResource Radius.Overlay}"
+            Background="{DynamicResource WindowBackground}"
+            behaviors:RoundedClipBehavior.IsEnabled="True"
+            ClipToBounds="True"
+            SnapsToDevicePixels="True">
+<Grid x:Name="RootGrid">
         <Grid.RenderTransform>
             <TranslateTransform Y="12"/>
         </Grid.RenderTransform>
@@ -305,10 +342,9 @@
 
         <Border Grid.Row="0"
                 Grid.ColumnSpan="2"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="0,0,0,1"
-                Padding="16,12,14,12">
+                Background="Transparent"
+                BorderThickness="0"
+                Padding="20,12,20,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MinWidth="260"/>
@@ -334,12 +370,7 @@
                 <Border Grid.Column="0"
                         Grid.Row="1"
                         Margin="0,0,14,0"
-                        Background="{DynamicResource CardBackground}"
-                        BorderBrush="{DynamicResource BorderColor}"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        MinHeight="36"
-                        Padding="12,5">
+                        Style="{StaticResource ChromeTitleFieldBorderStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -347,10 +378,9 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="TitleTextBox"
                                  Grid.Column="0"
+                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
                                  FontSize="19"
                                  FontWeight="SemiBold"
-                                 BorderThickness="0"
-                                 Background="Transparent"
                                  Foreground="{DynamicResource TextColor}"
                                  CaretBrush="{DynamicResource TextColor}"
                                  VerticalAlignment="Center"
@@ -438,12 +468,9 @@
 
         <Border Grid.Row="1"
                 Grid.Column="0"
-                Margin="20,10,20,0"
-                Padding="12,7"
-                CornerRadius="8"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1">
+                Margin="20,8,20,0"
+                Style="{StaticResource ChromeFieldBorderStyle}"
+                Padding="10,4">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -451,14 +478,12 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding [Tags], Source={StaticResource Loc}}"
                            VerticalAlignment="Center"
-                           Margin="0,0,12,0"
+                           Margin="0,0,10,0"
                            Foreground="{DynamicResource TextColor}"
                            FontWeight="SemiBold"/>
                 <TextBox x:Name="TagsTextBox"
                          Grid.Column="1"
-                         BorderThickness="0"
-                         Background="Transparent"
-                         VerticalContentAlignment="Center"
+                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
                          Foreground="{DynamicResource TextColor}"
                          CaretBrush="{DynamicResource TextColor}"
                          TextChanged="EditorField_TextChanged"
@@ -469,12 +494,9 @@
         <Border x:Name="FontPanel"
                 Grid.Row="2"
                 Grid.Column="0"
-                Margin="20,10,20,0"
-                Padding="12,7"
-                CornerRadius="8"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
+                Margin="20,8,20,0"
+                Style="{StaticResource ChromeFieldBorderStyle}"
+                Padding="10,4"
                 Opacity="0"
                 Visibility="Collapsed">
             <Border.RenderTransform>
@@ -691,20 +713,22 @@
               Margin="20,10,20,8">
             <!-- Shadow sits on a sibling so the RichTextBox is not rasterized through an Effect
                  (DropShadow on an ancestor disables ClearType and softens text/emojis). -->
-            <Border CornerRadius="10"
+            <Border CornerRadius="{StaticResource Radius.Card}"
                     Background="{DynamicResource CardBackground}"
                     IsHitTestVisible="False">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.06"/>
                 </Border.Effect>
             </Border>
-            <Border CornerRadius="10"
+            <Border CornerRadius="{StaticResource Radius.Card}"
                     Padding="2"
                     BorderBrush="{DynamicResource BorderColor}"
-                    BorderThickness="1"
-                    Background="{DynamicResource CardBackground}">
-                <Border CornerRadius="8"
-                        Background="{DynamicResource RichTextBoxBackground}">
+                    BorderThickness="0"
+                    Background="{DynamicResource CardBackground}"
+                    behaviors:RoundedClipBehavior.IsEnabled="True">
+                <Border CornerRadius="{StaticResource Radius.Control}"
+                        Background="{DynamicResource RichTextBoxBackground}"
+                        behaviors:RoundedClipBehavior.IsEnabled="True">
                     <Grid x:Name="EditorSurface"
                           ClipToBounds="True">
                         <RichTextBox x:Name="ContentTextBox"
@@ -719,7 +743,7 @@
                                      Margin="0"
                                      Padding="18,16"
                                      FontSize="14"
-                                     FontFamily="Calibri, Segoe UI Symbol"
+                                     FontFamily="{StaticResource FontFamily.Editor}"
                                      AcceptsReturn="True"
                                      AcceptsTab="True"
                                      KeyboardNavigation.TabNavigation="None"
@@ -758,11 +782,9 @@
         <Border Grid.Row="4"
                 Grid.Column="0"
                 Margin="20,0,20,12"
+                Style="{StaticResource ChromePanelBorderStyle}"
                 Padding="10,7"
-                CornerRadius="8"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1">
+                CornerRadius="{StaticResource Radius.Control}">
             <TextBlock x:Name="CounterText"
                        Text=""
                        FontSize="12"
@@ -774,11 +796,9 @@
                 Grid.Column="1"
                 Grid.RowSpan="3"
                 Margin="0,10,20,20"
+                Style="{StaticResource ChromePanelBorderStyle}"
                 Padding="7"
-                CornerRadius="8"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
+                CornerRadius="{StaticResource Radius.Control}"
                 VerticalAlignment="Top">
             <ScrollViewer VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
@@ -853,5 +873,8 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
+
     </Grid>
+    </Border>
+</Grid>
 </Window>

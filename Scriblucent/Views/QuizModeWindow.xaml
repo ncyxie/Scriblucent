@@ -2,18 +2,33 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         Title="{Binding [QuizModeTitle], Source={StaticResource Loc}}"
         Height="650"
         Width="800"
         WindowStartupLocation="CenterOwner"
         WindowState="Maximized"
-        Background="{DynamicResource WindowBackground}"
+        Background="{DynamicResource SidebarBackground}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         PreviewKeyDown="QuizModeWindow_PreviewKeyDown">
-    <Grid x:Name="ContentRoot">
+    <Grid Margin="10">
+    <Border CornerRadius="{StaticResource Radius.Overlay}"
+            Background="{DynamicResource WindowBackground}"
+            Margin="1"
+            IsHitTestVisible="False">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="20" ShadowDepth="0"/>
+        </Border.Effect>
+    </Border>
+    <Border CornerRadius="{StaticResource Radius.Overlay}"
+            Background="{DynamicResource WindowBackground}"
+            ClipToBounds="True"
+            SnapsToDevicePixels="True"
+            behaviors:RoundedClipBehavior.IsEnabled="True">
+<Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -22,9 +37,8 @@
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="0,0,0,1"
+                Background="Transparent"
+                BorderThickness="0"
                 Padding="20,16">
             <Grid>
                 <TextBlock x:Name="ProgressText"
@@ -44,10 +58,9 @@
         <!-- Question Area -->
         <Border Grid.Row="1"
                 x:Name="QuestionView"
-                Background="{DynamicResource CardBackground}"
+                Style="{StaticResource ChromePanelBorderStyle}"
                 Margin="20,16"
-                Padding="20"
-                CornerRadius="12">
+                Padding="20">
             <StackPanel>
 				<!-- Question Type Indicator -->
                 <StackPanel x:Name="QuestionTypeIndicator"
@@ -106,7 +119,7 @@
             Background="#FFF9E6"
             BorderBrush="#F59E0B"
             BorderThickness="1"
-            CornerRadius="8"
+            CornerRadius="{StaticResource Radius.Control}"
             Padding="12,10"
             Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal">
@@ -133,15 +146,15 @@
                 Background="{DynamicResource CardBackground}"
                 Margin="20,16"
                 Padding="20"
-                CornerRadius="12"
+                CornerRadius="{StaticResource Radius.Card}"
                 Visibility="Collapsed">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- Score Summary -->
                     <Border Background="{DynamicResource CardBackground}"
                             BorderBrush="{DynamicResource BorderColor}"
-                            BorderThickness="1"
-                            CornerRadius="10"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Card}"
                             Padding="20"
                             Margin="0,0,0,20">
                         <StackPanel HorizontalAlignment="Center">
@@ -178,9 +191,8 @@
 
         <!-- Navigation -->
         <Border Grid.Row="2"
-                Background="{DynamicResource CardBackground}"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="0,1,0,0"
+                Background="Transparent"
+                BorderThickness="0"
                 Padding="20,16">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -325,5 +337,8 @@
             <Border Width="12" Height="4" CornerRadius="1" Background="#FBBF24" Opacity="0" IsHitTestVisible="False"><Border.RenderTransform><TransformGroup><RotateTransform/><TranslateTransform/></TransformGroup></Border.RenderTransform></Border>
             <Border Width="9" Height="9" CornerRadius="2" Background="#0EA5E9" Opacity="0" IsHitTestVisible="False"><Border.RenderTransform><TransformGroup><RotateTransform/><TranslateTransform/></TransformGroup></Border.RenderTransform></Border>
         </Canvas>
+
+    </Grid>
+    </Border>
 </Grid>
 </Window>

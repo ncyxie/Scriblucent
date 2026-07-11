@@ -7,23 +7,21 @@ using System.Windows.Media.Imaging;
 namespace Scriblucent.Animations;
 
 /// <summary>
-/// Captures a downscaled, pre-blurred snapshot for overlay scrims. The reduced resolution is scaled up
-/// by the overlay viewbox so dim fades stay smooth on fullscreen windows.
+/// Captures a pre-blurred snapshot for overlay scrims at true 1:1 DIP size
+/// (pixel size = DIPs × DPI scale), so the backdrop never looks zoomed.
 /// </summary>
 public static class OverlayBackdropCapture
 {
-    private const int MaxCaptureWidth = 1280;
-    private const int MaxCaptureHeight = 720;
-    private const double BlurMin = 8;
-    private const double BlurMax = 20;
+    private const double BlurMin = 6;
+    private const double BlurMax = 14;
     private const int OverlayZIndexThreshold = 200;
 
     public static BitmapSource? TryCaptureForDimAnimation(Window? window)
         => TryCaptureForDimAnimation(window, GetBlurRadius(window));
 
     /// <summary>
-    /// Captures only the window content behind modal overlays (ZIndex &lt; 200).
-    /// Used while an overlay stays visible so the scrim can swap without hiding the panel.
+    /// Captures window content with modal overlays (ZIndex &gt;= 200) temporarily hidden,
+    /// so the scrim matches the real layout 1:1 — including the sidebar/content gap.
     /// </summary>
     public static BitmapSource? TryCaptureBehindOverlays(Window? window)
         => TryCaptureBehindOverlays(window, GetBlurRadius(window));
@@ -33,37 +31,33 @@ public static class OverlayBackdropCapture
         if (window?.Content is not Panel rootPanel)
             return TryCaptureForDimAnimation(window, blurRadius);
 
+        var hidden = new List<(UIElement Element, Visibility Visibility)>();
         try
         {
+            foreach (UIElement child in rootPanel.Children)
+            {
+                if (child is not FrameworkElement element)
+                    continue;
+                if (Panel.GetZIndex(element) < OverlayZIndexThreshold)
+                    continue;
+                if (element.Visibility != Visibility.Visible)
+                    continue;
+
+                hidden.Add((element, element.Visibility));
+                element.Visibility = Visibility.Hidden;
+            }
+
             rootPanel.UpdateLayout();
-
-            var sourceWidth = rootPanel.RenderSize.Width;
-            var sourceHeight = rootPanel.RenderSize.Height;
-            if (sourceWidth < 1 || sourceHeight < 1)
-                return null;
-
-            var (targetWidth, targetHeight) = GetScrimLogicalSize(sourceWidth, sourceHeight);
-            var dpi = VisualTreeHelper.GetDpi(rootPanel);
-
-            var captured = RenderPanelContentBehindOverlays(
-                window,
-                rootPanel,
-                sourceWidth,
-                sourceHeight,
-                targetWidth,
-                targetHeight,
-                dpi);
-
-            if (captured == null)
-                return null;
-
-            return blurRadius > 0.5
-                ? ApplyBlur(captured, blurRadius, dpi)
-                : captured;
+            return TryCaptureForDimAnimation(window, blurRadius);
         }
         catch
         {
             return null;
+        }
+        finally
+        {
+            foreach (var (element, visibility) in hidden)
+                element.Visibility = visibility;
         }
     }
 
@@ -81,14 +75,8 @@ public static class OverlayBackdropCapture
             if (sourceWidth < 1 || sourceHeight < 1)
                 return null;
 
-            var (targetWidth, targetHeight) = GetScrimLogicalSize(sourceWidth, sourceHeight);
             var dpi = VisualTreeHelper.GetDpi(root);
-
-            var needsDownscale = targetWidth < sourceWidth - 0.5 || targetHeight < sourceHeight - 0.5;
-            var captured = needsDownscale
-                ? RenderDownscaled(root, sourceWidth, sourceHeight, targetWidth, targetHeight, dpi)
-                : RenderDirect(root, targetWidth, targetHeight, dpi);
-
+            var captured = RenderAtDpi(root, sourceWidth, sourceHeight, dpi);
             if (captured == null)
                 return null;
 
@@ -103,68 +91,26 @@ public static class OverlayBackdropCapture
     }
 
     public static (int Width, int Height) GetScrimLogicalSize(double windowWidth, double windowHeight)
-        => GetCaptureSize(windowWidth, windowHeight);
+        => (
+            Math.Max(1, (int)Math.Ceiling(windowWidth)),
+            Math.Max(1, (int)Math.Ceiling(windowHeight)));
 
     public static double GetBlurRadius(Window? window)
     {
         var height = window?.ActualHeight ?? 720;
-        return Math.Clamp(height / 72.0, BlurMin, BlurMax);
+        return Math.Clamp(height / 90.0, BlurMin, BlurMax);
     }
 
-    private static BitmapSource? RenderPanelContentBehindOverlays(
-        Window window,
-        Panel rootPanel,
-        double sourceWidth,
-        double sourceHeight,
-        int targetWidth,
-        int targetHeight,
-        DpiScale dpi)
+    private static BitmapSource RenderAtDpi(Visual root, double dipWidth, double dipHeight, DpiScale dpi)
     {
-        var drawingVisual = new DrawingVisual();
-        using (var drawingContext = drawingVisual.RenderOpen())
-        {
-            if (window.Background is Brush windowBackground)
-                drawingContext.DrawRectangle(windowBackground, null, new Rect(0, 0, sourceWidth, sourceHeight));
+        var scaleX = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
+        var scaleY = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
+        var pixelWidth = Math.Max(1, (int)Math.Ceiling(dipWidth * scaleX));
+        var pixelHeight = Math.Max(1, (int)Math.Ceiling(dipHeight * scaleY));
 
-            foreach (UIElement child in rootPanel.Children)
-            {
-                if (child is not FrameworkElement element)
-                    continue;
-
-                if (Panel.GetZIndex(element) >= OverlayZIndexThreshold
-                    || element.Visibility != Visibility.Visible)
-                    continue;
-
-                if (element.ActualWidth < 1 || element.ActualHeight < 1)
-                    continue;
-
-                var topLeft = element.TransformToAncestor(rootPanel).Transform(new Point(0, 0));
-                drawingContext.DrawRectangle(
-                    new VisualBrush(element)
-                    {
-                        Stretch = Stretch.None,
-                        AlignmentX = AlignmentX.Left,
-                        AlignmentY = AlignmentY.Top,
-                        Viewbox = new Rect(0, 0, element.ActualWidth, element.ActualHeight),
-                        ViewboxUnits = BrushMappingMode.Absolute
-                    },
-                    null,
-                    new Rect(topLeft.X, topLeft.Y, element.ActualWidth, element.ActualHeight));
-            }
-        }
-
-        var needsDownscale = targetWidth < sourceWidth - 0.5 || targetHeight < sourceHeight - 0.5;
-        if (!needsDownscale)
-            return RenderDirect(drawingVisual, targetWidth, targetHeight, dpi);
-
-        return RenderDownscaled(drawingVisual, sourceWidth, sourceHeight, targetWidth, targetHeight, dpi);
-    }
-
-    private static BitmapSource RenderDirect(Visual root, int width, int height, DpiScale dpi)
-    {
         var bitmap = new RenderTargetBitmap(
-            width,
-            height,
+            pixelWidth,
+            pixelHeight,
             dpi.PixelsPerInchX,
             dpi.PixelsPerInchY,
             PixelFormats.Pbgra32);
@@ -174,72 +120,20 @@ public static class OverlayBackdropCapture
         return bitmap;
     }
 
-    private static BitmapSource? RenderDownscaled(
-        Visual root,
-        double sourceWidth,
-        double sourceHeight,
-        int targetWidth,
-        int targetHeight,
-        DpiScale dpi)
-    {
-        var previousScalingMode = BitmapScalingMode.Unspecified;
-        if (root is DependencyObject dependencyRoot)
-            previousScalingMode = RenderOptions.GetBitmapScalingMode(dependencyRoot);
-
-        try
-        {
-            if (root is DependencyObject dependencyObject)
-                RenderOptions.SetBitmapScalingMode(dependencyObject, BitmapScalingMode.Linear);
-
-            var drawingVisual = new DrawingVisual();
-            RenderOptions.SetBitmapScalingMode(drawingVisual, BitmapScalingMode.Linear);
-            using (var drawingContext = drawingVisual.RenderOpen())
-            {
-                drawingContext.DrawRectangle(
-                    new VisualBrush(root)
-                    {
-                        Stretch = Stretch.Fill,
-                        Viewbox = new Rect(0, 0, sourceWidth, sourceHeight),
-                        ViewboxUnits = BrushMappingMode.Absolute
-                    },
-                    null,
-                    new Rect(0, 0, targetWidth, targetHeight));
-            }
-
-            var bitmap = new RenderTargetBitmap(
-                targetWidth,
-                targetHeight,
-                dpi.PixelsPerInchX,
-                dpi.PixelsPerInchY,
-                PixelFormats.Pbgra32);
-
-            bitmap.Render(drawingVisual);
-            bitmap.Freeze();
-            return bitmap;
-        }
-        catch
-        {
-            return null;
-        }
-        finally
-        {
-            if (root is DependencyObject restoreRoot)
-                RenderOptions.SetBitmapScalingMode(restoreRoot, previousScalingMode);
-        }
-    }
-
     private static BitmapSource? ApplyBlur(BitmapSource source, double radius, DpiScale dpi)
     {
         try
         {
-            var width = source.PixelWidth;
-            var height = source.PixelHeight;
+            var scaleX = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
+            var scaleY = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
+            var dipWidth = source.PixelWidth / scaleX;
+            var dipHeight = source.PixelHeight / scaleY;
 
             var image = new Image
             {
                 Source = source,
-                Width = width,
-                Height = height,
+                Width = dipWidth,
+                Height = dipHeight,
                 Stretch = Stretch.Fill,
                 Effect = new BlurEffect
                 {
@@ -248,13 +142,13 @@ public static class OverlayBackdropCapture
                 }
             };
 
-            image.Measure(new Size(width, height));
-            image.Arrange(new Rect(0, 0, width, height));
+            image.Measure(new Size(dipWidth, dipHeight));
+            image.Arrange(new Rect(0, 0, dipWidth, dipHeight));
             image.UpdateLayout();
 
             var bitmap = new RenderTargetBitmap(
-                width,
-                height,
+                source.PixelWidth,
+                source.PixelHeight,
                 dpi.PixelsPerInchX,
                 dpi.PixelsPerInchY,
                 PixelFormats.Pbgra32);
@@ -267,23 +161,5 @@ public static class OverlayBackdropCapture
         {
             return source;
         }
-    }
-
-    private static (int Width, int Height) GetCaptureSize(double sourceWidth, double sourceHeight)
-    {
-        var scale = Math.Min(
-            MaxCaptureWidth / sourceWidth,
-            MaxCaptureHeight / sourceHeight);
-
-        if (scale >= 1.0)
-        {
-            return (
-                Math.Max(1, (int)Math.Ceiling(sourceWidth)),
-                Math.Max(1, (int)Math.Ceiling(sourceHeight)));
-        }
-
-        return (
-            Math.Max(1, (int)Math.Ceiling(sourceWidth * scale)),
-            Math.Max(1, (int)Math.Ceiling(sourceHeight * scale)));
     }
 }

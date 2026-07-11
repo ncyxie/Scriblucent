@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:models="clr-namespace:Scriblucent.Models"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
              Visibility="Collapsed"
              IsHitTestVisible="False">
@@ -28,7 +29,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -65,7 +66,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="DatePickerTextBox">
                         <Border Background="{TemplateBinding Background}"
-                                CornerRadius="8"
+                                CornerRadius="{StaticResource Radius.Control}"
                                 Padding="0"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost"/>
@@ -92,7 +93,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
+                                CornerRadius="{StaticResource Radius.Control}"
                                 Padding="3">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -136,7 +137,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"/>
@@ -176,7 +177,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
+                                CornerRadius="{StaticResource Radius.Control}"
                                 Padding="4">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
@@ -329,12 +330,12 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
             <Setter Property="Padding" Value="4"/>
             <Setter Property="CalendarDayButtonStyle" Value="{StaticResource ScheduleCalendarDayButtonStyle}"/>
             <Setter Property="CalendarButtonStyle" Value="{StaticResource ScheduleCalendarButtonStyle}"/>
             <Setter Property="CalendarItemStyle" Value="{StaticResource ScheduleCalendarItemStyle}"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Calendar">
@@ -363,9 +364,9 @@
         </Style>
 
         <Style x:Key="ScheduleEditableComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Height" Value="34"/>
@@ -385,7 +386,7 @@
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9"
+                                CornerRadius="{StaticResource Radius.Control}"
                                 SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost"/>
                         </Border>
@@ -399,8 +400,11 @@
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="8"
+                    CornerRadius="{StaticResource Radius.Control}"
                     Padding="{TemplateBinding Padding}">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
+                </Border.Effect>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -425,9 +429,9 @@
         </ControlTemplate>
 
         <Style x:Key="ScheduleComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Height" Value="34"/>
@@ -457,15 +461,24 @@
                                    AllowsTransparency="True"
                                    Focusable="False"
                                    PopupAnimation="None">
-                                <Border Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        MinWidth="{TemplateBinding ActualWidth}">
-                                    <ScrollViewer MaxHeight="180">
-                                        <ItemsPresenter/>
-                                    </ScrollViewer>
-                                </Border>
+                                                                <Grid MinWidth="{TemplateBinding ActualWidth}" Margin="0,4,8,8">
+                                                                            <Border Margin="2,3,2,0"
+                                                Background="#000000"
+                                                Opacity="0.18"
+                                                CornerRadius="{StaticResource Radius.Control}"
+                                                IsHitTestVisible="False">
+                                            <Border.Effect>
+                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
+                                            </Border.Effect>
+                                        </Border>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" behaviors:RoundedClipBehavior.IsEnabled="True"
+                                            SnapsToDevicePixels="True">
+                                        <ScrollViewer MaxHeight="180" Margin="2">
+                                            <ItemsPresenter/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
                             </Popup>
                         </Grid>
                     </ControlTemplate>
@@ -475,13 +488,15 @@
 
         <Style x:Key="ScheduleComboBoxItemStyle" TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="10,7"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
                         <Border x:Name="ItemBorder"
                                 Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Margin="2,1"
                                 Padding="{TemplateBinding Padding}">
                             <TextBlock Text="{TemplateBinding Content}"
                                        Foreground="{TemplateBinding Foreground}"
@@ -489,7 +504,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
@@ -508,10 +523,9 @@
     </UserControl.Resources>
 
     <Grid x:Name="OverlayRoot">
-        <Viewbox x:Name="ScrimViewbox"
-                 Stretch="Fill"
-                 RenderOptions.BitmapScalingMode="Linear">
-            <Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
                 <Image x:Name="BackdropSnapshot"
                        Stretch="Fill"
                        Visibility="Collapsed"
@@ -519,8 +533,7 @@
                 <Rectangle x:Name="OverlayDim"
                            Fill="#66000000"
                            MouseDown="OverlayDim_MouseDown"/>
-            </Grid>
-        </Viewbox>
+        </Grid>
         <Border x:Name="PanelMotionHost"
                 Margin="20"
                 HorizontalAlignment="Center"
@@ -605,7 +618,7 @@
                                                         <Border Background="{DynamicResource SelectionBackground}"
                                                                 BorderBrush="{DynamicResource BorderColor}"
                                                                 BorderThickness="1"
-                                                                CornerRadius="8"
+                                                                CornerRadius="{StaticResource Radius.Control}"
                                                                 Padding="8,2"
                                                                 HorizontalAlignment="Left">
                                                             <StackPanel Orientation="Horizontal">
@@ -617,7 +630,7 @@
                                                             </StackPanel>
                                                         </Border>
                                                         <TextBlock Text="{Binding Note}"
-                                                                   Margin="0,4,0,0"
+                                                                   Margin="0,4,8,8"
                                                                    Foreground="{DynamicResource TextColorSecondary}"
                                                                    TextWrapping="Wrap"/>
                                                     </StackPanel>
@@ -704,14 +717,14 @@
                                            FontSize="11"
                                            Foreground="{DynamicResource TextColorSecondary}"
                                            HorizontalAlignment="Center"
-                                           Margin="0,4,0,0"/>
+                                           Margin="0,4,8,8"/>
                                 <TextBlock Grid.Row="1"
                                            Grid.Column="4"
                                            Text="{Binding [CalendarMinuteShort], Source={StaticResource Loc}}"
                                            FontSize="11"
                                            Foreground="{DynamicResource TextColorSecondary}"
                                            HorizontalAlignment="Center"
-                                           Margin="0,4,0,0"/>
+                                           Margin="0,4,8,8"/>
                             </Grid>
 
                             <TextBlock Grid.Row="2"

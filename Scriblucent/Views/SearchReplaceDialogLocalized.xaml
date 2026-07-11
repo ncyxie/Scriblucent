@@ -42,7 +42,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="9">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ScrollViewer x:Name="PART_ContentHost"
                                           Margin="{TemplateBinding Padding}"
                                           Padding="0"
@@ -82,18 +82,16 @@
     </Window.Resources>
 
     <Grid x:Name="OverlayRoot">
-        <Viewbox x:Name="ScrimViewbox"
-                 Stretch="Fill"
-                 RenderOptions.BitmapScalingMode="Linear">
-            <Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
                 <Image x:Name="BackdropSnapshot"
                        Stretch="Fill"
                        Visibility="Collapsed"
                        IsHitTestVisible="False"/>
                 <Rectangle x:Name="OverlayDim"
                            Fill="#66000000"/>
-            </Grid>
-        </Viewbox>
+        </Grid>
 
         <Border x:Name="PanelMotionHost"
                 HorizontalAlignment="Center"
@@ -176,7 +174,7 @@
                     <Border Grid.Row="3"
                             MinHeight="34"
                             Padding="10,7"
-                            CornerRadius="9"
+                            CornerRadius="{StaticResource Radius.Control}"
                             Background="{DynamicResource IconButtonBackground}"
                             BorderBrush="{DynamicResource IconButtonBorder}"
                             BorderThickness="1">

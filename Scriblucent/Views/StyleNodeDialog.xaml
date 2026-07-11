@@ -1,6 +1,8 @@
 <Window x:Class="Scriblucent.Views.StyleNodeDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [MindMapStyleOrganizeTitle], Source={StaticResource Loc}}"
 		Height="520"
@@ -29,7 +31,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
@@ -42,8 +44,8 @@
 
         <Style x:Key="StyleNodeComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Height" Value="32"/>
@@ -57,7 +59,10 @@
                                     Background="{TemplateBinding Background}"
                                     BorderBrush="{TemplateBinding BorderBrush}"
                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="6">
+                                    CornerRadius="{StaticResource Radius.Control}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
+                                </Border.Effect>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -106,19 +111,27 @@
                                    Focusable="False"
                                    IsOpen="{TemplateBinding IsDropDownOpen}"
                                    PopupAnimation="None">
-                                <Border Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        SnapsToDevicePixels="True"
-                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
-                                    <ScrollViewer Margin="1"
-                                                  VerticalScrollBarVisibility="Auto"
-                                                  HorizontalScrollBarVisibility="Disabled"
-                                                  CanContentScroll="True">
-                                        <ItemsPresenter/>
-                                    </ScrollViewer>
-                                </Border>
+                                                                <Grid MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,4,8,8">
+                                                                            <Border Margin="2,3,2,0"
+                                                Background="#000000"
+                                                Opacity="0.18"
+                                                CornerRadius="{StaticResource Radius.Control}"
+                                                IsHitTestVisible="False">
+                                            <Border.Effect>
+                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
+                                            </Border.Effect>
+                                        </Border>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" behaviors:RoundedClipBehavior.IsEnabled="True"
+                                            SnapsToDevicePixels="True">
+                                        <ScrollViewer Margin="2"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      CanContentScroll="True">
+                                            <ItemsPresenter/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
                             </Popup>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -150,7 +163,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"/>
+                                CornerRadius="{StaticResource Radius.Control}"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="SwatchBorder" Property="BorderBrush" Value="#4A6EE0"/>
@@ -207,18 +220,16 @@
     </Window.Resources>
 
 	<Grid x:Name="OverlayRoot">
-		<Viewbox x:Name="ScrimViewbox"
-				 Stretch="Fill"
-				 RenderOptions.BitmapScalingMode="Linear">
-			<Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
 				<Image x:Name="BackdropSnapshot"
 					   Stretch="Fill"
 					   Visibility="Collapsed"
 					   IsHitTestVisible="False"/>
 				<Rectangle x:Name="OverlayDim"
 						   Fill="#66000000"/>
-			</Grid>
-		</Viewbox>
+        </Grid>
 		<Border x:Name="PanelMotionHost"
 				HorizontalAlignment="Center"
 				VerticalAlignment="Center"

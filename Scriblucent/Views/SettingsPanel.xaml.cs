@@ -59,8 +59,16 @@ namespace Scriblucent.Views
             if (Visibility != Visibility.Visible || _overlayAnimator.IsClosing)
                 return;
 
-            _overlayAnimator.RefreshBackdrop(
-                () => OverlayBackdropCapture.TryCaptureBehindOverlays(Window.GetWindow(this)));
+            // Wait until theme brushes and layout settle, then recapture at 1:1 DIP size.
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (Visibility != Visibility.Visible || _overlayAnimator.IsClosing)
+                    return;
+
+                Window.GetWindow(this)?.UpdateLayout();
+                _overlayAnimator.RefreshBackdrop(
+                    () => OverlayBackdropCapture.TryCaptureBehindOverlays(Window.GetWindow(this)));
+            }, DispatcherPriority.ApplicationIdle);
         }
 
         private void NoteEditorWindow_AiGenerationStateChanged(object? sender, EventArgs e)

@@ -59,7 +59,7 @@
                         <Border Padding="10"
                                 Margin="0,0,0,6"
                                 BorderThickness="1"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="{DynamicResource CardBackground}"/>

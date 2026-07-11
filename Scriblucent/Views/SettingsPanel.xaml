@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
              mc:Ignorable="d"
              d:DesignHeight="520"
@@ -30,7 +31,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -51,9 +52,9 @@
 
         <!-- ComboBox Style with Theme Support -->
         <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Height" Value="32"/>
@@ -85,18 +86,36 @@
                                    AllowsTransparency="True"
                                    Focusable="False"
                                    PopupAnimation="None">
-                                <Border x:Name="DropDownBorder"
-                                        Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
-                                        CornerRadius="4"
-                                        MinWidth="{TemplateBinding ActualWidth}">
-                                    <ScrollViewer SnapsToDevicePixels="True" MaxHeight="150">
-                                        <ItemsPresenter/>
-                                    </ScrollViewer>
-                                </Border>
+                                <Grid MinWidth="{TemplateBinding ActualWidth}" Margin="0,4,8,8">
+                                                                            <Border Margin="2,3,2,0"
+                                                Background="#000000"
+                                                Opacity="0.18"
+                                                CornerRadius="{StaticResource Radius.Control}"
+                                                IsHitTestVisible="False">
+                                            <Border.Effect>
+                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
+                                            </Border.Effect>
+                                        </Border>
+                                    <Border x:Name="DropDownBorder"
+                                            Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" behaviors:RoundedClipBehavior.IsEnabled="True"
+                                            SnapsToDevicePixels="True">
+                                        <ScrollViewer Style="{StaticResource PopupListScrollViewerStyle}"
+                                                      MaxHeight="150">
+                                            <ItemsPresenter/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
                             </Popup>
                         </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
+                            </Trigger>
+                            <Trigger Property="IsDropDownOpen" Value="True">
+                                <Setter TargetName="ToggleButton" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -105,7 +124,7 @@
         <!-- ComboBoxItem Style with Theme Support -->
         <Style TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -114,15 +133,17 @@
                     <ControlTemplate TargetType="ComboBoxItem">
                         <Border x:Name="ItemBorder"
                                 Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
                                 Padding="{TemplateBinding Padding}"
-                                BorderThickness="0">
-                            <TextBlock Text="{TemplateBinding Content}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       VerticalAlignment="Center"/>
+                                Margin="2,1"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
@@ -133,7 +154,7 @@
             </Setter>
         </Style>
 
-        <Style TargetType="TextBox">
+        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
@@ -150,8 +171,11 @@
                     Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="4"
+                    CornerRadius="{StaticResource Radius.Control}"
                     Padding="{TemplateBinding Padding}">
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
+                </Border.Effect>
                 <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -179,10 +203,9 @@
 
     </UserControl.Resources>
     <Grid x:Name="OverlayRoot">
-        <Viewbox x:Name="ScrimViewbox"
-                 Stretch="Fill"
-                 RenderOptions.BitmapScalingMode="Linear">
-            <Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
                 <Image x:Name="BackdropSnapshot"
                        Stretch="Fill"
                        Visibility="Collapsed"
@@ -190,8 +213,7 @@
                 <Rectangle x:Name="OverlayDim"
                            Fill="#66000000"
                            MouseDown="OverlayDim_MouseDown"/>
-            </Grid>
-        </Viewbox>
+        </Grid>
         <Border x:Name="PanelMotionHost"
                 Margin="20"
                 HorizontalAlignment="Center"
@@ -203,7 +225,7 @@
                     Background="{DynamicResource CardBackground}"
                     BorderBrush="{DynamicResource BorderColor}"
                     BorderThickness="1"
-                    CornerRadius="16"
+                    CornerRadius="{StaticResource Radius.Overlay}"
                     Padding="24"
                     Width="Auto"
                     MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
@@ -257,7 +279,7 @@
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="16">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -268,7 +290,7 @@
 
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="{Binding [Language], Source={StaticResource Loc}}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource Type.Body}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
                             <ComboBox Margin="0,8,0,0"
@@ -287,7 +309,7 @@
 
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="{Binding [Theme], Source={StaticResource Loc}}"
-                                       FontSize="13"
+                                       FontSize="{StaticResource Type.Body}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
                             <ComboBox Margin="0,8,0,0"
@@ -306,7 +328,7 @@
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
                         <TextBlock Text="{Binding [AiToolsSectionTitle], Source={StaticResource Loc}}"
@@ -327,7 +349,7 @@
                                    Foreground="{DynamicResource TextColor}"/>
 
                         <ComboBox x:Name="FlashcardModelBox"
-                                  Margin="0,6,0,0"
+                                  Margin="0,6,8,8"
                                   SelectedValuePath="Tag"
                                   SelectionChanged="FlashcardModelBox_SelectionChanged">
                         </ComboBox>
@@ -355,7 +377,7 @@
                             <Border Grid.Column="0"
                                     BorderBrush="{DynamicResource BorderColor}"
                                     BorderThickness="1"
-                                    CornerRadius="8"
+                                    CornerRadius="{StaticResource Radius.Control}"
                                     Padding="8"
                                     Background="{DynamicResource CardBackground}">
                                 <ListBox x:Name="AiToolsListBox"
@@ -379,7 +401,7 @@
                                                 <TextBlock Grid.Column="1"
                                                            Margin="8,0,8,0"
                                                            VerticalAlignment="Center"
-                                                           FontSize="12">
+                                                           FontSize="{StaticResource Type.Meta}">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
                                                             <Setter Property="Text" Value="{Binding [AiToolsNotDownloaded], Source={StaticResource Loc}}"/>
@@ -407,15 +429,17 @@
                                 </ListBox>
                             </Border>
 
-                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                            <StackPanel Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center">
                                 <Button Content="{icons:Icon Kind=ChevronUp, Size=12}"
                                         Width="32"
-                                        Height="30"
+                                        Height="32"
                                         Click="MoveAiToolUp_Click"
                                         Style="{StaticResource DialogSecondaryButtonStyle}"/>
                                 <Button Content="{icons:Icon Kind=ChevronDown, Size=12}"
                                         Width="32"
-                                        Height="30"
+                                        Height="32"
                                         Margin="0,6,0,0"
                                         Click="MoveAiToolDown_Click"
                                         Style="{StaticResource DialogSecondaryButtonStyle}"/>
@@ -494,7 +518,7 @@
         Background="{DynamicResource SidebarBackground}"
         BorderBrush="{DynamicResource BorderColor}"
         BorderThickness="1"
-        CornerRadius="12"
+        CornerRadius="{StaticResource Radius.Card}"
         Padding="16,12">
 
                     <StackPanel>
@@ -516,7 +540,7 @@
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -536,7 +560,7 @@
                             <Border Background="{DynamicResource CardBackground}"
                                     BorderBrush="{DynamicResource BorderColor}"
                                     BorderThickness="1"
-                                    CornerRadius="8"
+                                    CornerRadius="{StaticResource Radius.Control}"
                                     Padding="8,0">
                                 <TextBox x:Name="RecentItemsLimitTextBox"
                                          Width="48"
@@ -562,7 +586,7 @@
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
                         <Grid>
@@ -587,7 +611,7 @@
 
                         <TextBlock Text="{Binding [ReduceAnimationsDescription], Source={StaticResource Loc}}"
                                    Margin="0,8,0,0"
-                                   FontSize="12"
+                                   FontSize="{StaticResource Type.Meta}"
                                    Foreground="{DynamicResource TextColorSecondary}"
                                    TextWrapping="Wrap"/>
                     </StackPanel>
@@ -599,7 +623,7 @@
         Background="{DynamicResource SidebarBackground}"
         BorderBrush="{DynamicResource BorderColor}"
         BorderThickness="1"
-        CornerRadius="12"
+        CornerRadius="{StaticResource Radius.Card}"
         Padding="16,12">
                     <StackPanel>
                         <!-- Scrollbar Setting -->
@@ -646,7 +670,7 @@
                             Background="{DynamicResource SidebarBackground}"
                             BorderBrush="{DynamicResource BorderColor}"
                             BorderThickness="1"
-                            CornerRadius="12">
+                            CornerRadius="{StaticResource Radius.Card}">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Padding" Value="16,12"/>
@@ -700,7 +724,7 @@
                                     <Border Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource BorderColor}"
                                             BorderThickness="1"
-                                            CornerRadius="8"
+                                            CornerRadius="{StaticResource Radius.Control}"
                                             Padding="8,0"
                                             Margin="0,0,8,0">
                                         <TextBox x:Name="AutoSaveIntervalTextBox"
@@ -732,11 +756,11 @@
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
                         <TextBlock Text="{Binding UserActivitySummaryTitle}"
-                                   FontSize="14"
+                                   FontSize="{StaticResource Type.SectionTitle}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextColor}"
                                    Margin="0,0,0,12"/>
@@ -764,16 +788,16 @@
                         Background="{DynamicResource SidebarBackground}"
                         BorderBrush="{DynamicResource BorderColor}"
                         BorderThickness="1"
-                        CornerRadius="12"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
                         <TextBlock Text="{Binding [ResetFactorySettings], Source={StaticResource Loc}}"
-                                   FontSize="13"
+                                   FontSize="{StaticResource Type.Body}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextColor}"
                                    Margin="0,0,0,8"/>
                         <TextBlock Text="{Binding [ResetFactorySettingsDescription], Source={StaticResource Loc}}"
-                                   FontSize="12"
+                                   FontSize="{StaticResource Type.Meta}"
                                    Foreground="{DynamicResource TextColorSecondary}"
                                    TextWrapping="Wrap"
                                    Margin="0,0,0,12"/>

@@ -30,7 +30,7 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
+                                CornerRadius="{StaticResource Radius.Control}"
                                 SnapsToDevicePixels="True"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -48,18 +48,16 @@
     </Window.Resources>
 
     <Grid x:Name="OverlayRoot">
-        <Viewbox x:Name="ScrimViewbox"
-                 Stretch="Fill"
-                 RenderOptions.BitmapScalingMode="Linear">
-            <Grid x:Name="ScrimHost">
+        <Grid x:Name="ScrimHost"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
                 <Image x:Name="BackdropSnapshot"
                        Stretch="Fill"
                        Visibility="Collapsed"
                        IsHitTestVisible="False"/>
                 <Rectangle x:Name="OverlayDim"
                            Fill="#66000000"/>
-            </Grid>
-        </Viewbox>
+        </Grid>
 
         <Border x:Name="PanelMotionHost"
                 HorizontalAlignment="Center"
