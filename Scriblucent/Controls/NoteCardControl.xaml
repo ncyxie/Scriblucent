@@ -31,22 +31,22 @@
             <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="MenuButtonBorder"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource NoteCardTitle}"/>
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.BlockTitle}"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Visibility" Value="{Binding IsMenuVisible, Converter={StaticResource BoolToVis}}"/>
+            <Setter Property="Visibility" Value="Hidden"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="MenuButtonBorder"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
                                 CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -54,17 +54,18 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="MenuButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                                <Setter TargetName="MenuButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="MenuButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                                <Setter TargetName="MenuButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMenuVisible}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding DataContext.IsMassSelectMode, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
                     <Setter Property="Visibility" Value="Hidden"/>
                 </DataTrigger>
@@ -81,6 +82,7 @@
             behaviors:RoundedClipBehavior.IsEnabled="True"
             CornerRadius="{StaticResource Radius.Card}"
             Padding="14">
+        <!-- Level 4 D: CardShadowLayer sibling + NoteCardBorder R(theme); mass-select A via behavior. -->
         <Border.Style>
             <Style TargetType="Border">
                 <Setter Property="Background" Value="{DynamicResource NoteCardBackground}"/>
@@ -105,7 +107,7 @@
                     IsHitTestVisible="False"/>
             <Border x:Name="DropGlow"
                     Background="Transparent"
-                    BorderBrush="#5B7FED"
+                    BorderBrush="{DynamicResource AccentPrimary}"
                     BorderThickness="0"
                     CornerRadius="{StaticResource Radius.Card}"
                     Opacity="0"
@@ -139,35 +141,7 @@
                         Style="{StaticResource NoteDashboardListingMenuButtonStyle}"
                         Click="OnMenuButtonClick">
                     <Button.ContextMenu>
-                        <ContextMenu HasDropShadow="False"
-                                     Background="{DynamicResource CardBackground}"
-                                     BorderBrush="{DynamicResource BorderColor}"
-                                     BorderThickness="1"
-                                     Padding="0">
-                            <ContextMenu.Template>
-                                <ControlTemplate TargetType="ContextMenu">
-                                    <Border Background="Transparent"
-                                            Padding="8"
-                                            ClipToBounds="False">
-                                        <Border Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="{StaticResource Radius.Card}"
-                                                Padding="4"
-                                                ClipToBounds="False">
-                                            <Border.Effect>
-                                                <DropShadowEffect Color="#000000"
-                                                                  Opacity="0.22"
-                                                                  BlurRadius="16"
-                                                                  ShadowDepth="3"
-                                                                  Direction="270"/>
-                                            </Border.Effect>
-                                            <StackPanel IsItemsHost="True"
-                                                        KeyboardNavigation.DirectionalNavigation="Cycle"/>
-                                        </Border>
-                                    </Border>
-                                </ControlTemplate>
-                            </ContextMenu.Template>
+                        <ContextMenu>
                             <MenuItem Header="{Binding [Open], Source={StaticResource Loc}}" Click="OnOpenMenuClick"/>
                             <MenuItem Header="{Binding [SelectMultiple], Source={StaticResource Loc}}" Click="OnStartMassSelectMenuClick"/>
                             <MenuItem Header="{Binding [Info], Source={StaticResource Loc}}" Click="OnInfoMenuClick"/>
@@ -183,8 +157,8 @@
                                       Command="{Binding RemoveFromGroupCommand}"
                                       Visibility="{Binding IsGrouped, Converter={StaticResource BoolToVis}}"/>
                             <Separator/>
-                            <MenuItem Header="{Binding [Duplicate], Source={StaticResource Loc}}" 
-                            Command="{Binding DuplicateCommand}"/>
+                            <MenuItem Header="{Binding [Duplicate], Source={StaticResource Loc}}"
+                                      Command="{Binding DuplicateCommand}"/>
                             <MenuItem Header="{Binding [ReplaceFromFile], Source={StaticResource Loc}}" Click="OnOpenFromFileClick"/>
                             <Separator/>
                             <MenuItem Header="{Binding [Delete], Source={StaticResource Loc}}" Command="{Binding DeleteCommand}"/>

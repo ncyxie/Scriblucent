@@ -215,8 +215,13 @@
   <data name="FailedToPrintNote" xml:space="preserve"><value>Nepavyko atspausdinti užrašo:</value></data>
   <data name="PrintError" xml:space="preserve"><value>Spausdinimo klaida</value></data>
   <data name="OpenFileDialogFilter" xml:space="preserve"><value>Palaikomi užrašų failai (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent paketas (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Tekstiniai failai (*.txt)|*.txt|Markdown failai (*.md)|*.md|Raiškusis užrašo turinys (*.xamlpackage)|*.xamlpackage|Visi failai (*.*)|*.*</value></data>
-  <data name="AboutDescription" xml:space="preserve"><value>Paprasta užrašų kortelių programėlė greitam ir tvarkingam konspektų bei užrašų valdymui.</value></data>
+  <data name="AboutTagline" xml:space="preserve"><value>Užrašai. Kortelės. Minčių žemėlapiai. Testai.</value></data>
+  <data name="AboutDescription" xml:space="preserve"><value>Mokykitės offline su vietiniu AI — užrašai virsta kortelėmis, minčių žemėlapiais ir testais. Duomenys lieka jūsų įrenginyje.</value></data>
+  <data name="AboutMaintainedBy" xml:space="preserve"><value>Prižiūri</value></data>
+  <data name="AboutOriginalContributors" xml:space="preserve"><value>Pradiniai NoteCards autoriai</value></data>
+  <data name="AboutLicenseFooter" xml:space="preserve"><value>MIT licencija · 2026</value></data>
   <data name="Authors" xml:space="preserve"><value>AUTORIAI</value></data>
+  <data name="OpenGitHubProfile" xml:space="preserve"><value>Atidaryti GitHub profilį</value></data>
   <data name="SimpleInputTitle" xml:space="preserve"><value>Paprastas įvedimas</value></data>
   <data name="PrintPreviewTitle" xml:space="preserve"><value>Spausdinimo peržiūra</value></data>
   <data name="DocumentSentToPrinter" xml:space="preserve"><value>Dokumentas sėkmingai išsiųstas spausdintuvui!</value></data>
@@ -674,6 +679,12 @@ Dešiniu pelės mygtuku pašalinsite</value></data>
   <data name="MindMapExportAllFileSuffix" xml:space="preserve"><value>pilnas</value></data>
   <data name="MindMapExportBranchFileSuffix" xml:space="preserve"><value>saka</value></data>
   <data name="MindMapExportEmptyCanvas" xml:space="preserve"><value>Minčių žemėlapyje nėra eksportuojamo turinio.</value></data>
+  <data name="CombineFlashcards" xml:space="preserve"><value>Sujungti flashcards</value></data>
+  <data name="FlashcardHistory" xml:space="preserve"><value>Flashcards istorija</value></data>
+  <data name="FlashcardActions" xml:space="preserve"><value>Flashcards veiksmai</value></data>
+  <data name="CombineQuizzes" xml:space="preserve"><value>Sujungti testus</value></data>
+  <data name="QuizHistory" xml:space="preserve"><value>Testų istorija</value></data>
+  <data name="QuizActions" xml:space="preserve"><value>Testų veiksmai</value></data>
   <data name="ResetFactorySettings" xml:space="preserve"><value>Atstatyti gamyklos nustatymus</value></data>
   <data name="ResetFactorySettingsTitle" xml:space="preserve"><value>Atstatyti gamyklos nustatymus</value></data>
   <data name="ResetFactorySettingsDescription" xml:space="preserve"><value>Atstatyti visus nustatymus ir duomenis į numatytuosius. Šis veiksmas negali būti anuliuotas.</value></data>

@@ -2511,6 +2511,7 @@ public class MainViewModel : ViewModelBase
         ? MindMapTagFilters
         : IsQuizzesView ? QuizTagFilters : IsFlashcardsView ? FlashcardTagFilters : TagFilters;
     public ObservableCollection<CalendarScheduledItemViewModel> CalendarScheduledNotes { get; }
+    public IReadOnlyCollection<DateTime> CalendarDatesWithSchedules { get; private set; } = Array.Empty<DateTime>();
      public bool HasGroups => NoteGroups.Count > 0;
     public bool HasNotes => Notes.Count > 0;
     public bool HasUngroupedNotes => UngroupedVisibleCount > 0;
@@ -6574,8 +6575,7 @@ public class MainViewModel : ViewModelBase
                 Title = note.Title,
                 ScheduledAt = entry.ScheduledAt,
                 ScheduleNote = entry.Note ?? string.Empty
-            }))
-            .Where(item => item.ScheduledAt.Date == selected);
+            }));
 
         var flashcardItems = FlashcardSets
             .SelectMany(fs => (fs.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
@@ -6585,8 +6585,7 @@ public class MainViewModel : ViewModelBase
                 Title = fs.Title,
                 ScheduledAt = entry.ScheduledAt,
                 ScheduleNote = entry.Note ?? string.Empty
-            }))
-            .Where(item => item.ScheduledAt.Date == selected);
+            }));
 
         var mindMapItems = MindMaps
             .SelectMany(mm => (mm.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
@@ -6596,8 +6595,7 @@ public class MainViewModel : ViewModelBase
                 Title = mm.Title,
                 ScheduledAt = entry.ScheduledAt,
                 ScheduleNote = entry.Note ?? string.Empty
-            }))
-            .Where(item => item.ScheduledAt.Date == selected);
+            }));
 
         var quizItems = Quizzes
             .SelectMany(q => (q.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
@@ -6607,13 +6605,23 @@ public class MainViewModel : ViewModelBase
                 Title = q.Title,
                 ScheduledAt = entry.ScheduledAt,
                 ScheduleNote = entry.Note ?? string.Empty
-            }))
-            .Where(item => item.ScheduledAt.Date == selected);
+            }));
 
-        var items = noteItems
+        var allItems = noteItems
             .Concat(flashcardItems)
             .Concat(mindMapItems)
             .Concat(quizItems)
+            .ToList();
+
+        CalendarDatesWithSchedules = allItems
+            .Select(item => item.ScheduledAt.Date)
+            .Distinct()
+            .OrderBy(date => date)
+            .ToArray();
+        OnPropertyChanged(nameof(CalendarDatesWithSchedules));
+
+        var items = allItems
+            .Where(item => item.ScheduledAt.Date == selected)
             .OrderBy(item => item.ScheduledAt)
             .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToList();

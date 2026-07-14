@@ -3,6 +3,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using Scriblucent.Animations;
 using Scriblucent.Localization;
+using Scriblucent.Services;
 using PrintDialog = System.Windows.Controls.PrintDialog;
 
 namespace Scriblucent
@@ -42,7 +43,7 @@ namespace Scriblucent
                         new Run(_title)
                     )
                     {
-                        FontSize = 24,
+                        FontSize = TypeScale.Px(TypeScale.Display, 24),
                         FontWeight = FontWeights.Bold,
                         Foreground = Brushes.Black
                     };
@@ -56,7 +57,7 @@ namespace Scriblucent
                         new Run(_content)
                     )
                     {
-                        FontSize = 12,
+                        FontSize = TypeScale.Px(TypeScale.Caption, 12),
                         Foreground = Brushes.Black,
                         FontFamily = new FontFamily("Segoe UI")
                     };

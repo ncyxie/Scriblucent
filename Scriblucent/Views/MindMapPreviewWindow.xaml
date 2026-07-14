@@ -15,60 +15,18 @@
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
-        Background="{DynamicResource SidebarBackground}"
+        Background="{DynamicResource FeatureFrameBackground}"
         Closing="MindMapPreviewWindow_Closing">
     <Window.Resources>
-        <Style x:Key="MindMapToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
+        <Style x:Key="MindMapToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
             <Setter Property="Padding" Value="14,7"/>
             <Setter Property="MinHeight" Value="32"/>
             <Setter Property="MinWidth" Value="96"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
             <Setter Property="Margin" Value="0,0,8,8"/>
         </Style>
 
-        <Style x:Key="MindMapLinkedNoteButtonStyle" TargetType="Button" BasedOn="{StaticResource MindMapToolbarButtonStyle}">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="LinkedNoteBorder"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="MinWidth" Value="160"/>
-            <Setter Property="MaxWidth" Value="240"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="LinkedNoteBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Padding="{TemplateBinding Padding}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#000000" Opacity="0.10" BlurRadius="10" ShadowDepth="1" Direction="270"/>
-                            </Border.Effect>
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="LinkedNoteBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="LinkedNoteBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.65"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <Style x:Key="MindMapLinkedNoteButtonStyle" TargetType="Button" BasedOn="{StaticResource LinkedNoteToolbarButtonStyle}"/>
 
         <Style x:Key="MindMapToolbarCompactButtonStyle" TargetType="Button" BasedOn="{StaticResource MindMapToolbarButtonStyle}">
             <Setter Property="MinWidth" Value="90"/>
@@ -87,300 +45,38 @@
         </Style>
 
         <Style x:Key="MindMapToolbarSectionLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
 
-        <Style x:Key="MindMapToolbarTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="Padding" Value="10,0"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="TextBoxBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                behaviors:RoundedClipBehavior.IsEnabled="True"
-                                SnapsToDevicePixels="True">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="10" ShadowDepth="1" Direction="270"/>
-                            </Border.Effect>
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          Padding="0"
-                                          VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="TextBoxBorder" Property="BorderBrush" Value="{DynamicResource MindMapSelectedBorderBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="MindMapLayoutComboBoxItemStyle" TargetType="ComboBoxItem">
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+        <Style x:Key="MindMapLayoutComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource FeatureToolbarComboBoxStyle}">
             <Setter Property="Padding" Value="8,4"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="ItemBorder"
-                                Background="{TemplateBinding Background}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="MindMapLayoutComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8,4"/>
-            <Setter Property="ItemContainerStyle" Value="{StaticResource MindMapLayoutComboBoxItemStyle}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <Border x:Name="ComboBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="{StaticResource Radius.Control}">
-                                <Border.Effect>
-                                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
-                                </Border.Effect>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="26"/>
-                                    </Grid.ColumnDefinitions>
+        <Style x:Key="MindMapLinkedNoteComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource LinkedNoteComboBoxStyle}"/>
 
-                                    <ContentPresenter Grid.Column="0"
-                                                      Margin="8,0,4,0"
-                                                      VerticalAlignment="Center"
-                                                      HorizontalAlignment="Left"
-                                                      Content="{TemplateBinding SelectionBoxItem}"
-                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
-
-                                    <Border Grid.Column="1"
-                                            Background="Transparent"
-                                            BorderThickness="0">
-                                        <Path HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Fill="{DynamicResource TextColorSecondary}"
-                                              Data="M 0 0 L 8 0 L 4 5 Z"/>
-                                    </Border>
-
-                                    <ToggleButton Grid.ColumnSpan="2"
-                                                  Focusable="False"
-                                                  Background="Transparent"
-                                                  BorderBrush="Transparent"
-                                                  BorderThickness="0"
-                                                  ClickMode="Press"
-                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-                                        <ToggleButton.Template>
-                                            <ControlTemplate TargetType="ToggleButton">
-                                                <Border Background="Transparent"
-                                                        BorderBrush="Transparent"
-                                                        BorderThickness="0"/>
-                                            </ControlTemplate>
-                                        </ToggleButton.Template>
-                                    </ToggleButton>
-                                </Grid>
-                            </Border>
-
-                            <Popup x:Name="PART_Popup"
-                                   Placement="Bottom"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   PopupAnimation="None">
-                                                                <Grid MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,4,8,8">
-                                                                            <Border Margin="2,3,2,0"
-                                                Background="#000000"
-                                                Opacity="0.18"
-                                                CornerRadius="{StaticResource Radius.Control}"
-                                                IsHitTestVisible="False">
-                                            <Border.Effect>
-                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
-                                            </Border.Effect>
-                                        </Border>
-                                    <Border Background="{DynamicResource CardBackground}"
-                                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" behaviors:RoundedClipBehavior.IsEnabled="True"
-                                            SnapsToDevicePixels="True">
-                                        <ScrollViewer Margin="2"
-                                                      VerticalScrollBarVisibility="Auto"
-                                                      HorizontalScrollBarVisibility="Disabled"
-                                                      CanContentScroll="True">
-                                            <ItemsPresenter/>
-                                        </ScrollViewer>
-                                    </Border>
-                                </Grid>
-                            </Popup>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="MindMapLinkedNoteComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource MindMapLayoutComboBoxStyle}">
-            <Setter Property="MinWidth" Value="160"/>
-            <Setter Property="MaxWidth" Value="240"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <Border x:Name="ComboBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="{StaticResource Radius.Control}">
-                                <Border.Effect>
-                                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
-                                </Border.Effect>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="26"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Margin="8,0,4,0"
-                                               VerticalAlignment="Center"
-                                               Text="{Binding ElementName=MindMapWindow, Path=LinkedNoteButtonText}"
-                                               Foreground="{TemplateBinding Foreground}"/>
-                                    <Border Grid.Column="1"
-                                            Background="Transparent"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="1,0,0,0">
-                                        <Path HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Fill="{DynamicResource TextColorSecondary}"
-                                              Data="M 0 0 L 8 0 L 4 5 Z"/>
-                                    </Border>
-                                    <ToggleButton Grid.ColumnSpan="2"
-                                                  Focusable="False"
-                                                  Background="Transparent"
-                                                  BorderBrush="Transparent"
-                                                  BorderThickness="0"
-                                                  ClickMode="Press"
-                                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
-                                        <ToggleButton.Template>
-                                            <ControlTemplate TargetType="ToggleButton">
-                                                <Border Background="Transparent"
-                                                        BorderBrush="Transparent"
-                                                        BorderThickness="0"/>
-                                            </ControlTemplate>
-                                        </ToggleButton.Template>
-                                    </ToggleButton>
-                                </Grid>
-                            </Border>
-                            <Popup x:Name="PART_Popup"
-                                   Placement="Bottom"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   PopupAnimation="None">
-                                                                <Grid MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" Margin="0,4,8,8">
-                                                                            <Border Margin="2,3,2,0"
-                                                Background="#000000"
-                                                Opacity="0.18"
-                                                CornerRadius="{StaticResource Radius.Control}"
-                                                IsHitTestVisible="False">
-                                            <Border.Effect>
-                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
-                                            </Border.Effect>
-                                        </Border>
-                                    <Border Background="{DynamicResource CardBackground}"
-                                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" behaviors:RoundedClipBehavior.IsEnabled="True"
-                                            SnapsToDevicePixels="True">
-                                        <ScrollViewer Margin="2"
-                                                      VerticalScrollBarVisibility="Auto"
-                                                      HorizontalScrollBarVisibility="Disabled"
-                                                      CanContentScroll="True">
-                                            <ItemsPresenter/>
-                                        </ScrollViewer>
-                                    </Border>
-                                </Grid>
-                            </Popup>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
+        <!-- Level 6 toolbar: rest S; checked = filled accent (no rest hairline). Domain node strokes stay out of chrome. -->
         <Style x:Key="MindMapToolbarToggleButtonStyle" TargetType="ToggleButton">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="12,7"/>
             <Setter Property="MinHeight" Value="32"/>
             <Setter Property="MinWidth" Value="176"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
             <Setter Property="Margin" Value="0,0,8,8"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="ToggleBorder"
                         Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
+                        BorderBrush="Transparent"
+                        BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Control}"
                         Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
@@ -389,20 +85,10 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource MindMapSelectedBorderBrush}"/>
-                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource MindMapSelectedBorderBrush}"/>
-                                <Setter TargetName="ToggleBorder" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect Color="#4A6EE0"
-                                                          BlurRadius="12"
-                                                          ShadowDepth="0"
-                                                          Opacity="0.22"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryForeground}"/>
+                                <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource AccentPrimary}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
@@ -413,31 +99,11 @@
             </Setter>
         </Style>
 
-        <Style x:Key="MindMapToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogPrimaryButtonStyle}">
-            <Setter Property="Padding" Value="14,7"/>
-            <Setter Property="MinHeight" Value="32"/>
-            <Setter Property="MinWidth" Value="96"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Margin" Value="0,0,8,8"/>
-        </Style>
+        <Style x:Key="MindMapToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarPrimaryButtonStyle}"/>
     </Window.Resources>
-
-    <Grid Margin="10">
-    <Border CornerRadius="{StaticResource Radius.Overlay}"
-            Background="{DynamicResource WindowBackground}"
-            Margin="1"
-            IsHitTestVisible="False">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="20" ShadowDepth="0"/>
-        </Border.Effect>
-    </Border>
-    <Border CornerRadius="{StaticResource Radius.Overlay}"
-            Background="{DynamicResource WindowBackground}"
-            behaviors:RoundedClipBehavior.IsEnabled="True"
-            ClipToBounds="True"
-            SnapsToDevicePixels="True">
-<Grid x:Name="ContentRoot"
-          Background="{DynamicResource WindowBackground}">
+    <controls:FeatureWindowShell>
+        <controls:FeatureWindowShell.Body><Grid x:Name="ContentRoot"
+          Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -449,7 +115,7 @@
         <Border Grid.Row="0"
                 Background="Transparent"
                 BorderThickness="0"
-                Padding="20,12">
+                Padding="{StaticResource Shell.FeatureTitleRowPadding}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -458,6 +124,7 @@
 
                 <Border Grid.Column="0"
                         Margin="0,0,14,0"
+                        VerticalAlignment="Center"
                         Style="{StaticResource ChromeTitleFieldBorderStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -467,18 +134,17 @@
                         <TextBox x:Name="TitleTextBox"
                                  Grid.Column="0"
                                  Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                 FontSize="19"
+                                 FontSize="{StaticResource Type.DialogTitle}"
                                  FontWeight="SemiBold"
                                  Foreground="{DynamicResource TextColor}"
                                  CaretBrush="{DynamicResource TextColor}"
-                                 VerticalAlignment="Center"
                                  TextChanged="EditorField_TextChanged"
                                  ToolTip="{Binding [MindMapTitleHint], Source={StaticResource Loc}}"/>
                         <TextBlock x:Name="EditedIndicatorText"
                                    Grid.Column="1"
                                    Text="{Binding [EditedIndicator], Source={StaticResource Loc}}"
                                    Margin="12,0,0,0"
-                                   FontSize="12"
+                                   FontSize="{StaticResource Type.Caption}"
                                    FontStyle="Italic"
                                    Foreground="{DynamicResource TextColorSecondary}"
                                    VerticalAlignment="Center"
@@ -519,9 +185,8 @@
         </Border>
 
         <Border Grid.Row="1"
-                Margin="20,8,20,0"
-                Style="{StaticResource ChromeFieldBorderStyle}"
-                Padding="10,4">
+                Margin="20,4,20,0"
+                Style="{StaticResource ChromeFieldBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -621,7 +286,7 @@
                                             BorderThickness="0">
                                         <TextBlock x:Name="ManualPositioningStateText"
                                                    Text="{Binding [MindMapManualPositioningOff], Source={StaticResource Loc}}"
-                                                   FontSize="10"
+                                                   FontSize="{StaticResource Type.Chip}"
                                                    FontWeight="Bold"
                                                    Foreground="{DynamicResource TextColorSecondary}"/>
                                     </Border>
@@ -640,7 +305,7 @@
                                     Click="ResetZoomButton_Click"/>
                             <TextBlock Text="{Binding [MindMapZoom], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="12"
+                                       FontSize="{StaticResource Type.Caption}"
                                        Foreground="{DynamicResource TextColorSecondary}"
                                        Margin="2,0,8,0"/>
                             <Slider x:Name="ZoomSlider"
@@ -661,21 +326,38 @@
                                    Style="{StaticResource MindMapToolbarSectionLabelStyle}"/>
                         <StackPanel Orientation="Horizontal"
                                     VerticalAlignment="Center">
-                            <TextBox x:Name="SearchTextBox"
-                                     Width="220"
-                                     Style="{StaticResource MindMapToolbarTextBoxStyle}"
-                                     TextChanged="SearchTextBox_TextChanged"
-                                     ToolTip="{Binding [MindMapSearchHint], Source={StaticResource Loc}}"/>
+                            <!-- Same chrome field as main/flashcard search; WindowBackground inset so it reads on the white toolbar plate. -->
+                            <Border Width="220"
+                                    Height="32"
+                                    MinHeight="32"
+                                    Padding="6,0"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource ChromeFieldBorderStyle}"
+                                    Background="{DynamicResource WindowBackground}">
+                                <DockPanel LastChildFill="True">
+                                    <icons:AppIcon Kind="Search"
+                                                   Width="14"
+                                                   Height="14"
+                                                   Foreground="{DynamicResource TextColorSecondary}"
+                                                   Margin="2,0,8,0"
+                                                   VerticalAlignment="Center"/>
+                                    <TextBox x:Name="SearchTextBox"
+                                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                             VerticalContentAlignment="Center"
+                                             FontSize="{StaticResource Type.Caption}"
+                                             TextChanged="SearchTextBox_TextChanged"
+                                             ToolTip="{Binding [MindMapSearchHint], Source={StaticResource Loc}}"/>
+                                </DockPanel>
+                            </Border>
                             <Button Content="{Binding [MindMapSearchPrevious], Source={StaticResource Loc}}"
                                     Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
-                                    Margin="8,0,6,0"
                                     Click="SearchPreviousButton_Click"/>
                             <Button Content="{Binding [MindMapSearchNext], Source={StaticResource Loc}}"
                                     Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
                                     Click="SearchNextButton_Click"/>
                             <TextBlock x:Name="SearchResultsTextBlock"
                                        VerticalAlignment="Center"
-                                       FontSize="12"
+                                       FontSize="{StaticResource Type.Caption}"
                                        MinWidth="56"
                                        Foreground="{DynamicResource TextColorSecondary}"
                                        Text="{Binding [MindMapSearchNoResults], Source={StaticResource Loc}}"/>
@@ -755,6 +437,6 @@
         </Border>
 
     </Grid>
-    </Border>
-</Grid>
+        </controls:FeatureWindowShell.Body>
+    </controls:FeatureWindowShell>
 </Window>

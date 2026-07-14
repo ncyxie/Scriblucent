@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views;
 
 public partial class ModernMessageDialog : Window
@@ -66,7 +68,7 @@ public partial class ModernMessageDialog : Window
         EscapeChoice = ResultToChoice(EscapeResult);
 
         InitializeComponent();
-        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+        _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         ApplyPrimaryButtonStyle(DialogTone);
         ConfigureButtonLayout();
         Scriblucent.Services.WindowThemeService.Register(this);
@@ -126,7 +128,7 @@ public partial class ModernMessageDialog : Window
         EscapeChoice = ResultToChoice(EscapeResult);
 
         InitializeComponent();
-        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+        _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         ApplyButtonStyles(
             primaryStyle ?? DefaultPrimaryButtonStyleForTone(tone),
             secondaryStyle,
@@ -242,29 +244,29 @@ public partial class ModernMessageDialog : Window
         {
             ModernDialogTone.Success => (
                 "✓",
-                ResolveResourceBrush("FlashcardKnownChipBackground", "#E8F8F0"),
-                ResolveResourceBrush("FlashcardKnownChipBorder", "#B7E6CC"),
-                ResolveResourceBrush("FlashcardKnownChipForeground", "#096B3F")),
+                ResolveResourceBrush("AccentSuccessSubtle", "#E8F8F0"),
+                ResolveResourceBrush("AccentSuccessSubtleBorder", "#B7E6CC"),
+                ResolveResourceBrush("AccentSuccessSubtleForeground", "#096B3F")),
             ModernDialogTone.Danger or ModernDialogTone.Error => (
                 "!",
-                CreateBrush("#FEE2E2"),
-                CreateBrush("#FCA5A5"),
-                CreateBrush("#DC2626")),
+                ResolveResourceBrush("AccentDangerSubtle", "#F6DEDE"),
+                ResolveResourceBrush("AccentDangerSubtleBorder", "#D7A6A6"),
+                ResolveResourceBrush("AccentDangerSubtleForeground", "#9F2D2D")),
             ModernDialogTone.Warning => (
                 "!",
-                CreateBrush("#FFF4E0"),
-                CreateBrush("#F6D28B"),
-                CreateBrush("#B45309")),
+                ResolveResourceBrush("AccentWarningSubtle", "#FFF9E6"),
+                ResolveResourceBrush("AccentWarningSubtleBorder", "#F59E0B"),
+                ResolveResourceBrush("AccentWarningSubtleForeground", "#92400E")),
             ModernDialogTone.Question => (
                 "?",
-                ResolveResourceBrush("EditorToolActiveBackground", "#EAF2FF"),
-                ResolveResourceBrush("EditorToolActiveBorder", "#8FB1FF"),
-                ResolveResourceBrush("EditorToolActiveForeground", "#1F4EA8")),
+                ResolveResourceBrush("AccentPrimarySubtle", "#EEF0FE"),
+                ResolveResourceBrush("AccentPrimary", "#435CEC"),
+                ResolveResourceBrush("AccentPrimary", "#435CEC")),
             _ => (
                 "i",
-                ResolveResourceBrush("EditorToolActiveBackground", "#EAF2FF"),
-                ResolveResourceBrush("EditorToolActiveBorder", "#8FB1FF"),
-                ResolveResourceBrush("EditorToolActiveForeground", "#1F4EA8"))
+                ResolveResourceBrush("AccentPrimarySubtle", "#EEF0FE"),
+                ResolveResourceBrush("AccentPrimary", "#435CEC"),
+                ResolveResourceBrush("AccentPrimary", "#435CEC"))
         };
     }
 

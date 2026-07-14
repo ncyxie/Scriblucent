@@ -4,6 +4,8 @@ using System;
 using System.Windows;
 using System.Windows.Input;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views
 {
     public partial class SearchReplaceDialogLocalized : Window
@@ -23,7 +25,7 @@ namespace Scriblucent.Views
             _editor = editor;
 
             InitializeComponent();
-            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+            _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
             Scriblucent.Services.WindowThemeService.Register(this);
             Loaded += SearchReplaceDialogLocalized_Loaded;
 

@@ -63,6 +63,7 @@ public static class AppIconKindMap
         AppIconKind.Lightbulb => PackIconLucideKind.Lightbulb,
         AppIconKind.Refresh => PackIconLucideKind.RefreshCw,
         AppIconKind.Warning => PackIconLucideKind.TriangleAlert,
+        AppIconKind.Github => PackIconLucideKind.Github,
         _ => PackIconLucideKind.CircleQuestionMark
     };
 }

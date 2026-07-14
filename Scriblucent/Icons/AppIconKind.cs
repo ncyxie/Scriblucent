@@ -56,5 +56,6 @@ public enum AppIconKind
     Play,
     Lightbulb,
     Refresh,
-    Warning
+    Warning,
+    Github
 }

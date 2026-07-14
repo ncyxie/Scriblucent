@@ -66,69 +66,88 @@ namespace Scriblucent
         private ScrollViewer? _dashboardDragScrollViewer;
         private Point _dashboardDragScrollPosition;
 
-        private FrameworkElement? RecentSectionBodyElement => FindName("RecentSectionBody") as FrameworkElement;
-        private FrameworkElement? FlashcardRecentSectionBodyElement => FindName("FlashcardRecentSectionBody") as FrameworkElement;
-        private FrameworkElement? QuizRecentSectionBodyElement => FindName("QuizRecentSectionBody") as FrameworkElement;
-        private FrameworkElement? MindMapRecentSectionBodyElement => FindName("MindMapRecentSectionBody") as FrameworkElement;
-        private FrameworkElement? CalendarSectionBodyElement => FindName("CalendarSectionBody") as FrameworkElement;
-        private FrameworkElement? FlashcardCalendarSectionBodyElement => FindName("FlashcardCalendarSectionBody") as FrameworkElement;
-        private FrameworkElement? QuizCalendarSectionBodyElement => FindName("QuizCalendarSectionBody") as FrameworkElement;
-        private FrameworkElement? MindMapCalendarSectionBodyElement => FindName("MindMapCalendarSectionBody") as FrameworkElement;
-        private FrameworkElement? GroupsSectionBodyElement => FindName("GroupsSectionBody") as FrameworkElement;
-        private ItemsControl? GroupsItemsControlElement => FindName("GroupsItemsControl") as ItemsControl;
-        private FrameworkElement? UngroupedSectionBodyElement => FindName("UngroupedSectionBody") as FrameworkElement;
-        private FrameworkElement? UngroupedNotesItemsControlElement => FindName("UngroupedNotesItemsControl") as FrameworkElement;
-        private FrameworkElement? NotesDashboardSectionBodyElement => FindName("NotesDashboardSectionBody") as FrameworkElement;
-        private FrameworkElement? FlashcardGroupsSectionBodyElement => FindName("FlashcardGroupsSectionBody") as FrameworkElement;
-        private FrameworkElement? FlashcardDashboardGroupsSectionBodyElement => FindName("FlashcardDashboardGroupsSectionBody") as FrameworkElement;
-        private FrameworkElement? FlashcardDashboardUngroupedSectionBodyElement => FindName("FlashcardDashboardUngroupedSectionBody") as FrameworkElement;
-        private ItemsControl? FlashcardDashboardGroupsItemsControlElement => FindName("FlashcardDashboardGroupsItemsControl") as ItemsControl;
-        private FrameworkElement? FlashcardDashboardUngroupedItemsControlElement => FindName("FlashcardDashboardUngroupedItemsControl") as FrameworkElement;
-        private FrameworkElement? QuizGroupsSectionBodyElement => FindName("QuizGroupsSectionBody") as FrameworkElement;
-        private FrameworkElement? QuizDashboardGroupsSectionBodyElement => FindName("QuizDashboardGroupsSectionBody") as FrameworkElement;
-        private FrameworkElement? QuizDashboardUngroupedSectionBodyElement => FindName("QuizDashboardUngroupedSectionBody") as FrameworkElement;
-        private ItemsControl? QuizDashboardGroupsItemsControlElement => FindName("QuizDashboardGroupsItemsControl") as ItemsControl;
-        private FrameworkElement? QuizDashboardUngroupedItemsControlElement => FindName("QuizDashboardUngroupedItemsControl") as FrameworkElement;
-        private FrameworkElement? MindMapGroupsSectionBodyElement => FindName("MindMapGroupsSectionBody") as FrameworkElement;
-        private FrameworkElement? MindMapDashboardGroupsSectionBodyElement => FindName("MindMapDashboardGroupsSectionBody") as FrameworkElement;
-        private FrameworkElement? MindMapDashboardUngroupedSectionBodyElement => FindName("MindMapDashboardUngroupedSectionBody") as FrameworkElement;
-        private FrameworkElement? NotesDashboardViewElement => FindName("NotesDashboardView") as FrameworkElement;
-        private FrameworkElement? FlashcardsDashboardViewElement => FindName("FlashcardsDashboardView") as FrameworkElement;
-        private FrameworkElement? QuizzesDashboardViewElement => FindName("QuizzesDashboardView") as FrameworkElement;
-        private FrameworkElement? MindMapsDashboardViewElement => FindName("MindMapsDashboardView") as FrameworkElement;
-        private FrameworkElement? NotesEmptyDashboardPanelElement => FindName("NotesEmptyDashboardPanel") as FrameworkElement;
-        private FrameworkElement? NotesDashboardContentHostElement => FindName("NotesDashboardContentHost") as FrameworkElement;
-        private FrameworkElement? FlashcardsDashboardContentHostElement => FindName("FlashcardsDashboardContentHost") as FrameworkElement;
-        private FrameworkElement? QuizzesDashboardContentHostElement => FindName("QuizzesDashboardContentHost") as FrameworkElement;
-        private FrameworkElement? MindMapsDashboardContentHostElement => FindName("MindMapsDashboardContentHost") as FrameworkElement;
-        private FrameworkElement? FlashcardsEmptyDashboardPanelElement => FindName("FlashcardsEmptyDashboardPanel") as FrameworkElement;
-        private FrameworkElement? QuizzesEmptyDashboardPanelElement => FindName("QuizzesEmptyDashboardPanel") as FrameworkElement;
-        private FrameworkElement? MindMapsEmptyDashboardPanelElement => FindName("MindMapsEmptyDashboardPanel") as FrameworkElement;
-        private ItemsControl? MindMapDashboardGroupsItemsControlElement => FindName("MindMapDashboardGroupsItemsControl") as ItemsControl;
-        private FrameworkElement? MindMapDashboardUngroupedItemsControlElement => FindName("MindMapDashboardUngroupedItemsControl") as FrameworkElement;
-        private ScrollViewer? FlashcardsScrollViewerElement => FindName("FlashcardsScrollViewer") as ScrollViewer;
-        private ScrollViewer? QuizzesScrollViewerElement => FindName("QuizzesScrollViewer") as ScrollViewer;
-        private ScrollViewer? MindMapsScrollViewerElement => FindName("MindMapsScrollViewer") as ScrollViewer;
-        private FrameworkElement? CalendarSectionContainerElement => FindName("CalendarSectionContainer") as FrameworkElement;
-        private FrameworkElement? FlashcardCalendarSectionContainerElement => FindName("FlashcardCalendarSectionContainer") as FrameworkElement;
-        private FrameworkElement? QuizCalendarSectionContainerElement => FindName("QuizCalendarSectionContainer") as FrameworkElement;
-        private FrameworkElement? MindMapCalendarSectionContainerElement => FindName("MindMapCalendarSectionContainer") as FrameworkElement;
-        private FrameworkElement? GroupsSectionContainerElement => FindName("GroupsSectionContainer") as FrameworkElement;
-        private FrameworkElement? UngroupedSectionContainerElement => FindName("UngroupedSectionContainer") as FrameworkElement;
-        private FrameworkElement? FlashcardDashboardUngroupedSectionContainerElement => FindName("FlashcardDashboardUngroupedSectionContainer") as FrameworkElement;
-        private FrameworkElement? QuizDashboardUngroupedSectionContainerElement => FindName("QuizDashboardUngroupedSectionContainer") as FrameworkElement;
-        private FrameworkElement? MindMapDashboardUngroupedSectionContainerElement => FindName("MindMapDashboardUngroupedSectionContainer") as FrameworkElement;
-        private FrameworkElement? FlashcardDashboardGroupsSectionContainerElement => FindName("FlashcardDashboardGroupsSectionContainer") as FrameworkElement;
-        private FrameworkElement? QuizDashboardGroupsSectionContainerElement => FindName("QuizDashboardGroupsSectionContainer") as FrameworkElement;
-        private FrameworkElement? MindMapDashboardGroupsSectionContainerElement => FindName("MindMapDashboardGroupsSectionContainer") as FrameworkElement;
-        private FrameworkElement? MassSelectOverlayToolbarElement => FindName("MassSelectOverlayToolbar") as FrameworkElement;
-        private FrameworkElement? MassSelectMoreActionsPanelElement => FindName("MassSelectMoreActionsPanel") as FrameworkElement;
-        private Button? MassSelectMoreActionsToggleButtonElement => FindName("MassSelectMoreActionsToggleButton") as Button;
-        private Popup? SortNotesPopupElement => FindName("SortNotesPopup") as Popup;
-        private Popup? DashboardSectionsPopupElement => FindName("DashboardSectionsPopup") as Popup;
-        private ColumnDefinition? SidebarColumnElement => FindName("SidebarColumn") as ColumnDefinition;
-        private FrameworkElement? SidebarChromeElement => FindName("SidebarChrome") as FrameworkElement;
-        private FrameworkElement? MainContentRootElement => FindName("MainContentRoot") as FrameworkElement;
+
+        private FrameworkElement? NotesDashboardPageElement => NotesDashboardView;
+        private FrameworkElement? FlashcardsDashboardPageElement => FlashcardsDashboardView;
+        private FrameworkElement? QuizzesDashboardPageElement => QuizzesDashboardView;
+        private FrameworkElement? MindMapsDashboardPageElement => MindMapsDashboardView;
+
+        private object? FindDashboardName(string name)
+            => NotesDashboardView?.FindName(name)
+               ?? FlashcardsDashboardView?.FindName(name)
+               ?? QuizzesDashboardView?.FindName(name)
+               ?? MindMapsDashboardView?.FindName(name)
+               ?? FindName(name);
+
+        private ScrollViewer? NotesScrollViewer
+            => NotesDashboardView?.FindName("NotesScrollViewer") as ScrollViewer;
+
+        private ScrollViewer? RecentNotesScrollViewer
+            => NotesDashboardView?.FindName("RecentNotesScrollViewer") as ScrollViewer;
+
+        private FrameworkElement? RecentSectionBodyElement => FindDashboardName("RecentSectionBody") as FrameworkElement;
+        private FrameworkElement? FlashcardRecentSectionBodyElement => FindDashboardName("FlashcardRecentSectionBody") as FrameworkElement;
+        private FrameworkElement? QuizRecentSectionBodyElement => FindDashboardName("QuizRecentSectionBody") as FrameworkElement;
+        private FrameworkElement? MindMapRecentSectionBodyElement => FindDashboardName("MindMapRecentSectionBody") as FrameworkElement;
+        private FrameworkElement? CalendarSectionBodyElement => FindDashboardName("CalendarSectionBody") as FrameworkElement;
+        private FrameworkElement? FlashcardCalendarSectionBodyElement => FindDashboardName("FlashcardCalendarSectionBody") as FrameworkElement;
+        private FrameworkElement? QuizCalendarSectionBodyElement => FindDashboardName("QuizCalendarSectionBody") as FrameworkElement;
+        private FrameworkElement? MindMapCalendarSectionBodyElement => FindDashboardName("MindMapCalendarSectionBody") as FrameworkElement;
+        private FrameworkElement? GroupsSectionBodyElement => FindDashboardName("GroupsSectionBody") as FrameworkElement;
+        private ItemsControl? GroupsItemsControlElement => FindDashboardName("GroupsItemsControl") as ItemsControl;
+        private FrameworkElement? UngroupedSectionBodyElement => FindDashboardName("UngroupedSectionBody") as FrameworkElement;
+        private FrameworkElement? UngroupedNotesItemsControlElement => FindDashboardName("UngroupedNotesItemsControl") as FrameworkElement;
+        private FrameworkElement? NotesDashboardSectionBodyElement => FindDashboardName("NotesDashboardSectionBody") as FrameworkElement;
+        private FrameworkElement? FlashcardGroupsSectionBodyElement => FindDashboardName("FlashcardGroupsSectionBody") as FrameworkElement;
+        private FrameworkElement? FlashcardDashboardGroupsSectionBodyElement => FindDashboardName("FlashcardDashboardGroupsSectionBody") as FrameworkElement;
+        private FrameworkElement? FlashcardDashboardUngroupedSectionBodyElement => FindDashboardName("FlashcardDashboardUngroupedSectionBody") as FrameworkElement;
+        private ItemsControl? FlashcardDashboardGroupsItemsControlElement => FindDashboardName("FlashcardDashboardGroupsItemsControl") as ItemsControl;
+        private FrameworkElement? FlashcardDashboardUngroupedItemsControlElement => FindDashboardName("FlashcardDashboardUngroupedItemsControl") as FrameworkElement;
+        private FrameworkElement? QuizGroupsSectionBodyElement => FindDashboardName("QuizGroupsSectionBody") as FrameworkElement;
+        private FrameworkElement? QuizDashboardGroupsSectionBodyElement => FindDashboardName("QuizDashboardGroupsSectionBody") as FrameworkElement;
+        private FrameworkElement? QuizDashboardUngroupedSectionBodyElement => FindDashboardName("QuizDashboardUngroupedSectionBody") as FrameworkElement;
+        private ItemsControl? QuizDashboardGroupsItemsControlElement => FindDashboardName("QuizDashboardGroupsItemsControl") as ItemsControl;
+        private FrameworkElement? QuizDashboardUngroupedItemsControlElement => FindDashboardName("QuizDashboardUngroupedItemsControl") as FrameworkElement;
+        private FrameworkElement? MindMapGroupsSectionBodyElement => FindDashboardName("MindMapGroupsSectionBody") as FrameworkElement;
+        private FrameworkElement? MindMapDashboardGroupsSectionBodyElement => FindDashboardName("MindMapDashboardGroupsSectionBody") as FrameworkElement;
+        private FrameworkElement? MindMapDashboardUngroupedSectionBodyElement => FindDashboardName("MindMapDashboardUngroupedSectionBody") as FrameworkElement;
+        private FrameworkElement? NotesDashboardViewElement => NotesDashboardView;
+        private FrameworkElement? FlashcardsDashboardViewElement => FlashcardsDashboardView;
+        private FrameworkElement? QuizzesDashboardViewElement => QuizzesDashboardView;
+        private FrameworkElement? MindMapsDashboardViewElement => MindMapsDashboardView;
+        private FrameworkElement? NotesEmptyDashboardPanelElement => FindDashboardName("NotesEmptyDashboardPanel") as FrameworkElement;
+        private FrameworkElement? NotesDashboardContentHostElement => FindDashboardName("NotesDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? FlashcardsDashboardContentHostElement => FindDashboardName("FlashcardsDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? QuizzesDashboardContentHostElement => FindDashboardName("QuizzesDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? MindMapsDashboardContentHostElement => FindDashboardName("MindMapsDashboardContentHost") as FrameworkElement;
+        private FrameworkElement? FlashcardsEmptyDashboardPanelElement => FindDashboardName("FlashcardsEmptyDashboardPanel") as FrameworkElement;
+        private FrameworkElement? QuizzesEmptyDashboardPanelElement => FindDashboardName("QuizzesEmptyDashboardPanel") as FrameworkElement;
+        private FrameworkElement? MindMapsEmptyDashboardPanelElement => FindDashboardName("MindMapsEmptyDashboardPanel") as FrameworkElement;
+        private ItemsControl? MindMapDashboardGroupsItemsControlElement => FindDashboardName("MindMapDashboardGroupsItemsControl") as ItemsControl;
+        private FrameworkElement? MindMapDashboardUngroupedItemsControlElement => FindDashboardName("MindMapDashboardUngroupedItemsControl") as FrameworkElement;
+        private ScrollViewer? FlashcardsScrollViewerElement => FindDashboardName("FlashcardsScrollViewer") as ScrollViewer;
+        private ScrollViewer? QuizzesScrollViewerElement => FindDashboardName("QuizzesScrollViewer") as ScrollViewer;
+        private ScrollViewer? MindMapsScrollViewerElement => FindDashboardName("MindMapsScrollViewer") as ScrollViewer;
+        private FrameworkElement? CalendarSectionContainerElement => FindDashboardName("CalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? FlashcardCalendarSectionContainerElement => FindDashboardName("FlashcardCalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? QuizCalendarSectionContainerElement => FindDashboardName("QuizCalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? MindMapCalendarSectionContainerElement => FindDashboardName("MindMapCalendarSectionContainer") as FrameworkElement;
+        private FrameworkElement? GroupsSectionContainerElement => FindDashboardName("GroupsSectionContainer") as FrameworkElement;
+        private FrameworkElement? UngroupedSectionContainerElement => FindDashboardName("UngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? FlashcardDashboardUngroupedSectionContainerElement => FindDashboardName("FlashcardDashboardUngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? QuizDashboardUngroupedSectionContainerElement => FindDashboardName("QuizDashboardUngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? MindMapDashboardUngroupedSectionContainerElement => FindDashboardName("MindMapDashboardUngroupedSectionContainer") as FrameworkElement;
+        private FrameworkElement? FlashcardDashboardGroupsSectionContainerElement => FindDashboardName("FlashcardDashboardGroupsSectionContainer") as FrameworkElement;
+        private FrameworkElement? QuizDashboardGroupsSectionContainerElement => FindDashboardName("QuizDashboardGroupsSectionContainer") as FrameworkElement;
+        private FrameworkElement? MindMapDashboardGroupsSectionContainerElement => FindDashboardName("MindMapDashboardGroupsSectionContainer") as FrameworkElement;
+        private FrameworkElement? MassSelectOverlayToolbarElement => FindDashboardName("MassSelectOverlayToolbar") as FrameworkElement;
+        private FrameworkElement? MassSelectMoreActionsPanelElement => FindDashboardName("MassSelectMoreActionsPanel") as FrameworkElement;
+        private Button? MassSelectMoreActionsToggleButtonElement => FindDashboardName("MassSelectMoreActionsToggleButton") as Button;
+        private Popup? SortNotesPopupElement => FindDashboardName("SortNotesPopup") as Popup;
+        private Popup? DashboardSectionsPopupElement => FindDashboardName("DashboardSectionsPopup") as Popup;
+        private ColumnDefinition? SidebarColumnElement => FindDashboardName("SidebarColumn") as ColumnDefinition;
+        private FrameworkElement? SidebarChromeElement => FindDashboardName("SidebarChrome") as FrameworkElement;
+        private FrameworkElement? MainContentRootElement => FindDashboardName("MainContentRoot") as FrameworkElement;
         private bool _isMassSelectMoreActionsExpanded;
 
         internal static bool IsNoteDragInProgress { get; private set; }
@@ -1433,7 +1452,7 @@ namespace Scriblucent
                 });
         }
 
-        private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
+        internal void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
         {
             if (DataContext is not MainViewModel vm || sender is not System.Windows.Controls.Calendar calendar)
                 return;
@@ -1444,7 +1463,7 @@ namespace Scriblucent
 
 
 
-        private void NotesScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
+        internal void NotesScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (!IsNoteDragInProgress || sender is not ScrollViewer scrollViewer)
                 return;
@@ -1464,7 +1483,7 @@ namespace Scriblucent
             }
         }
 
-        private void NotesScrollViewer_PreviewDragLeave(object sender, DragEventArgs e)
+        internal void NotesScrollViewer_PreviewDragLeave(object sender, DragEventArgs e)
         {
             if (DashboardDragGhost.IsNoteDropGlowSyncActive)
                 NoteCardControl.ClearDropGlowOwner();
@@ -1612,7 +1631,7 @@ namespace Scriblucent
             }
         }
 
-        private void DashboardScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
+        internal void DashboardScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (sender is not ScrollViewer scrollViewer || !HasDashboardListingDragData(e))
                 return;
@@ -1620,13 +1639,13 @@ namespace Scriblucent
             StartDashboardDragAutoScroll(scrollViewer, e);
         }
 
-        private void DashboardScrollViewer_PreviewDragLeave(object sender, DragEventArgs e)
+        internal void DashboardScrollViewer_PreviewDragLeave(object sender, DragEventArgs e)
         {
             if (ReferenceEquals(sender, _dashboardDragScrollViewer))
                 StopDashboardDragAutoScroll();
         }
 
-        private void DashboardScrollViewer_Drop(object sender, DragEventArgs e)
+        internal void DashboardScrollViewer_Drop(object sender, DragEventArgs e)
         {
             if (ReferenceEquals(sender, _dashboardDragScrollViewer))
                 StopDashboardDragAutoScroll();
@@ -1691,7 +1710,7 @@ namespace Scriblucent
                    || e.Data.GetDataPresent(typeof(QuizViewModel));
         }
 
-        private void NotesScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        internal void NotesScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (!IsNoteDragInProgress || sender is not ScrollViewer scrollViewer)
                 return;
@@ -2184,7 +2203,7 @@ namespace Scriblucent
             schedulePanel?.ShowAnimated(vm, noteViewModel);
         }
 
-        private void CreateFlashcardsButton_Click(object sender, RoutedEventArgs e)
+        internal void CreateFlashcardsButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
                 return;
@@ -2193,13 +2212,13 @@ namespace Scriblucent
                 OpenFlashcardSetEditor(vm, null);
         }
 
-        private void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
+        internal void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
         }
 
-        private void OpenFlashcardCombineMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenFlashcardCombineMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is not MainViewModel vm)
                 return;
@@ -2211,7 +2230,7 @@ namespace Scriblucent
             window.ShowDialog();
         }
 
-        private void OpenFlashcardHistoryMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenFlashcardHistoryMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is not MainViewModel vm)
                 return;
@@ -2223,7 +2242,7 @@ namespace Scriblucent
             window.ShowDialog();
         }
 
-        private void CreateQuizButton_Click(object sender, RoutedEventArgs e)
+        internal void CreateQuizButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
                 return;
@@ -2232,7 +2251,7 @@ namespace Scriblucent
                 OpenQuizEditor(vm, null);
         }
 
-        private void CreateMindMapButton_Click(object sender, RoutedEventArgs e)
+        internal void CreateMindMapButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
                 return;
@@ -2291,7 +2310,8 @@ namespace Scriblucent
                 document?.SetNames,
                 document?.StudySession,
                 document?.SourceNoteId,
-                noteId => OpenNoteById(vm, noteId))
+                noteId => OpenNoteById(vm, noteId),
+                document?.FlipDelayMilliseconds ?? 0)
             {
                 Owner = this
             };
@@ -2317,7 +2337,7 @@ namespace Scriblucent
             }
         }
 
-        private void OpenFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: FlashcardSetViewModel set })
                 OpenFlashcardSetEditor(vm, set);
@@ -2388,18 +2408,18 @@ namespace Scriblucent
             window.ShowDialog();
         }
 
-        private void QuizDashboardActionsButton_Click(object sender, RoutedEventArgs e)
+        internal void QuizDashboardActionsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
         }
 
-        private void OpenQuizLibraryMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenQuizLibraryMenuItem_Click(object sender, RoutedEventArgs e)
         {
             OpenQuizLibraryButton_Click(sender, e);
         }
 
-        private void OpenAttemptHistoryMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenAttemptHistoryMenuItem_Click(object sender, RoutedEventArgs e)
         {
             OpenAttemptHistoryButton_Click(sender, e);
         }
@@ -2435,7 +2455,7 @@ namespace Scriblucent
             return target?.DataContext as QuizViewModel;
         }
 
-        private void DeleteQuizMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DeleteQuizMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var quiz = GetQuizFromMenuSender(sender);
             if (quiz is null)
@@ -2454,7 +2474,7 @@ namespace Scriblucent
                 vm.RequestDeleteQuiz(quiz);
         }
 
-        private void OpenQuizMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenQuizMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm
                 && sender is MenuItem menuItem
@@ -2464,7 +2484,7 @@ namespace Scriblucent
             }
         }
 
-        private void DuplicateQuizMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DuplicateQuizMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem menuItem && menuItem.DataContext is QuizViewModel quizVm)
             {
@@ -2475,19 +2495,19 @@ namespace Scriblucent
             }
         }
 
-        private void ToggleQuizPinMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void ToggleQuizPinMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: QuizViewModel quizVm })
                 vm.ToggleQuizPin(quizVm);
         }
 
-        private void RemoveQuizFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void RemoveQuizFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: QuizViewModel quizVm })
                 vm.RemoveQuizFromGroup(quizVm);
         }
 
-        private void QuizInfoMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void QuizInfoMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var quiz = GetQuizFromMenuSender(sender)
                 ?? (sender as MenuItem)?.DataContext as QuizViewModel;
@@ -2506,7 +2526,7 @@ namespace Scriblucent
             return target?.DataContext as FlashcardSetViewModel;
         }
 
-        private void DeleteFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DeleteFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var set = GetFlashcardSetFromMenuSender(sender);
             if (set is null)
@@ -2525,25 +2545,25 @@ namespace Scriblucent
                 vm.RequestDeleteFlashcardSet(set);
         }
 
-        private void DuplicateFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DuplicateFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: FlashcardSetViewModel set })
                 vm.DuplicateFlashcardSet(set);
         }
 
-        private void ToggleFlashcardSetPinMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void ToggleFlashcardSetPinMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: FlashcardSetViewModel set })
                 vm.ToggleFlashcardSetPin(set);
         }
 
-        private void RemoveFlashcardSetFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void RemoveFlashcardSetFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: FlashcardSetViewModel set })
                 vm.RemoveFlashcardSetFromGroup(set);
         }
 
-        private void FlashcardSetInfoMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void FlashcardSetInfoMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var set = GetFlashcardSetFromMenuSender(sender)
                 ?? (sender as MenuItem)?.DataContext as FlashcardSetViewModel;
@@ -2552,7 +2572,7 @@ namespace Scriblucent
                 ShowFlashcardSetInfo(set);
         }
 
-        private void OpenMindMapMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void OpenMindMapMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem menuItem && menuItem.DataContext is MindMapViewModel mindMapVm)
             {
@@ -2560,7 +2580,7 @@ namespace Scriblucent
             }
         }
 
-        private async void DuplicateMindMapMenuItem_Click(object sender, RoutedEventArgs e)
+        internal async void DuplicateMindMapMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem menuItem || menuItem.DataContext is not MindMapViewModel mindMapVm)
                 return;
@@ -2577,13 +2597,13 @@ namespace Scriblucent
             }
         }
 
-        private void ToggleMindMapPinMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void ToggleMindMapPinMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: MindMapViewModel mindMapVm })
                 vm.ToggleMindMapPin(mindMapVm);
         }
 
-        private async void DeleteMindMapMenuItem_Click(object sender, RoutedEventArgs e)
+        internal async void DeleteMindMapMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem menuItem || menuItem.DataContext is not MindMapViewModel mindMapVm)
                 return;
@@ -2604,13 +2624,13 @@ namespace Scriblucent
                 vm.RequestDeleteMindMap(mindMapVm);
         }
 
-        private void RemoveMindMapFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void RemoveMindMapFromGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is MenuItem { DataContext: MindMapViewModel mindMapVm })
                 vm.RemoveMindMapFromGroup(mindMapVm);
         }
 
-        private void MindMapInfoMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void MindMapInfoMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem { DataContext: MindMapViewModel mindMapVm })
                 ShowMindMapInfo(mindMapVm);
@@ -2720,31 +2740,31 @@ namespace Scriblucent
                 settingsPanel.ShowAnimated();
             }
         }
-        private void RecentNoteButton_Click(object sender, RoutedEventArgs e)
+        internal void RecentNoteButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Tag is NoteCardViewModel noteVm)
                 OpenNoteEditor(noteVm);
         }
 
-        private void RecentFlashcardSetButton_Click(object sender, RoutedEventArgs e)
+        internal void RecentFlashcardSetButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is Button { Tag: FlashcardSetViewModel set })
                 OpenFlashcardSetEditor(vm, set);
         }
 
-        private void RecentMindMapButton_Click(object sender, RoutedEventArgs e)
+        internal void RecentMindMapButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { Tag: MindMapViewModel mindMap })
                 OpenMindMapEditor(mindMap);
         }
 
-        private void RecentQuizButton_Click(object sender, RoutedEventArgs e)
+        internal void RecentQuizButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm && sender is Button { Tag: QuizViewModel quiz })
                 OpenQuizEditor(vm, quiz);
         }
 
-        private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        internal void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (e.OriginalSource is DependencyObject source && IsWithinCalendarScheduleGearButton(source))
                 return;
@@ -2772,7 +2792,7 @@ namespace Scriblucent
             }
         }
 
-        private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
+        internal void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { Tag: CalendarScheduledItemViewModel item })
             {
@@ -2832,20 +2852,20 @@ namespace Scriblucent
                 LocalizationService.GetString("CalendarAssignMenu"), subtitle);
         }
 
-        private void ScheduleFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void ScheduleFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var set = GetFlashcardSetFromMenuSender(sender);
             if (set != null)
                 OpenFlashcardSetSchedule(set);
         }
 
-        private void ScheduleMindMapMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void ScheduleMindMapMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem menuItem && menuItem.DataContext is MindMapViewModel mindMapVm)
                 OpenMindMapSchedule(mindMapVm);
         }
 
-        private void ScheduleQuizMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void ScheduleQuizMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem menuItem && menuItem.DataContext is QuizViewModel quizVm)
                 OpenQuizSchedule(quizVm);
@@ -3156,124 +3176,124 @@ namespace Scriblucent
 
         private static string InfoText(string key) => LocalizationService.GetString(key);
 
-        private void ToggleRecentSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleRecentSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsRecentSectionExpanded = !vm.IsRecentSectionExpanded;
         }
 
-        private void ToggleGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsGroupsSectionExpanded = !vm.IsGroupsSectionExpanded;
         }
 
-        private void ToggleCalendarSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleCalendarSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsCalendarSectionExpanded = !vm.IsCalendarSectionExpanded;
         }
 
-        private void ToggleUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsUngroupedSectionExpanded = !vm.IsUngroupedSectionExpanded;
         }
 
-        private void ToggleNotesDashboardSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleNotesDashboardSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsNotesDashboardSectionExpanded = !vm.IsNotesDashboardSectionExpanded;
         }
 
-        private void ToggleFlashcardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleFlashcardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsFlashcardGroupsSectionExpanded = !vm.IsFlashcardGroupsSectionExpanded;
         }
 
-        private void ToggleQuizGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleQuizGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsQuizGroupsSectionExpanded = !vm.IsQuizGroupsSectionExpanded;
         }
 
-        private void ToggleMindMapGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleMindMapGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsMindMapGroupsSectionExpanded = !vm.IsMindMapGroupsSectionExpanded;
         }
 
-        private void ToggleFlashcardDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleFlashcardDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsFlashcardDashboardGroupsSectionExpanded = !vm.IsFlashcardDashboardGroupsSectionExpanded;
         }
 
-        private void ToggleFlashcardDashboardUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleFlashcardDashboardUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsFlashcardDashboardUngroupedSectionExpanded = !vm.IsFlashcardDashboardUngroupedSectionExpanded;
         }
 
-        private void MoveFlashcardDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveFlashcardDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
             => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: true);
 
-        private void MoveFlashcardDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveFlashcardDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
             => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: false);
 
-        private void MoveFlashcardDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveFlashcardDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
             => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: false);
 
-        private void MoveFlashcardDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveFlashcardDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
             => SwapFlashcardDashboardGroupsAndUngrouped(groupsFirst: true);
 
-        private void ToggleQuizDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleQuizDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsQuizDashboardGroupsSectionExpanded = !vm.IsQuizDashboardGroupsSectionExpanded;
         }
 
-        private void ToggleQuizDashboardUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleQuizDashboardUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsQuizDashboardUngroupedSectionExpanded = !vm.IsQuizDashboardUngroupedSectionExpanded;
         }
 
-        private void MoveQuizDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveQuizDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
             => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: true);
 
-        private void MoveQuizDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveQuizDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
             => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: false);
 
-        private void MoveQuizDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveQuizDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
             => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: false);
 
-        private void MoveQuizDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveQuizDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
             => SwapQuizDashboardGroupsAndUngrouped(groupsFirst: true);
 
-        private void ToggleMindMapDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleMindMapDashboardGroupsSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsMindMapDashboardGroupsSectionExpanded = !vm.IsMindMapDashboardGroupsSectionExpanded;
         }
 
-        private void ToggleMindMapDashboardUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
+        internal void ToggleMindMapDashboardUngroupedSectionButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel vm)
                 vm.IsMindMapDashboardUngroupedSectionExpanded = !vm.IsMindMapDashboardUngroupedSectionExpanded;
         }
 
-        private void MoveMindMapDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveMindMapDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
             => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: true);
 
-        private void MoveMindMapDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveMindMapDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
             => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: false);
 
-        private void MoveMindMapDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveMindMapDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
             => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: false);
 
-        private void MoveMindMapDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveMindMapDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
             => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: true);
 
         private void ExitMassSelectButton_Click(object sender, RoutedEventArgs e)
@@ -3322,7 +3342,7 @@ namespace Scriblucent
                 vm.DeleteSelectedNotesCommand.Execute(null);
         }
 
-        private void StartDashboardMassSelectMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void StartDashboardMassSelectMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var listing = sender is MenuItem menuItem
                 ? menuItem.DataContext ?? ResolveDashboardGroupFromMenuItem(menuItem)
@@ -3345,28 +3365,28 @@ namespace Scriblucent
             }
         }
 
-        private void MoveGroupsUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveGroupsUpButton_Click(object sender, RoutedEventArgs e)
             => SwapNotesGroupsAndUngroupedSections(groupsFirst: true);
 
-        private void MoveGroupsDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveGroupsDownButton_Click(object sender, RoutedEventArgs e)
             => SwapNotesGroupsAndUngroupedSections(groupsFirst: false);
 
-        private void MoveUngroupedUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveUngroupedUpButton_Click(object sender, RoutedEventArgs e)
             => SwapNotesGroupsAndUngroupedSections(groupsFirst: false);
 
-        private void MoveUngroupedDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveUngroupedDownButton_Click(object sender, RoutedEventArgs e)
             => SwapNotesGroupsAndUngroupedSections(groupsFirst: true);
 
-        private void MoveCalendarUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveCalendarUpButton_Click(object sender, RoutedEventArgs e)
             => SwapActiveDashboardCalendarAndDashboard(calendarFirst: true);
 
-        private void MoveCalendarDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveCalendarDownButton_Click(object sender, RoutedEventArgs e)
             => SwapActiveDashboardCalendarAndDashboard(calendarFirst: false);
 
-        private void MoveDashboardContentUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveDashboardContentUpButton_Click(object sender, RoutedEventArgs e)
             => SwapActiveDashboardCalendarAndDashboard(calendarFirst: false);
 
-        private void MoveDashboardContentDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveDashboardContentDownButton_Click(object sender, RoutedEventArgs e)
             => SwapActiveDashboardCalendarAndDashboard(calendarFirst: true);
 
         private void SwapActiveDashboardCalendarAndDashboard(bool calendarFirst)
@@ -3391,7 +3411,7 @@ namespace Scriblucent
             }
         }
 
-        private void MoveSingleGroupUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveSingleGroupUpButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button { Tag: NoteGroupViewModel group })
                 return;
@@ -3406,7 +3426,7 @@ namespace Scriblucent
                     () => vm.MoveGroupUp(group));
         }
 
-        private void MoveSingleGroupDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveSingleGroupDownButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button { Tag: NoteGroupViewModel group })
                 return;
@@ -3538,7 +3558,7 @@ namespace Scriblucent
             return true;
         }
 
-        private void GroupBorder_DragOver(object sender, DragEventArgs e)
+        internal void GroupBorder_DragOver(object sender, DragEventArgs e)
         {
             var canDrop = e.Data.GetData(typeof(NoteCardViewModel)) is NoteCardViewModel;
             SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), canDrop);
@@ -3546,13 +3566,13 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void GroupBorder_DragLeave(object sender, DragEventArgs e)
+        internal void GroupBorder_DragLeave(object sender, DragEventArgs e)
         {
             SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
-        private void GroupBorder_Drop(object sender, DragEventArgs e)
+        internal void GroupBorder_Drop(object sender, DragEventArgs e)
         {
             try
             {
@@ -3574,7 +3594,7 @@ namespace Scriblucent
             }
         }
 
-        private void UngroupedDropZone_DragOver(object sender, DragEventArgs e)
+        internal void UngroupedDropZone_DragOver(object sender, DragEventArgs e)
         {
             var canDrop = e.Data.GetData(typeof(NoteCardViewModel)) is NoteCardViewModel { IsGrouped: true };
             SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), canDrop);
@@ -3582,13 +3602,13 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void UngroupedDropZone_DragLeave(object sender, DragEventArgs e)
+        internal void UngroupedDropZone_DragLeave(object sender, DragEventArgs e)
         {
             SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
-        private void UngroupedDropZone_Drop(object sender, DragEventArgs e)
+        internal void UngroupedDropZone_Drop(object sender, DragEventArgs e)
         {
             try
             {
@@ -3607,13 +3627,13 @@ namespace Scriblucent
             }
         }
 
-        private void GroupMenuButton_Click(object sender, RoutedEventArgs e)
+        internal void GroupMenuButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
         }
 
-        private void ListingContextMenuButton_Click(object sender, RoutedEventArgs e)
+        internal void ListingContextMenuButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button menuButton)
                 return;
@@ -3626,14 +3646,14 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void DashboardListing_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        internal void DashboardListing_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dashboardListingDragStart = sender is IInputElement inputElement
                 ? e.GetPosition(inputElement)
                 : e.GetPosition(this);
         }
 
-        private void DashboardListing_PreviewMouseMove(object sender, MouseEventArgs e)
+        internal void DashboardListing_PreviewMouseMove(object sender, MouseEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
                 return;
@@ -3673,7 +3693,7 @@ namespace Scriblucent
             }
         }
 
-        private void DashboardListing_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        internal void DashboardListing_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             if (_suppressDashboardListingOpen)
             {
@@ -3715,7 +3735,7 @@ namespace Scriblucent
             }
         }
 
-        private void DashboardListing_PreviewDragEnter(object sender, DragEventArgs e)
+        internal void DashboardListing_PreviewDragEnter(object sender, DragEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
             {
@@ -3731,7 +3751,7 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void DashboardListing_PreviewDragOver(object sender, DragEventArgs e)
+        internal void DashboardListing_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
             {
@@ -3747,14 +3767,14 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void DashboardListing_PreviewDragLeave(object sender, DragEventArgs e)
+        internal void DashboardListing_PreviewDragLeave(object sender, DragEventArgs e)
         {
             if (!DashboardDragGhost.IsListingDropVisualSyncActive)
                 SetDashboardListingDropVisual(sender as DependencyObject, false);
             e.Handled = true;
         }
 
-        private void DashboardListing_PreviewDrop(object sender, DragEventArgs e)
+        internal void DashboardListing_PreviewDrop(object sender, DragEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
             {
@@ -3776,7 +3796,7 @@ namespace Scriblucent
             }
         }
 
-        private void DashboardGroupBorder_PreviewDragOver(object sender, DragEventArgs e)
+        internal void DashboardGroupBorder_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
                 && CanDropDashboardListing(listingElement, e))
@@ -3792,13 +3812,13 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)
+        internal void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)
         {
             SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
-        private void DashboardGroupBorder_PreviewDrop(object sender, DragEventArgs e)
+        internal void DashboardGroupBorder_PreviewDrop(object sender, DragEventArgs e)
         {
             try
             {
@@ -3832,7 +3852,7 @@ namespace Scriblucent
             }
         }
 
-        private void DashboardUngroupedDropZone_DragOver(object sender, DragEventArgs e)
+        internal void DashboardUngroupedDropZone_DragOver(object sender, DragEventArgs e)
         {
             if (DataContext is MainViewModel { IsMassSelectMode: true })
             {
@@ -3856,13 +3876,13 @@ namespace Scriblucent
             e.Handled = true;
         }
 
-        private void DashboardUngroupedDropZone_DragLeave(object sender, DragEventArgs e)
+        internal void DashboardUngroupedDropZone_DragLeave(object sender, DragEventArgs e)
         {
             SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
             e.Handled = true;
         }
 
-        private void DashboardUngroupedDropZone_Drop(object sender, DragEventArgs e)
+        internal void DashboardUngroupedDropZone_Drop(object sender, DragEventArgs e)
         {
             try
             {
@@ -4040,7 +4060,7 @@ namespace Scriblucent
             };
         }
 
-        private void MoveDashboardGroupUpButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveDashboardGroupUpButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is not MainViewModel vm || sender is not Button { Tag: object group })
                 return;
@@ -4077,7 +4097,7 @@ namespace Scriblucent
             }
         }
 
-        private void MoveDashboardGroupDownButton_Click(object sender, RoutedEventArgs e)
+        internal void MoveDashboardGroupDownButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is not MainViewModel vm || sender is not Button { Tag: object group })
                 return;
@@ -4114,19 +4134,19 @@ namespace Scriblucent
             }
         }
 
-        private void DashboardGroupColorButton_Click(object sender, RoutedEventArgs e)
+        internal void DashboardGroupColorButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
         }
 
-        private void DashboardGroupMenuButton_Click(object sender, RoutedEventArgs e)
+        internal void DashboardGroupMenuButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
         }
 
-        private void DashboardGroupColorMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DashboardGroupColorMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem { Tag: string colorHex } menuItem || DataContext is not MainViewModel vm)
                 return;
@@ -4146,7 +4166,7 @@ namespace Scriblucent
             }
         }
 
-        private void RenameDashboardGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void RenameDashboardGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem menuItem || DataContext is not MainViewModel vm)
                 return;
@@ -4188,7 +4208,7 @@ namespace Scriblucent
             }
         }
 
-        private void DisbandDashboardGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DisbandDashboardGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem menuItem || DataContext is not MainViewModel vm)
                 return;
@@ -4619,13 +4639,13 @@ namespace Scriblucent
                 : VisualTreeHelper.GetParent(source);
         }
 
-        private void GroupColorButton_Click(object sender, RoutedEventArgs e)
+        internal void GroupColorButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
         }
 
-        private void RenameGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void RenameGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var group = ResolveGroupFromMenuSender(sender);
             if (group is null || DataContext is not MainViewModel vm)
@@ -4643,7 +4663,7 @@ namespace Scriblucent
                 vm.RenameGroup(group, dialog.InputText);
         }
 
-        private void GroupColorMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void GroupColorMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuItem menuItem || menuItem.Tag is not string colorHex)
                 return;
@@ -4655,7 +4675,7 @@ namespace Scriblucent
             vm.SetGroupBackgroundColor(group, colorHex);
         }
 
-        private void DisbandGroupMenuItem_Click(object sender, RoutedEventArgs e)
+        internal void DisbandGroupMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var group = ResolveGroupFromMenuSender(sender);
             if (group is null || DataContext is not MainViewModel vm)
@@ -4704,7 +4724,7 @@ namespace Scriblucent
                 ?? (placementTarget as Button)?.Tag as NoteGroupViewModel;
         }
 
-        private void ImportButton_Click(object sender, RoutedEventArgs e)
+        internal void ImportButton_Click(object sender, RoutedEventArgs e)
         {
             CollapseTopSearchPanel();
             UiMotion.ClosePopup(SortNotesPopupElement);

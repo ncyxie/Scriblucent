@@ -8,47 +8,7 @@
              Visibility="Collapsed"
              IsHitTestVisible="False">
     <UserControl.Resources>
-        <Style x:Key="ScheduleCloseIconButtonStyle" TargetType="Button">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="CloseButtonBorder"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="Normal"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="CloseButtonBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CloseButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                                <Setter TargetName="CloseButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="CloseButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                                <Setter TargetName="CloseButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ScheduleDatePickerStyle" TargetType="DatePicker">
+<Style x:Key="ScheduleDatePickerStyle" TargetType="DatePicker">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -76,449 +36,52 @@
             </Setter>
         </Style>
 
-        <Style x:Key="ScheduleCalendarDayButtonStyle" TargetType="CalendarDayButton">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="DayBorder"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Style x:Key="ScheduleCalendarDayButtonStyle" TargetType="CalendarDayButton" BasedOn="{StaticResource CalendarDayButtonStyle}">
             <Setter Property="Margin" Value="1"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CalendarDayButton">
-                        <Border x:Name="DayBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Padding="3">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="DayBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                                <Setter TargetName="DayBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="DayBorder" Property="Background" Value="#3F6FE8"/>
-                                <Setter TargetName="DayBorder" Property="BorderBrush" Value="#2F5CD0"/>
-                                <Setter Property="Foreground" Value="White"/>
-                            </Trigger>
-                            <Trigger Property="IsInactive" Value="True">
-                                <Setter Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                            <Trigger Property="IsToday" Value="True">
-                                <Setter TargetName="DayBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                                <Setter TargetName="DayBorder" Property="BorderThickness" Value="2"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="ScheduleCalendarHeaderButtonStyle" TargetType="Button">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="HeaderButtonBorder"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="HeaderButtonBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="HeaderButtonBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                                <Setter TargetName="HeaderButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="HeaderButtonBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                                <Setter TargetName="HeaderButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ScheduleCalendarButtonStyle" TargetType="CalendarButton">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="CalendarButtonBorder"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="2"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CalendarButton">
-                        <Border x:Name="CalendarButtonBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Padding="4">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CalendarButtonBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                                <Setter TargetName="CalendarButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                            </Trigger>
-                            <Trigger Property="IsInactive" Value="True">
-                                <Setter Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ScheduleCalendarItemStyle" TargetType="CalendarItem">
+        <Style x:Key="ScheduleCalendarItemStyle" TargetType="CalendarItem" BasedOn="{StaticResource CalendarItemStyle}">
             <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CalendarItem">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="0"
-                                CornerRadius="10"
-                                Padding="2"
-                                SnapsToDevicePixels="True">
-                            <Grid x:Name="PART_Root">
-                                <Grid.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                                        <Setter Property="VerticalAlignment" Value="Center"/>
-                                    </Style>
-                                </Grid.Resources>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="32"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <Grid Margin="0,0,0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="30"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="30"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Button x:Name="PART_PreviousButton"
-                                            Style="{StaticResource ScheduleCalendarHeaderButtonStyle}"
-                                            Width="28"
-                                            Height="28">
-                                        <Path Data="M 7 0 L 0 7 L 7 14"
-                                              Stroke="{DynamicResource TextColor}"
-                                              StrokeThickness="2"
-                                              StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round"
-                                              Width="7"
-                                              Height="14"
-                                              Stretch="Uniform"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                                    </Button>
-                                    <Button x:Name="PART_HeaderButton"
-                                            Grid.Column="1"
-                                            Style="{StaticResource ScheduleCalendarHeaderButtonStyle}"
-                                            FontSize="13"
-                                            FontWeight="SemiBold"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center"/>
-                                    <Button x:Name="PART_NextButton"
-                                            Grid.Column="2"
-                                            Style="{StaticResource ScheduleCalendarHeaderButtonStyle}"
-                                            Width="28"
-                                            Height="28">
-                                        <Path Data="M 0 0 L 7 7 L 0 14"
-                                              Stroke="{DynamicResource TextColor}"
-                                              StrokeThickness="2"
-                                              StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round"
-                                              Width="7"
-                                              Height="14"
-                                              Stretch="Uniform"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                                    </Button>
-                                </Grid>
-                                <Grid x:Name="PART_MonthView"
-                                      Grid.Row="1"
-                                      TextElement.Foreground="{DynamicResource TextColorSecondary}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
-                                </Grid>
-                                <Grid x:Name="PART_YearView"
-                                      Grid.Row="1"
-                                      Visibility="Hidden">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
-                                </Grid>
-                            </Grid>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding DisplayMode, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Calendar}}}" Value="Year">
-                                <Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden"/>
-                                <Setter TargetName="PART_YearView" Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding DisplayMode, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Calendar}}}" Value="Decade">
-                                <Setter TargetName="PART_MonthView" Property="Visibility" Value="Hidden"/>
-                                <Setter TargetName="PART_YearView" Property="Visibility" Value="Visible"/>
-                            </DataTrigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.6"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <!-- Outer popup calendar owns Elevation.Popup/Dialog chrome; item has no box stroke (template BorderThickness=0). -->
+            <Setter Property="BorderBrush" Value="Transparent"/>
         </Style>
 
-        <Style x:Key="ScheduleCalendarStyle" TargetType="Calendar">
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
-            <Setter Property="Padding" Value="4"/>
+        <Style x:Key="ScheduleCalendarStyle" TargetType="Calendar" BasedOn="{StaticResource PopupCalendarControlStyle}">
             <Setter Property="CalendarDayButtonStyle" Value="{StaticResource ScheduleCalendarDayButtonStyle}"/>
-            <Setter Property="CalendarButtonStyle" Value="{StaticResource ScheduleCalendarButtonStyle}"/>
             <Setter Property="CalendarItemStyle" Value="{StaticResource ScheduleCalendarItemStyle}"/>
-            <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Calendar">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="10"
-                                Padding="4">
-                            <CalendarItem x:Name="PART_CalendarItem"
-                                          Background="{TemplateBinding Background}"
-                                          BorderBrush="{TemplateBinding BorderBrush}"
-                                          BorderThickness="0"
-                                          Style="{TemplateBinding CalendarItemStyle}"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
+        <!-- Nested group: surface contrast only (no box stroke). -->
         <Style x:Key="ScheduleSectionCardStyle" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="CornerRadius" Value="14"/>
             <Setter Property="Padding" Value="12"/>
         </Style>
 
-        <Style x:Key="ScheduleEditableComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,6"/>
+        <Style x:Key="ScheduleEditableComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource EditableComboBoxStyle}">
             <Setter Property="Height" Value="34"/>
+        </Style>
+
+        <Style x:Key="ScheduleRoundedTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Padding" Value="10,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="ItemContainerStyle" Value="{DynamicResource ScheduleComboBoxItemStyle}"/>
+            <Style.Triggers>
+                <Trigger Property="AcceptsReturn" Value="True">
+                    <Setter Property="VerticalContentAlignment" Value="Top"/>
+                    <Setter Property="Padding" Value="10,8"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
-        <Style x:Key="ScheduleRoundedTextBoxStyle" TargetType="TextBox">
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Padding" Value="10,8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                SnapsToDevicePixels="True">
-                            <ScrollViewer x:Name="PART_ContentHost"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <ControlTemplate x:Key="ScheduleComboBoxToggleButtonTemplate" TargetType="ToggleButton">
-            <Border x:Name="ComboBorder"
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="{StaticResource Radius.Control}"
-                    Padding="{TemplateBinding Padding}">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="12" ShadowDepth="1" Direction="270"/>
-                </Border.Effect>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="18"/>
-                    </Grid.ColumnDefinitions>
-                    <icons:AppIcon Kind="ChevronDown" Width="12" Height="12" Grid.Column="1"
-                               Foreground="{TemplateBinding Foreground}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
-                </Grid>
-            </Border>
-            <ControlTemplate.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                    <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                    <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                </Trigger>
-            </ControlTemplate.Triggers>
-        </ControlTemplate>
-
-        <Style x:Key="ScheduleComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,6"/>
+        <Style x:Key="ScheduleComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="Height" Value="34"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="ItemContainerStyle" Value="{DynamicResource ScheduleComboBoxItemStyle}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton Focusable="False"
-                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                          ClickMode="Press"
-                                          Template="{StaticResource ScheduleComboBoxToggleButtonTemplate}"
-                                          Background="{TemplateBinding Background}"
-                                          BorderBrush="{TemplateBinding BorderBrush}"
-                                          BorderThickness="{TemplateBinding BorderThickness}"
-                                          Foreground="{TemplateBinding Foreground}"
-                                          Padding="{TemplateBinding Padding}"/>
-                            <TextBlock IsHitTestVisible="False"
-                                       Text="{TemplateBinding SelectionBoxItem}"
-                                       Margin="10,0,24,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="{TemplateBinding Foreground}"/>
-                            <Popup x:Name="Popup"
-                                   Placement="Bottom"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   PopupAnimation="None">
-                                                                <Grid MinWidth="{TemplateBinding ActualWidth}" Margin="0,4,8,8">
-                                                                            <Border Margin="2,3,2,0"
-                                                Background="#000000"
-                                                Opacity="0.18"
-                                                CornerRadius="{StaticResource Radius.Control}"
-                                                IsHitTestVisible="False">
-                                            <Border.Effect>
-                                                <BlurEffect Radius="12" KernelType="Gaussian"/>
-                                            </Border.Effect>
-                                        </Border>
-                                    <Border Background="{DynamicResource CardBackground}"
-                                            BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="{StaticResource Radius.Control}" behaviors:RoundedClipBehavior.IsEnabled="True"
-                                            SnapsToDevicePixels="True">
-                                        <ScrollViewer MaxHeight="180" Margin="2">
-                                            <ItemsPresenter/>
-                                        </ScrollViewer>
-                                    </Border>
-                                </Grid>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="ScheduleComboBoxItemStyle" TargetType="ComboBoxItem">
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Padding" Value="10,7"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="ItemBorder"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="8"
-                                Margin="2,1"
-                                Padding="{TemplateBinding Padding}">
-                            <TextBlock Text="{TemplateBinding Content}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ScheduleRemoveButtonStyle" TargetType="Button" BasedOn="{StaticResource ScheduleCloseIconButtonStyle}">
+        <Style x:Key="ScheduleRemoveButtonStyle" TargetType="Button" BasedOn="{StaticResource OverlayCloseIconButtonStyle}">
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
-            <Setter Property="Foreground" Value="#D64545"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentDanger}"/>
         </Style>
     </UserControl.Resources>
 
@@ -531,7 +94,7 @@
                        Visibility="Collapsed"
                        IsHitTestVisible="False"/>
                 <Rectangle x:Name="OverlayDim"
-                           Fill="#66000000"
+                           Fill="{DynamicResource OverlayScrim}"
                            MouseDown="OverlayDim_MouseDown"/>
         </Grid>
         <Border x:Name="PanelMotionHost"
@@ -541,17 +104,19 @@
                 RenderTransformOrigin="0.5,1"
                 UseLayoutRounding="True"
                 SnapsToDevicePixels="True">
-            <Border x:Name="PanelCard"
-                    Background="{DynamicResource CardBackground}"
-                    BorderBrush="{DynamicResource BorderColor}"
-                    BorderThickness="1"
-                    CornerRadius="20"
-                    Width="Auto"
-                    MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
-                    MaxWidth="780">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" Opacity="0.24" BlurRadius="28" ShadowDepth="0"/>
-                </Border.Effect>
+            <Grid Width="Auto"
+                  MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
+                  MaxWidth="780"
+                  UseLayoutRounding="True"
+                  SnapsToDevicePixels="True">
+                <Border Background="{DynamicResource CardBackground}"
+                        CornerRadius="{StaticResource Radius.Overlay}"
+                        IsHitTestVisible="False"
+                        Effect="{StaticResource Elevation.Dialog}"/>
+                <Border x:Name="PanelCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Overlay}">
             <Grid Margin="20,18,20,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -567,17 +132,17 @@
                     <StackPanel>
                         <TextBlock x:Name="ScheduleTitleText"
                                    Text="{Binding [CalendarAssignTitle], Source={StaticResource Loc}}"
-                                   FontSize="20"
+                                   FontSize="{StaticResource Type.DialogTitle}"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextColor}"/>
                         <TextBlock x:Name="ScheduleSubtitleText"
-                                   FontSize="13"
+                                   FontSize="{StaticResource Type.Meta}"
                                    Foreground="{DynamicResource TextColorSecondary}"
                                    Margin="1,5,0,0"
                                    Visibility="Collapsed"/>
                     </StackPanel>
                     <Button Grid.Column="1"
-                            Style="{StaticResource ScheduleCloseIconButtonStyle}"
+                            Style="{StaticResource OverlayCloseIconButtonStyle}"
                             Content="{icons:Icon Close}"
                             Click="CloseButton_Click"/>
                 </Grid>
@@ -603,12 +168,24 @@
                                 <ItemsControl x:Name="ScheduleItemsControl" ItemsSource="{Binding ScheduleItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type models:NoteScheduleEntry}">
-                                            <Border BorderBrush="{DynamicResource BorderColor}"
-                                                    BorderThickness="1"
+                                            <!-- Match dashboard event cards: surface lift + calendar hover (no intermittent clipped shadow). -->
+                                            <Border BorderThickness="0"
                                                     CornerRadius="10"
-                                                    Background="{DynamicResource CardBackground}"
                                                     Padding="11"
-                                                    Margin="0,0,0,8">
+                                                    Margin="0,0,0,8"
+                                                    Cursor="Hand"
+                                                    behaviors:ButtonPressMotionBehavior.IsEnabled="True"
+                                                    behaviors:ButtonPressMotionBehavior.PressedBackground="{DynamicResource CalendarPressedBackground}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource CalendarHoverBackground}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -616,8 +193,7 @@
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel>
                                                         <Border Background="{DynamicResource SelectionBackground}"
-                                                                BorderBrush="{DynamicResource BorderColor}"
-                                                                BorderThickness="1"
+                                                                BorderThickness="0"
                                                                 CornerRadius="{StaticResource Radius.Control}"
                                                                 Padding="8,2"
                                                                 HorizontalAlignment="Left">
@@ -625,7 +201,7 @@
                                                                 <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                                                 <TextBlock Text="{Binding ScheduledAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
                                                                            FontWeight="SemiBold"
-                                                                           FontSize="11"
+                                                                           FontSize="{StaticResource Type.Chip}"
                                                                            Foreground="{DynamicResource TextColor}"/>
                                                             </StackPanel>
                                                         </Border>
@@ -699,8 +275,7 @@
                                 <Border Grid.Row="0"
                                         Grid.Column="0"
                                         Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource BorderColor}"
-                                        BorderThickness="1"
+                                        BorderThickness="0"
                                         CornerRadius="10"
                                         Padding="1"
                                         Height="36">
@@ -714,14 +289,14 @@
                                 <TextBlock Grid.Row="1"
                                            Grid.Column="2"
                                            Text="{Binding [CalendarHourShort], Source={StaticResource Loc}}"
-                                           FontSize="11"
+                                           FontSize="{StaticResource Type.Chip}"
                                            Foreground="{DynamicResource TextColorSecondary}"
                                            HorizontalAlignment="Center"
                                            Margin="0,4,8,8"/>
                                 <TextBlock Grid.Row="1"
                                            Grid.Column="4"
                                            Text="{Binding [CalendarMinuteShort], Source={StaticResource Loc}}"
-                                           FontSize="11"
+                                           FontSize="{StaticResource Type.Chip}"
                                            Foreground="{DynamicResource TextColorSecondary}"
                                            HorizontalAlignment="Center"
                                            Margin="0,4,8,8"/>
@@ -769,6 +344,7 @@
                 </StackPanel>
             </Grid>
             </Border>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

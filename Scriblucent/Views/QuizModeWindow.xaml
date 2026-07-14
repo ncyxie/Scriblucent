@@ -1,6 +1,7 @@
 <Window x:Class="Scriblucent.Views.QuizModeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         Title="{Binding [QuizModeTitle], Source={StaticResource Loc}}"
@@ -8,27 +9,14 @@
         Width="800"
         WindowStartupLocation="CenterOwner"
         WindowState="Maximized"
-        Background="{DynamicResource SidebarBackground}"
+        Background="{DynamicResource FeatureFrameBackground}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         PreviewKeyDown="QuizModeWindow_PreviewKeyDown">
-    <Grid Margin="10">
-    <Border CornerRadius="{StaticResource Radius.Overlay}"
-            Background="{DynamicResource WindowBackground}"
-            Margin="1"
-            IsHitTestVisible="False">
-        <Border.Effect>
-            <DropShadowEffect Color="#000000" Opacity="0.12" BlurRadius="20" ShadowDepth="0"/>
-        </Border.Effect>
-    </Border>
-    <Border CornerRadius="{StaticResource Radius.Overlay}"
-            Background="{DynamicResource WindowBackground}"
-            ClipToBounds="True"
-            SnapsToDevicePixels="True"
-            behaviors:RoundedClipBehavior.IsEnabled="True">
-<Grid x:Name="ContentRoot">
+    <controls:FeatureWindowShell>
+        <controls:FeatureWindowShell.Body><Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -39,16 +27,16 @@
         <Border Grid.Row="0"
                 Background="Transparent"
                 BorderThickness="0"
-                Padding="20,16">
+                Padding="{StaticResource Shell.FeatureTitleRowPadding}">
             <Grid>
                 <TextBlock x:Name="ProgressText"
-                           FontSize="14"
+                           FontSize="{StaticResource Type.Body}"
                            Foreground="{DynamicResource TextColorSecondary}"/>
                 <!-- Pakeisti esamą TimerText į Border su TextBlock viduje: -->
                 <Border x:Name="TimerBorder" CornerRadius="6" Padding="8,4" Background="Transparent">
                     <TextBlock x:Name="TimerText"
                HorizontalAlignment="Right"
-               FontSize="14"
+               FontSize="{StaticResource Type.Body}"
                FontWeight="SemiBold"
                Foreground="{DynamicResource TextColor}"/>
                 </Border>
@@ -68,8 +56,7 @@
                             Margin="0,0,0,12"
                             Visibility="Collapsed">
                     <Border Background="{DynamicResource SelectionBackground}"
-                            BorderBrush="{DynamicResource BorderColor}"
-                            BorderThickness="1"
+                            BorderThickness="0"
                             CornerRadius="6"
                             Padding="8,4">
                         <StackPanel Orientation="Horizontal">
@@ -79,7 +66,7 @@
                                         Margin="0,0,6,0"/>
                             <TextBlock x:Name="QuestionTypeText"
                             Text="{Binding [QuizMultipleChoiceInstruction], Source={StaticResource Loc}}"
-                                        FontSize="12"
+                                        FontSize="{StaticResource Type.Caption}"
                                         FontWeight="SemiBold"
                                         Foreground="{DynamicResource TextColor}"
                                         VerticalAlignment="Center"/>
@@ -88,7 +75,7 @@
                 </StackPanel>
                 <!-- Question Text -->
                 <TextBlock x:Name="QuestionTextBlock"
-                           FontSize="22"
+                           FontSize="{StaticResource Type.PageTitle}"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource TextColor}"
                            TextWrapping="Wrap"
@@ -107,7 +94,7 @@
                             Click="ShowHintButton_Click">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
-                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="FontSize" Value="{StaticResource Type.Meta}"/>
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
@@ -115,10 +102,10 @@
                             <TextBlock Text="Show Hint" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
+                    <!-- Level 5 status banner: soft fill (role I); no decorative box stroke. -->
                     <Border x:Name="HintTextBorder"
-            Background="#FFF9E6"
-            BorderBrush="#F59E0B"
-            BorderThickness="1"
+            Background="{DynamicResource AccentWarningSubtle}"
+            BorderThickness="0"
             CornerRadius="{StaticResource Radius.Control}"
             Padding="12,10"
             Visibility="Collapsed">
@@ -128,10 +115,10 @@
                                            Height="14"
                                            VerticalAlignment="Top"
                                            Margin="0,0,6,0"
-                                           Foreground="#92400E"/>
+                                           Foreground="{DynamicResource AccentWarningSubtleForeground}"/>
                             <TextBlock x:Name="HintTextBlock"
-                       FontSize="13"
-                       Foreground="#92400E"
+                       FontSize="{StaticResource Type.Meta}"
+                       Foreground="{DynamicResource AccentWarningSubtleForeground}"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"/>
                         </StackPanel>
@@ -152,7 +139,6 @@
                 <StackPanel>
                     <!-- Score Summary -->
                     <Border Background="{DynamicResource CardBackground}"
-                            BorderBrush="{DynamicResource BorderColor}"
                             BorderThickness="0"
                             CornerRadius="{StaticResource Radius.Card}"
                             Padding="20"
@@ -160,18 +146,18 @@
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock x:Name="ResultsTitleText"
                             Text="{Binding [QuizResultsTitleGreat], Source={StaticResource Loc}}"
-                                       FontSize="28"
+                                       FontSize="{StaticResource Type.Display}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"
                                        HorizontalAlignment="Center"
                                        Margin="0,0,0,8"/>
                             <TextBlock x:Name="ResultsScoreText"
-                                       FontSize="20"
+                                       FontSize="{StaticResource Type.DialogTitle}"
                                        Foreground="{DynamicResource TextColor}"
                                        HorizontalAlignment="Center"
                                        Margin="0,0,0,8"/>
                             <TextBlock x:Name="ResultsTimeText"
-                                       FontSize="14"
+                                       FontSize="{StaticResource Type.Body}"
                                        Foreground="{DynamicResource TextColorSecondary}"
                                        HorizontalAlignment="Center"/>
                         </StackPanel>
@@ -179,7 +165,7 @@
 
                     <!-- Questions Review -->
                     <TextBlock Text="{Binding [QuizReviewAnswers], Source={StaticResource Loc}}"
-                               FontSize="18"
+                               FontSize="{StaticResource Type.BlockTitle}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"
                                Margin="0,0,0,16"/>
@@ -207,6 +193,7 @@
                         x:Name="PreviousButton"
                         Content="{Binding [QuizPreviousButton], Source={StaticResource Loc}}"
                         Style="{StaticResource DialogSecondaryButtonStyle}"
+                        Background="{DynamicResource CardBackground}"
                         MinWidth="130"
                         Padding="16,10"
                         Click="PreviousButton_Click"/>
@@ -231,6 +218,7 @@
 				<Button Grid.Column="2"
 						x:Name="RetryAllButton"
 						Style="{StaticResource DialogSecondaryButtonStyle}"
+						Background="{DynamicResource CardBackground}"
 						MinWidth="130"
 						Padding="16,10"
 						Visibility="Collapsed"
@@ -244,6 +232,7 @@
 				<Button Grid.Column="3"
 						x:Name="RetryWrongButton"
 						Style="{StaticResource DialogSecondaryButtonStyle}"
+						Background="{DynamicResource CardBackground}"
 						MinWidth="130"
 						Padding="16,10"
 						Margin="8,0,0,0"
@@ -339,6 +328,6 @@
         </Canvas>
 
     </Grid>
-    </Border>
-</Grid>
+        </controls:FeatureWindowShell.Body>
+    </controls:FeatureWindowShell>
 </Window>

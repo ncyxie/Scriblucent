@@ -352,7 +352,7 @@ public static class MassSelectHighlightBehavior
 
         return (
             GetThemeBrush(border, "CardBackground"),
-            GetThemeBrush(border, "BorderColor"));
+            GetThemeBrush(border, "NoteCardBorder"));
     }
 
     private static Brush? GetThemeBrush(FrameworkElement element, string resourceKey)

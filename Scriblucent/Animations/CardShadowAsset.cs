@@ -12,17 +12,18 @@ namespace Scriblucent.Animations;
 /// that per-element blur cost is what made scrolling choppy (see NoteCardControl.xaml history).
 /// Baking the blur once into a small shared bitmap and slicing/stretching it costs nothing per
 /// card beyond a handful of cheap image draws - the same technique large UI toolkits (Material,
-/// Fluent, etc.) use for elevation shadows at scale.
+/// Fluent, etc.) use for elevation shadows at scale. The bake composites a soft centered ambient
+/// contact with a downward key cast so tops stay readable on light shells without a live effect.
 /// </summary>
 internal static class CardShadowAsset
 {
     public const double CornerTileSize = 22;
 
-    private const double ShapeCornerRadius = 12;
+    private const double ShapeCornerRadius = 14;
     private const double BlurRadius = 9;
     private const double EdgeStripThickness = 4;
     private const double SwatchSize = CornerTileSize * 2 + 24;
-    private const double RenderScale = 3.0;
+    private const double RenderScale = 2.0;
 
     private static readonly Lazy<BitmapSource> Swatch = new(Bake);
 
@@ -59,12 +60,23 @@ internal static class CardShadowAsset
 
         using (var dc = visual.RenderOpen())
         {
+            // Ambient (centered) + key (offset down) in one blur pass: top contact stays
+            // readable on white section shells while the underside reads as a cast.
+            const double castOffsetY = 2.5;
             var inset = BlurRadius + 3;
-            var rect = new Rect(inset, inset, SwatchSize - inset * 2, SwatchSize - inset * 2);
+            var size = SwatchSize - inset * 2;
+            var ambient = new Rect(inset, inset, size, size);
+            var key = new Rect(inset, inset + castOffsetY, size, size);
             dc.DrawRoundedRectangle(
-                new SolidColorBrush(Color.FromArgb(150, 0, 0, 0)),
+                new SolidColorBrush(Color.FromArgb(95, 0, 0, 0)),
                 null,
-                rect,
+                ambient,
+                ShapeCornerRadius,
+                ShapeCornerRadius);
+            dc.DrawRoundedRectangle(
+                new SolidColorBrush(Color.FromArgb(145, 0, 0, 0)),
+                null,
+                key,
                 ShapeCornerRadius,
                 ShapeCornerRadius);
         }

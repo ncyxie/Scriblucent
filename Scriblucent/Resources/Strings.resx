@@ -215,8 +215,13 @@
   <data name="FailedToPrintNote" xml:space="preserve"><value>Failed to print note:</value></data>
   <data name="PrintError" xml:space="preserve"><value>Print Error</value></data>
   <data name="OpenFileDialogFilter" xml:space="preserve"><value>Supported note files (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent Package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|Markdown Files (*.md)|*.md|Rich Note Body (*.xamlpackage)|*.xamlpackage|All files (*.*)|*.*</value></data>
-  <data name="AboutDescription" xml:space="preserve"><value>A simple note card app for quick, tidy management of outlines and notes.</value></data>
+  <data name="AboutTagline" xml:space="preserve"><value>Notes. Flashcards. Mind Maps. Quizzes.</value></data>
+  <data name="AboutDescription" xml:space="preserve"><value>Study offline with local AI — notes become flashcards, mind maps, and quizzes. Your data stays on your device.</value></data>
+  <data name="AboutMaintainedBy" xml:space="preserve"><value>Maintained by</value></data>
+  <data name="AboutOriginalContributors" xml:space="preserve"><value>Original NoteCards contributors</value></data>
+  <data name="AboutLicenseFooter" xml:space="preserve"><value>MIT License · 2026</value></data>
   <data name="Authors" xml:space="preserve"><value>AUTHORS</value></data>
+  <data name="OpenGitHubProfile" xml:space="preserve"><value>Open GitHub profile</value></data>
   <data name="SimpleInputTitle" xml:space="preserve"><value>Simple Input</value></data>
   <data name="PrintPreviewTitle" xml:space="preserve"><value>Print Preview</value></data>
   <data name="DocumentSentToPrinter" xml:space="preserve"><value>Document sent to printer successfully!</value></data>
@@ -726,4 +731,10 @@ Right-click to remove</value></data>
   <data name="MindMapExportAllFileSuffix" xml:space="preserve"><value>full</value></data>
   <data name="MindMapExportBranchFileSuffix" xml:space="preserve"><value>branch</value></data>
   <data name="MindMapExportEmptyCanvas" xml:space="preserve"><value>Mind map has no renderable content to export.</value></data>
+  <data name="CombineFlashcards" xml:space="preserve"><value>Combine flashcards</value></data>
+  <data name="FlashcardHistory" xml:space="preserve"><value>Flashcard history</value></data>
+  <data name="FlashcardActions" xml:space="preserve"><value>Flashcard actions</value></data>
+  <data name="CombineQuizzes" xml:space="preserve"><value>Combine quizzes</value></data>
+  <data name="QuizHistory" xml:space="preserve"><value>Quiz history</value></data>
+  <data name="QuizActions" xml:space="preserve"><value>Quiz actions</value></data>
 </root>

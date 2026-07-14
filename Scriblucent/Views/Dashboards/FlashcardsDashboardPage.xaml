@@ -1,0 +1,888 @@
+<UserControl x:Class="Scriblucent.Views.Dashboards.FlashcardsDashboardPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Scriblucent.Controls"
+             xmlns:dashboard="clr-namespace:Scriblucent.Controls.Dashboard"
+             xmlns:vm="clr-namespace:Scriblucent.ViewModels"
+             xmlns:Views="clr-namespace:Scriblucent.Views"
+             xmlns:converters="clr-namespace:Scriblucent.Converters"
+             xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+             xmlns:services="clr-namespace:Scriblucent.Services"
+             xmlns:anim="clr-namespace:Scriblucent.Animations"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
+             RenderTransformOrigin="0.5,0.5">
+    <UserControl.RenderTransform>
+        <ScaleTransform ScaleX="1" ScaleY="1"/>
+    </UserControl.RenderTransform>
+    <Grid>
+<Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0"
+                                Visibility="{Binding IsRecentSectionVisible, Converter={StaticResource BoolToVis}}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="{StaticResource Shell.RecentPadding}"
+                                ClipToBounds="False">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0"
+                                            ToolTip="{Binding [ToggleRecentFlashcardsSection], Source={StaticResource Loc}}"
+                                            Click="ToggleRecentSectionButton_Click"
+                    Style="{StaticResource DashboardSectionToggleButtonStyle}"
+                    behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsRecentSectionExpanded}" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding [RecentFlashcards], Source={StaticResource Loc}}"
+                                               FontSize="{StaticResource Type.SectionTitle}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextColor}"
+                                               Margin="8,0,0,0"
+                                               FontFamily="{StaticResource FontFamily.UI}"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                                <Border x:Name="FlashcardRecentSectionBody"
+                                        Margin="0,6,0,0"
+                                        ClipToBounds="False"
+                                        RenderTransformOrigin="0.5,0">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform/>
+                                    </Border.RenderTransform>
+                                    <ScrollViewer Style="{DynamicResource RecentItemsStripScrollViewerStyle}">
+                                        <ItemsControl Style="{DynamicResource RecentStripItemsStyle}"
+                                                      ItemsSource="{Binding RecentFlashcardSets}" ItemsPanel="{StaticResource RecentItemsStripPanelTemplate}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:FlashcardSetViewModel}">
+                                                    <Button Style="{DynamicResource RecentNoteCardStyle}"
+                                                            Tag="{Binding}"
+                                                            Click="RecentFlashcardSetButton_Click">
+                                                        <StackPanel MinWidth="118" MaxWidth="176">
+                                                            <TextBlock Text="{Binding Title}"
+                                                                       FontWeight="SemiBold"
+                                                                       FontSize="{StaticResource Type.Meta}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       Foreground="{DynamicResource TextColor}"/>
+                                                            <TextBlock Text="{Binding SetCountText}"
+                                                                       FontSize="{StaticResource Type.Meta}"
+                                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                                       Margin="0,3,0,0"/>
+                                                            <TextBlock Text="{Binding Document.LastModified, StringFormat='{}{0:dd MMM, HH:mm}'}"
+                                                                       FontSize="{StaticResource Type.Meta}"
+                                                                       Foreground="{DynamicResource TextColor}"
+                                                                       Margin="0,2,0,0"/>
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                        <ScrollViewer x:Name="FlashcardsScrollViewer"
+                                      Grid.Row="1"
+                                      Style="{DynamicResource DashboardListingScrollViewerStyle}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Background="Transparent"
+                                      PreviewDragOver="DashboardScrollViewer_PreviewDragOver"
+                                      PreviewDragLeave="DashboardScrollViewer_PreviewDragLeave"
+                                      Drop="DashboardScrollViewer_Drop"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <Grid Margin="0,0,0,32">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid x:Name="FlashcardCalendarSectionContainer"
+                                        Visibility="{Binding IsCalendarSectionVisible, Converter={StaticResource BoolToVis}}"
+                                        Margin="0,0,0,14"
+                                        RenderTransformOrigin="0.5,0.5"
+                                        UseLayoutRounding="True"
+                                        SnapsToDevicePixels="True">
+                                    <Grid.Style>
+                                        <Style TargetType="Grid">
+                                            <Setter Property="Grid.Row" Value="0"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCalendarFirst}" Value="False">
+                                                    <Setter Property="Grid.Row" Value="1"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Grid.Style>
+                                    <controls:CardShadowLayer/>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                        BorderThickness="0"
+                                        CornerRadius="{StaticResource Radius.Card}"
+                                        Padding="12">
+                                    <StackPanel>
+                                        <Grid Margin="2,0,2,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0"
+                                                    Style="{StaticResource DashboardSectionMoveButtonStyle}"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
+                                                    Margin="0,0,2,0"
+                                                    ToolTip="{Binding [MoveCalendarSectionUp], Source={StaticResource Loc}}"
+                                                    Click="MoveCalendarUpButton_Click"/>
+                                            <Button Grid.Column="1"
+                                                    Style="{StaticResource DashboardSectionMoveButtonStyle}"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
+                                                    Margin="0,0,4,0"
+                                                    ToolTip="{Binding [MoveCalendarSectionDown], Source={StaticResource Loc}}"
+                                                    Click="MoveCalendarDownButton_Click"/>
+                                            <Button Grid.Column="2"
+                                                    ToolTip="{Binding [ToggleCalendarSection], Source={StaticResource Loc}}"
+                                                    Click="ToggleCalendarSectionButton_Click"
+                                            Style="{StaticResource DashboardSectionToggleButtonStyle}"
+                                            behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsCalendarSectionExpanded}" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding [CalendarSection], Source={StaticResource Loc}}"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <Grid x:Name="FlashcardCalendarSectionBody" Margin="0" Height="252">
+                                            <Grid x:Name="CalendarSectionBodySurface">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="240"/>
+                                                <ColumnDefinition Width="12"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
+                                                    BorderThickness="0"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                    Padding="12">
+                                                <Calendar x:Name="FlashcardDashboardCalendar"
+                                                          Style="{DynamicResource DashboardCalendarControlStyle}"
+                                                          SelectedDate="{Binding CalendarSelectedDate, Mode=TwoWay}"
+                                                          SelectionMode="SingleDate"
+                                                          HorizontalAlignment="Stretch"
+                                                          behaviors:CalendarScheduleMarkBehavior.ScheduledDates="{Binding CalendarDatesWithSchedules}"
+                                                          SelectedDatesChanged="DashboardCalendar_SelectedDatesChanged"/>
+                                            </Border>
+                                            <Border Grid.Column="2"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    BorderBrush="Transparent"
+                                                    BorderThickness="0"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                    Padding="12"
+                                                    ClipToBounds="False">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock Text="{Binding CalendarSelectedDateDisplay}"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextColor}"
+                                                               Margin="2,2,2,8"/>
+                                                    <Grid Grid.Row="1">
+                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178">
+                                                            <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type vm:CalendarScheduledItemViewModel}">
+                                                                        <Border Style="{DynamicResource CalendarScheduledItemCardStyle}"
+                                                                                Tag="{Binding}"
+                                                                                MouseLeftButtonUp="CalendarScheduledItemCard_MouseLeftButtonUp">
+                                                                            <Grid>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="Auto"/>
+                                                                                    <ColumnDefinition Width="*"/>
+                                                                                    <ColumnDefinition Width="Auto"/>
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <Button x:Name="CalendarScheduleGearButton"
+                                                                                        Grid.Column="0"
+                                                                                        Content="{icons:Icon Edit}"
+                                                                                        Style="{DynamicResource TopBarIconButtonStyle}"
+                                                                                        Width="30"
+                                                                                        Height="30"
+                                                                                        Margin="0,0,10,0"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Tag="{Binding}"
+                                                                                        ToolTip="{Binding [CalendarEditSchedule], Source={StaticResource Loc}}"
+                                                                                        Click="CalendarScheduleGearButton_Click"/>
+                                                                                <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                                                                    <TextBlock Text="{Binding Title}"
+                                                                                               FontWeight="SemiBold"
+                                                                                               Foreground="{DynamicResource TextColor}"
+                                                                                               TextTrimming="CharacterEllipsis"
+                                                                                               VerticalAlignment="Center"
+                                                                                               Margin="0,0,0,6"/>
+                                                                                    <TextBlock Text="{Binding ScheduleNote}"
+                                                                                               TextWrapping="Wrap"
+                                                                                               MaxHeight="34"
+                                                                                               Foreground="{DynamicResource TextColorSecondary}">
+                                                                                        <TextBlock.Style>
+                                                                                            <Style TargetType="TextBlock">
+                                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                                                <Style.Triggers>
+                                                                                                    <Trigger Property="Text" Value="">
+                                                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                                    </Trigger>
+                                                                                                </Style.Triggers>
+                                                                                            </Style>
+                                                                                        </TextBlock.Style>
+                                                                                    </TextBlock>
+                                                                                </StackPanel>
+                                                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                                                    <Border Background="{DynamicResource SelectionBackground}" BorderBrush="Transparent" BorderThickness="0"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
+                                                                                            Padding="6,2"
+                                                                                            Margin="0,0,4,0"
+                                                                                            VerticalAlignment="Center">
+                                                                                        <icons:AppIcon Kind="{Binding TypeIconKind}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
+                                                                                    </Border>
+                                                                                    <Border Background="{DynamicResource SelectionBackground}" BorderBrush="Transparent" BorderThickness="0"
+                                                                                            CornerRadius="{StaticResource Radius.Control}"
+                                                                                            Padding="8,2"
+                                                                                            VerticalAlignment="Center">
+                                                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                                            <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                                                            <TextBlock Text="{Binding TimeText}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                                                        </StackPanel>
+                                                                                    </Border>
+                                                                                </StackPanel>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <StackPanel/>
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                        <TextBlock Text="{Binding [CalendarNoSchedulesForDay], Source={StaticResource Loc}}"
+                                                                   Foreground="{DynamicResource TextColorSecondary}"
+                                                                   FontStyle="Italic"
+                                                                   TextWrapping="Wrap"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   TextAlignment="Center"
+                                                                   Margin="10,10,10,10">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding HasCalendarScheduledNotes}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                            </Grid>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                </Grid>
+
+                                <Grid x:Name="FlashcardsDashboardContentHost"
+                                        Margin="0,0,0,14"
+                                        UseLayoutRounding="True"
+                                        SnapsToDevicePixels="True">
+                                    <Grid.Style>
+                                        <Style TargetType="Grid">
+                                            <Setter Property="Grid.Row" Value="1"/>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding ShouldShowFlashcardsDashboardContent}" Value="True"/>
+                                                        <Condition Binding="{Binding IsFlashcardGroupsSectionVisible}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                                <DataTrigger Binding="{Binding IsCalendarFirst}" Value="False">
+                                                    <Setter Property="Grid.Row" Value="0"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Grid.Style>
+                                    <controls:CardShadowLayer/>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                        BorderThickness="0"
+                                        CornerRadius="{StaticResource Radius.Card}"
+                                        Padding="14">
+                                    <StackPanel>
+                                        <Grid Margin="2,0,2,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0"
+                                                    Style="{StaticResource DashboardSectionMoveButtonStyle}"
+                                                    Content="{icons:Icon Kind=ArrowUp, Size=12}"
+                                                    Margin="0,0,2,0"
+                                                    ToolTip="{Binding [MoveSectionUp], Source={StaticResource Loc}}"
+                                                    Click="MoveDashboardContentUpButton_Click"/>
+                                            <Button Grid.Column="1"
+                                                    Style="{StaticResource DashboardSectionMoveButtonStyle}"
+                                                    Content="{icons:Icon Kind=ArrowDown, Size=12}"
+                                                    Margin="0,0,4,0"
+                                                    ToolTip="{Binding [MoveSectionDown], Source={StaticResource Loc}}"
+                                                    Click="MoveDashboardContentDownButton_Click"/>
+                                            <Button Grid.Column="2"
+                                                    ToolTip="{Binding [ToggleFlashcardDashboardSection], Source={StaticResource Loc}}"
+                                                    Click="ToggleFlashcardGroupsSectionButton_Click"
+                                            Style="{StaticResource DashboardSectionToggleButtonStyle}"
+                                            behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardGroupsSectionExpanded}" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding [FlashcardGroupsDashboardTitle], Source={StaticResource Loc}}"
+                                                       FontSize="{StaticResource Type.BlockTitle}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"/>
+                                            <StackPanel Grid.Column="4"
+                                                        Orientation="Horizontal"
+                                                        HorizontalAlignment="Right">
+                                                <Button Style="{StaticResource DashboardSectionMoveButtonStyle}"
+                                                        FontSize="{StaticResource Type.BlockTitle}"
+                                                        FontWeight="Bold"
+                                                        Content="{icons:Icon Kind=MoreVertical, Size=14}"
+                                                        ToolTip="{Binding [FlashcardActions], Source={StaticResource Loc}}"
+                                                        Click="FlashcardDashboardActionsButton_Click">
+                                                    <Button.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="{Binding [CombineFlashcards], Source={StaticResource Loc}}"
+                                                                      Click="OpenFlashcardCombineMenuItem_Click"/>
+                                                            <MenuItem Header="{Binding [FlashcardHistory], Source={StaticResource Loc}}"
+                                                                      Click="OpenFlashcardHistoryMenuItem_Click"/>
+                                                        </ContextMenu>
+                                                    </Button.ContextMenu>
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <StackPanel x:Name="FlashcardGroupsSectionBody"
+                                                    RenderTransformOrigin="0.5,0">
+                                            <StackPanel.RenderTransform>
+                                                <TranslateTransform/>
+                                            </StackPanel.RenderTransform>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Border x:Name="FlashcardDashboardGroupsSectionContainer"
+                                                        Margin="0,0,0,10"
+                                                        RenderTransformOrigin="0.5,0.5">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Setter Property="Grid.Row" Value="0"/>
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding HasFlashcardSetGroups}" Value="True"/>
+                                                                        <Condition Binding="{Binding IsFlashcardDashboardGroupsSectionVisible}" Value="True"/>
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </MultiDataTrigger>
+                                                                <DataTrigger Binding="{Binding IsFlashcardDashboardGroupsFirst}" Value="False">
+                                                                    <Setter Property="Grid.Row" Value="1"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Border.RenderTransform>
+                                                        <TranslateTransform/>
+                                                    </Border.RenderTransform>
+                                                    <StackPanel>
+                                                        <Grid Margin="10,6,10,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveGroupsSectionUp], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardGroupsUpButton_Click"/>
+                                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveGroupsSectionDown], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardGroupsDownButton_Click"/>
+                                                            <Button Grid.Column="2" ToolTip="{Binding [ToggleGroupsSection], Source={StaticResource Loc}}" Click="ToggleFlashcardDashboardGroupsSectionButton_Click"
+                                                            Style="{StaticResource DashboardSectionToggleButtonStyle}"
+                                                            behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardDashboardGroupsSectionExpanded}" />
+                                                            <TextBlock Grid.Column="3"
+                                                                       Text="{Binding [Groups], Source={StaticResource Loc}}"
+                                                                       FontSize="{StaticResource Type.SectionTitle}"
+                                                                       FontWeight="SemiBold"
+                                                                       Foreground="{DynamicResource TextColor}"
+                                                                       Margin="8,0,0,0"
+                                                                       VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                        <StackPanel x:Name="FlashcardDashboardGroupsSectionBody">
+                                        <ItemsControl x:Name="FlashcardDashboardGroupsItemsControl"
+                                                      ItemsSource="{Binding FlashcardSetGroups}"
+                                                      Visibility="{Binding HasFlashcardSetGroups, Converter={StaticResource BoolToVis}}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:FlashcardSetGroupViewModel}">
+                                                    <Border Style="{DynamicResource GroupCardStyle}"
+                                                            Background="{Binding BackgroundBrush}"
+                                                            BorderThickness="0"
+                                                            CornerRadius="{StaticResource Radius.Card}"
+                                                            Padding="10"
+                                                            Margin="0,0,0,14"
+                                                            AllowDrop="True"
+                                                            PreviewDragOver="DashboardGroupBorder_PreviewDragOver"
+                                                            PreviewDragLeave="DashboardGroupBorder_PreviewDragLeave"
+                                                            PreviewDrop="DashboardGroupBorder_PreviewDrop">
+                                                        <Border.Tag>
+                                                            <Binding/>
+                                                        </Border.Tag>
+                                                        <StackPanel>
+                                                            <Grid Margin="2,0,2,8">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Button Grid.Column="0"
+                                                                        Style="{DynamicResource GroupHeaderMoveButtonStyle}"
+                                                                        Content="{icons:Icon Kind=ArrowUp, Size=12}"
+                                                                        Margin="0,0,3,0"
+                                                                        Tag="{Binding}"
+                                                                        ToolTip="{Binding [MoveThisGroupUp], Source={StaticResource Loc}}"
+                                                                        Click="MoveDashboardGroupUpButton_Click"/>
+                                                                <Button Grid.Column="1"
+                                                                        Style="{DynamicResource GroupHeaderMoveButtonStyle}"
+                                                                        Content="{icons:Icon Kind=ArrowDown, Size=12}"
+                                                                        Margin="0,0,4,0"
+                                                                        Tag="{Binding}"
+                                                                        ToolTip="{Binding [MoveThisGroupDown], Source={StaticResource Loc}}"
+                                                                        Click="MoveDashboardGroupDownButton_Click"/>
+                                                                <Button Grid.Column="2"
+                                                                        Style="{DynamicResource GroupHeaderIconButtonStyle}"
+                                                                        FontSize="{StaticResource Type.Meta}"
+                                                                        Content="{icons:Icon Color}"
+                                                                        Margin="0,0,4,0"
+                                                                        Tag="{Binding}"
+                                                                        ToolTip="{Binding [GroupBackgroundColor], Source={StaticResource Loc}}"
+                                                                        Click="DashboardGroupColorButton_Click">
+                                                                    <Button.ContextMenu>
+                                                                        <ContextMenu>
+                                                                            <MenuItem Header="{Binding [GroupColorDefault], Source={StaticResource Loc}}" Tag="#F8FAFF" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorBlue], Source={StaticResource Loc}}" Tag="#EEF0FE" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorMint], Source={StaticResource Loc}}" Tag="#ECFDF3" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorRose], Source={StaticResource Loc}}" Tag="#FFF1F2" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorAmber], Source={StaticResource Loc}}" Tag="#FFFBEB" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorLilac], Source={StaticResource Loc}}" Tag="#F5F3FF" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorTeal], Source={StaticResource Loc}}" Tag="#F0FDFA" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorSlate], Source={StaticResource Loc}}" Tag="#F8FAFC" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                            <MenuItem Header="{Binding [GroupColorPeach], Source={StaticResource Loc}}" Tag="#FFF7ED" Click="DashboardGroupColorMenuItem_Click"/>
+                                                                        </ContextMenu>
+                                                                    </Button.ContextMenu>
+                                                                </Button>
+                                                                <Button Grid.Column="3"
+                                                                        Style="{DynamicResource GroupHeaderIconButtonStyle}"
+                                                                        FontSize="{StaticResource Type.BlockTitle}"
+                                                                        FontWeight="Bold"
+                                                                        Content="{icons:Icon Kind=MoreVertical, Size=14}"
+                                                                        Tag="{Binding}"
+                                                                        Click="DashboardGroupMenuButton_Click">
+                                                                    <Button.ContextMenu>
+                                                                        <ContextMenu>
+                                                                            <MenuItem Header="{Binding [RenameGroup], Source={StaticResource Loc}}"
+                                                                                      Click="RenameDashboardGroupMenuItem_Click"/>
+                                                                            <Separator/>
+                                                                            <MenuItem Header="{Binding [DisbandGroup], Source={StaticResource Loc}}"
+                                                                                      Click="DisbandDashboardGroupMenuItem_Click"/>
+                                                                        </ContextMenu>
+                                                                    </Button.ContextMenu>
+                                                                </Button>
+                                                                <TextBlock Grid.Column="4"
+                                                                           Text="{Binding Name}"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource TextColor}"
+                                                                           VerticalAlignment="Center"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Margin="8,0,0,0"/>
+                                                            </Grid>
+                                                            <controls:DashboardVirtualizationHost HostMode="Static"
+                                                                                                  MotionScope="{x:Static services:DashboardMotionScope.Flashcards}">
+                                                            <controls:DashboardVirtualizedCardGrid ItemsSource="{Binding Sets}"
+                                                                                                    ItemCellSize="240,128">
+                                                            <controls:DashboardVirtualizedCardGrid.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type vm:FlashcardSetViewModel}">
+                                                                        <Border Tag="{Binding}"
+                                                                                Width="236"
+                                                                                MinHeight="112"
+                                                                                Margin="0,0,4,6"
+                                                                                Padding="8"
+                                                                                Background="Transparent"
+                                                                                Cursor="Hand"
+                                                                                AllowDrop="True"
+                                                                                behaviors:CardSurfaceMotionBehavior.IsEnabled="True"
+                                                                                behaviors:CardSurfaceMotionBehavior.Profile="Listing"
+                                                                                behaviors:CardSurfaceMotionBehavior.ShadowElementName="GroupedFlashcardCardBorder"
+                                                                                PreviewMouseLeftButtonDown="DashboardListing_PreviewMouseLeftButtonDown"
+                                                                                MouseMove="DashboardListing_PreviewMouseMove"
+                                                                                MouseLeftButtonUp="DashboardListing_MouseLeftButtonUp"
+                                                                                DragEnter="DashboardListing_PreviewDragEnter"
+                                                                                DragOver="DashboardListing_PreviewDragOver"
+                                                                                DragLeave="DashboardListing_PreviewDragLeave"
+                                                                                Drop="DashboardListing_PreviewDrop">
+                                                                            <Border.ContextMenu>
+                                                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                                                    <MenuItem Header="{Binding [Open], Source={StaticResource Loc}}" Click="OpenFlashcardSetMenuItem_Click"/>
+                                                                                    <MenuItem Header="{Binding [SelectMultiple], Source={StaticResource Loc}}" Click="StartDashboardMassSelectMenuItem_Click"/>
+                                                                                    <MenuItem Header="{Binding [Info], Source={StaticResource Loc}}" Click="FlashcardSetInfoMenuItem_Click"/>
+                                                                                    <Separator/>
+                                                                                    <MenuItem Header="{Binding [Pin], Source={StaticResource Loc}}"
+                                                                                              Click="ToggleFlashcardSetPinMenuItem_Click"
+                                                                                              Visibility="{Binding Document.IsPinned, Converter={StaticResource InverseBoolToVis}}"/>
+                                                                                    <MenuItem Header="{Binding [Unpin], Source={StaticResource Loc}}"
+                                                                                              Click="ToggleFlashcardSetPinMenuItem_Click"
+                                                                                              Visibility="{Binding Document.IsPinned, Converter={StaticResource BoolToVis}}"/>
+                                                                                    <MenuItem Header="{Binding [CalendarAssignMenu], Source={StaticResource Loc}}" Click="ScheduleFlashcardSetMenuItem_Click"/>
+                                                                                    <MenuItem Header="{Binding [RemoveFromGroup], Source={StaticResource Loc}}" Click="RemoveFlashcardSetFromGroupMenuItem_Click"/>
+                                                                                    <Separator/>
+                                                                                    <MenuItem Header="{Binding [Duplicate], Source={StaticResource Loc}}" Click="DuplicateFlashcardSetMenuItem_Click"/>
+                                                                                    <Separator/>
+                                                                                    <MenuItem Header="{Binding [DeleteFlashcardSet], Source={StaticResource Loc}}" Click="DeleteFlashcardSetMenuItem_Click"/>
+                                                                                </ContextMenu>
+                                                                            </Border.ContextMenu>
+                                                                            <Grid>
+                                                                            <controls:CardShadowLayer/>
+                                                                            <Border x:Name="GroupedFlashcardCardBorder" Style="{DynamicResource DashboardGroupedListingCardStyle}">
+                                                                                <Grid>
+                                                                                    <Grid.RowDefinitions>
+                                                                                        <RowDefinition Height="Auto"/>
+                                                                                        <RowDefinition Height="Auto"/>
+                                                                                        <RowDefinition Height="Auto"/>
+                                                                                    </Grid.RowDefinitions>
+                                                                                    <CheckBox Grid.RowSpan="3"
+                                                                                              HorizontalAlignment="Right"
+                                                                                              VerticalAlignment="Top"
+                                                                                              Margin="0,0,2,0"
+                                                                                              Panel.ZIndex="6"
+                                                                                              Style="{StaticResource DashboardMassSelectCheckBoxStyle}"
+
+                                                                                              />
+                                                                                    <Grid>
+                                                                                        <Grid.ColumnDefinitions>
+                                                                                            <ColumnDefinition Width="Auto"/>
+                                                                                            <ColumnDefinition Width="*"/>
+                                                                                            <ColumnDefinition Width="Auto"/>
+                                                                                        </Grid.ColumnDefinitions>
+                                                                                        <Border Grid.Column="0"
+                                                                                                Width="24"
+                                                                                                Height="24"
+                                                                                                Margin="0,0,6,0"
+                                                                                                CornerRadius="{StaticResource Radius.Card}"
+                                                                                                Background="{DynamicResource IconButtonBackground}" BorderBrush="Transparent" BorderThickness="0"
+                                                                                                ToolTip="{Binding AiGeneratedTooltip}"
+                                                                                                Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
+                                                                                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                                        </Border>
+                                                                                        <StackPanel Grid.Column="1"
+                                                                                                    Orientation="Horizontal"
+                                                                                                    VerticalAlignment="Center"
+                                                                                                    Margin="0,0,6,0">
+                                                                                            <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                                            <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="12" Height="12" Foreground="{DynamicResource TextColor}" Margin="0,0,5,0" ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                                            <TextBlock Text="{Binding Title}"
+                                                                                                       FontSize="{StaticResource Type.CardTitle}"
+                                                                                                       FontWeight="SemiBold"
+                                                                                                       Foreground="{DynamicResource TextColor}"
+                                                                                                       TextTrimming="CharacterEllipsis"
+                                                                                                       VerticalAlignment="Center"/>
+                                                                                        </StackPanel>
+                                                                                        <Button x:Name="ListingContextMenuButton"
+                                                                                                Grid.Column="2"
+                                                                                                Tag="{Binding}"
+                                                                                                Content="{icons:Icon Kind=MoreVertical, Size=14}"
+                                                                                                Style="{DynamicResource DashboardListingMenuButtonStyle}"
+                                                                                                ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
+                                                                                                Click="ListingContextMenuButton_Click"/>
+                                                                                    </Grid>
+                                                                                    <TextBlock Grid.Row="1"
+                                                                                               Text="{Binding CardCountText}"
+                                                                                               FontSize="{StaticResource Type.Caption}"
+                                                                                               Foreground="{DynamicResource TextColorSecondary}"
+                                                                                               Margin="0,6,0,0"/>
+                                                                                    <Border Grid.Row="2"
+                                                                                            Style="{StaticResource DashboardTagChipStyle}">
+                                                                                        <TextBlock Text="{Binding TagsDisplay}"
+                                                                                                   Style="{StaticResource DashboardTagTextStyle}"/>
+                                                                                    </Border>
+                                                                                </Grid>
+                                                                            </Border>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                            </controls:DashboardVirtualizedCardGrid.ItemTemplate>
+                                                            </controls:DashboardVirtualizedCardGrid>
+                                                            </controls:DashboardVirtualizationHost>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Border>
+
+                                <Border x:Name="FlashcardDashboardUngroupedSectionContainer"
+                                                Margin="0,0,0,10"
+                                                MinHeight="96"
+                                                Background="Transparent"
+                                                CornerRadius="{StaticResource Radius.Overlay}"
+                                                AllowDrop="True"
+                                                DragOver="DashboardUngroupedDropZone_DragOver"
+                                                DragLeave="DashboardUngroupedDropZone_DragLeave"
+                                                Drop="DashboardUngroupedDropZone_Drop">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Grid.Row" Value="1"/>
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding ShouldShowFlashcardsDashboardContent}" Value="True"/>
+                                                                <Condition Binding="{Binding IsFlashcardDashboardUngroupedSectionVisible}" Value="True"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </MultiDataTrigger>
+                                                        <DataTrigger Binding="{Binding IsFlashcardDashboardGroupsFirst}" Value="False">
+                                                            <Setter Property="Grid.Row" Value="0"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel>
+                                        <Grid Margin="10,2,10,8"
+                                              Background="Transparent"
+                                              AllowDrop="True"
+                                              DragOver="DashboardUngroupedDropZone_DragOver"
+                                              DragLeave="DashboardUngroupedDropZone_DragLeave"
+                                              Drop="DashboardUngroupedDropZone_Drop">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,2,0" Content="{icons:Icon Kind=ArrowUp, Size=12}" ToolTip="{Binding [MoveUngroupedSectionUp], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardUngroupedUpButton_Click"/>
+                                            <Button Grid.Column="1" Style="{StaticResource DashboardSectionMoveButtonStyle}" Margin="0,0,4,0" Content="{icons:Icon Kind=ArrowDown, Size=12}" ToolTip="{Binding [MoveUngroupedSectionDown], Source={StaticResource Loc}}" Click="MoveFlashcardDashboardUngroupedDownButton_Click"/>
+                                            <Button Grid.Column="2" ToolTip="{Binding [ToggleUngroupedSection], Source={StaticResource Loc}}" Click="ToggleFlashcardDashboardUngroupedSectionButton_Click"
+                                            Style="{StaticResource DashboardSectionToggleButtonStyle}"
+                                            behaviors:SectionChevronMotionBehavior.IsExpanded="{Binding IsFlashcardDashboardUngroupedSectionExpanded}" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding [UngroupedItems], Source={StaticResource Loc}}"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <StackPanel x:Name="FlashcardDashboardUngroupedSectionBody">
+                                        <controls:DashboardVirtualizationHost ScrollViewerElement="{Binding ElementName=FlashcardsScrollViewer}"
+                                                                              MotionScope="{x:Static services:DashboardMotionScope.Flashcards}">
+                                        <controls:DashboardVirtualizedCardGrid x:Name="FlashcardDashboardUngroupedItemsControl"
+                                                      ItemsSource="{Binding FlashcardSetsView}"
+                                                      ItemCellSize="330,204"
+                                                      AllowDrop="True"
+                                                      DragOver="DashboardUngroupedDropZone_DragOver"
+                                                      DragLeave="DashboardUngroupedDropZone_DragLeave"
+                                                      Drop="DashboardUngroupedDropZone_Drop"
+                                                      Visibility="{Binding HasUngroupedFlashcardSets, Converter={StaticResource BoolToVis}}">
+                                            <controls:DashboardVirtualizedCardGrid.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:FlashcardSetViewModel}">
+                                                    <Border Tag="{Binding}"
+                                                            Width="320"
+                                                            MinHeight="184"
+                                                            Margin="0,0,10,10"
+                                                            Padding="10"
+                                                            Background="Transparent"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            behaviors:CardSurfaceMotionBehavior.IsEnabled="True"
+                                                            behaviors:CardSurfaceMotionBehavior.Profile="Listing"
+                                                            behaviors:CardSurfaceMotionBehavior.ShadowElementName="FlashcardSetCardBorder"
+                                                            PreviewMouseLeftButtonDown="DashboardListing_PreviewMouseLeftButtonDown"
+                                                            MouseMove="DashboardListing_PreviewMouseMove"
+                                                            MouseLeftButtonUp="DashboardListing_MouseLeftButtonUp"
+                                                            DragEnter="DashboardListing_PreviewDragEnter"
+                                                            DragOver="DashboardListing_PreviewDragOver"
+                                                            DragLeave="DashboardListing_PreviewDragLeave"
+                                                            Drop="DashboardListing_PreviewDrop">
+														<Border.ContextMenu>
+															<ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                                <MenuItem Header="{Binding [Open], Source={StaticResource Loc}}"
+                                                                          Click="OpenFlashcardSetMenuItem_Click"/>
+                                                                <MenuItem Header="{Binding [SelectMultiple], Source={StaticResource Loc}}"
+                                                                          Click="StartDashboardMassSelectMenuItem_Click"/>
+                                                                <MenuItem Header="{Binding [Info], Source={StaticResource Loc}}"
+                                                                          Click="FlashcardSetInfoMenuItem_Click"/>
+                                                                <Separator/>
+                                                                <MenuItem Header="{Binding [Pin], Source={StaticResource Loc}}"
+                                                                          Click="ToggleFlashcardSetPinMenuItem_Click"
+                                                                          Visibility="{Binding Document.IsPinned, Converter={StaticResource InverseBoolToVis}}"/>
+                                                                <MenuItem Header="{Binding [Unpin], Source={StaticResource Loc}}"
+                                                                          Click="ToggleFlashcardSetPinMenuItem_Click"
+                                                                          Visibility="{Binding Document.IsPinned, Converter={StaticResource BoolToVis}}"/>
+                                                                <MenuItem Header="{Binding [CalendarAssignMenu], Source={StaticResource Loc}}"
+                                                                          Click="ScheduleFlashcardSetMenuItem_Click"/>
+                                                                <MenuItem Header="{Binding [RemoveFromGroup], Source={StaticResource Loc}}"
+                                                                          Visibility="{Binding Document.GroupId, Converter={StaticResource NullToVisibilityConverter}}"
+                                                                          Click="RemoveFlashcardSetFromGroupMenuItem_Click"/>
+                                                                <Separator/>
+                                                                <MenuItem Header="{Binding [Duplicate], Source={StaticResource Loc}}"
+                                                                          Click="DuplicateFlashcardSetMenuItem_Click"/>
+                                                                <Separator/>
+																<MenuItem Header="{Binding [DeleteFlashcardSet], Source={StaticResource Loc}}"
+																		  Click="DeleteFlashcardSetMenuItem_Click"/>
+															</ContextMenu>
+														</Border.ContextMenu>
+                        <Grid>
+                        <controls:CardShadowLayer Margin="8,3,8,0"/>
+                                                        <Border x:Name="FlashcardSetCardBorder"
+                                                                Style="{DynamicResource DashboardListingCardSelectionStyle}"
+                                                                CornerRadius="{StaticResource Radius.Card}"
+                                                                Padding="16"
+                                                                RenderTransformOrigin="0.5,0.5">
+                                                            <Border.RenderTransform>
+                                                                <TransformGroup>
+                                                                    <ScaleTransform ScaleX="0.88" ScaleY="0.88"/>
+                                                                    <TranslateTransform Y="0"/>
+                                                                </TransformGroup>
+                                                            </Border.RenderTransform>
+                                                            <Grid>
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="*"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+                                                                <CheckBox Grid.RowSpan="3"
+                                                                          HorizontalAlignment="Right"
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="0,0,2,0"
+                                                                          Panel.ZIndex="6"
+                                                                          Style="{StaticResource DashboardMassSelectCheckBoxStyle}"
+
+                                                                          />
+																<Grid>
+																	<Grid.ColumnDefinitions>
+																		<ColumnDefinition Width="Auto"/>
+																		<ColumnDefinition Width="*"/>
+																		<ColumnDefinition Width="Auto"/>
+																	</Grid.ColumnDefinitions>
+																	<Border Grid.Column="0"
+																			Width="24"
+																			Height="24"
+																			Margin="0,0,6,0"
+																			CornerRadius="{StaticResource Radius.Card}"
+																			Background="{DynamicResource IconButtonBackground}" BorderBrush="Transparent" BorderThickness="0"
+                                                                            ToolTip="{Binding AiGeneratedTooltip}"
+                                                                            Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
+                                                                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
+																	</Border>
+																	<StackPanel Grid.Column="1"
+                                                                                Orientation="Horizontal"
+                                                                                VerticalAlignment="Center"
+                                                                                Margin="0,0,8,0">
+                                                                        <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                                                                        <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="13" Height="13" Foreground="{DynamicResource TextColor}" Margin="0,0,6,0" ToolTip="{Binding NextScheduleDisplay}"/>
+                                                                        <TextBlock Text="{Binding Title}"
+                                                                                   FontSize="{StaticResource Type.CardTitle}"
+                                                                                   FontWeight="SemiBold"
+                                                                                   Foreground="{DynamicResource TextColor}"
+                                                                                   TextTrimming="CharacterEllipsis"
+                                                                                   VerticalAlignment="Center"/>
+                                                                    </StackPanel>
+                                                                    <Button x:Name="ListingContextMenuButton"
+                                                                            Grid.Column="2"
+                                                                            Tag="{Binding}"
+                                                                            Content="{icons:Icon Kind=MoreVertical, Size=14}"
+                                                                            Style="{DynamicResource DashboardListingMenuButtonStyle}"
+                                                                            ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
+                                                                            Click="ListingContextMenuButton_Click"/>
+																</Grid>
+
+                                                                <StackPanel Grid.Row="1"
+                                                                            Orientation="Horizontal"
+                                                                            Margin="0,14,0,0">
+                                                                    <TextBlock Text="{Binding CardCountText}"
+                                                                               FontSize="{StaticResource Type.Meta}"
+                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                    <TextBlock Text="  •  "
+                                                                               FontSize="{StaticResource Type.Meta}"
+                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                    <TextBlock Text="{Binding SetCountText}"
+                                                                               FontSize="{StaticResource Type.Meta}"
+                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                </StackPanel>
+
+                                                                <Border Grid.Row="2"
+                                                                        Style="{StaticResource DashboardTagChipStyle}">
+                                                                    <TextBlock Text="{Binding TagsDisplay}"
+                                                                               Style="{StaticResource DashboardTagTextStyle}"/>
+                                                                </Border>
+                                                            </Grid>
+                                                        </Border>
+                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </controls:DashboardVirtualizedCardGrid.ItemTemplate>
+                                        </controls:DashboardVirtualizedCardGrid>
+                                        </controls:DashboardVirtualizationHost>
+                                            </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                            </Grid>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                                </Grid>
+
+                                <dashboard:EmptyDashboardPanel x:Name="FlashcardsEmptyDashboardPanel"
+                                            Grid.Row="2"
+                                            Visibility="{Binding ShowFlashcardsEmptyDashboard, Converter={StaticResource BoolToVis}}"
+                                            Prompt="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
+                                            ButtonContent="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
+                                            Click="CreateFlashcardsButton_Click"/>
+                            </Grid>
+                        </ScrollViewer>
+
+                        <Button Grid.Row="1"
+                                Style="{DynamicResource FabStyle}"
+                            IsEnabled="{Binding IsNotMassSelectMode}"
+                                VerticalAlignment="Bottom"
+                                HorizontalAlignment="Right"
+                                Content="{icons:Icon Kind=Plus, Size=22}"
+                                ToolTip="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
+                                Click="CreateFlashcardsButton_Click"/>
+                    </Grid>
+    </Grid>
+</UserControl>

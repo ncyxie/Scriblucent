@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views
 {
     public partial class ItemInfoDialog : Window
@@ -30,7 +32,7 @@ namespace Scriblucent.Views
             AdvancedRows = advancedRows.Select(row => new InfoRow(row.Label, row.Value)).ToList();
 
             InitializeComponent();
-            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+            _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
             Scriblucent.Services.WindowThemeService.Register(this);
             DataContext = this;
             Loaded += ItemInfoDialog_Loaded;

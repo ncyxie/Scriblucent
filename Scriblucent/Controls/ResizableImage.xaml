@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:controls="clr-namespace:Scriblucent.Controls"
              MinHeight="50" MinWidth="50"
              Cursor="SizeAll"
              Opacity="1"
@@ -21,11 +22,8 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="5"
-                                SnapsToDevicePixels="True">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.16"/>
-                            </Border.Effect>
-                        </Border>
+                                SnapsToDevicePixels="True"
+                                Effect="{StaticResource Elevation.Thumb}"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -37,20 +35,20 @@
             <Setter Property="MinWidth" Value="70"/>
             <Setter Property="Height" Value="26"/>
             <Setter Property="Padding" Value="10,0"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
             <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="LayoutButtonBorder"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
                                 CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -72,20 +70,20 @@
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="26"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
             <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="AspectButtonBorder"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
                                 CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -99,7 +97,6 @@
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="AspectButtonBorder" Property="Background" Value="{DynamicResource ButtonPressedBackground}"/>
-                                <Setter TargetName="AspectButtonBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -108,16 +105,14 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="RootGrid" Background="Transparent">
+    <Grid x:Name="RootGrid" Background="Transparent" ClipToBounds="False">
+        <!-- Level 6: baked plate; selection ring (A) appears while resize handles are shown. -->
+        <controls:CardShadowLayer/>
         <Border CornerRadius="10"
-                BorderBrush="{DynamicResource BorderColor}"
-                BorderThickness="1"
+                BorderThickness="0"
                 Background="{DynamicResource CardBackground}"
                 Padding="2"
                 SnapsToDevicePixels="True">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.10"/>
-            </Border.Effect>
             <Border CornerRadius="8" ClipToBounds="True">
                 <Image x:Name="InnerImage"
                        Stretch="Fill"

@@ -128,7 +128,13 @@ public class AppSettings
     public int FlashcardFlipDelayMilliseconds { get; set; } = DefaultFlashcardFlipDelayMilliseconds;
 
     public static int NormalizeFlashcardFlipDelayMilliseconds(int milliseconds)
-        => Math.Clamp(milliseconds, MinFlashcardFlipDelayMilliseconds, MaxFlashcardFlipDelayMilliseconds);
+    {
+        // 0 / missing JSON values must not clamp to Min (120) — treat as default.
+        if (milliseconds <= 0)
+            return DefaultFlashcardFlipDelayMilliseconds;
+
+        return Math.Clamp(milliseconds, MinFlashcardFlipDelayMilliseconds, MaxFlashcardFlipDelayMilliseconds);
+    }
 
     // Activity Tracking
     public long TotalTimeSpentSeconds { get; set; } = 0;

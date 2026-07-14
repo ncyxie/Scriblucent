@@ -93,6 +93,16 @@ public static class UiMotion
             typeof(FrameworkElement),
             FrameworkElement.ContextMenuOpeningEvent,
             new ContextMenuEventHandler(OnContextMenuOpening));
+        EventManager.RegisterClassHandler(
+            typeof(ComboBox),
+            FrameworkElement.LoadedEvent,
+            new RoutedEventHandler(OnComboBoxLoadedForPopupMotion));
+    }
+
+    private static void OnComboBoxLoadedForPopupMotion(object sender, RoutedEventArgs e)
+    {
+        if (sender is ComboBox comboBox)
+            AttachComboBoxDropdownAnimation(comboBox);
     }
 
     private sealed class MotionPrepState
@@ -451,6 +461,8 @@ public static class UiMotion
             });
     }
 
+    private const string SectionMotionCacheSurfaceName = "CalendarSectionBodySurface";
+
     public static void AnimateClipReveal(
         FrameworkElement section,
         bool expand,
@@ -491,6 +503,8 @@ public static class UiMotion
             section.Opacity = 0;
             translate.Y = -slideOffset;
 
+            BeginClipMotionCache(section);
+
             Run(
                 section,
                 new[]
@@ -501,6 +515,7 @@ public static class UiMotion
                 },
                 () =>
                 {
+                    EndClipMotionCache(section);
                     section.Clip = null;
                     section.ClipToBounds = false;
                     section.Dispatcher.BeginInvoke(() =>
@@ -531,6 +546,8 @@ public static class UiMotion
         var opacityStart = section.Opacity;
         var translateStart = translate.Y;
 
+        BeginClipMotionCache(section);
+
         Run(
             section,
             new[]
@@ -541,9 +558,25 @@ public static class UiMotion
             },
             () =>
             {
+                EndClipMotionCache(section);
                 SetSectionCollapsedState(section, translate, slideOffset);
                 onComplete?.Invoke();
             });
+    }
+
+    private static void BeginClipMotionCache(FrameworkElement section)
+    {
+        if (section.FindName(SectionMotionCacheSurfaceName) is not FrameworkElement cacheSurface)
+            return;
+
+        cacheSurface.UpdateLayout();
+        cacheSurface.CacheMode = DpiAwareBitmapCache.Create(cacheSurface, enableClearType: true);
+    }
+
+    private static void EndClipMotionCache(FrameworkElement section)
+    {
+        if (section.FindName(SectionMotionCacheSurfaceName) is FrameworkElement cacheSurface)
+            cacheSurface.CacheMode = null;
     }
 
     public static void ExpandHorizontalPanel(
@@ -1358,44 +1391,162 @@ public static class UiMotion
             onComplete);
     }
 
-    public static void AnimatePopupOpen(FrameworkElement element, int durationMs = QuickMs)
+    private const int PopupOpenMs = 180;
+
+    /// <summary>
+    /// Prefer the solid card (fill / shadow host) over the transparent padding shell.
+    /// </summary>
+    private static FrameworkElement ResolvePopupMotionSurface(FrameworkElement root)
     {
-        if (PrefersReducedMotion)
+        try
         {
-            element.Opacity = 1;
-            EnsureScale(element).ScaleX = 1;
-            EnsureScale(element).ScaleY = 1;
-            return;
+            if (root is Border { Child: Border card }
+                && (card.Effect is not null || IsPaintingBackground(card.Background)))
+            {
+                return card;
+            }
+
+            if (root is Border { Child: FrameworkElement mid })
+            {
+                if (mid is Border { Child: Border nested }
+                    && (nested.Effect is not null || IsPaintingBackground(nested.Background)))
+                {
+                    return nested;
+                }
+
+                if (mid is Border midBorder)
+                    return midBorder;
+            }
+        }
+        catch
+        {
+            // fall through
         }
 
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var scale = EnsureScale(element, 0.96);
-        Clear(scale, ScaleTransform.ScaleXProperty);
-        Clear(scale, ScaleTransform.ScaleYProperty);
-
-        element.Opacity = 0;
-        scale.ScaleX = 0.96;
-        scale.ScaleY = 0.96;
-
-        RunComposited(
-            element,
-            new[]
-            {
-                Track(durationMs, OutCubic, 0, 1, value => element.Opacity = value),
-                Track(durationMs, OutCubic, 0.96, 1, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
-            });
+        return root;
     }
 
-    public static void AnimatePopupOpenDeferred(FrameworkElement element, int durationMs = QuickMs)
+    private static bool IsPaintingBackground(Brush? brush)
     {
-        element.Dispatcher.BeginInvoke(
-            () => AnimatePopupOpen(element, durationMs),
-            DispatcherPriority.Loaded);
+        if (brush is null)
+            return false;
+        if (ReferenceEquals(brush, Brushes.Transparent))
+            return false;
+        if (brush is SolidColorBrush solid)
+            return solid.Color.A > 0;
+        return true;
+    }
+
+    /// <summary>
+    /// Layered popup HWNDs often ignore manual Opacity writes from CompositionTarget.Rendering.
+    /// WPF DoubleAnimation goes through the animation system and repaints the popup.
+    /// </summary>
+    private static void StopPopupOpacityAnimation(FrameworkElement surface)
+    {
+        try
+        {
+            Stop(surface);
+            surface.BeginAnimation(UIElement.OpacityProperty, null);
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    /// <summary>
+    /// Hide the motion surface before paint so open never flashes solid for a frame.
+    /// Close is always instant — no fade-out.
+    /// </summary>
+    public static void PreparePopupOpenVisual(FrameworkElement root)
+    {
+        try
+        {
+            var surface = ResolvePopupMotionSurface(root);
+            StopPopupOpacityAnimation(surface);
+            StopPopupOpacityAnimation(root);
+            root.Opacity = 1;
+            surface.Opacity = 0;
+        }
+        catch
+        {
+            // Element may already be disconnecting.
+        }
+    }
+
+    public static void AnimatePopupOpen(FrameworkElement root, int durationMs = PopupOpenMs)
+    {
+        try
+        {
+            var surface = ResolvePopupMotionSurface(root);
+            root.Opacity = 1;
+
+            if (PrefersReducedMotion || durationMs <= 0)
+            {
+                surface.Opacity = 1;
+                return;
+            }
+
+            StopPopupOpacityAnimation(surface);
+            surface.Opacity = 0;
+
+            var animation = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(durationMs),
+                EasingFunction = OutCubic,
+                FillBehavior = FillBehavior.Stop
+            };
+
+            EventHandler? completed = null;
+            completed = (_, _) =>
+            {
+                animation.Completed -= completed;
+                try
+                {
+                    surface.BeginAnimation(UIElement.OpacityProperty, null);
+                    surface.Opacity = 1;
+                }
+                catch
+                {
+                    // ignore
+                }
+            };
+            animation.Completed += completed;
+            surface.BeginAnimation(UIElement.OpacityProperty, animation);
+        }
+        catch
+        {
+            try { ResolvePopupMotionSurface(root).Opacity = 1; } catch { /* ignore */ }
+        }
+    }
+
+    /// <summary>
+    /// Hide immediately on open, then fade in on the next render tick.
+    /// </summary>
+    public static void AnimatePopupOpenDeferred(
+        FrameworkElement root,
+        Popup? hostPopup = null,
+        int durationMs = PopupOpenMs)
+    {
+        PreparePopupOpenVisual(root);
+        root.Dispatcher.BeginInvoke(
+            () =>
+            {
+                try
+                {
+                    if (hostPopup is { IsOpen: false })
+                        return;
+
+                    AnimatePopupOpen(root, durationMs);
+                }
+                catch
+                {
+                    try { ResolvePopupMotionSurface(root).Opacity = 1; } catch { /* ignore */ }
+                }
+            },
+            DispatcherPriority.Render);
     }
 
     public static void OpenPopup(Popup popup, bool open = true)
@@ -1405,6 +1556,8 @@ public static class UiMotion
 
         AttachPopupOpenAnimation(popup);
         popup.IsOpen = open;
+        if (!open && popup.Child is FrameworkElement root)
+            PreparePopupOpenVisual(root);
     }
 
     public static void TogglePopup(Popup? popup)
@@ -1412,15 +1565,21 @@ public static class UiMotion
         if (popup is null)
             return;
 
-        OpenPopup(popup, !popup.IsOpen);
+        if (popup.IsOpen)
+            ClosePopup(popup);
+        else
+            OpenPopup(popup, open: true);
     }
 
     public static void ClosePopup(Popup? popup)
     {
-        if (popup is null)
+        if (popup is null || !popup.IsOpen)
             return;
 
+        // Instant close — no fade-out.
         popup.IsOpen = false;
+        if (popup.Child is FrameworkElement root)
+            PreparePopupOpenVisual(root);
     }
 
     public static void OpenContextMenu(ContextMenu menu, UIElement placementTarget, PlacementMode placement = PlacementMode.Bottom)
@@ -1469,11 +1628,28 @@ public static class UiMotion
         if (popup is null || !TryAttachPopupMotion(popup))
             return;
 
-        popup.Opened += (_, _) =>
-        {
-            if (popup.Child is FrameworkElement child)
-                AnimatePopupOpenDeferred(child);
-        };
+        // Skip ComboBox PART_Popup here — DropDownOpened owns that path so we never double-animate.
+        if (popup.TemplatedParent is ComboBox)
+            return;
+
+        popup.Opened += OnStandalonePopupOpened;
+        popup.Closed += OnStandalonePopupClosed;
+    }
+
+    private static void OnStandalonePopupOpened(object? sender, EventArgs e)
+    {
+        if (sender is not Popup { Child: FrameworkElement child } popup)
+            return;
+
+        AnimatePopupOpenDeferred(child, popup);
+    }
+
+    private static void OnStandalonePopupClosed(object? sender, EventArgs e)
+    {
+        if (sender is not Popup { Child: FrameworkElement child })
+            return;
+
+        PreparePopupOpenVisual(child);
     }
 
     public static void AttachComboBoxDropdownAnimation(ComboBox comboBox)
@@ -1482,16 +1658,45 @@ public static class UiMotion
             return;
 
         comboBox.ApplyTemplate();
-        comboBox.DropDownOpened += (_, _) =>
-        {
-            if (PrefersReducedMotion)
-                return;
+        comboBox.DropDownOpened += OnComboBoxDropDownOpened;
+        comboBox.DropDownClosed += OnComboBoxDropDownClosed;
+    }
 
-            comboBox.ApplyTemplate();
-            if (comboBox.Template.FindName("Popup", comboBox) is Popup popup
-                && popup.Child is FrameworkElement child)
-                AnimatePopupOpenDeferred(child);
-        };
+    private static void OnComboBoxDropDownOpened(object? sender, EventArgs e)
+    {
+        if (sender is not ComboBox comboBox)
+            return;
+
+        if (FindComboBoxPopup(comboBox) is not { Child: FrameworkElement child })
+            return;
+
+        if (PrefersReducedMotion)
+        {
+            PreparePopupOpenVisual(child);
+            ResolvePopupMotionSurface(child).Opacity = 1;
+            return;
+        }
+
+        AnimatePopupOpenDeferred(child, hostPopup: null);
+    }
+
+    private static void OnComboBoxDropDownClosed(object? sender, EventArgs e)
+    {
+        if (sender is not ComboBox comboBox)
+            return;
+
+        if (FindComboBoxPopup(comboBox) is { Child: FrameworkElement child })
+            PreparePopupOpenVisual(child);
+    }
+
+    private static Popup? FindComboBoxPopup(ComboBox comboBox)
+    {
+        comboBox.ApplyTemplate();
+        if (comboBox.Template is null)
+            return null;
+
+        return comboBox.Template.FindName("PART_Popup", comboBox) as Popup
+            ?? comboBox.Template.FindName("Popup", comboBox) as Popup;
     }
 
     public static void AttachContextMenuOpenAnimation(ContextMenu? contextMenu)
@@ -1500,6 +1705,7 @@ public static class UiMotion
             return;
 
         contextMenu.Opened += (_, _) => AnimateContextMenuRoot(menu: contextMenu);
+        contextMenu.Closed += (_, _) => ResetContextMenuRoot(menu: contextMenu);
     }
 
     private static void AnimateContextMenuRoot(ContextMenu menu)
@@ -1516,9 +1722,16 @@ public static class UiMotion
             {
                 if (VisualTreeHelper.GetChildrenCount(menu) > 0
                     && VisualTreeHelper.GetChild(menu, 0) is FrameworkElement deferredRoot)
-                    AnimatePopupOpen(deferredRoot);
+                    AnimatePopupOpenDeferred(deferredRoot);
             },
-            DispatcherPriority.Loaded);
+            DispatcherPriority.Render);
+    }
+
+    private static void ResetContextMenuRoot(ContextMenu menu)
+    {
+        if (VisualTreeHelper.GetChildrenCount(menu) > 0
+            && VisualTreeHelper.GetChild(menu, 0) is FrameworkElement root)
+            PreparePopupOpenVisual(root);
     }
 
     public static void ConfigurePopupsForWindow(Window window)
@@ -1535,10 +1748,11 @@ public static class UiMotion
 
     public static void ConfigurePopupsInLogicalTree(DependencyObject root)
     {
-        if (root is Popup popup)
-            AttachPopupOpenAnimation(popup);
-        else if (root is ComboBox comboBox)
+        // ComboBox before nested PART_Popup so TryAttach marks the combo; popup skip uses TemplatedParent.
+        if (root is ComboBox comboBox)
             AttachComboBoxDropdownAnimation(comboBox);
+        else if (root is Popup popup)
+            AttachPopupOpenAnimation(popup);
         else if (root is ContextMenu contextMenu)
             AttachContextMenuOpenAnimation(contextMenu);
         else if (root is FrameworkElement framework && framework.ContextMenu is ContextMenu attachedMenu)
@@ -1553,10 +1767,10 @@ public static class UiMotion
 
     public static void ConfigurePopupsInVisualTree(DependencyObject root)
     {
-        if (root is Popup popup)
-            AttachPopupOpenAnimation(popup);
-        else if (root is ComboBox comboBox)
+        if (root is ComboBox comboBox)
             AttachComboBoxDropdownAnimation(comboBox);
+        else if (root is Popup popup)
+            AttachPopupOpenAnimation(popup);
         else if (root is ContextMenu contextMenu)
             AttachContextMenuOpenAnimation(contextMenu);
         else if (root is FrameworkElement framework && framework.ContextMenu is ContextMenu attachedMenu)

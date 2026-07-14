@@ -1,0 +1,403 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+                    xmlns:icons="clr-namespace:Scriblucent.Icons"
+                    xmlns:converters="clr-namespace:Scriblucent.Converters"
+                    xmlns:controls="clr-namespace:Scriblucent.Controls">
+
+    <sys:Double x:Key="CheckGlyphPathLength">14</sys:Double>
+    <DoubleCollection x:Key="CheckGlyphDashArray">14</DoubleCollection>
+
+    <Style x:Key="DashboardRevealIconStyle" TargetType="{x:Type icons:AppIcon}">
+        <Setter Property="behaviors:IndicatorRevealMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="Width" Value="14"/>
+        <Setter Property="Height" Value="14"/>
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Visibility" Value="Collapsed"/>
+    </Style>
+    <Style x:Key="DashboardPinIconStyle" TargetType="{x:Type icons:AppIcon}" BasedOn="{StaticResource DashboardRevealIconStyle}">
+        <Setter Property="behaviors:IndicatorRevealMotionBehavior.SourceProperty" Value="IsPinned"/>
+        <Setter Property="Kind" Value="Pin"/>
+    </Style>
+    <Style x:Key="DashboardScheduleIconStyle" TargetType="{x:Type icons:AppIcon}" BasedOn="{StaticResource DashboardRevealIconStyle}">
+        <Setter Property="behaviors:IndicatorRevealMotionBehavior.SourceProperty" Value="HasSchedule"/>
+        <Setter Property="Kind" Value="Schedule"/>
+    </Style>
+
+    <!-- Level 1 form control: rest stroke (R) like App CheckBox; fill communicates checked. -->
+    <Style x:Key="DashboardMassSelectCheckBoxStyle" TargetType="CheckBox">
+        <Setter Property="Width" Value="22"/>
+        <Setter Property="Height" Value="22"/>
+        <Setter Property="Visibility" Value="Collapsed"/>
+        <Setter Property="behaviors:DashboardMassSelectCheckBoxBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:CheckBoxCheckMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="IsHitTestVisible" Value="True"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="SelectionBox"
+                            Background="{DynamicResource MassSelectBoxBackground}"
+                            BorderBrush="{DynamicResource BorderColor}"
+                            BorderThickness="1"
+                            CornerRadius="7">
+                        <Path x:Name="CheckGlyph"
+                              Data="M 2,5.5 L 5.5,9 L 12,2.5"
+                              Stroke="{DynamicResource MassSelectBoxGlyph}"
+                              StrokeThickness="1.75"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Opacity="0"
+                              StrokeDashArray="{StaticResource CheckGlyphDashArray}"
+                              StrokeDashOffset="{StaticResource CheckGlyphPathLength}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="SelectionBox" Property="Background" Value="{DynamicResource MassSelectBoxCheckedBackground}"/>
+                            <Setter TargetName="SelectionBox" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="DashboardTagChipStyle" TargetType="Border">
+        <Setter Property="Margin" Value="0,10,0,0"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Background" Value="{DynamicResource TagChipBackground}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}"/>
+        <Setter Property="ClipToBounds" Value="False"/>
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        <Setter Property="behaviors:TagChipMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="Visibility" Value="{Binding HasTags, Converter={StaticResource BoolToVis}}"/>
+    </Style>
+
+    <Style x:Key="DashboardTagTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TagChipForeground}"/>
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+        <Setter Property="TextWrapping" Value="NoWrap"/>
+    </Style>
+
+    <Style x:Key="DashboardSectionToggleButtonStyle" TargetType="Button">
+        <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ToggleBorder"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Width" Value="30"/>
+        <Setter Property="Height" Value="30"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
+		<Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="ToggleBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Control}">
+                        <icons:AppIcon Kind="ChevronDown"
+                                       Width="12"
+                                       Height="12"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+                            <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                            <Setter TargetName="ToggleBorder" Property="Opacity" Value="0.65"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="DashboardSectionMoveButtonStyle" TargetType="Button">
+        <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="MoveBorder"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Padding" Value="0"/>
+		<Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="MoveBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Control}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="MoveBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="MoveBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SortOptionRadioButtonStyle" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="4,0,0,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="behaviors:RadioButtonSelectionMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="18"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="RadioButtonBorder"
+                                Grid.Column="0"
+                                Width="18"
+                                Height="18"
+                                Background="{DynamicResource CardBackground}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="9">
+                            <Ellipse x:Name="RadioGlyph"
+                                     Width="6"
+                                     Height="6"
+                                     Fill="{DynamicResource TextColor}"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Opacity="0"/>
+                        </Border>
+                        <ContentPresenter Grid.Column="1"
+                                          Margin="6,0,0,0"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="RadioButtonBorder" Property="BorderBrush" Value="{DynamicResource TextColor}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="RadioButtonBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                            <Setter TargetName="RadioButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.6"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!-- moved from MainWindow: RecentItemsStripPanelTemplate -->
+<ItemsPanelTemplate x:Key="RecentItemsStripPanelTemplate">
+            <StackPanel Orientation="Horizontal" Margin="0,2,0,2"/>
+        </ItemsPanelTemplate>
+
+    <!-- moved from MainWindow: RecentStripItemsStyle -->
+<Style x:Key="RecentStripItemsStyle" TargetType="ItemsControl">
+            <Setter Property="behaviors:RecentStripEnterMotionBehavior.IsEnabled" Value="True"/>
+        </Style>
+
+    <!-- moved from MainWindow: RecentItemsStripScrollViewerStyle -->
+    <Style x:Key="RecentItemsStripScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="True"/>
+            <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="CanContentScroll" Value="True"/>
+            <Setter Property="PanningMode" Value="HorizontalOnly"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="ClipToBounds" Value="False"/>
+            <Setter Property="behaviors:MiddleClickScrollBehavior.IsEnabled" Value="True"/>
+        </Style>
+
+    <!-- moved from MainWindow: DashboardListingScrollViewerStyle -->
+    <Style x:Key="DashboardListingScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="True"/>
+            <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <!-- Padding scrolls away with content; margin + rounded clip keep a sticky viewport frame. -->
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="{StaticResource Shell.DashboardPadding}"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="behaviors:RoundedClipBehavior.IsEnabled" Value="True"/>
+            <Setter Property="behaviors:RoundedClipBehavior.CornerRadius" Value="{StaticResource Radius.Card}"/>
+            <Setter Property="behaviors:MiddleClickScrollBehavior.IsEnabled" Value="True"/>
+        </Style>
+
+    <!-- Level 4 D: CardShadowLayer + NoteCardBorder R(theme); focus A (2px). -->
+    <Style x:Key="RecentNoteCardStyle" TargetType="Button">
+			<Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="RecentCard"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.MotionHostName" Value="CardBorder"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.ShadowElementName" Value="CardShadow"/>
+			<Setter Property="OverridesDefaultStyle" Value="True"/>
+			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="ClipToBounds" Value="False"/>
+			<Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+			<Setter Property="Padding" Value="11,8"/>
+			<Setter Property="Margin" Value="0,5,7,5"/>
+			<Setter Property="VerticalAlignment" Value="Center"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+			<Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="Button">
+						<Grid ClipToBounds="False">
+							<controls:CardShadowLayer x:Name="CardShadow"/>
+							<Border x:Name="CardBorder"
+									Background="{TemplateBinding Background}"
+									BorderBrush="{DynamicResource NoteCardBorder}"
+									BorderThickness="1"
+									CornerRadius="{StaticResource Radius.Control}"
+									Padding="{TemplateBinding Padding}"
+									behaviors:RoundedClipBehavior.IsEnabled="True">
+								<ContentPresenter Content="{TemplateBinding Content}"
+												  ContentTemplate="{TemplateBinding ContentTemplate}"
+												  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+												  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+							</Border>
+						</Grid>
+						<ControlTemplate.Triggers>
+							<Trigger Property="IsMouseOver" Value="True">
+								<Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+							</Trigger>
+							<Trigger Property="IsPressed" Value="True">
+								<Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+							</Trigger>
+							<Trigger Property="IsKeyboardFocused" Value="True">
+								<Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
+								<Setter TargetName="CardBorder" Property="BorderThickness" Value="2"/>
+							</Trigger>
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+			<Style.Triggers>
+				<DataTrigger Binding="{Binding DataContext.IsMassSelectMode, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+					<Setter Property="IsEnabled" Value="False"/>
+					<Setter Property="Opacity" Value="0.55"/>
+				</DataTrigger>
+			</Style.Triggers>
+		</Style>
+
+    <!-- Nested calendar-rail event cards (inside rounded/clipped tray):
+         no DropShadow — parent RoundedClip/ClipToBounds was clipping Elevation.Card unevenly
+         so some rows looked raised and others flat. Lift comes from CardBackground on the tray
+         (+ theme NoteCardBorder on dark). Hover + press match chrome buttons (nudge + wash). -->
+    <Style x:Key="CalendarScheduledItemCardStyle" TargetType="Border">
+			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+			<Setter Property="BorderBrush" Value="{DynamicResource NoteCardBorder}"/>
+			<Setter Property="BorderThickness" Value="1"/>
+			<Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
+			<Setter Property="Padding" Value="11"/>
+			<Setter Property="Margin" Value="0,0,0,8"/>
+			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="SnapsToDevicePixels" Value="True"/>
+			<Setter Property="Effect" Value="{x:Null}"/>
+			<Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
+			<Setter Property="behaviors:ButtonPressMotionBehavior.PressedBackground" Value="{DynamicResource CalendarPressedBackground}"/>
+			<Style.Triggers>
+				<Trigger Property="IsMouseOver" Value="True">
+					<Setter Property="Background" Value="{DynamicResource CalendarHoverBackground}"/>
+				</Trigger>
+			</Style.Triggers>
+		</Style>
+
+    <!-- moved from MainWindow: FabStyle -->
+<Style x:Key="FabStyle" TargetType="Button">
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="Fab"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.MotionHostName" Value="FabBorder"/>
+			<Setter Property="OverridesDefaultStyle" Value="True"/>
+			<Setter Property="SnapsToDevicePixels" Value="True"/>
+			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+			<Setter Property="FontSize" Value="{StaticResource Type.Display}"/>
+			<Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
+			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
+			<Setter Property="BorderBrush" Value="Transparent"/>
+			<Setter Property="BorderThickness" Value="0"/>
+			<Setter Property="Width" Value="52"/>
+			<Setter Property="Height" Value="52"/>
+			<Setter Property="Margin" Value="0,0,40,36"/>
+			<Setter Property="HorizontalContentAlignment" Value="Center"/>
+			<Setter Property="VerticalContentAlignment" Value="Center"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="{x:Type Button}">
+						<Border x:Name="FabBorder"
+								Background="{TemplateBinding Background}"
+								BorderBrush="Transparent"
+								BorderThickness="0"
+								CornerRadius="{StaticResource Radius.Card}"
+								Effect="{StaticResource Elevation.Button}">
+							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+											  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+											  RecognizesAccessKey="True"/>
+						</Border>
+						<ControlTemplate.Triggers>
+							<Trigger Property="IsMouseOver" Value="True">
+								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+							</Trigger>
+							<Trigger Property="IsPressed" Value="True">
+								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+							</Trigger>
+						   <Trigger Property="IsEnabled" Value="False">
+								<Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+								<Setter TargetName="FabBorder" Property="Opacity" Value="0.62"/>
+							</Trigger>
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+			<Style.Triggers>
+				<DataTrigger Binding="{Binding DataContext.IsMassSelectMode, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+					<Setter Property="IsEnabled" Value="False"/>
+					<Setter Property="Cursor" Value="Arrow"/>
+				</DataTrigger>
+			</Style.Triggers>
+		</Style>
+
+</ResourceDictionary>

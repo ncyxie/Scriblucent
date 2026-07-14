@@ -33,6 +33,9 @@ namespace Scriblucent
 
             if (!effectiveThemeChanged)
             {
+                // App.xaml already merges LightTheme; first SetTheme("Light") skips ApplyTheme.
+                // Still register the logo Uri so SvgViewbox has a valid Source.
+                ApplyBrandLogoResource(_currentTheme);
                 if (preferenceChanged)
                     ThemeChanged?.Invoke(null, EventArgs.Empty);
                 return;
@@ -83,9 +86,24 @@ namespace Scriblucent
                 Application.Current.Resources.MergedDictionaries.Insert(0, dict);
             }
 
+            // SvgViewbox.Source requires System.Uri — XAML <sys:Uri> becomes String on .NET.
+            ApplyBrandLogoResource(theme);
+
             var refreshVersion = ++_nativeThemeRefreshVersion;
             ApplyNativeThemeToOpenWindows(_currentTheme, invalidateVisuals: true, rebuildFrame: true);
             RefreshNativeThemeAfterLayout(_currentTheme, refreshVersion);
+        }
+
+        private static void ApplyBrandLogoResource(string theme)
+        {
+            if (Application.Current is null)
+                return;
+
+            // Light chrome → dark-ink logo; dark chrome → light-ink logo.
+            var logoPack = string.Equals(theme, DarkTheme, StringComparison.OrdinalIgnoreCase)
+                ? "pack://application:,,,/Assets/brand-logo-light.svg"
+                : "pack://application:,,,/Assets/brand-logo-dark.svg";
+            Application.Current.Resources["BrandLogoSvg"] = new Uri(logoPack, UriKind.Absolute);
         }
 
         private static string ResolveEffectiveTheme(string preference)

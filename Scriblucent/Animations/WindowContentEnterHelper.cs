@@ -57,6 +57,34 @@ public static class WindowContentEnterHelper
     public static bool ShouldBypassCloseHandling(Window window)
         => States.TryGetValue(window, out var state) && state.AllowImmediateClose;
 
+    /// <summary>
+    /// Plays the same exit animation as a plain close, then sets <see cref="Window.DialogResult"/>.
+    /// Do not set <see cref="Window.DialogResult"/> before calling this — cancelling that close
+    /// clears the result and can make a later set throw.
+    /// </summary>
+    public static void CloseWithDialogResult(Window window, bool dialogResult)
+    {
+        var state = States.GetValue(window, _ => new WindowMotionState());
+        state.PendingDialogResult = dialogResult;
+
+        if (UiMotion.PrefersReducedMotion)
+        {
+            ApplyPendingDialogResult(window, state);
+            return;
+        }
+
+        if (state.IsExitAnimating)
+            return;
+
+        if (window.FindName(state.ElementName) is not FrameworkElement root)
+        {
+            ApplyPendingDialogResult(window, state);
+            return;
+        }
+
+        BeginExitAnimation(window, state, root);
+    }
+
     private static void ScheduleEnterWhenRendered(Window window, WindowMotionState state, int attempt)
     {
         if (UiMotion.PrefersReducedMotion)
@@ -148,10 +176,20 @@ public static class WindowContentEnterHelper
         if (state.AllowImmediateClose || UiMotion.PrefersReducedMotion || e.Cancel || state.IsExitAnimating)
             return;
 
+        // DialogResult already committed (legacy callers): do not cancel — that clears the result
+        // and breaks ShowDialog. Prefer CloseWithDialogResult for animated Save/OK.
+        if (window.DialogResult.HasValue)
+            return;
+
         if (window.FindName(state.ElementName) is not FrameworkElement root)
             return;
 
         e.Cancel = true;
+        BeginExitAnimation(window, state, root);
+    }
+
+    private static void BeginExitAnimation(Window window, WindowMotionState state, FrameworkElement root)
+    {
         state.IsExitAnimating = true;
         ChildWindowOwnerMotion.TryBegin(window);
 
@@ -161,10 +199,38 @@ public static class WindowContentEnterHelper
             {
                 ChildWindowOwnerMotion.TryEnd(window);
                 state.BeforeFinalClose?.Invoke();
-                state.AllowImmediateClose = true;
                 state.IsExitAnimating = false;
-                window.Close();
+
+                // Defer off the render clock — setting DialogResult during CompositionTarget.Rendering is unsafe.
+                window.Dispatcher.BeginInvoke(
+                    () => FinishExit(window, state),
+                    DispatcherPriority.Normal);
             });
+    }
+
+    private static void FinishExit(Window window, WindowMotionState state)
+    {
+        state.AllowImmediateClose = true;
+
+        if (state.PendingDialogResult.HasValue)
+        {
+            ApplyPendingDialogResult(window, state);
+            return;
+        }
+
+        window.Close();
+    }
+
+    private static void ApplyPendingDialogResult(Window window, WindowMotionState state)
+    {
+        var result = state.PendingDialogResult;
+        state.PendingDialogResult = null;
+        state.AllowImmediateClose = true;
+
+        if (result.HasValue)
+            window.DialogResult = result;
+        else
+            window.Close();
     }
 
     private sealed class WindowMotionState
@@ -174,6 +240,7 @@ public static class WindowContentEnterHelper
         public bool AllowImmediateClose;
         public bool IsExitAnimating;
         public bool IsEnterAnimating;
+        public bool? PendingDialogResult;
         public List<Action> AfterEnterCallbacks = new();
     }
 }

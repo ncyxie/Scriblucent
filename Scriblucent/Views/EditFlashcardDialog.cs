@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views
 {
     public partial class EditFlashcardDialog : Window
@@ -47,7 +49,7 @@ namespace Scriblucent.Views
                     .OrderBy(category => category, StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
             InitializeComponent();
-            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+            _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
             Scriblucent.Services.WindowThemeService.Register(this);
             DataContext = this;
             Loaded += EditFlashcardDialog_Loaded;

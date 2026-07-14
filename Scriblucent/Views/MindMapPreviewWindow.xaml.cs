@@ -2,6 +2,7 @@ using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent;
+using Scriblucent.Services;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -50,6 +51,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private MindMapLayoutMode _selectedLayoutMode = MindMapLayoutMode.BalancedTree;
     private bool _suppressLayoutModeSelectionChanged;
     private bool _suppressManualPositioningToggleChanged;
+    private bool _suppressZoomSliderViewportRecenter;
     private const double ManualDragThreshold = 4;
     private const int ConnectionZIndex = 0;
     private const int NodeZIndex = 1;
@@ -312,8 +314,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     {
         MarkCurrentStateSaved();
         _allowCloseWithoutPrompt = true;
-        DialogResult = true;
-        Close();
+        WindowContentEnterHelper.CloseWithDialogResult(this, true);
     }
 
     private void SelectLayoutComboBoxItem(MindMapLayoutMode mode)
@@ -454,7 +455,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         ManualPositioningStateText.Text = LocalizationService.GetString("MindMapManualPositioningOff");
         ManualPositioningStatusDot.Fill = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92));
         ManualPositioningStateBadge.Background = GetThemeBrush("IconButtonBackground", Color.FromRgb(245, 247, 251));
-        ManualPositioningStateBadge.BorderBrush = GetThemeBrush("IconButtonBorder", Color.FromRgb(221, 228, 243));
+        ManualPositioningStateBadge.BorderBrush = Brushes.Transparent;
         ManualPositioningStateText.Foreground = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92));
         ManualPositioningToggle.ToolTip = LocalizationService.GetString("MindMapManualPositioningOffHint");
     }
@@ -1153,6 +1154,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         border.Cursor = Cursors.Hand;
+        border.Effect = null;
     }
 
     private void CancelManualDragPending()
@@ -1220,10 +1222,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         var isRoot = ReferenceEquals(node, _root);
         var defaultThickness = node.BorderThickness > 0 ? node.BorderThickness : 1;
         border.BorderThickness = new Thickness(defaultThickness);
-        border.BorderBrush = new SolidColorBrush(
-            !string.IsNullOrWhiteSpace(node.BorderColor)
-                ? (Color)ColorConverter.ConvertFromString(node.BorderColor)
-                : isRoot ? Color.FromRgb(47, 92, 208) : Color.FromRgb(194, 203, 220));
+        border.BorderBrush = !string.IsNullOrWhiteSpace(node.BorderColor)
+            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(node.BorderColor))
+            : isRoot
+                ? GetThemeBrush("MindMapNodeRootBorderBrush", Color.FromRgb(47, 92, 208))
+                : GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220));
         border.Effect = null;
 
         if (_searchMatches.Contains(node))
@@ -1236,13 +1239,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         {
             border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(245, 114, 11));
             border.BorderThickness = new Thickness(3);
-            border.Effect = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                Opacity = 0.2,
-                BlurRadius = 14,
-                ShadowDepth = 0
-            };
+            // Border highlight only — avoid a permanent live DropShadowEffect on canvas nodes.
         }
 
         if (_selectedNodes.Contains(node))
@@ -1414,20 +1411,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 Padding = new Thickness(6, 4, 6, 4),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, -8, -8, 0), // Position outside the node
-                Effect = new DropShadowEffect
-                {
-                    Color = Colors.Black,
-                    Opacity = 0.2,
-                    BlurRadius = 8,
-                    ShadowDepth = 2
-                }
+                Margin = new Thickness(0, -8, -8, 0) // Position outside the node
             };
 
             var iconText = new TextBlock
             {
                 Text = node.Icon,
-                FontSize = 14,
+                FontSize = TypeScale.Px(TypeScale.Body, 14),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
@@ -2002,6 +1992,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         var oldZoom = e.OldValue > 0 ? e.OldValue : 1;
         var newZoom = Math.Max(e.NewValue, 0.1);
+        var preserveViewportCenter = !_suppressZoomSliderViewportRecenter;
         var centerX = (MapScrollViewer.HorizontalOffset + MapScrollViewer.ViewportWidth / 2) / oldZoom;
         var centerY = (MapScrollViewer.VerticalOffset + MapScrollViewer.ViewportHeight / 2) / oldZoom;
 
@@ -2010,6 +2001,9 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         UpdateMapCanvasSize();
         MapCanvas.InvalidateMeasure();
         MapScrollViewer.InvalidateScrollInfo();
+
+        if (!preserveViewportCenter)
+            return;
 
         Dispatcher.BeginInvoke(new Action(() =>
         {
@@ -2025,11 +2019,49 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void MapScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+        var ctrlHeld = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+            || Keyboard.IsKeyDown(Key.LeftCtrl)
+            || Keyboard.IsKeyDown(Key.RightCtrl);
+        if (!ctrlHeld || ZoomSlider is null)
             return;
 
-        var delta = e.Delta > 0 ? 0.08 : -0.08;
-        ZoomSlider.Value = Math.Clamp(ZoomSlider.Value + delta, ZoomSlider.Minimum, ZoomSlider.Maximum);
+        // Zoom toward the pointer (not only viewport center).
+        var oldZoom = Math.Max(ZoomSlider.Value, 0.1);
+        var step = e.Delta > 0 ? 0.1 : -0.1;
+        var newZoom = Math.Clamp(oldZoom + step, ZoomSlider.Minimum, ZoomSlider.Maximum);
+        if (Math.Abs(newZoom - oldZoom) < 0.0001)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        var pointer = e.GetPosition(MapScrollViewer);
+        var contentX = (MapScrollViewer.HorizontalOffset + pointer.X) / oldZoom;
+        var contentY = (MapScrollViewer.VerticalOffset + pointer.Y) / oldZoom;
+
+        _suppressZoomSliderViewportRecenter = true;
+        try
+        {
+            ZoomSlider.Value = newZoom;
+        }
+        finally
+        {
+            _suppressZoomSliderViewportRecenter = false;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (MapScrollViewer is null || MapCanvas is null)
+                return;
+
+            MapCanvas.UpdateLayout();
+            MapScrollViewer.UpdateLayout();
+            var targetX = contentX * newZoom - pointer.X;
+            var targetY = contentY * newZoom - pointer.Y;
+            MapScrollViewer.ScrollToHorizontalOffset(Math.Clamp(targetX, 0, Math.Max(0, MapScrollViewer.ScrollableWidth)));
+            MapScrollViewer.ScrollToVerticalOffset(Math.Clamp(targetY, 0, Math.Max(0, MapScrollViewer.ScrollableHeight)));
+        }), DispatcherPriority.Loaded);
+
         e.Handled = true;
     }
 
@@ -2552,8 +2584,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             case UnsavedCloseDecision.SaveAndClose:
                 _allowCloseWithoutPrompt = true;
                 MarkCurrentStateSaved();
-                DialogResult = true;
-                e.Cancel = false;
+                e.Cancel = true;
+                WindowContentEnterHelper.CloseWithDialogResult(this, true);
                 return;
             case UnsavedCloseDecision.LeaveWithoutSaving:
                 _allowCloseWithoutPrompt = true;

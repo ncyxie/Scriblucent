@@ -4,7 +4,7 @@
              xmlns:anim="clr-namespace:Scriblucent.Animations"
              IsHitTestVisible="False"
              Focusable="False"
-             Margin="-10,-6,-10,-14">
+             Margin="-11,-9,-11,-12">
     <!--
         Nine-slice shadow: a soft Gaussian-blurred shadow texture baked ONCE (see
         CardShadowAsset) and reused as eight stretched image slices per card, instead of a
@@ -16,13 +16,16 @@
         looking like a real soft shadow rather than flat opacity bands. BitmapCache bakes
         the eight image draws into one cached texture per card since this layer never changes.
 
-        The default margin above (negative, so the halo bleeds outward past a full-scale card)
-        is overridden per-instance for card templates that render at a fixed sub-1.0 scale via
-        a static RenderTransform on the card border - see MainWindow.xaml's ungrouped
-        Flashcard/Quiz/MindMap templates. This is plain layout (Margin), not a transform, so it
-        composes with the card's own transform predictably instead of needing to match it.
+        The bake composites ambient (centered contact) + key (downward cast). Default margin
+        is mildly bottom-biased so the underside has a bit more room while the top still
+        bleeds enough to separate white cards from white section shells. Negative values
+        bleed the plate past a full-scale card. Overridden per-instance for card templates
+        that render at a fixed sub-1.0 scale via a static RenderTransform on the card border
+        - see ungrouped Flashcard/Quiz/MindMap dashboard templates. This is plain layout
+        (Margin), not a transform, so it composes with the card's own transform predictably
+        instead of needing to match it.
     -->
-    <Grid x:Name="ShadowRoot" Opacity="0.6">
+    <Grid x:Name="ShadowRoot" Opacity="0.72">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="22"/>
             <ColumnDefinition Width="*"/>

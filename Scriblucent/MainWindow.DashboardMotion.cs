@@ -646,19 +646,19 @@ public partial class MainWindow : IDashboardMotionHost
         switch (scope)
         {
             case DashboardMotionScope.Notes:
-                if (FindName("UngroupedNotesItemsControl") is Controls.DashboardVirtualizedCardGrid notesUngrouped)
+                if (FindDashboardName("UngroupedNotesItemsControl") is Controls.DashboardVirtualizedCardGrid notesUngrouped)
                     yield return notesUngrouped;
                 break;
             case DashboardMotionScope.Flashcards:
-                if (FindName("FlashcardDashboardUngroupedItemsControl") is Controls.DashboardVirtualizedCardGrid flashcardsUngrouped)
+                if (FindDashboardName("FlashcardDashboardUngroupedItemsControl") is Controls.DashboardVirtualizedCardGrid flashcardsUngrouped)
                     yield return flashcardsUngrouped;
                 break;
             case DashboardMotionScope.Quizzes:
-                if (FindName("QuizDashboardUngroupedItemsControl") is Controls.DashboardVirtualizedCardGrid quizzesUngrouped)
+                if (FindDashboardName("QuizDashboardUngroupedItemsControl") is Controls.DashboardVirtualizedCardGrid quizzesUngrouped)
                     yield return quizzesUngrouped;
                 break;
             case DashboardMotionScope.MindMaps:
-                if (FindName("MindMapDashboardUngroupedItemsControl") is Controls.DashboardVirtualizedCardGrid mindMapsUngrouped)
+                if (FindDashboardName("MindMapDashboardUngroupedItemsControl") is Controls.DashboardVirtualizedCardGrid mindMapsUngrouped)
                     yield return mindMapsUngrouped;
                 break;
         }
@@ -673,7 +673,7 @@ public partial class MainWindow : IDashboardMotionHost
         };
 
         if (groupsControlName is null
-            || FindName(groupsControlName) is not ItemsControl groupsControl)
+            || FindDashboardName(groupsControlName) is not ItemsControl groupsControl)
             yield break;
 
         foreach (var grid in EnumerateDescendantCardGrids(groupsControl))

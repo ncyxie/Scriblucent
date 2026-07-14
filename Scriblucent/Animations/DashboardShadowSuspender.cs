@@ -5,9 +5,15 @@ using System.Windows.Media.Effects;
 namespace Scriblucent.Animations;
 
 /// <summary>
-/// Temporarily removes <see cref="DropShadowEffect"/> from a scoped visual subtree
-/// (dashboard listings, not floating chrome) to avoid WPF's black shadow bitmap flash
-/// while the compositor resizes.
+/// Temporarily removes live <see cref="DropShadowEffect"/> instances from a scoped visual
+/// subtree (e.g. on window minimize/restore) to avoid WPF's black shadow bitmap flash while
+/// the compositor resizes.
+/// <para>
+/// Dashboard <b>tile</b> rest elevation uses bake-once <c>CardShadowLayer</c> nine-slices and
+/// does not need this suspender for scroll performance. Prefer this helper for leftover live
+/// effects (chrome, dialogs) and minimize/restore scopes — not as the primary scroll strategy
+/// for listing cards.
+/// </para>
 /// </summary>
 internal static class DashboardShadowSuspender
 {

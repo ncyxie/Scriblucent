@@ -11,7 +11,9 @@
 
   <ItemGroup>
     <Resource Include="logo.ico" />
-    <Resource Include="Assets\logo.png" />
+    <Resource Include="Assets\brand-logo-light.svg" />
+    <Resource Include="Assets\brand-logo-dark.svg" />
+    <Resource Include="Assets\Fonts\**\*.*" Exclude="Assets\Fonts\README.md" />
   </ItemGroup>
 
   <ItemGroup>
@@ -36,6 +38,7 @@
     <PackageReference Include="LLamaSharp" Version="0.26.0" />
     <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.26.0" />
     <PackageReference Include="MahApps.Metro.IconPacks.Lucide" Version="6.2.1" />
+    <PackageReference Include="SharpVectors.Wpf" Version="1.8.5" />
     <PackageReference Include="VirtualizingWrapPanel" Version="2.5.2" />
   </ItemGroup>
 

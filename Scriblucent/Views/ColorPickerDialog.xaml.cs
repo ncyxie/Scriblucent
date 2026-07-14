@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views;
 
 public partial class ColorPickerDialog : Window
@@ -14,7 +16,7 @@ public partial class ColorPickerDialog : Window
     public ColorPickerDialog()
     {
         InitializeComponent();
-        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+        _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         Scriblucent.Services.WindowThemeService.Register(this);
         Loaded += ColorPickerDialog_Loaded;
         BuildSwatches();

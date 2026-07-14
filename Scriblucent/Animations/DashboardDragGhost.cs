@@ -21,10 +21,15 @@ public static class DashboardDragGhost
 {
     private const double NoteSourceOpacityDuringDrag = 0.22;
     private const double ListingSourceOpacityDuringDrag = 0.18;
-    private const double GhostScale = 1.045;
     private const double GhostFloatYOffset = -5;
     private const double GhostLiftAboveGrabY = 14;
     private const double GhostShadowPad = 24;
+    // Match CardShadowLayer default margin (-11,-9,-11,-12) and ShadowRoot opacity.
+    private const double GhostShadowBleedLeft = 11;
+    private const double GhostShadowBleedTop = 9;
+    private const double GhostShadowBleedRight = 11;
+    private const double GhostShadowBleedBottom = 12;
+    private const double GhostShadowPlateOpacity = 0.72;
     private const double CaptureMargin = 16;
     private const double NoteCardRestWidth = 220;
     private const double NoteCardRestMinHeight = 140;
@@ -292,11 +297,10 @@ public static class DashboardDragGhost
 
     private static void ResetShadowToRest(FrameworkElement shadowHost)
     {
+        // Listing/note tiles already use CardShadowLayer; do not reattach a live DropShadowEffect.
         UiMotion.Stop(shadowHost);
-        var shadow = UiMotion.EnsureShadow(shadowHost);
-        shadow.Opacity = UiMotion.ShadowOpacityRest;
-        shadow.BlurRadius = UiMotion.ShadowBlurRest;
-        shadow.ShadowDepth = 1;
+        if (shadowHost.Effect is DropShadowEffect)
+            shadowHost.Effect = null;
     }
 
     private static (double Width, double Height) GetRestCaptureSize(
@@ -350,38 +354,24 @@ public static class DashboardDragGhost
     {
         var contentW = snapshot.Width;
         var contentH = snapshot.Height;
-        var scaledW = contentW * GhostScale;
-        var scaledH = contentH * GhostScale;
-        var bakeW = scaledW + GhostShadowPad * 2;
-        var bakeH = scaledH + GhostShadowPad * 2 + GhostLiftAboveGrabY;
-
-        var centerX = contentW * 0.5;
-        var centerY = contentH * 0.5;
-        var originX = GhostShadowPad + centerX * (1 - GhostScale);
-        var originY = GhostShadowPad + GhostLiftAboveGrabY + GhostFloatYOffset + centerY * (1 - GhostScale);
+        var bakeW = contentW + GhostShadowPad * 2;
+        var bakeH = contentH + GhostShadowPad * 2 + GhostLiftAboveGrabY;
+        var originX = GhostShadowPad;
+        var originY = GhostShadowPad + GhostLiftAboveGrabY + GhostFloatYOffset;
 
         var dpi = VisualTreeHelper.GetDpi(owner);
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
         {
-            var shadowRect = new Rect(originX + 5, originY + 9, scaledW, scaledH);
-            dc.DrawRoundedRectangle(
-                new SolidColorBrush(Color.FromArgb(52, 0, 0, 0)),
-                null,
-                shadowRect,
-                12 * GhostScale,
-                12 * GhostScale);
+            // Nine-slice hugs the visible card face only (exclude CaptureMargin pad).
+            var face = new Rect(
+                originX + snapshot.ContentOffsetX,
+                originY + snapshot.ContentOffsetY,
+                snapshot.Width - 2 * snapshot.ContentOffsetX,
+                snapshot.Height - 2 * snapshot.ContentOffsetY);
+            DrawCardShadowNineSlice(dc, face);
 
-            dc.PushTransform(new TransformGroup
-            {
-                Children =
-                {
-                    new TranslateTransform(originX, originY),
-                    new ScaleTransform(GhostScale, GhostScale)
-                }
-            });
-            dc.DrawImage(snapshot.Image, new Rect(0, 0, contentW, contentH));
-            dc.Pop();
+            dc.DrawImage(snapshot.Image, new Rect(originX, originY, contentW, contentH));
         }
 
         var pixelW = Math.Max(1, (int)Math.Ceiling(bakeW * dpi.DpiScaleX));
@@ -395,9 +385,8 @@ public static class DashboardDragGhost
         baked.Render(visual);
         baked.Freeze();
 
-        var grabAnchorXDip = originX + grabOffset.X * GhostScale;
-        var grabAnchorYDip = originY + grabOffset.Y * GhostScale;
-        var grabPx = ResolveTransformToDevice(owner).Transform(new Point(grabAnchorXDip, grabAnchorYDip));
+        var grabPx = ResolveTransformToDevice(owner).Transform(
+            new Point(originX + grabOffset.X, originY + grabOffset.Y));
 
         return new BakedGhost(
             baked,
@@ -405,6 +394,41 @@ public static class DashboardDragGhost
             bakeH,
             (int)Math.Round(grabPx.X),
             (int)Math.Round(grabPx.Y));
+    }
+
+    private static void DrawCardShadowNineSlice(DrawingContext dc, Rect face)
+    {
+        var left = GhostShadowBleedLeft;
+        var top = GhostShadowBleedTop;
+        var right = GhostShadowBleedRight;
+        var bottom = GhostShadowBleedBottom;
+        var corner = CardShadowAsset.CornerTileSize;
+
+        var plate = new Rect(
+            face.X - left,
+            face.Y - top,
+            face.Width + left + right,
+            face.Height + top + bottom);
+
+        var x0 = plate.X;
+        var x1 = plate.X + corner;
+        var x2 = plate.Right - corner;
+        var y0 = plate.Y;
+        var y1 = plate.Y + corner;
+        var y2 = plate.Bottom - corner;
+        var midW = Math.Max(0, x2 - x1);
+        var midH = Math.Max(0, y2 - y1);
+
+        dc.PushOpacity(GhostShadowPlateOpacity);
+        dc.DrawImage(CardShadowAsset.TopLeft, new Rect(x0, y0, corner, corner));
+        dc.DrawImage(CardShadowAsset.TopEdge, new Rect(x1, y0, midW, corner));
+        dc.DrawImage(CardShadowAsset.TopRight, new Rect(x2, y0, corner, corner));
+        dc.DrawImage(CardShadowAsset.LeftEdge, new Rect(x0, y1, corner, midH));
+        dc.DrawImage(CardShadowAsset.RightEdge, new Rect(x2, y1, corner, midH));
+        dc.DrawImage(CardShadowAsset.BottomLeft, new Rect(x0, y2, corner, corner));
+        dc.DrawImage(CardShadowAsset.BottomEdge, new Rect(x1, y2, midW, corner));
+        dc.DrawImage(CardShadowAsset.BottomRight, new Rect(x2, y2, corner, corner));
+        dc.Pop();
     }
 
     private static SnapshotCapture? CaptureSnapshot(
@@ -678,8 +702,7 @@ public static class DashboardDragGhost
                 SnapsToDevicePixels = true,
                 IsHitTestVisible = false
             };
-            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.LowQuality);
-            image.CacheMode = DpiAwareBitmapCache.Create(image, enableClearType: false);
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
 
             Content = image;
             Width = bakedGhost.WidthDip;

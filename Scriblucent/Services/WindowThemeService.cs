@@ -12,11 +12,6 @@ internal static class WindowThemeService
     private const int DwmaBorderColor = 34;
     private const int DwmaCaptionColor = 35;
     private const int DwmaTextColor = 36;
-    private const uint SwpNoSize = 0x0001;
-    private const uint SwpNoMove = 0x0002;
-    private const uint SwpNoZOrder = 0x0004;
-    private const uint SwpNoActivate = 0x0010;
-    private const uint SwpFrameChanged = 0x0020;
     private const uint RdwInvalidate = 0x0001;
     private const uint RdwFrame = 0x0400;
     private const uint RdwUpdateNow = 0x0100;
@@ -28,16 +23,18 @@ internal static class WindowThemeService
     private static extern int SetWindowTheme(IntPtr hwnd, string? pszSubAppName, string? pszSubIdList);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
-
-    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool GetWindowRect(IntPtr hWnd, out Rect rect);
 
     public static void Register(Window window)
     {
+        // Same themed caption + DWM animation chrome everywhere. Feature windows use a
+        // softer init (no STYLECHANGING fight; deferred ForceFrameChanged) so ShowDialog
+        // stays responsive while still getting the built-in open animation.
+        if (window is MainWindow)
+            ShellWindowChrome.TryAttach(window, ShellChromeKind.NativeAnimated);
+        else
+            ShellWindowChrome.TryAttach(window, ShellChromeKind.Client);
+
         ApplyThemeWhenReady(window, ThemeManager.CurrentTheme);
     }
 
@@ -68,7 +65,16 @@ internal static class WindowThemeService
         SetWindowTheme(handle, isDarkMode ? "DarkMode_Explorer" : "Explorer", null);
 
         ApplyCaptionColors(handle, window, isDarkMode);
-        RefreshNonClientFrame(handle, window, rebuildFrame);
+
+        // SetWindowPos(SWP_FRAMECHANGED) / size thrash breaks DWM maximize animations on Win10
+        // (window briefly clones toward a corner). Only soft-invalidate after a live theme switch.
+        if (!rebuildFrame)
+            return;
+
+        if (window.WindowStyle == WindowStyle.None || window.AllowsTransparency)
+            return;
+
+        RedrawWindow(handle, IntPtr.Zero, IntPtr.Zero, RdwInvalidate | RdwFrame | RdwUpdateNow);
     }
 
     private static void OnWindowSourceInitialized(object? sender, EventArgs e)
@@ -82,9 +88,20 @@ internal static class WindowThemeService
 
     private static void ApplyCaptionColors(IntPtr handle, Window window, bool isDarkMode)
     {
-        var captionColor = ResolveColor(window, isDarkMode ? "CardBackground" : "WindowBackground", isDarkMode ? Color.FromRgb(38, 38, 38) : Color.FromRgb(235, 235, 239));
-        var borderColor = ResolveColor(window, "BorderColor", isDarkMode ? Color.FromRgb(58, 58, 58) : Color.FromRgb(217, 217, 223));
-        var textColor = ResolveColor(window, "TextColor", isDarkMode ? Colors.White : Color.FromRgb(28, 28, 28));
+        // Main shell caption matches SidebarBackground; feature Client chrome matches FeatureFrameBackground.
+        var frameKey = ShellWindowChrome.GetShellFrameBackgroundKey(window);
+        var captionFallback = frameKey == "FeatureFrameBackground"
+            ? (isDarkMode ? Color.FromRgb(0x16, 0x16, 0x16) : Color.FromRgb(0xDE, 0xDE, 0xE8))
+            : (isDarkMode ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xEC, 0xEC, 0xF1));
+        var captionColor = ResolveColor(window, frameKey, captionFallback);
+        var borderColor = ResolveColor(
+            window,
+            "BorderColor",
+            isDarkMode ? Color.FromRgb(0x3A, 0x3A, 0x3A) : Color.FromRgb(0xE0, 0xE0, 0xE6));
+        var textColor = ResolveColor(
+            window,
+            "TextColor",
+            isDarkMode ? Colors.White : Color.FromRgb(0x1C, 0x1C, 0x1C));
 
         SetDwmColor(handle, DwmaCaptionColor, captionColor);
         SetDwmColor(handle, DwmaBorderColor, borderColor);
@@ -93,45 +110,18 @@ internal static class WindowThemeService
 
     private static Color ResolveColor(Window window, string resourceKey, Color fallback)
     {
-        return window.TryFindResource(resourceKey) is SolidColorBrush brush
-            ? brush.Color
-            : fallback;
+        if (window.TryFindResource(resourceKey) is SolidColorBrush windowBrush)
+            return windowBrush.Color;
+
+        if (Application.Current?.TryFindResource(resourceKey) is SolidColorBrush appBrush)
+            return appBrush.Color;
+
+        return fallback;
     }
 
     private static void SetDwmColor(IntPtr handle, int attribute, Color color)
     {
         var colorRef = color.R | (color.G << 8) | (color.B << 16);
         DwmSetWindowAttribute(handle, attribute, ref colorRef, Marshal.SizeOf<int>());
-    }
-
-    private static void RefreshNonClientFrame(IntPtr handle, Window window, bool rebuildFrame)
-    {
-        SetWindowPos(
-            handle,
-            IntPtr.Zero,
-            0,
-            0,
-            0,
-            0,
-            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
-
-        if (rebuildFrame && window.WindowState == WindowState.Normal && GetWindowRect(handle, out var rect))
-        {
-            var width = rect.Right - rect.Left;
-            var height = rect.Bottom - rect.Top;
-            SetWindowPos(handle, IntPtr.Zero, rect.Left, rect.Top, width + 1, height, SwpNoMove | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
-            SetWindowPos(handle, IntPtr.Zero, rect.Left, rect.Top, width, height, SwpNoMove | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
-        }
-
-        RedrawWindow(handle, IntPtr.Zero, IntPtr.Zero, RdwInvalidate | RdwFrame | RdwUpdateNow);
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct Rect
-    {
-        public readonly int Left;
-        public readonly int Top;
-        public readonly int Right;
-        public readonly int Bottom;
     }
 }

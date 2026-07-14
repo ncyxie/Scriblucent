@@ -40,6 +40,7 @@ public partial class FlashcardFlipHost : UserControl
     private bool _isAnimating;
     private double _lastExtentWidth;
     private double _lastExtentHeight;
+    private readonly List<(CardShadowLayer Layer, double Opacity)> _hiddenPlates = new();
 
     public FlashcardFlipHost()
     {
@@ -98,6 +99,7 @@ public partial class FlashcardFlipHost : UserControl
         UiMotion.Clear(FlipScale, ScaleTransform.ScaleYProperty);
         DashboardShadowSuspender.TrySuspend(this, FrontHost);
         DashboardShadowSuspender.TrySuspend(this, BackFace);
+        HideBakedShadowPlates();
         ApplyScale(fromScale);
 
         UiMotion.RunComposited(
@@ -114,11 +116,45 @@ public partial class FlashcardFlipHost : UserControl
             () =>
             {
                 DashboardShadowSuspender.TryResume(this);
+                RestoreBakedShadowPlates();
                 ApplyScale(toScale);
                 CommitFlipState(targetFlipped);
                 _isAnimating = false;
                 onComplete?.Invoke();
             });
+    }
+
+    /// <summary>
+    /// Nine-slice plates distort under ScaleY flip; hide for the animation only (live Effects
+    /// are handled by <see cref="DashboardShadowSuspender"/>).
+    /// </summary>
+    private void HideBakedShadowPlates()
+    {
+        RestoreBakedShadowPlates();
+        CollectBakedShadowPlates(FrontHost);
+        CollectBakedShadowPlates(BackFace);
+        foreach (var (layer, _) in _hiddenPlates)
+            layer.Opacity = 0;
+    }
+
+    private void CollectBakedShadowPlates(DependencyObject? root)
+    {
+        if (root is null)
+            return;
+
+        if (root is CardShadowLayer layer)
+            _hiddenPlates.Add((layer, layer.Opacity));
+
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+            CollectBakedShadowPlates(VisualTreeHelper.GetChild(root, i));
+    }
+
+    private void RestoreBakedShadowPlates()
+    {
+        foreach (var (layer, opacity) in _hiddenPlates)
+            layer.Opacity = opacity;
+        _hiddenPlates.Clear();
     }
 
     private void CommitFlipState(bool flipped)

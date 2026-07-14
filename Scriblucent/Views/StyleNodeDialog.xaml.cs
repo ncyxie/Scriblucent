@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views
 {
     public partial class StyleNodeDialog : Window
@@ -25,7 +27,7 @@ namespace Scriblucent.Views
     public StyleNodeDialog()
     {
         InitializeComponent();
-        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+        _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         Scriblucent.Services.WindowThemeService.Register(this);
         Loaded += StyleNodeDialog_Loaded;
 
@@ -241,7 +243,8 @@ namespace Scriblucent.Views
         {
             button.Background = FindResource("SelectionBackground") as Brush
                 ?? new SolidColorBrush(Color.FromRgb(232, 240, 254));
-            button.BorderBrush = new SolidColorBrush(Color.FromRgb(74, 110, 224));
+            button.BorderBrush = FindResource("AccentPrimary") as Brush
+                ?? new SolidColorBrush(Color.FromRgb(74, 110, 224));
             button.BorderThickness = new Thickness(2);
         }
 
@@ -264,7 +267,7 @@ namespace Scriblucent.Views
 
                 button.Background = isCustomButton ? customBackground : defaultBackground;
                 button.BorderBrush = isCustomButton
-                    ? new SolidColorBrush(Color.FromRgb(74, 110, 224))
+                    ? FindResource("AccentPrimary") as Brush ?? defaultBorder
                     : defaultBorder;
                 button.BorderThickness = new Thickness(1);
             }

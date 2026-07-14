@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Scriblucent.Animations;
@@ -7,8 +8,15 @@ using Scriblucent.Animations;
 namespace Scriblucent.Behaviors;
 
 /// <summary>
-/// Subtle press motion for chrome buttons (section toggles, calendar days, dialog actions).
+/// Subtle press motion for chrome buttons (section toggles, calendar days, dialog actions)
+/// and pressable surfaces such as calendar event cards.
 /// Uses a downward nudge instead of scale so label text stays sharp while pressed.
+/// <para>
+/// Does not capture the mouse — capturing during PreviewMouseLeftButtonDown breaks WPF
+/// Button.Click routing (sidebar / top-bar would stop responding).
+/// </para>
+/// Optional <see cref="PressedBackgroundProperty"/> swaps fill for the press on non-Button
+/// surfaces (e.g. Border event cards), clearing the local value on release so style hover resumes.
 /// </summary>
 public static class ButtonPressMotionBehavior
 {
@@ -18,6 +26,7 @@ public static class ButtonPressMotionBehavior
         public bool IsPressed;
         public MouseButtonEventHandler? MouseDownHandler;
         public MouseButtonEventHandler? MouseUpHandler;
+        public MouseEventHandler? MouseLeaveHandler;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -38,6 +47,16 @@ public static class ButtonPressMotionBehavior
         typeof(ButtonPressMotionBehavior),
         new PropertyMetadata(string.Empty));
 
+    /// <summary>
+    /// Optional fill applied while the pointer is pressed (Border / non-Button surfaces).
+    /// Cleared on release so style triggers can drive the brush again.
+    /// </summary>
+    public static readonly DependencyProperty PressedBackgroundProperty = DependencyProperty.RegisterAttached(
+        "PressedBackground",
+        typeof(Brush),
+        typeof(ButtonPressMotionBehavior),
+        new PropertyMetadata(null));
+
     public static void SetIsEnabled(DependencyObject element, bool value)
         => element.SetValue(IsEnabledProperty, value);
 
@@ -49,6 +68,12 @@ public static class ButtonPressMotionBehavior
 
     public static string GetMotionHostName(DependencyObject element)
         => (string)element.GetValue(MotionHostNameProperty);
+
+    public static void SetPressedBackground(DependencyObject element, Brush? value)
+        => element.SetValue(PressedBackgroundProperty, value);
+
+    public static Brush? GetPressedBackground(DependencyObject element)
+        => element.GetValue(PressedBackgroundProperty) as Brush;
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -69,7 +94,7 @@ public static class ButtonPressMotionBehavior
 
         state.MouseDownHandler = (_, e) =>
         {
-            if (e.ChangedButton != MouseButton.Left)
+            if (e.ChangedButton != MouseButton.Left || !element.IsEnabled)
                 return;
 
             state.IsPressed = true;
@@ -77,17 +102,33 @@ public static class ButtonPressMotionBehavior
         };
         state.MouseUpHandler = (_, e) =>
         {
-            if (e.ChangedButton != MouseButton.Left)
+            if (e.ChangedButton != MouseButton.Left || !state.IsPressed)
                 return;
 
             state.IsPressed = false;
             PlayPress(element, isPressed: false);
         };
+        state.MouseLeaveHandler = (_, _) =>
+        {
+            if (!state.IsPressed)
+                return;
 
-        element.Unloaded += (_, _) => Detach(element);
+            // Pointer left while held — release visual without capturing the mouse.
+            state.IsPressed = false;
+            PlayPress(element, isPressed: false);
+        };
+
+        element.Unloaded += OnUnloaded;
         element.PreviewMouseLeftButtonDown += state.MouseDownHandler;
         element.PreviewMouseLeftButtonUp += state.MouseUpHandler;
+        element.MouseLeave += state.MouseLeaveHandler;
         state.IsAttached = true;
+    }
+
+    private static void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element)
+            Detach(element);
     }
 
     private static void Detach(FrameworkElement element)
@@ -95,10 +136,13 @@ public static class ButtonPressMotionBehavior
         if (element.GetValue(StateProperty) is not State state || !state.IsAttached)
             return;
 
+        element.Unloaded -= OnUnloaded;
         if (state.MouseDownHandler != null)
             element.PreviewMouseLeftButtonDown -= state.MouseDownHandler;
         if (state.MouseUpHandler != null)
             element.PreviewMouseLeftButtonUp -= state.MouseUpHandler;
+        if (state.MouseLeaveHandler != null)
+            element.MouseLeave -= state.MouseLeaveHandler;
 
         UiMotion.Stop(element);
         var host = ResolveMotionHost(element);
@@ -107,12 +151,16 @@ public static class ButtonPressMotionBehavior
         scale.ScaleY = 1;
         translate.X = 0;
         translate.Y = 0;
+        ClearPressedBackground(element);
+
         state.IsAttached = false;
         state.IsPressed = false;
     }
 
     private static void PlayPress(FrameworkElement element, bool isPressed)
     {
+        ApplyPressedBackground(element, isPressed);
+
         if (UiMotion.PrefersReducedMotion)
             return;
 
@@ -132,6 +180,34 @@ public static class ButtonPressMotionBehavior
             });
     }
 
+    private static void ApplyPressedBackground(FrameworkElement element, bool isPressed)
+    {
+        var pressed = GetPressedBackground(element);
+        if (pressed is null)
+            return;
+
+        // Never overwrite Control.Background on real Buttons — their templates own the chrome.
+        if (element is ButtonBase)
+            return;
+
+        if (element is Border)
+        {
+            if (isPressed)
+                element.SetValue(Border.BackgroundProperty, pressed);
+            else
+                ClearPressedBackground(element);
+        }
+    }
+
+    private static void ClearPressedBackground(FrameworkElement element)
+    {
+        if (GetPressedBackground(element) is null)
+            return;
+
+        if (element is Border)
+            element.ClearValue(Border.BackgroundProperty);
+    }
+
     private static FrameworkElement ResolveMotionHost(FrameworkElement element)
     {
         if (element is not Control control)
@@ -143,6 +219,7 @@ public static class ButtonPressMotionBehavior
         control.ApplyTemplate();
         var hostName = GetMotionHostName(element);
         if (!string.IsNullOrWhiteSpace(hostName)
+            && control.Template != null
             && control.Template.FindName(hostName, control) is FrameworkElement namedHost)
         {
             namedHost.RenderTransformOrigin = new Point(0.5, 0.5);

@@ -103,11 +103,10 @@ internal static class SmoothScrollCompositor
 
         DashboardShadowSuspender.BeginScope(DashboardShadowSuspender.AnimatedScrollShadowScope);
 
-        // Suspend every drop shadow inside the scrolled content, not just card shadows.
-        // The dashboards wrap each section in a full-extent Border with a DropShadowEffect;
-        // an effect that large forces the whole section through a huge intermediate texture
-        // that is re-blurred whenever scrolling dirties anything inside it. A reclaimed hold
-        // still has these suspended, so the walk runs once per scroll interaction.
+        // Live DropShadowEffect leftovers (chrome/popups) are suspended for the scroll
+        // session. Dashboard section shells and listing tiles use bake-once CardShadowLayer
+        // and do not need this walk for blur cost — the suspender still strips any stray
+        // live Effects in the scrolled content.
         if (!reclaimedHold && session.ContentElement is { } shadowRoot)
             DashboardShadowSuspender.TrySuspend(DashboardShadowSuspender.AnimatedScrollShadowScope, shadowRoot);
 

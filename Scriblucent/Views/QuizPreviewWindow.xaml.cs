@@ -1,6 +1,7 @@
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
+using Scriblucent.Services;
 using System.Collections.Specialized;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
@@ -36,9 +37,13 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         typeof(QuizPreviewWindow),
         new PropertyMetadata(false, OnIsEditModeChanged));
 
-    private static readonly Brush CorrectBrush = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-    private static readonly Brush IncorrectBrush = new SolidColorBrush(Color.FromRgb(220, 38, 38));
-    private static readonly Brush UnansweredBrush = new SolidColorBrush(Color.FromRgb(107, 114, 128));
+    private static Brush ResolveThemeBrush(string key, Color fallback)
+        => Application.Current?.TryFindResource(key) as Brush
+           ?? new SolidColorBrush(fallback);
+
+    private static Brush CorrectBrush => ResolveThemeBrush("AccentSuccess", Color.FromRgb(16, 185, 129));
+    private static Brush IncorrectBrush => ResolveThemeBrush("AccentDanger", Color.FromRgb(220, 38, 38));
+    private static Brush UnansweredBrush => ResolveThemeBrush("TextColorSecondary", Color.FromRgb(107, 114, 128));
 
     public sealed class QuizNoteLinkOption
     {
@@ -418,8 +423,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         MarkCurrentStateSaved();
         _allowCloseWithoutPrompt = true;
-        DialogResult = true;
-        Close();
+        WindowContentEnterHelper.CloseWithDialogResult(this, true);
     }
 
     private void CommitFocusedTextBoxBinding()
@@ -565,7 +569,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void StartQuizButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_sourceDocument?.Questions == null || _sourceDocument.Questions.Count == 0)
+        // Use the live editor snapshot — _sourceDocument.Questions is not updated until Save.
+        var quizDocument = ToDocument(_sourceDocument);
+        if (quizDocument.Questions == null || quizDocument.Questions.Count == 0)
         {
             ModernMessageBox.Show(
                 LocalizationService.GetString("QuizNoQuestions"),
@@ -577,7 +583,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         try
         {
-            var optionsDialog = new QuizStartOptionsDialog(_sourceDocument.TimeLimitSeconds, _sourceDocument.PassingScorePercent)
+            var optionsDialog = new QuizStartOptionsDialog(quizDocument.TimeLimitSeconds, quizDocument.PassingScorePercent)
             {
                 Owner = this
             };
@@ -586,14 +592,20 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 return;
 
             var timeLimitSeconds = optionsDialog.TimeLimitSeconds;
-            _sourceDocument.TimeLimitSeconds = timeLimitSeconds == 0 ? null : timeLimitSeconds;
-            _sourceDocument.PassingScorePercent = optionsDialog.PassingScorePercent;
+            quizDocument.TimeLimitSeconds = timeLimitSeconds == 0 ? null : timeLimitSeconds;
+            quizDocument.PassingScorePercent = optionsDialog.PassingScorePercent;
+            _sourceDocument.TimeLimitSeconds = quizDocument.TimeLimitSeconds;
+            _sourceDocument.PassingScorePercent = quizDocument.PassingScorePercent;
 
-            var quizModeWindow = new QuizModeWindow(_sourceDocument, timeLimitSeconds);
+            var quizModeWindow = new QuizModeWindow(quizDocument, timeLimitSeconds)
+            {
+                Owner = this
+            };
             quizModeWindow.ShowDialog();
             // Išsaugoti attempt į dokumento istoriją
             if (quizModeWindow.LastAttempt != null)
             {
+                _sourceDocument.Attempts ??= new List<QuizAttempt>();
                 _sourceDocument.Attempts.Add(quizModeWindow.LastAttempt);
                 SaveQuizProgress();
                 RefreshProgressPanel();
@@ -610,10 +622,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     }
     private void SaveQuizProgress()
     {
-        // Naudojam tą patį save mechanizmą kaip ir visur kitur projekte
-        _allowCloseWithoutPrompt = true;
-        MarkCurrentStateSaved();
-        DialogResult = true;
+        // Keep the quiz editor open after a test run. Attempts are part of the editor
+        // snapshot, so leaving the document dirty lets autosave persist them.
+        UpdateEditedIndicator();
     }
 
     private void RefreshProgressPanel()
@@ -693,8 +704,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             case UnsavedCloseDecision.SaveAndClose:
                 _allowCloseWithoutPrompt = true;
                 MarkCurrentStateSaved();
-                DialogResult = true;
-                e.Cancel = false;
+                e.Cancel = true;
+                WindowContentEnterHelper.CloseWithDialogResult(this, true);
                 return;
             case UnsavedCloseDecision.LeaveWithoutSaving:
                 _allowCloseWithoutPrompt = true;
@@ -1059,18 +1070,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void ToggleFullscreen()
     {
-        if (WindowStyle == WindowStyle.None)
-        {
-            WindowStyle = WindowStyle.SingleBorderWindow;
-            WindowState = WindowState.Normal;
-            ResizeMode = ResizeMode.CanResize;
-        }
+        if (ShellWindowChrome.IsFullscreenSuspended(this))
+            ShellWindowChrome.ResumeFromFullscreen(this);
         else
-        {
-            WindowStyle = WindowStyle.None;
-            WindowState = WindowState.Maximized;
-            ResizeMode = ResizeMode.NoResize;
-        }
+            ShellWindowChrome.SuspendForFullscreen(this);
     }
 
     private void RenumberQuestions()
@@ -1213,7 +1216,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         var document = new FlowDocument
         {
             FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 12,
+            FontSize = TypeScale.Px(TypeScale.Caption, 12),
             PagePadding = new Thickness(48),
             ColumnWidth = 700,
             Background = Brushes.White,
@@ -1222,7 +1225,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         document.Blocks.Add(new Paragraph(new Run(EditorTitle))
         {
-            FontSize = 24,
+            FontSize = TypeScale.Px(TypeScale.Display, 24),
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 0, 0, 16)
         });
@@ -1237,7 +1240,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 _ => LocalizationService.GetString("QuizTypeSingleChoice")
             })))
             {
-                FontSize = 16,
+                FontSize = TypeScale.Px(TypeScale.BlockTitle, 16),
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 12, 0, 6)
             });
@@ -1307,7 +1310,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     {
         if (e.Key == Key.Escape)
         {
-            if (WindowStyle == WindowStyle.None)
+            if (ShellWindowChrome.IsFullscreenSuspended(this))
             {
                 ToggleFullscreen();
                 e.Handled = true;

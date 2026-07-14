@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views
 {
     public partial class UpdateCheckDialog : Window
@@ -54,7 +56,7 @@ namespace Scriblucent.Views
             _releasesUrl = result.IsUpdateAvailable ? latest?.HtmlUrl : result.ReleasesUrl;
 
             InitializeComponent();
-            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+            _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
             Scriblucent.Services.WindowThemeService.Register(this);
             DataContext = this;
             Loaded += UpdateCheckDialog_Loaded;
@@ -77,7 +79,7 @@ namespace Scriblucent.Views
             _releasesUrl = releasesUrl;
 
             InitializeComponent();
-            _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+            _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
             Scriblucent.Services.WindowThemeService.Register(this);
             DataContext = this;
             Loaded += UpdateCheckDialog_Loaded;

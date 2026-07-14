@@ -237,6 +237,14 @@ public static class SmoothScrollBehavior
         if (e.Handled || state.ExternalDrive || !CanScroll(state.ScrollViewer))
             return;
 
+        // Ctrl+wheel is reserved for zoom (e.g. mind-map canvas); do not consume it for scrolling.
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)
+            || Keyboard.IsKeyDown(Key.LeftCtrl)
+            || Keyboard.IsKeyDown(Key.RightCtrl))
+        {
+            return;
+        }
+
         e.Handled = true;
         var (deltaX, deltaY) = ComputeWheelDelta(state.ScrollViewer, e);
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)

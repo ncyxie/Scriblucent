@@ -1,6 +1,7 @@
 <Window x:Class="Scriblucent.Views.SearchReplaceDialogLocalized"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
         Title="{Binding [FindReplaceTitle], Source={StaticResource Loc}}"
         Height="390"
         Width="560"
@@ -19,200 +20,155 @@
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="FindReplaceLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
 
-        <Style x:Key="FindReplaceInputStyle" TargetType="TextBox">
-            <Setter Property="Height" Value="38"/>
-            <Setter Property="Padding" Value="12,0"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="InputBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          Padding="0"
-                                          VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="InputBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.55"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="FindReplaceCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
             <Setter Property="Margin" Value="0,0,18,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-
-        <Style x:Key="FindReplaceSecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
-            <Setter Property="MinWidth" Value="104"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-        </Style>
-
-        <Style x:Key="FindReplacePrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogPrimaryButtonStyle}">
-            <Setter Property="MinWidth" Value="112"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-        </Style>
     </Window.Resources>
 
-    <Grid x:Name="OverlayRoot">
-        <Grid x:Name="ScrimHost"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-                <Image x:Name="BackdropSnapshot"
-                       Stretch="Fill"
-                       Visibility="Collapsed"
-                       IsHitTestVisible="False"/>
-                <Rectangle x:Name="OverlayDim"
-                           Fill="#66000000"/>
-        </Grid>
+    <controls:OverlayDialogShell
+                                 MaxCardWidth="560"
+                                 CardPadding="18">
+        <controls:OverlayDialogShell.Header>
+            <TextBlock Text="{Binding [FindReplaceTitle], Source={StaticResource Loc}}"
+                       FontSize="{StaticResource Type.DialogTitle}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextColor}"
+                       Margin="0,0,0,14"/>
+        </controls:OverlayDialogShell.Header>
 
-        <Border x:Name="PanelMotionHost"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                RenderTransformOrigin="0.5,1"
-                UseLayoutRounding="True"
-                SnapsToDevicePixels="True">
-            <Border x:Name="DialogCard"
-                    Background="{DynamicResource CardBackground}"
-                    BorderBrush="{DynamicResource BorderColor}"
-                    BorderThickness="1"
-                    CornerRadius="14"
-                    Padding="18"
-                    MinWidth="520"
-                    MaxWidth="560">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" Opacity="0.24" BlurRadius="28" ShadowDepth="0"/>
-                </Border.Effect>
+        <controls:OverlayDialogShell.Body>
+            <StackPanel>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="14"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0"
-                               Text="{Binding [FindReplaceTitle], Source={StaticResource Loc}}"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"
-                               Margin="0,0,0,14"/>
-
-                    <Grid Grid.Row="1" Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="14"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="{Binding [FindLabel], Source={StaticResource Loc}}"
-                                       Style="{StaticResource FindReplaceLabelStyle}"/>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding [FindLabel], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FindReplaceLabelStyle}"/>
+                        <!-- WindowBackground inset: InputSurface matches CardBackground on the dialog plate. -->
+                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                Background="{DynamicResource WindowBackground}"
+                                Padding="6,0"
+                                MinHeight="38">
                             <TextBox x:Name="SearchBox"
-                                     Style="{StaticResource FindReplaceInputStyle}"
+                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                     FontSize="{StaticResource Type.Meta}"
+                                     VerticalContentAlignment="Center"
                                      TextChanged="SearchOptions_Changed"/>
-                        </StackPanel>
+                        </Border>
+                    </StackPanel>
 
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="{Binding [ReplaceLabel], Source={StaticResource Loc}}"
-                                       Style="{StaticResource FindReplaceLabelStyle}"/>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="{Binding [ReplaceLabel], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FindReplaceLabelStyle}"/>
+                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                Background="{DynamicResource WindowBackground}"
+                                Padding="6,0"
+                                MinHeight="38">
                             <TextBox x:Name="ReplaceBox"
-                                     Style="{StaticResource FindReplaceInputStyle}"/>
-                        </StackPanel>
-                    </Grid>
+                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                     FontSize="{StaticResource Type.Meta}"
+                                     VerticalContentAlignment="Center"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
 
-                    <WrapPanel Grid.Row="2"
-                               Margin="0,0,0,12"
-                               VerticalAlignment="Center">
-                        <CheckBox x:Name="MatchCaseBox"
-                                  Content="{Binding [FindReplaceMatchCase], Source={StaticResource Loc}}"
-                                  Style="{StaticResource FindReplaceCheckBoxStyle}"
-                                  Checked="SearchOptions_Changed"
-                                  Unchecked="SearchOptions_Changed"/>
-                        <CheckBox x:Name="WholeWordBox"
-                                  Content="{Binding [FindReplaceWholeWord], Source={StaticResource Loc}}"
-                                  Style="{StaticResource FindReplaceCheckBoxStyle}"
-                                  Checked="SearchOptions_Changed"
-                                  Unchecked="SearchOptions_Changed"/>
-                        <CheckBox x:Name="WrapAroundBox"
-                                  Content="{Binding [FindReplaceWrapAround], Source={StaticResource Loc}}"
-                                  Style="{StaticResource FindReplaceCheckBoxStyle}"
-                                  Checked="SearchOptions_Changed"
-                                  Unchecked="SearchOptions_Changed"/>
-                    </WrapPanel>
+                <WrapPanel Margin="0,0,0,12"
+                           VerticalAlignment="Center">
+                    <CheckBox x:Name="MatchCaseBox"
+                              Content="{Binding [FindReplaceMatchCase], Source={StaticResource Loc}}"
+                              Style="{StaticResource FindReplaceCheckBoxStyle}"
+                              Checked="SearchOptions_Changed"
+                              Unchecked="SearchOptions_Changed"/>
+                    <CheckBox x:Name="WholeWordBox"
+                              Content="{Binding [FindReplaceWholeWord], Source={StaticResource Loc}}"
+                              Style="{StaticResource FindReplaceCheckBoxStyle}"
+                              Checked="SearchOptions_Changed"
+                              Unchecked="SearchOptions_Changed"/>
+                    <CheckBox x:Name="WrapAroundBox"
+                              Content="{Binding [FindReplaceWrapAround], Source={StaticResource Loc}}"
+                              Style="{StaticResource FindReplaceCheckBoxStyle}"
+                              Checked="SearchOptions_Changed"
+                              Unchecked="SearchOptions_Changed"/>
+                </WrapPanel>
 
-                    <Border Grid.Row="3"
-                            MinHeight="34"
-                            Padding="10,7"
-                            CornerRadius="{StaticResource Radius.Control}"
-                            Background="{DynamicResource IconButtonBackground}"
-                            BorderBrush="{DynamicResource IconButtonBorder}"
-                            BorderThickness="1">
-                        <TextBlock x:Name="StatusText"
-                                   Text="{Binding [FindReplaceEnterSearch], Source={StaticResource Loc}}"
-                                   Foreground="{DynamicResource TextColorSecondary}"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"/>
-                    </Border>
+                <Border MinHeight="34"
+                        Padding="10,7"
+                        CornerRadius="{StaticResource Radius.Control}"
+                        Background="{DynamicResource IconButtonBackground}"
+                        BorderBrush="Transparent"
+                        BorderThickness="0">
+                    <TextBlock x:Name="StatusText"
+                               Text="{Binding [FindReplaceEnterSearch], Source={StaticResource Loc}}"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               FontSize="{StaticResource Type.Caption}"
+                               VerticalAlignment="Center"/>
+                </Border>
+            </StackPanel>
+        </controls:OverlayDialogShell.Body>
 
-                    <UniformGrid Grid.Row="5"
-                                 Columns="3"
-                                 Rows="2"
-                                 Margin="0,16,0,0">
+        <controls:OverlayDialogShell.Footer>
+            <!-- Find actions + Close on top; replace actions below — even gaps, no empty UniformGrid cell. -->
+            <Grid Margin="0,16,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                         <Button x:Name="FindPreviousBtn"
                                 Content="{Binding [FindPrevious], Source={StaticResource Loc}}"
-                                Style="{StaticResource FindReplaceSecondaryButtonStyle}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                MinWidth="110"
+                                Padding="14,8"
+                                Margin="0,0,8,0"
                                 Click="FindPreviousBtn_Click"/>
                         <Button x:Name="FindNextBtn"
                                 Content="{Binding [FindNext], Source={StaticResource Loc}}"
-                                Style="{StaticResource FindReplaceSecondaryButtonStyle}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                MinWidth="110"
+                                Padding="14,8"
                                 Click="FindNextBtn_Click"/>
-                        <Button x:Name="ReplaceNextBtn"
-                                Content="{Binding [ReplaceNext], Source={StaticResource Loc}}"
-                                Style="{StaticResource FindReplacePrimaryButtonStyle}"
-                                Click="ReplaceNextBtn_Click"/>
-                        <Button x:Name="ReplaceAllBtn"
-                                Content="{Binding [ReplaceAll], Source={StaticResource Loc}}"
-                                Style="{StaticResource FindReplacePrimaryButtonStyle}"
-                                Margin="0,8,8,0"
-                                Click="ReplaceAllBtn_Click"/>
-                        <Button Content="{Binding [Close], Source={StaticResource Loc}}"
-                                Style="{StaticResource FindReplaceSecondaryButtonStyle}"
-                                Margin="0,8,0,0"
-                                Click="Close_Click"/>
-                    </UniformGrid>
+                    </StackPanel>
+                    <Button Content="{Binding [Close], Source={StaticResource Loc}}"
+                            Style="{StaticResource DialogSecondaryButtonStyle}"
+                            MinWidth="110"
+                            Padding="14,8"
+                            HorizontalAlignment="Right"
+                            Click="Close_Click"/>
                 </Grid>
-            </Border>
-        </Border>
-    </Grid>
+
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left">
+                    <Button x:Name="ReplaceNextBtn"
+                            Content="{Binding [ReplaceNext], Source={StaticResource Loc}}"
+                            Style="{StaticResource DialogPrimaryButtonStyle}"
+                            MinWidth="110"
+                            Padding="14,8"
+                            Margin="0,0,8,0"
+                            Click="ReplaceNextBtn_Click"/>
+                    <Button x:Name="ReplaceAllBtn"
+                            Content="{Binding [ReplaceAll], Source={StaticResource Loc}}"
+                            Style="{StaticResource DialogPrimaryButtonStyle}"
+                            MinWidth="110"
+                            Padding="14,8"
+                            Click="ReplaceAllBtn_Click"/>
+                </StackPanel>
+            </Grid>
+        </controls:OverlayDialogShell.Footer>
+    </controls:OverlayDialogShell>
 </Window>

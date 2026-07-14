@@ -160,7 +160,8 @@ namespace Scriblucent
         public NoteEditorWindow()
         {
             InitializeComponent();
-            Scriblucent.Services.WindowThemeService.Register(this);
+            // Note editors are hosted inside NoteEditorTabsWindow (never shown as their own
+            // window). Do not attach ShellWindowChrome here — that would nest a second caption.
             InitializeEditorFormattingOptions();
             InitializeEditorUiPreferences();
             InitializeAutoSave();
@@ -416,9 +417,9 @@ namespace Scriblucent
             }
 
             button.SetResourceReference(Control.BackgroundProperty, "IconButtonBackground");
-            button.SetResourceReference(Control.BorderBrushProperty, "IconButtonBorder");
+            button.BorderBrush = Brushes.Transparent;
             button.SetResourceReference(Control.ForegroundProperty, "IconButtonForeground");
-            button.BorderThickness = new Thickness(1);
+            button.BorderThickness = new Thickness(0);
         }
 
         public void EnableTabMode()
@@ -449,9 +450,17 @@ namespace Scriblucent
 
         public UIElement? DetachEditorContentForHosting()
         {
-            var root = Content as UIElement;
-            Content = null;
-            return root;
+            // Peel accidental chrome first, then unwrap FeatureWindowShell so the tabs window
+            // (which already has chrome + FeatureWindowShell) does not get a nested caption/frame.
+            var content = Services.ShellWindowChrome.DetachContent(this);
+            if (content is Controls.FeatureWindowShell shell)
+            {
+                var body = shell.Body as UIElement;
+                shell.Body = null!;
+                return body;
+            }
+
+            return content;
         }
 
         public void DisposeHostedEditor()
@@ -3229,7 +3238,7 @@ namespace Scriblucent
             // Add title as FIRST paragraph (from TitleTextBox only)
             var titleParagraph = new Paragraph(new Run(title))
             {
-                FontSize = 24,
+                FontSize = TypeScale.Px(TypeScale.Display, 24),
                 FontWeight = FontWeights.Bold,
                 Foreground = Brushes.Black,
                 Margin = new Thickness(0, 0, 0, 30)
@@ -3239,7 +3248,7 @@ namespace Scriblucent
             // Add separator line
             var separator = new Paragraph(new Run("────────────────────────────────────────────────"))
             {
-                FontSize = 10,
+                FontSize = TypeScale.Px(TypeScale.Chip, 10),
                 Foreground = Brushes.LightGray,
                 Margin = new Thickness(0, 0, 0, 20)
             };
@@ -3260,7 +3269,7 @@ namespace Scriblucent
             {
                 exportDoc.Blocks.Add(new Paragraph(new Run(LocalizationService.GetString("NoContent")))
                 {
-                    FontSize = 12,
+                    FontSize = TypeScale.Px(TypeScale.Caption, 12),
                     Foreground = Brushes.Gray,
                     FontStyle = FontStyles.Italic
                 });
@@ -3875,7 +3884,6 @@ namespace Scriblucent
 
             var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
             ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, CreateEditorFontFamily(fontName));
-
             SavePreferredFontFamily(GetPrimaryFontFamily(fontName));
             SyncFontSelectorsFromSelection();
 
@@ -3902,9 +3910,7 @@ namespace Scriblucent
             size = NormalizeEditorFontSize(size);
             var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
             ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
-
             ApplyLineSpacingToInlineFormattingTarget(size);
-
             SavePreferredFontSize(size);
             SyncFontSelectorsFromSelection();
 
@@ -4813,11 +4819,11 @@ namespace Scriblucent
         {
             foreach (var option in comboBox.Items.OfType<ComboBoxItem>())
             {
-                if (string.Equals(option.Content?.ToString(), content, comparison))
-                {
-                    comboBox.SelectedItem = option;
-                    return true;
-                }
+                if (!string.Equals(option.Content?.ToString(), content, comparison))
+                    continue;
+
+                comboBox.SelectedItem = option;
+                return true;
             }
 
             return false;
@@ -4827,12 +4833,14 @@ namespace Scriblucent
         {
             foreach (var option in comboBox.Items.OfType<ComboBoxItem>())
             {
-                if (TryGetFontSize(option.Tag, out var optionValue)
-                    && Math.Abs(optionValue - tagValue) < 0.1)
+                if (!TryGetFontSize(option.Tag, out var optionValue)
+                    || Math.Abs(optionValue - tagValue) >= 0.1)
                 {
-                    comboBox.SelectedItem = option;
-                    return true;
+                    continue;
                 }
+
+                comboBox.SelectedItem = option;
+                return true;
             }
 
             return false;

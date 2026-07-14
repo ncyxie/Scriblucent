@@ -20,6 +20,7 @@ public partial class NoteEditorTabsWindow : Window
         public required NoteEditorWindow Editor { get; init; }
         public required NoteCardViewModel NoteViewModel { get; init; }
         public required TabItem TabItem { get; init; }
+        public required UIElement HostedContent { get; init; }
         public required TextBlock TitleTextBlock { get; init; }
         public required Button CloseButton { get; init; }
         public required Action<NoteDocument> AutoSaveHandler { get; init; }
@@ -28,6 +29,16 @@ public partial class NoteEditorTabsWindow : Window
 
     private readonly Dictionary<Guid, EditorTabState> _tabsByDocumentId = new();
     private bool _isWindowClosing;
+
+    private TabItem? _dragTab;
+    private bool _isDraggingTab;
+    private bool _reorderingTabs;
+    private double _grabOffsetInTab;
+    private TranslateTransform? _dragTransform;
+    private int _dragRestoreZIndex;
+    private int _dragFromIndex;
+    private int _dragToIndex;
+    private double _dragTabWidth;
 
     public NoteEditorTabsWindow()
     {
@@ -42,8 +53,10 @@ public partial class NoteEditorTabsWindow : Window
 
     private void EditorTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (EditorTabs.SelectedContent is FrameworkElement content)
-            UiMotion.AnimateContentEnter(content, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
+        if (_isDraggingTab || _reorderingTabs)
+            return;
+
+        ShowSelectedEditor(animate: IsLoaded);
     }
 
     public void OpenOrFocusNote(NoteCardViewModel noteViewModel, object? sharedDataContext, bool animateContent = true)
@@ -52,6 +65,7 @@ public partial class NoteEditorTabsWindow : Window
         if (_tabsByDocumentId.TryGetValue(documentId, out var existingState))
         {
             EditorTabs.SelectedItem = existingState.TabItem;
+            ShowHostedContent(existingState, animate: false);
             existingState.Editor.Focus();
             return;
         }
@@ -66,45 +80,51 @@ public partial class NoteEditorTabsWindow : Window
         if (hostedContent == null)
             return;
 
+        var noteIcon = new AppIcon
+        {
+            Kind = AppIconKind.Notes
+        };
+        if (TryFindResource("EditorTabIconStyle") is Style iconStyle)
+            noteIcon.Style = iconStyle;
+
         var titleText = new TextBlock
         {
-            Text = GetTabHeaderText(noteViewModel),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0),
-            Foreground = TryFindResource("TextColor") as Brush ?? Brushes.Black
+            Text = GetTabHeaderText(noteViewModel)
         };
+        if (TryFindResource("EditorTabTitleStyle") is Style titleStyle)
+            titleText.Style = titleStyle;
 
         var closeButton = new Button
         {
             Content = new AppIcon
             {
                 Kind = AppIconKind.Close,
-                Width = 12,
-                Height = 12,
-                Foreground = TryFindResource("TextColor") as Brush ?? Brushes.Black
-            },
-            Width = 20,
-            Height = 20,
-            Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Cursor = System.Windows.Input.Cursors.Hand,
-            Foreground = TryFindResource("TextColor") as Brush ?? Brushes.Black
+                Width = 11,
+                Height = 11
+            }
         };
+        if (TryFindResource("EditorTabCloseButtonStyle") is Style closeStyle)
+            closeButton.Style = closeStyle;
 
-        var headerPanel = new DockPanel
+        var headerPanel = new StackPanel
         {
-            LastChildFill = false
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center
         };
+        headerPanel.Children.Add(noteIcon);
         headerPanel.Children.Add(titleText);
         headerPanel.Children.Add(closeButton);
 
+        // Header-only TabItem — heavy editor UI stays on EditorHost so Items reorder is safe.
         var tabItem = new TabItem
         {
             Header = headerPanel,
-            Content = hostedContent
+            Content = null
         };
+        tabItem.PreviewMouseLeftButtonDown += TabItem_PreviewMouseLeftButtonDown;
+        tabItem.PreviewMouseMove += TabItem_PreviewMouseMove;
+        tabItem.PreviewMouseLeftButtonUp += TabItem_PreviewMouseLeftButtonUp;
+        tabItem.LostMouseCapture += TabItem_LostMouseCapture;
 
         Action<NoteDocument> autoSaveHandler = _ =>
         {
@@ -127,6 +147,7 @@ public partial class NoteEditorTabsWindow : Window
             Editor = editor,
             NoteViewModel = noteViewModel,
             TabItem = tabItem,
+            HostedContent = hostedContent,
             TitleTextBlock = titleText,
             CloseButton = closeButton,
             AutoSaveHandler = autoSaveHandler,
@@ -135,10 +156,33 @@ public partial class NoteEditorTabsWindow : Window
 
         _tabsByDocumentId[documentId] = state;
 
-        EditorTabs.Items.Add(tabItem);
-        EditorTabs.SelectedItem = tabItem;
-        if (animateContent && hostedContent is FrameworkElement hostedElement)
-            UiMotion.AnimateContentEnter(hostedElement, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
+        void InsertTab()
+        {
+            EditorTabs.ApplyTemplate();
+            _reorderingTabs = true;
+            try
+            {
+                EditorTabs.Items.Add(tabItem);
+                EditorTabs.SelectedItem = tabItem;
+            }
+            finally
+            {
+                _reorderingTabs = false;
+            }
+
+            ShowHostedContent(state, animate: animateContent && IsLoaded);
+        }
+
+        if (IsLoaded)
+            InsertTab();
+        else
+            Loaded += OnLoaded;
+
+        void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            Loaded -= OnLoaded;
+            InsertTab();
+        }
     }
 
     public void ApplyMeasurementUnitSystemPreference(string unitSystem)
@@ -182,7 +226,10 @@ public partial class NoteEditorTabsWindow : Window
         if (askConfirmation && !state.Editor.ConfirmCloseIfNeeded())
             return false;
 
-        if (!UiMotion.PrefersReducedMotion && state.TabItem.Content is FrameworkElement content)
+        if (ReferenceEquals(_dragTab, state.TabItem))
+            EndTabDrag();
+
+        if (!UiMotion.PrefersReducedMotion && state.HostedContent is FrameworkElement content)
         {
             UiMotion.Fade(
                 content,
@@ -202,14 +249,299 @@ public partial class NoteEditorTabsWindow : Window
         state.Editor.DocumentAutoSaved -= state.AutoSaveHandler;
         state.Editor.CloseRequested -= OnEditorCloseRequested;
         state.CloseButton.Click -= state.CloseClickHandler;
+        state.TabItem.PreviewMouseLeftButtonDown -= TabItem_PreviewMouseLeftButtonDown;
+        state.TabItem.PreviewMouseMove -= TabItem_PreviewMouseMove;
+        state.TabItem.PreviewMouseLeftButtonUp -= TabItem_PreviewMouseLeftButtonUp;
+        state.TabItem.LostMouseCapture -= TabItem_LostMouseCapture;
+
+        var host = GetEditorHost();
+        if (host is not null && ReferenceEquals(host.Content, state.HostedContent))
+            host.Content = null;
+
         state.Editor.DisposeHostedEditor();
 
-        state.TabItem.Content = null;
         EditorTabs.Items.Remove(state.TabItem);
         _tabsByDocumentId.Remove(state.DocumentId);
 
         if (!_isWindowClosing && EditorTabs.Items.Count == 0)
+        {
             Close();
+            return;
+        }
+
+        ShowSelectedEditor(animate: false);
+    }
+
+    private void ShowSelectedEditor(bool animate)
+    {
+        if (EditorTabs.SelectedItem is not TabItem selectedTab)
+        {
+            var host = GetEditorHost();
+            if (host is not null)
+                host.Content = null;
+            return;
+        }
+
+        var state = _tabsByDocumentId.Values.FirstOrDefault(s => ReferenceEquals(s.TabItem, selectedTab));
+        if (state is null)
+            return;
+
+        ShowHostedContent(state, animate);
+    }
+
+    private void ShowHostedContent(EditorTabState state, bool animate)
+    {
+        var host = GetEditorHost();
+        if (host is null)
+            return;
+
+        if (!ReferenceEquals(host.Content, state.HostedContent))
+            host.Content = state.HostedContent;
+
+        if (animate && state.HostedContent is FrameworkElement hostedElement)
+            UiMotion.AnimateContentEnter(hostedElement, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
+    }
+
+    private void TabItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TabItem tab)
+            return;
+        if (FindAncestor<Button>(e.OriginalSource as DependencyObject) is not null)
+            return;
+
+        _dragTab = tab;
+        _grabOffsetInTab = e.GetPosition(tab).X;
+        _isDraggingTab = false;
+    }
+
+    private void TabItem_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragTab is null || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var header = GetHeaderPanel();
+        if (header is null)
+            return;
+
+        var pointer = e.GetPosition(header);
+        if (!_isDraggingTab)
+        {
+            var tabOrigin = _dragTab.TranslatePoint(new Point(0, 0), header);
+            var deltaX = pointer.X - (tabOrigin.X + _grabOffsetInTab);
+            if (Math.Abs(deltaX) < SystemParameters.MinimumHorizontalDragDistance)
+                return;
+
+            BeginTabDrag(_dragTab);
+        }
+
+        UpdateTabDrag(pointer.X);
+        e.Handled = true;
+    }
+
+    private void TabItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        => EndTabDrag();
+
+    private void TabItem_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (_reorderingTabs)
+            return;
+        if (_isDraggingTab)
+            EndTabDrag();
+    }
+
+    private void BeginTabDrag(TabItem tab)
+    {
+        _isDraggingTab = true;
+        _dragTab = tab;
+        _dragFromIndex = EditorTabs.Items.IndexOf(tab);
+        _dragToIndex = _dragFromIndex;
+        _dragTabWidth = Math.Max(tab.ActualWidth, 1);
+        _dragRestoreZIndex = Panel.GetZIndex(tab);
+        Panel.SetZIndex(tab, 1000);
+        EditorTabs.SelectedItem = tab;
+        ShowSelectedEditor(animate: false);
+
+        _dragTransform = new TranslateTransform();
+        tab.RenderTransform = _dragTransform;
+        tab.CaptureMouse();
+        Mouse.OverrideCursor = Cursors.SizeAll;
+    }
+
+    private void UpdateTabDrag(double pointerXInHeader)
+    {
+        if (_dragTab is null || _dragTransform is null)
+            return;
+
+        var header = GetHeaderPanel();
+        if (header is null)
+            return;
+
+        var layoutLeft = _dragTab.TranslatePoint(new Point(0, 0), header).X - _dragTransform.X;
+        _dragTransform.X = pointerXInHeader - _grabOffsetInTab - layoutLeft;
+
+        var target = ComputeDragTargetIndex(pointerXInHeader);
+        if (target == _dragToIndex)
+            return;
+
+        _dragToIndex = target;
+        ApplySiblingGapTransforms();
+    }
+
+    private int ComputeDragTargetIndex(double pointerXInHeader)
+    {
+        var header = GetHeaderPanel();
+        if (header is null)
+            return _dragFromIndex;
+
+        for (var i = 0; i < EditorTabs.Items.Count; i++)
+        {
+            if (i == _dragFromIndex)
+                continue;
+            if (EditorTabs.Items[i] is not TabItem tab)
+                continue;
+
+            var mid = GetTabLayoutLeft(tab, header) + tab.ActualWidth * 0.5;
+            if (pointerXInHeader < mid)
+                return i > _dragFromIndex ? i - 1 : i;
+        }
+
+        return EditorTabs.Items.Count - 1;
+    }
+
+    private void ApplySiblingGapTransforms()
+    {
+        if (_dragTab is null)
+            return;
+
+        var shift = _dragTabWidth + 8;
+        for (var i = 0; i < EditorTabs.Items.Count; i++)
+        {
+            if (EditorTabs.Items[i] is not TabItem tab || ReferenceEquals(tab, _dragTab))
+                continue;
+
+            var transform = tab.RenderTransform as TranslateTransform ?? new TranslateTransform();
+            tab.RenderTransform = transform;
+
+            double x = 0;
+            if (_dragFromIndex < _dragToIndex && i > _dragFromIndex && i <= _dragToIndex)
+                x = -shift;
+            else if (_dragFromIndex > _dragToIndex && i >= _dragToIndex && i < _dragFromIndex)
+                x = shift;
+
+            transform.X = x;
+        }
+    }
+
+    private void ClearSiblingGapTransforms()
+    {
+        foreach (var item in EditorTabs.Items)
+        {
+            if (item is not TabItem tab || ReferenceEquals(tab, _dragTab))
+                continue;
+            tab.RenderTransform = Transform.Identity;
+        }
+    }
+
+    private void EndTabDrag()
+    {
+        if (_dragTab is null)
+        {
+            _isDraggingTab = false;
+            Mouse.OverrideCursor = null;
+            return;
+        }
+
+        var tab = _dragTab;
+        var toIndex = _dragToIndex;
+        var wasDragging = _isDraggingTab;
+
+        if (wasDragging)
+            ClearSiblingGapTransforms();
+
+        if (tab.IsMouseCaptured)
+        {
+            _reorderingTabs = true;
+            try { tab.ReleaseMouseCapture(); }
+            finally { _reorderingTabs = false; }
+        }
+
+        if (wasDragging)
+        {
+            tab.RenderTransform = Transform.Identity;
+            Panel.SetZIndex(tab, _dragRestoreZIndex);
+        }
+
+        _dragTab = null;
+        _dragTransform = null;
+        _isDraggingTab = false;
+        Mouse.OverrideCursor = null;
+
+        // Clicks set _dragTab on mouse-down but never BeginTabDrag — do not commit
+        // with a stale _dragToIndex (that was sending tabs to the end).
+        if (wasDragging)
+            CommitTabReorder(tab, toIndex);
+    }
+
+    private void CommitTabReorder(TabItem tab, int toIndex)
+    {
+        var fromIndex = EditorTabs.Items.IndexOf(tab);
+        if (fromIndex < 0)
+            return;
+
+        toIndex = Math.Clamp(toIndex, 0, EditorTabs.Items.Count - 1);
+        if (fromIndex == toIndex)
+        {
+            EditorTabs.SelectedItem = tab;
+            ShowSelectedEditor(animate: false);
+            return;
+        }
+
+        _reorderingTabs = true;
+        try
+        {
+            // Header-only TabItems — Remove/Insert no longer tears down editor visuals.
+            EditorTabs.Items.RemoveAt(fromIndex);
+            EditorTabs.Items.Insert(toIndex, tab);
+            EditorTabs.SelectedItem = tab;
+        }
+        finally
+        {
+            _reorderingTabs = false;
+        }
+
+        ShowSelectedEditor(animate: false);
+    }
+
+    private ContentControl? GetEditorHost()
+    {
+        EditorTabs.ApplyTemplate();
+        return EditorTabs.Template?.FindName("EditorHost", EditorTabs) as ContentControl;
+    }
+
+    private Panel? GetHeaderPanel()
+    {
+        EditorTabs.ApplyTemplate();
+        return EditorTabs.Template?.FindName("HeaderPanel", EditorTabs) as Panel;
+    }
+
+    private static double GetTabLayoutLeft(TabItem tab, UIElement relativeTo)
+    {
+        var visualLeft = tab.TranslatePoint(new Point(0, 0), relativeTo).X;
+        return tab.RenderTransform is TranslateTransform transform
+            ? visualLeft - transform.X
+            : visualLeft;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+                return match;
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)

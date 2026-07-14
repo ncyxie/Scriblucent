@@ -3,54 +3,88 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:services="clr-namespace:Scriblucent.Services"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+             xmlns:controls="clr-namespace:Scriblucent.Controls"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:svgc="http://sharpvectors.codeplex.com/svgc/"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              d:DesignHeight="520"
              d:DesignWidth="960">
     <UserControl.Resources>
-        <Style x:Key="AuthorLineStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Opacity" Value="0.86"/>
-            <Setter Property="Margin" Value="0,5,0,0"/>
+        <Style x:Key="AboutSectionLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
         </Style>
 
-        <Style x:Key="AboutCloseIconButtonStyle" TargetType="Button">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="CloseButtonBorder"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Style x:Key="AboutStageCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource OverlayCloseIconButtonStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource AboutStageForeground}"/>
+            <Setter Property="Background" Value="{DynamicResource AboutStageCloseFill}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="AboutHandleChipStyle" TargetType="Border">
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
+        <Style x:Key="AboutHandleChipMaintainerStyle" TargetType="Border" BasedOn="{StaticResource AboutHandleChipStyle}">
+            <Setter Property="Background" Value="{DynamicResource AccentPrimarySubtle}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="AboutHandleChipContributorStyle" TargetType="Border" BasedOn="{StaticResource AboutHandleChipStyle}">
+            <Setter Property="Background" Value="{DynamicResource TagChipBackground}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="AboutHandleTextMaintainerStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentPrimary}"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="AboutHandleTextContributorStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TagChipForeground}"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="AboutPersonButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,7"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource IconButtonBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="CloseButtonBorder"
+                        <Border x:Name="Row"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <ContentPresenter HorizontalAlignment="Center"
+                                CornerRadius="{StaticResource Radius.Chip}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch"
                                               VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CloseButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                                <Setter TargetName="CloseButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentPrimarySubtle}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="CloseButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                                <Setter TargetName="CloseButtonBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                                <Setter TargetName="Row" Property="Opacity" Value="0.88"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -63,14 +97,15 @@
         <Grid x:Name="ScrimHost"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch">
-                <Image x:Name="BackdropSnapshot"
-                       Stretch="Fill"
-                       Visibility="Collapsed"
-                       IsHitTestVisible="False"/>
-                <Rectangle x:Name="OverlayDim"
-                           Fill="#66000000"
-                           MouseDown="OverlayDim_MouseDown"/>
+            <Image x:Name="BackdropSnapshot"
+                   Stretch="Fill"
+                   Visibility="Collapsed"
+                   IsHitTestVisible="False"/>
+            <Rectangle x:Name="OverlayDim"
+                       Fill="{DynamicResource OverlayScrim}"
+                       MouseDown="OverlayDim_MouseDown"/>
         </Grid>
+
         <Border x:Name="PanelMotionHost"
                 Margin="20"
                 HorizontalAlignment="Center"
@@ -78,117 +113,338 @@
                 RenderTransformOrigin="0.5,1"
                 UseLayoutRounding="True"
                 SnapsToDevicePixels="True">
-            <Border x:Name="PanelCard"
-                    Background="{DynamicResource CardBackground}"
-                    BorderBrush="{DynamicResource BorderColor}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource Radius.Overlay}"
-                    Width="Auto"
-                    MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
-                    MaxWidth="500">
-                <Border.Effect>
-                    <DropShadowEffect Color="#000000" Opacity="0.20" BlurRadius="24" ShadowDepth="0"/>
-                </Border.Effect>
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
-                          CanContentScroll="True">
-                <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <Grid Width="Auto"
+                  MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
+                  MaxWidth="480"
+                  ClipToBounds="False">
+                <controls:CardShadowLayer/>
 
-                <Grid Margin="20,18,20,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <!--
+                  BorderThickness=0 so the stage paints edge-to-edge under the rounded clip.
+                  Level 2 documented exception: stroke overlay avoids the classic 1px banner inset seam
+                  under RoundedClip (not a general floating-surface rest hairline).
+                -->
+                <Border x:Name="PanelCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Overlay}"
+                        behaviors:RoundedClipBehavior.IsEnabled="True"
+                        SnapsToDevicePixels="True">
+                    <Grid>
+                        <!-- Soft mesh stage (Linear/Stripe-style blobs, no BlurEffect) -->
+                        <Border x:Name="BrandStage"
+                                Height="200"
+                                VerticalAlignment="Top"
+                                Background="{DynamicResource AboutStageBase}"
+                                ClipToBounds="True">
+                            <Grid>
+                                <Ellipse Width="420" Height="320"
+                                         Margin="-140,-160,0,0"
+                                         HorizontalAlignment="Left" VerticalAlignment="Top"
+                                         Fill="{DynamicResource AboutStageMeshA}"
+                                         IsHitTestVisible="False"/>
+                                <Ellipse Width="380" Height="300"
+                                         Margin="0,-120,-130,0"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                         Fill="{DynamicResource AboutStageMeshB}"
+                                         IsHitTestVisible="False"/>
 
-                    <TextBlock Text="{Binding [About], Source={StaticResource Loc}}"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
+                                <!-- Soft veil + bottom fade so mesh never reads as hard circles at the seam -->
+                                <Rectangle IsHitTestVisible="False">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                                            <GradientStop Color="#55FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#18FFFFFF" Offset="0.4"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="0.72"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <Rectangle Height="88"
+                                           VerticalAlignment="Bottom"
+                                           IsHitTestVisible="False"
+                                           Fill="{DynamicResource AboutStageBottomFade}"/>
 
-                    <Button Grid.Column="1"
-                            Style="{StaticResource AboutCloseIconButtonStyle}"
-                            Content="{icons:Icon Close}"
-                            Click="CloseButton_Click"/>
-                </Grid>
+                                <Grid Margin="20,16,20,20">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="1" x:Name="ContentPanel" Margin="20,12,20,18">
-                    <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1" Padding="18,16,18,14" Background="{DynamicResource WindowBackground}">
-                        <StackPanel HorizontalAlignment="Center">
-                            <Border CornerRadius="14"
-                                    Width="54"
-                                    Height="54"
-                                    Background="{DynamicResource CardBackground}"
-                                    BorderBrush="{DynamicResource BorderColor}"
-                                    BorderThickness="1"
-                                    HorizontalAlignment="Center"
-                                    Margin="0,0,0,10">
-                                <Border.Effect>
-                                    <DropShadowEffect Color="#000000" Opacity="0.18" BlurRadius="12" ShadowDepth="2" Direction="270"/>
-                                </Border.Effect>
-                                <Image Source="/Scriblucent;component/Assets/logo.png"
-                                       Width="30"
-                                       Height="30"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       SnapsToDevicePixels="True"/>
-                            </Border>
-                            <TextBlock Text="Scriblucent"
-                                       FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColor}"
-                                       HorizontalAlignment="Center"
-                                       FontFamily="{StaticResource FontFamily.UI}"/>
-                            <TextBlock Text="{x:Static services:AppVersionInfo.DisplayVersion}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource TextColorSecondary}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,4,0,0"
-                                       FontFamily="{StaticResource FontFamily.UI}"/>
-                        </StackPanel>
-                    </Border>
+                                    <Grid>
+                                        <TextBlock Text="{Binding [About], Source={StaticResource Loc}}"
+                                                   FontSize="{StaticResource Type.Meta}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AboutStageForeground}"
+                                                   Opacity="0.78"
+                                                   VerticalAlignment="Center"
+                                                   FontFamily="{StaticResource FontFamily.UI}"/>
 
-                    <StackPanel Margin="4,12,4,0">
-                        <TextBlock Text="{Binding [AboutDescription], Source={StaticResource Loc}, Mode=OneWay}"
-                                   TextWrapping="Wrap"
-                                   TextAlignment="Center"
-                                   FontSize="13"
-                                   Foreground="{DynamicResource TextColor}"
-                                   Opacity="0.86"
-                                   Margin="0,0,0,10"
-                                   FontFamily="{StaticResource FontFamily.UI}"/>
+                                        <Button HorizontalAlignment="Right"
+                                                Style="{StaticResource AboutStageCloseButtonStyle}"
+                                                Content="{icons:Icon Kind=Close, Size=14}"
+                                                Foreground="{DynamicResource AboutStageForeground}"
+                                                Click="CloseButton_Click"/>
+                                    </Grid>
 
-                        <Separator Background="{DynamicResource BorderColor}" Margin="0,0,0,10"/>
+                                    <svgc:SvgViewbox x:Name="BrandLogoHost"
+                                                     Grid.Row="1"
+                                                     Source="{DynamicResource BrandLogoSvg}"
+                                                     Height="58"
+                                                     Stretch="Uniform"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     SnapsToDevicePixels="True"
+                                                     UseLayoutRounding="True"/>
 
-                        <TextBlock Text="{Binding [Authors], Source={StaticResource Loc}}"
-                                   FontSize="10"
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource TextColorSecondary}"
-                                   Margin="0,0,0,6"
-                                   FontFamily="{StaticResource FontFamily.UI}"/>
+                                    <TextBlock Grid.Row="2"
+                                               Text="{x:Static services:AppVersionInfo.DisplayVersion}"
+                                               FontSize="{StaticResource Type.Chip}"
+                                               Foreground="{DynamicResource AboutStageMuted}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,12,0,0"
+                                               FontFamily="{StaticResource FontFamily.UI}"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
 
-                        <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Mantas Gaižutis"/>
-                        <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Jaunius Pigaga"/>
-                        <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Rapolas Turauskas"/>
-                        <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Deividas Kepenis"/>
-                        <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Gustas Valaika"/>
-                        <TextBlock Style="{StaticResource AuthorLineStyle}" Text="Mantas Brūžė"/>
+                        <!-- Body fills the rest; no top pad — that was the scrolling white spacer -->
+                        <Border Margin="0,200,0,0"
+                                Background="{DynamicResource CardBackground}">
+                            <ScrollViewer Margin="0,0,2,0"
+                                          Padding="22,0,18,20"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          CanContentScroll="False"
+                                          PanningMode="VerticalOnly"
+                                          Background="Transparent">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [AboutTagline], Source={StaticResource Loc}}"
+                                           FontSize="{StaticResource Type.SectionTitle}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextColor}"
+                                           TextAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,10,0,0"
+                                           FontFamily="{StaticResource FontFamily.UI}"/>
 
-                        <Button Content="{Binding [Close], Source={StaticResource Loc}}"
-                                Style="{StaticResource DialogSecondaryButtonStyle}"
-                                HorizontalAlignment="Center"
-                                Padding="28,8"
-                                Margin="0,14,0,0"
-                                Click="CloseButton_Click"/>
-                    </StackPanel>
-                </StackPanel>
-                </Grid>
-            </ScrollViewer>
-            </Border>
+                                <TextBlock Text="{Binding [AboutDescription], Source={StaticResource Loc}}"
+                                           TextWrapping="Wrap"
+                                           TextAlignment="Center"
+                                           FontSize="{StaticResource Type.Meta}"
+                                           Foreground="{DynamicResource TextColorSecondary}"
+                                           Margin="4,8,4,18"
+                                           LineHeight="20"
+                                           FontFamily="{StaticResource FontFamily.UI}"/>
+
+                                <Border Background="{DynamicResource BorderColor}"
+                                        Height="1"
+                                        Opacity="0.7"
+                                        Margin="0,0,0,16"/>
+
+                                <TextBlock Style="{StaticResource AboutSectionLabelStyle}"
+                                           Text="{Binding [AboutMaintainedBy], Source={StaticResource Loc}}"/>
+
+                                <Button Style="{StaticResource AboutPersonButtonStyle}"
+                                        Tag="https://github.com/ncyxie"
+                                        ToolTip="{Binding [OpenGitHubProfile], Source={StaticResource Loc}}"
+                                        Click="GitHubProfile_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Mantas Gaižutis"
+                                                       FontSize="{StaticResource Type.Body}"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontFamily.UI}"/>
+                                            <Border Style="{StaticResource AboutHandleChipMaintainerStyle}">
+                                                <TextBlock Text="@ncyxie" Style="{StaticResource AboutHandleTextMaintainerStyle}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <icons:AppIcon Grid.Column="1"
+                                                       Kind="Github"
+                                                       Width="15"
+                                                       Height="15"
+                                                       Foreground="{DynamicResource AccentPrimary}"
+                                                       VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Button>
+
+                                <Button Style="{StaticResource AboutPersonButtonStyle}"
+                                        Tag="https://github.com/JauniusP"
+                                        ToolTip="{Binding [OpenGitHubProfile], Source={StaticResource Loc}}"
+                                        Click="GitHubProfile_Click"
+                                        Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Jaunius Pigaga"
+                                                       FontSize="{StaticResource Type.Body}"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontFamily.UI}"/>
+                                            <Border Style="{StaticResource AboutHandleChipMaintainerStyle}">
+                                                <TextBlock Text="@JauniusP" Style="{StaticResource AboutHandleTextMaintainerStyle}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <icons:AppIcon Grid.Column="1"
+                                                       Kind="Github"
+                                                       Width="15"
+                                                       Height="15"
+                                                       Foreground="{DynamicResource AccentPrimary}"
+                                                       VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Button>
+
+                                <TextBlock Style="{StaticResource AboutSectionLabelStyle}"
+                                           Text="{Binding [AboutOriginalContributors], Source={StaticResource Loc}}"/>
+
+                                <Button Style="{StaticResource AboutPersonButtonStyle}"
+                                        Tag="https://github.com/gustas215"
+                                        ToolTip="{Binding [OpenGitHubProfile], Source={StaticResource Loc}}"
+                                        Click="GitHubProfile_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Gustas Valaika"
+                                                       FontSize="{StaticResource Type.Body}"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontFamily.UI}"/>
+                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                                <TextBlock Text="@gustas215" Style="{StaticResource AboutHandleTextContributorStyle}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <icons:AppIcon Grid.Column="1"
+                                                       Kind="Github"
+                                                       Width="15"
+                                                       Height="15"
+                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                       VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Button>
+
+                                <Button Style="{StaticResource AboutPersonButtonStyle}"
+                                        Tag="https://github.com/deikep"
+                                        ToolTip="{Binding [OpenGitHubProfile], Source={StaticResource Loc}}"
+                                        Click="GitHubProfile_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Deividas Kepenis"
+                                                       FontSize="{StaticResource Type.Body}"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontFamily.UI}"/>
+                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                                <TextBlock Text="@deikep" Style="{StaticResource AboutHandleTextContributorStyle}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <icons:AppIcon Grid.Column="1"
+                                                       Kind="Github"
+                                                       Width="15"
+                                                       Height="15"
+                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                       VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Button>
+
+                                <Button Style="{StaticResource AboutPersonButtonStyle}"
+                                        Tag="https://github.com/Mantelio626"
+                                        ToolTip="{Binding [OpenGitHubProfile], Source={StaticResource Loc}}"
+                                        Click="GitHubProfile_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Mantas Brūžė"
+                                                       FontSize="{StaticResource Type.Body}"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontFamily.UI}"/>
+                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                                <TextBlock Text="@Mantelio626" Style="{StaticResource AboutHandleTextContributorStyle}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <icons:AppIcon Grid.Column="1"
+                                                       Kind="Github"
+                                                       Width="15"
+                                                       Height="15"
+                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                       VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Button>
+
+                                <Button Style="{StaticResource AboutPersonButtonStyle}"
+                                        Tag="https://github.com/Rapol05"
+                                        ToolTip="{Binding [OpenGitHubProfile], Source={StaticResource Loc}}"
+                                        Click="GitHubProfile_Click">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="Rapolas Turauskas"
+                                                       FontSize="{StaticResource Type.Body}"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontFamily.UI}"/>
+                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                                <TextBlock Text="@Rapol05" Style="{StaticResource AboutHandleTextContributorStyle}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <icons:AppIcon Grid.Column="1"
+                                                       Kind="Github"
+                                                       Width="15"
+                                                       Height="15"
+                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                       VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Button>
+
+                                <TextBlock Text="{Binding [AboutLicenseFooter], Source={StaticResource Loc}}"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource TextColorSecondary}"
+                                           Opacity="0.75"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,16,0,0"
+                                           FontFamily="{StaticResource FontFamily.UI}"/>
+
+                                <Button Content="{Binding [Close], Source={StaticResource Loc}}"
+                                        Style="{StaticResource DialogSecondaryButtonStyle}"
+                                        HorizontalAlignment="Center"
+                                        Padding="28,8"
+                                        Margin="0,14,0,0"
+                                        Click="CloseButton_Click"/>
+                            </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Stroke overlay: draws the outline without insetting content -->
+                        <Border BorderBrush="{DynamicResource BorderColor}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Overlay}"
+                                Background="Transparent"
+                                IsHitTestVisible="False"
+                                SnapsToDevicePixels="True"/>
+                    </Grid>
+                </Border>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

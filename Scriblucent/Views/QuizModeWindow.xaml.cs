@@ -3,6 +3,7 @@ using Scriblucent.Behaviors;
 using Scriblucent.Localization;
 using Scriblucent;
 using Scriblucent.Models;
+using Scriblucent.Services;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -16,13 +17,9 @@ namespace Scriblucent.Views;
 
 public partial class QuizModeWindow : Window
 {
-    private static readonly Color CorrectAnswerBackgroundColor = Color.FromRgb(240, 253, 244);
-    private static readonly Color CorrectAnswerBorderColor = Color.FromRgb(16, 185, 129);
-    private static readonly Color IncorrectAnswerBackgroundColor = Color.FromRgb(254, 242, 242);
-    private static readonly Color IncorrectAnswerBorderColor = Color.FromRgb(220, 38, 38);
     private const string PlainTextAnswerMarker = "__PLAINTEXT__:";
 
-    private readonly QuizDocument _quiz;
+    private QuizDocument _quiz;
     private int _currentQuestionIndex;
     private readonly Dictionary<int, List<QuizOption>> _userAnswers;
     private DispatcherTimer? _timer;
@@ -48,7 +45,6 @@ public partial class QuizModeWindow : Window
         _elapsedTime = TimeSpan.Zero;
         _isResultsView = false;
 
-        Owner = Application.Current.MainWindow;
         Title = LocalizationService.GetString("QuizModeTitle");
 
         StartTimer();
@@ -171,7 +167,7 @@ public partial class QuizModeWindow : Window
                         BorderThickness = new Thickness(1),
                         Cursor = Cursors.Hand,
                         Tag = option,
-                        FontSize = 14,
+                        FontSize = TypeScale.Px(TypeScale.Body, 14),
                         FontWeight = FontWeights.Normal,
                         MinHeight = 44,
                         Focusable = false,
@@ -263,7 +259,7 @@ public partial class QuizModeWindow : Window
         var label = new TextBlock
         {
             Text = LocalizationService.GetString("QuizPlainTextYourAnswerLabel"),
-            FontSize = 12,
+            FontSize = TypeScale.Px(TypeScale.Caption, 12),
             FontWeight = FontWeights.SemiBold,
             Foreground = (Brush)FindResource("TextColorSecondary"),
             VerticalAlignment = VerticalAlignment.Center
@@ -272,7 +268,7 @@ public partial class QuizModeWindow : Window
 
         var charCountLabel = new TextBlock
         {
-            FontSize = 12,
+            FontSize = TypeScale.Px(TypeScale.Caption, 12),
             Foreground = (Brush)FindResource("TextColorSecondary"),
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -282,19 +278,20 @@ public partial class QuizModeWindow : Window
 
         var inputBorder = new Border
         {
-            Background = (Brush)FindResource("WindowBackground"),
-            BorderBrush = (Brush)FindResource("BorderColor"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(10, 8, 10, 8)
+            Padding = new Thickness(10, 8, 10, 8),
+            MinHeight = 146
         };
+        inputBorder.SetResourceReference(StyleProperty, "ChromeFieldBorderStyle");
+        // Inset on the white question plate so the field (and its focus ring) read clearly.
+        inputBorder.SetResourceReference(BackgroundProperty, "WindowBackground");
+        FieldFocusRingBehavior.SetIsEnabled(inputBorder, true);
 
         var inputGrid = new Grid();
         var textBox = new TextBox
         {
             Name = "PlainTextAnswerBox",
             Padding = new Thickness(0),
-            FontSize = 15,
+            FontSize = TypeScale.Px(TypeScale.SectionTitle, 15),
             Foreground = (Brush)FindResource("TextColor"),
             CaretBrush = (Brush)FindResource("TextColor"),
             Background = Brushes.Transparent,
@@ -304,8 +301,11 @@ public partial class QuizModeWindow : Window
             MinHeight = 130,
             MaxHeight = 260,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalAlignment = VerticalAlignment.Stretch,
             Tag = "PlainTextQuestion"
         };
+        if (TryFindResource("EmbeddedFieldTextBoxStyle") is Style embeddedStyle)
+            textBox.Style = embeddedStyle;
 
         if (_userAnswers.TryGetValue(_currentQuestionIndex, out var previousAnswer)
             && TryGetPlainTextAnswer(previousAnswer, out var restoredAnswer))
@@ -316,7 +316,7 @@ public partial class QuizModeWindow : Window
         var placeholder = new TextBlock
         {
             Text = LocalizationService.GetString("QuizPlainTextPracticePlaceholder"),
-            FontSize = 15,
+            FontSize = TypeScale.Px(TypeScale.SectionTitle, 15),
             Foreground = (Brush)FindResource("TextColorSecondary"),
             Opacity = 0.72,
             IsHitTestVisible = false,
@@ -338,16 +338,8 @@ public partial class QuizModeWindow : Window
             UpdatePlainTextState();
             SavePlainTextAnswer(textBox.Text);
         };
-        textBox.GotKeyboardFocus += (s, e) =>
-        {
-            inputBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(63, 111, 232));
-            UpdatePlainTextState();
-        };
-        textBox.LostKeyboardFocus += (s, e) =>
-        {
-            inputBorder.BorderBrush = (Brush)FindResource("BorderColor");
-            UpdatePlainTextState();
-        };
+        textBox.GotKeyboardFocus += (s, e) => UpdatePlainTextState();
+        textBox.LostKeyboardFocus += (s, e) => UpdatePlainTextState();
 
         inputGrid.Children.Add(textBox);
         inputGrid.Children.Add(placeholder);
@@ -891,8 +883,8 @@ public partial class QuizModeWindow : Window
                 {
                     Background = (Brush)FindResource("CardBackground"),
                     BorderBrush = isCorrect
-                        ? new SolidColorBrush(CorrectAnswerBorderColor)
-                        : new SolidColorBrush(IncorrectAnswerBorderColor),
+                        ? (Brush)FindResource("AccentSuccess")
+                        : (Brush)FindResource("AccentDanger"),
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(10),
                     Padding = new Thickness(16),
@@ -908,7 +900,7 @@ public partial class QuizModeWindow : Window
                 var qText = new TextBlock
                 {
                     Text = string.Format(LocalizationService.GetString("QuizQuestionPrefixFormat"), i + 1, q.Question),
-                    FontSize = 15,
+                    FontSize = TypeScale.Px(TypeScale.SectionTitle, 15),
                     FontWeight = FontWeights.SemiBold,
                     Foreground = (Brush)FindResource("TextColor"),
                     TextWrapping = TextWrapping.Wrap,
@@ -920,11 +912,11 @@ public partial class QuizModeWindow : Window
                 var status = new TextBlock
                 {
                     Text = isCorrect ? "✓" : "✗",
-                    FontSize = 20,
+                    FontSize = TypeScale.Px(TypeScale.DialogTitle, 20),
                     FontWeight = FontWeights.Bold,
                     Foreground = isCorrect
-                        ? new SolidColorBrush(Color.FromRgb(16, 185, 129))
-                        : new SolidColorBrush(Color.FromRgb(220, 38, 38)),
+                        ? (Brush)FindResource("AccentSuccess")
+                        : (Brush)FindResource("AccentDanger"),
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(10, 0, 0, 0)
                 };
@@ -946,7 +938,7 @@ public partial class QuizModeWindow : Window
                         Text = string.Format(
                             LocalizationService.GetString("QuizYourAnswerFormat"),
                             userAnswer),
-                        FontSize = 13,
+                        FontSize = TypeScale.Px(TypeScale.Meta, 13),
                         Foreground = (Brush)FindResource("TextColor"),
                         Margin = new Thickness(0, 8, 0, 4),
                         TextWrapping = TextWrapping.Wrap
@@ -961,8 +953,8 @@ public partial class QuizModeWindow : Window
                             Text = string.Format(
                                 LocalizationService.GetString("QuizCorrectAnswerFormat"),
                                 q.PlainTextAnswer),
-                            FontSize = 13,
-                            Foreground = new SolidColorBrush(CorrectAnswerBorderColor),
+                            FontSize = TypeScale.Px(TypeScale.Meta, 13),
+                            Foreground = (Brush)FindResource("AccentSuccessSubtleForeground"),
                             Margin = new Thickness(0, 0, 0, 4),
                             TextWrapping = TextWrapping.Wrap
                         };
@@ -979,7 +971,7 @@ public partial class QuizModeWindow : Window
                         Text = string.Format(
                             LocalizationService.GetString("QuizYourAnswerFormat"),
                             userSel.Count > 0 ? string.Join(", ", userSel.Select(o => o.Text)) : LocalizationService.GetString("QuizNoAnswer")),
-                        FontSize = 13,
+                        FontSize = TypeScale.Px(TypeScale.Meta, 13),
                         Foreground = (Brush)FindResource("TextColor"),
                         Margin = new Thickness(0, 8, 0, 4),
                         TextWrapping = TextWrapping.Wrap
@@ -991,8 +983,8 @@ public partial class QuizModeWindow : Window
                         var correctAns = new TextBlock
                         {
                             Text = string.Format(LocalizationService.GetString("QuizCorrectAnswerFormat"), string.Join(", ", correctOpts.Select(o => o.Text))),
-                            FontSize = 13,
-                            Foreground = new SolidColorBrush(CorrectAnswerBorderColor),
+                            FontSize = TypeScale.Px(TypeScale.Meta, 13),
+                            Foreground = (Brush)FindResource("AccentSuccessSubtleForeground"),
                             Margin = new Thickness(0, 0, 0, 4),
                             TextWrapping = TextWrapping.Wrap
                         };
@@ -1005,7 +997,7 @@ public partial class QuizModeWindow : Window
                     var expl = new TextBlock
                     {
                         Text = string.Format(LocalizationService.GetString("QuizExplanationFormat"), q.Explanation),
-                        FontSize = 12,
+                        FontSize = TypeScale.Px(TypeScale.Caption, 12),
                         Foreground = (Brush)FindResource("TextColorSecondary"),
                         Margin = new Thickness(0, 8, 0, 0),
                         TextWrapping = TextWrapping.Wrap,
@@ -1184,22 +1176,13 @@ public partial class QuizModeWindow : Window
 
     private void RetryAllButton_Click(object sender, RoutedEventArgs e)
     {
-        _timer?.Stop();
-        var retryWindow = new QuizModeWindow(_quiz, _timeLimitSeconds)
-        {
-            Owner = this.Owner
-        };
-        retryWindow.ShowDialog();
-        // Propagate the retry attempt back to the preview window.
-        if (retryWindow.LastAttempt != null)
-            LastAttempt = retryWindow.LastAttempt;
-        Close();
+        RestartSession(_quiz);
     }
 
     private void RetryWrongButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_wrongQuestionIndices.Count == 0) return;
-        _timer?.Stop();
+        if (_wrongQuestionIndices.Count == 0)
+            return;
 
         var wrongQuestions = _wrongQuestionIndices
             .Select(i => _quiz.Questions[i])
@@ -1215,14 +1198,48 @@ public partial class QuizModeWindow : Window
             Tags = _quiz.Tags
         };
 
-        var retryWindow = new QuizModeWindow(wrongOnlyQuiz, _timeLimitSeconds)
+        RestartSession(wrongOnlyQuiz);
+    }
+
+    private void RestartSession(QuizDocument quiz)
+    {
+        _timer?.Stop();
+        if (CelebrationOverlay != null)
+            StudyCelebration.Stop(CelebrationOverlay);
+
+        _quiz = quiz ?? throw new ArgumentNullException(nameof(quiz));
+        _currentQuestionIndex = 0;
+        _userAnswers.Clear();
+        _hintUsedQuestions.Clear();
+        _wrongQuestionIndices.Clear();
+        LastAttempt = null;
+
+        ResetTimerForNewSession();
+        ApplyReturnFromResultsState();
+
+        if (FindName("ResultsQuestionsPanel") is StackPanel resultsPanel)
+            resultsPanel.Children.Clear();
+
+        LoadQuestion();
+
+        if (FindName("QuestionView") is FrameworkElement questionView)
+            UiMotion.AnimateContentEnter(questionView, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
+    }
+
+    private void ResetTimerForNewSession()
+    {
+        _isCountdown = _timeLimitSeconds > 0;
+        _elapsedTime = TimeSpan.Zero;
+        _remainingTime = _isCountdown ? TimeSpan.FromSeconds(_timeLimitSeconds) : TimeSpan.Zero;
+        _timerWarningActive = false;
+
+        if (FindName("TimerText") is TextBlock timerText)
         {
-            Owner = this.Owner
-        };
-        retryWindow.ShowDialog();
-        if (retryWindow.LastAttempt != null)
-            LastAttempt = retryWindow.LastAttempt;
-        Close();
+            UiMotion.Stop(timerText);
+            timerText.SetResourceReference(TextBlock.ForegroundProperty, "TextColor");
+        }
+
+        UpdateTimerDisplay(_isCountdown ? _remainingTime : _elapsedTime);
     }
 
 }

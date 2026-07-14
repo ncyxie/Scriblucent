@@ -1,5 +1,5 @@
 <div align="center">
-<img src="Scriblucent/Assets/logo.png" width="80" alt="Scriblucent logo"/>
+<img src="Scriblucent/Assets/brand-logo-dark.svg" width="220" alt="Scriblucent logo"/>
 
 <h1>Scriblucent</h1>
 

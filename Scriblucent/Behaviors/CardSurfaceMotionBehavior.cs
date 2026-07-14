@@ -132,14 +132,21 @@ public static class CardSurfaceMotionBehavior
         UiMotion.Stop(hoverTarget);
 
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(hoverTarget);
+        // Listing rest size is always 1 (0.88 is enter start only). Hover uses lift, not scale.
         scale.ScaleX = 1;
         scale.ScaleY = 1;
         translate.X = 0;
         translate.Y = 0;
 
-        var shadowHost = ResolveShadowHostElement(hoverTarget);
-        if (shadowHost.Effect is DropShadowEffect { IsFrozen: false })
-            shadowHost.Effect = null;
+        ClearLiveShadowEffect(hoverTarget);
+        if (TryResolveBakedShadowPlate(hoverTarget, element, out var plate)
+            && !IsVisualDescendantOf(plate, hoverTarget))
+        {
+            UiMotion.Stop(plate);
+            var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
+            plateTranslate.X = 0;
+            plateTranslate.Y = 0;
+        }
     }
 
     /// <summary>
@@ -607,12 +614,7 @@ public static class CardSurfaceMotionBehavior
                 element.Opacity = 0;
                 scale.ScaleX = UiMotion.EnterScale;
                 scale.ScaleY = UiMotion.EnterScale;
-                if (!ShouldSuppressShadowMotion(element))
-                {
-                    var shadow = ResolveShadowTarget(element);
-                    shadow.BlurRadius = UiMotion.ShadowBlurRest;
-                    shadow.Opacity = UiMotion.ShadowOpacityRest;
-                }
+                ClearLiveShadowEffect(element);
 
                 UiMotion.Run(
                     element,
@@ -703,21 +705,23 @@ public static class CardSurfaceMotionBehavior
         if (motionSurface.Opacity < 0.95)
             motionSurface.Opacity = 1;
 
-        if (motionSurface.RenderTransform is TransformGroup group)
-        {
-            var scale = group.Children.OfType<ScaleTransform>().FirstOrDefault();
-            if (scale is not null && Math.Abs(scale.ScaleX - 1) < 0.02)
-            {
-                scale.ScaleX = 1;
-                scale.ScaleY = 1;
-            }
-        }
+        // Rest size is always 1; 0.88 is enter start only. Use EnsureScaleTranslateGroup so we
+        // never mutate a frozen XAML ScaleTransform (that throws and crashes the app).
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(motionSurface);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+        translate.X = 0;
+        if (!layoutRoot.IsMouseOver)
+            translate.Y = 0;
 
-        if (!ShouldSuppressShadowMotion(layoutRoot))
+        ClearLiveShadowEffect(motionSurface);
+        if (!layoutRoot.IsMouseOver
+            && TryResolveBakedShadowPlate(motionSurface, layoutRoot, out var plate)
+            && !IsVisualDescendantOf(plate, motionSurface))
         {
-            var shadow = ResolveShadowTarget(motionSurface);
-            if (!layoutRoot.IsMouseOver && Math.Abs(shadow.Opacity - UiMotion.ShadowOpacityRest) < 0.05)
-                shadow.BlurRadius = UiMotion.ShadowBlurRest;
+            var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
+            plateTranslate.X = 0;
+            plateTranslate.Y = 0;
         }
     }
 
@@ -736,11 +740,13 @@ public static class CardSurfaceMotionBehavior
         translate.X = 0;
         translate.Y = 0;
 
-        if (!ShouldSuppressShadowMotion(layoutRoot))
+        ClearLiveShadowEffect(motionSurface);
+        if (TryResolveBakedShadowPlate(motionSurface, layoutRoot, out var plate)
+            && !IsVisualDescendantOf(plate, motionSurface))
         {
-            var shadow = ResolveShadowTarget(motionSurface);
-            shadow.Opacity = UiMotion.ShadowOpacityRest;
-            shadow.BlurRadius = UiMotion.ShadowBlurRest;
+            var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
+            plateTranslate.X = 0;
+            plateTranslate.Y = 0;
         }
     }
 
@@ -807,17 +813,13 @@ public static class CardSurfaceMotionBehavior
         // glyphs and inevitably softens text/icons. A translate pop stays pixel-sharp.
         var targetLift = isEnter ? UiMotion.CardHoverLiftY : 0.0;
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(hoverTarget);
+        // Rest size is always 1 (0.88 is enter start only). Hover animates lift, not scale.
         scale.ScaleX = 1;
         scale.ScaleY = 1;
 
-        var suppressShadow = ShouldSuppressShadowMotion(element);
-        DropShadowEffect? shadow = null;
-        if (!suppressShadow)
-        {
-            shadow = ResolveShadowTarget(hoverTarget);
-            if (isEnter)
-                shadow.BlurRadius = UiMotion.ShadowBlurHover;
-        }
+        // Prefer the shared nine-slice plate (no live DropShadowEffect). Clear any leftover
+        // Effect from older sessions so hover never reintroduces per-card blur cost.
+        ClearLiveShadowEffect(hoverTarget);
 
         var liftFrom = translate.Y;
         var tracks = new List<RenderTransitionClock.Track>
@@ -825,63 +827,97 @@ public static class CardSurfaceMotionBehavior
             UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
         };
 
-        if (shadow is not null)
+        // Listing motion surface is the face border; plate is a sibling and must co-lift.
+        // NoteCard lifts the whole control (plate is a descendant) — skip duplicate plate motion.
+        if (TryResolveBakedShadowPlate(hoverTarget, element, out var plate)
+            && !IsVisualDescendantOf(plate, hoverTarget))
         {
-            var opacityFrom = shadow.Opacity;
-            var opacityTo = isEnter ? UiMotion.ShadowOpacityHover : UiMotion.ShadowOpacityRest;
-            tracks.Add(UiMotion.Track(durationMs, UiMotion.OutCubic, opacityFrom, opacityTo, value => shadow.Opacity = value));
+            UiMotion.Stop(plate);
+            var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
+            var plateLiftFrom = plateTranslate.Y;
+            tracks.Add(UiMotion.Track(
+                durationMs,
+                UiMotion.OutCubic,
+                plateLiftFrom,
+                targetLift,
+                value => plateTranslate.Y = value));
         }
 
-        UiMotion.Run(
-            hoverTarget,
-            tracks.ToArray(),
-            onComplete: isEnter || shadow is null
-                ? null
-                : () =>
+        UiMotion.Run(hoverTarget, tracks.ToArray());
+    }
+
+    private static void ClearLiveShadowEffect(FrameworkElement hoverTarget)
+    {
+        var shadowHost = ResolveShadowHostElement(hoverTarget);
+        if (shadowHost.Effect is DropShadowEffect { IsFrozen: false })
+            shadowHost.Effect = null;
+        if (!ReferenceEquals(shadowHost, hoverTarget)
+            && hoverTarget.Effect is DropShadowEffect { IsFrozen: false })
+            hoverTarget.Effect = null;
+    }
+
+    private static bool TryResolveBakedShadowPlate(
+        FrameworkElement hoverTarget,
+        FrameworkElement layoutRoot,
+        out FrameworkElement plate)
+    {
+        plate = null!;
+
+        if (hoverTarget.Parent is Panel siblingPanel)
+        {
+            foreach (UIElement child in siblingPanel.Children)
+            {
+                if (child is CardShadowLayer layer)
                 {
-                    // Drop the lazily created effect entirely rather than just resting its
-                    // blur/opacity - cards sit at rest far more than they sit hovered, so
-                    // leaving a live (if dim) DropShadowEffect behind on every card that was
-                    // ever hovered would slowly reintroduce the same per-card blur cost this
-                    // shadow rework removed.
-                    var shadowHostElement = ResolveShadowHostElement(hoverTarget);
-                    if (ReferenceEquals(shadowHostElement.Effect, shadow))
-                        shadowHostElement.Effect = null;
-                });
+                    plate = layer;
+                    return true;
+                }
+            }
+        }
+
+        if (FindDescendantCardShadowLayer(layoutRoot) is { } descendant)
+        {
+            plate = descendant;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static CardShadowLayer? FindDescendantCardShadowLayer(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is CardShadowLayer layer)
+                return layer;
+
+            if (FindDescendantCardShadowLayer(child) is { } nested)
+                return nested;
+        }
+
+        return null;
+    }
+
+    private static bool IsVisualDescendantOf(DependencyObject child, DependencyObject ancestor)
+    {
+        for (var current = child; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, ancestor))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool IsMassSelectActive(FrameworkElement element)
         => Window.GetWindow(element)?.DataContext is MainViewModel { IsMassSelectMode: true };
 
-    private static DropShadowEffect ScrollShadowDiscard { get; } = new()
-    {
-        Opacity = 0,
-        BlurRadius = 0,
-        ShadowDepth = 0
-    };
-
     private static bool ShouldSuppressShadowMotion(FrameworkElement element)
         => DashboardScrollRenderGate.IsSmoothScrollRendering(element);
 
-    private static DropShadowEffect ResolveShadowTarget(FrameworkElement element)
-    {
-        if (ShouldSuppressShadowMotion(element))
-        {
-            if (DashboardScrollRenderGate.ResolveShadowHost(element) is { Effect: DropShadowEffect existing }
-                && !existing.IsFrozen)
-                return existing;
-
-            if (element.Effect is DropShadowEffect direct && !direct.IsFrozen)
-                return direct;
-
-            return ScrollShadowDiscard;
-        }
-
-        return UiMotion.EnsureShadow(ResolveShadowHostElement(element));
-    }
-
-    /// <summary>Same host resolution <see cref="ResolveShadowTarget"/> uses, exposed so callers
-    /// can clear the effect they lazily created once they no longer need it live.</summary>
+    /// <summary>Named face border when <see cref="ShadowElementNameProperty"/> is set; otherwise the element.</summary>
     private static FrameworkElement ResolveShadowHostElement(FrameworkElement element)
     {
         var shadowName = GetShadowElementName(element);

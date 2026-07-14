@@ -66,6 +66,7 @@ public static class OverlayBackdropCapture
         if (window?.Content is not FrameworkElement root)
             return null;
 
+        var suspendedEffects = SuspendEffectsForCapture(root);
         try
         {
             root.UpdateLayout();
@@ -88,6 +89,40 @@ public static class OverlayBackdropCapture
         {
             return null;
         }
+        finally
+        {
+            RestoreEffects(suspendedEffects);
+        }
+    }
+
+    /// <summary>
+    /// DropShadow/Blur on large feature shells makes RenderTargetBitmap extremely expensive
+    /// under nested ShowDialog. Suspend effects for the capture pass only.
+    /// </summary>
+    private static List<(UIElement Element, Effect? Effect)> SuspendEffectsForCapture(DependencyObject root)
+    {
+        var suspended = new List<(UIElement, Effect?)>();
+        SuspendEffectsWalk(root, suspended);
+        return suspended;
+    }
+
+    private static void SuspendEffectsWalk(DependencyObject current, List<(UIElement Element, Effect? Effect)> suspended)
+    {
+        if (current is UIElement element && element.Effect is not null)
+        {
+            suspended.Add((element, element.Effect));
+            element.Effect = null;
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(current);
+        for (var i = 0; i < count; i++)
+            SuspendEffectsWalk(VisualTreeHelper.GetChild(current, i), suspended);
+    }
+
+    private static void RestoreEffects(List<(UIElement Element, Effect? Effect)> suspended)
+    {
+        foreach (var (element, effect) in suspended)
+            element.Effect = effect;
     }
 
     public static (int Width, int Height) GetScrimLogicalSize(double windowWidth, double windowHeight)

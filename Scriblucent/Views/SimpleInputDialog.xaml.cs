@@ -1,6 +1,8 @@
 using Scriblucent.Animations;
 using System.Windows;
 
+using Scriblucent.Controls;
+
 namespace Scriblucent.Views;
 
 public partial class SimpleInputDialog : Window
@@ -10,7 +12,7 @@ public partial class SimpleInputDialog : Window
     public SimpleInputDialog(string title, string prompt)
     {
         InitializeComponent();
-        _overlayAnimator = OverlayDialogAnimator.Bind(this, OverlayRoot, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+        _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         Scriblucent.Services.WindowThemeService.Register(this);
         Title = title;
         PromptText.Text = prompt;

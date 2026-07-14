@@ -19,7 +19,16 @@ namespace Scriblucent.Views;
 
 public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 {
-    private const double StudyProgressBarWidth = 316;
+    private const double StudyProgressBarFallbackWidth = 316;
+
+    private double GetStudyProgressTrackWidth()
+    {
+        if (StudyModeProgressTrack is null)
+            return StudyProgressBarFallbackWidth;
+
+        var width = StudyModeProgressTrack.ActualWidth;
+        return width > 1 ? width : StudyProgressBarFallbackWidth;
+    }
 
     private enum UnsavedCloseDecision
     {
@@ -86,12 +95,12 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         IReadOnlyDictionary<int, string>? setNames = null,
         FlashcardStudySession? studySession = null,
         Guid? sourceNoteId = null,
-        Action<Guid>? openNoteAction = null)
+        Action<Guid>? openNoteAction = null,
+        int flipDelayMilliseconds = 0)
     {
         InitializeComponent();
-        FreezeStudyModeResources();
         Scriblucent.Services.WindowThemeService.Register(this);
-        InitializeFlipSpeedSlider();
+        InitializeFlipSpeedSlider(flipDelayMilliseconds);
         _openNoteAction = openNoteAction;
         if (noteOptions != null)
         {
@@ -202,7 +211,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             SourceNoteId = _selectedLinkedNote?.Id ?? existingDocument?.SourceNoteId,
             GroupId = existingDocument?.GroupId,
             Schedules = existingDocument?.Schedules?.ToList() ?? new List<NoteScheduleEntry>(),
-            IsPinned = existingDocument?.IsPinned ?? false
+            IsPinned = existingDocument?.IsPinned ?? false,
+            FlipDelayMilliseconds = GetFlipAnimationDurationMs()
         };
     }
 
@@ -340,7 +350,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             string.Join('\u001E', Tags),
             setSnapshot,
             cardSnapshot,
-            studySnapshot);
+            studySnapshot,
+            GetFlipAnimationDurationMs().ToString());
     }
 
     private void LinkedNoteButton_Click(object sender, RoutedEventArgs e)
@@ -393,8 +404,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         MarkCurrentStateSaved();
         _allowCloseWithoutPrompt = true;
-        DialogResult = true;
-        Close();
+        WindowContentEnterHelper.CloseWithDialogResult(this, true);
     }
 
     private void ConfigureAiGeneratedIndicator(string? modelDisplayName)
@@ -845,22 +855,14 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         StudyModeFullscreenButton.ToolTip = LocalizationService.GetString("StudyModeFullscreenTooltip");
     }
 
-    private bool IsStudyFullscreen => WindowStyle == WindowStyle.None;
+    private bool IsStudyFullscreen => ShellWindowChrome.IsFullscreenSuspended(this);
 
     private void ToggleFullscreenMode()
     {
-        if (WindowStyle == WindowStyle.None)
-        {
-            WindowStyle = WindowStyle.SingleBorderWindow;
-            WindowState = WindowState.Normal;
-            ResizeMode = ResizeMode.CanResize;
-        }
+        if (IsStudyFullscreen)
+            ShellWindowChrome.ResumeFromFullscreen(this);
         else
-        {
-            WindowStyle = WindowStyle.None;
-            WindowState = WindowState.Maximized;
-            ResizeMode = ResizeMode.NoResize;
-        }
+            ShellWindowChrome.SuspendForFullscreen(this);
 
         UpdateStudyModeFullscreenButton();
     }
@@ -1386,8 +1388,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             case UnsavedCloseDecision.SaveAndClose:
                 _allowCloseWithoutPrompt = true;
                 MarkCurrentStateSaved();
-                DialogResult = true;
-                e.Cancel = false;
+                e.Cancel = true;
+                WindowContentEnterHelper.CloseWithDialogResult(this, true);
                 return;
             case UnsavedCloseDecision.LeaveWithoutSaving:
                 _allowCloseWithoutPrompt = true;
@@ -1469,16 +1471,67 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         host.AnimateToggle(GetFlipAnimationDurationMs(), UpdateQuestionAnswerToggleButton);
     }
 
-    private void FreezeStudyModeResources()
+    // Hover is lift-only on the shared parent Grid (CardShadowLayer + CardSurface) so the
+    // baked plate and face move together. No live DropShadowEffect — rest elevation is the
+    // nine-slice plate. FlashcardsGridViewBorder/StudyModeViewBorder clip via RoundedClipBehavior,
+    // so both containers carry extra Padding for the plate bleed and lift.
+    private void FlashcardStudyCardSurface_MouseEnter(object sender, MouseEventArgs e)
     {
-        if (FindResource("FlashcardStudyCardShadow") is DropShadowEffect studyShadow && studyShadow.CanFreeze)
-            studyShadow.Freeze();
+        if (sender is not FrameworkElement surface)
+            return;
 
-        if (FindResource("FlashcardStudyCardHoverShadow") is DropShadowEffect hoverShadow && hoverShadow.CanFreeze)
-            hoverShadow.Freeze();
+        ClearStudyCardLiveShadow(surface);
+
+        if (surface.Parent is not FrameworkElement cardRoot)
+            return;
+
+        cardRoot.RenderTransformOrigin = new Point(0.5, 0.5);
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(cardRoot);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+        var liftFrom = translate.Y;
+        UiMotion.Stop(cardRoot);
+        UiMotion.Run(cardRoot, new[]
+        {
+            UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, liftFrom, UiMotion.CardHoverLiftY, value => translate.Y = value)
+        });
     }
 
-    private void InitializeFlipSpeedSlider()
+    private void FlashcardStudyCardSurface_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is not FrameworkElement surface)
+            return;
+
+        ClearStudyCardLiveShadow(surface);
+
+        if (surface.Parent is not FrameworkElement cardRoot)
+            return;
+
+        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(cardRoot);
+        scale.ScaleX = 1;
+        scale.ScaleY = 1;
+        var liftFrom = translate.Y;
+        UiMotion.Stop(cardRoot);
+        UiMotion.Run(cardRoot, new[]
+        {
+            UiMotion.Track(UiMotion.HoverOutMs, UiMotion.OutCubic, liftFrom, 0, value => translate.Y = value)
+        });
+    }
+
+    private static void ClearStudyCardLiveShadow(FrameworkElement surface)
+    {
+        if (surface.Effect is DropShadowEffect)
+            surface.Effect = null;
+
+        if (surface.FindName("ShadowLayer") is FrameworkElement shadowLayer
+            && shadowLayer.Effect is DropShadowEffect)
+        {
+            UiMotion.Stop(shadowLayer);
+            shadowLayer.Effect = null;
+        }
+    }
+
+    private void InitializeFlipSpeedSlider(int preferredFlipDelayMilliseconds = 0)
     {
         if (FlipSpeedSlider is null)
             return;
@@ -1486,11 +1539,15 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         FlipSpeedSlider.ValueChanged += FlipSpeedSlider_ValueChanged;
 
         var settings = AppSettingsService.Load();
+        // Prefer this set's saved delay; otherwise app-wide flashcard preference.
+        var initialDelay = preferredFlipDelayMilliseconds > 0
+            ? preferredFlipDelayMilliseconds
+            : settings.FlashcardFlipDelayMilliseconds;
+
         FlipSpeedSlider.Minimum = AppSettings.MinFlashcardFlipDelayMilliseconds;
         FlipSpeedSlider.Maximum = AppSettings.MaxFlashcardFlipDelayMilliseconds;
         _isApplyingFlipSpeed = true;
-        FlipSpeedSlider.Value = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(
-            settings.FlashcardFlipDelayMilliseconds);
+        FlipSpeedSlider.Value = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(initialDelay);
         _isApplyingFlipSpeed = false;
     }
 
@@ -1499,10 +1556,13 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         if (_isApplyingFlipSpeed || FlipSpeedSlider is null)
             return;
 
+        // Keep app-wide default in sync so new sets inherit the last chosen speed.
         var settings = AppSettingsService.Load();
-        settings.FlashcardFlipDelayMilliseconds = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(
-            (int)Math.Round(FlipSpeedSlider.Value));
+        settings.FlashcardFlipDelayMilliseconds = GetFlipAnimationDurationMs();
         AppSettingsService.Save(settings);
+
+        if (!_isInitializing)
+            UpdateEditedIndicator();
     }
 
     private int GetFlipAnimationDurationMs()
@@ -1550,6 +1610,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         StartStudyModeButton.IsEnabled = _items.Count > 0;
         StartStudyModeButton.Content = LocalizationService.GetString(_isStudyMode ? "StudyModeExit" : "StudyModeStart");
         UpdateQuestionAnswerToggleButton();
+        UpdateStudyModeFullscreenButton();
 
         if (!_isStudyMode || _items.Count == 0)
             return;
@@ -1666,7 +1727,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var targetWidth = StudyProgressBarWidth * Math.Clamp((double)knownCount / totalCount, 0, 1);
+        var targetWidth = GetStudyProgressTrackWidth() * Math.Clamp((double)knownCount / totalCount, 0, 1);
         var currentWidth = StudyModeProgressFill.Width;
         if (double.IsNaN(currentWidth) || currentWidth < 0)
             currentWidth = 0;
@@ -1690,7 +1751,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
         StudyModeProgressTrack.ToolTip = tooltipText;
         UiMotion.Stop(StudyModeProgressFill);
-        SetStudyProgressFillWidth(StudyProgressBarWidth);
+        SetStudyProgressFillWidth(GetStudyProgressTrackWidth());
     }
 
     private void SetStudyProgressFillWidth(double width)

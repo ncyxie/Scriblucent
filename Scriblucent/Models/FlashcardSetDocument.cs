@@ -15,4 +15,9 @@ public sealed class FlashcardSetDocument
     public Guid? GroupId { get; set; }
     public List<NoteScheduleEntry> Schedules { get; set; } = new();
     public bool IsPinned { get; set; }
+
+    /// <summary>
+    /// Preferred flip animation duration for this set (ms). 0 = fall back to app settings.
+    /// </summary>
+    public int FlipDelayMilliseconds { get; set; }
 }
