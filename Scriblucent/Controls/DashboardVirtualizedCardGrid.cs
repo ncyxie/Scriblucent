@@ -54,6 +54,8 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     private bool _addMotionLayoutActive;
     private bool _interactiveSweepDeferred;
     private VirtualizationMode _savedVirtualizationMode = VirtualizationMode.Recycling;
+    private DashboardMotionScope? _cachedMotionScope;
+    private bool _motionScopeResolved;
 
     public DashboardCardGridLayout Layout
     {
@@ -83,7 +85,12 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         ApplyLayoutPanel(Layout);
 
         Loaded += OnLoaded;
-        Unloaded += (_, _) => DetachMainViewModel();
+        Unloaded += (_, _) =>
+        {
+            DetachMainViewModel();
+            _motionScopeResolved = false;
+            _cachedMotionScope = null;
+        };
         ItemContainerGenerator.StatusChanged += OnItemContainerGeneratorStatusChanged;
     }
 
@@ -368,11 +375,18 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
     private DashboardMotionScope? ResolveHostingMotionScope()
     {
+        if (_motionScopeResolved)
+            return _cachedMotionScope;
+
         var ancestor = Parent;
         while (ancestor is not null)
         {
             if (ancestor is DashboardVirtualizationHost host)
-                return host.MotionScope;
+            {
+                _cachedMotionScope = host.MotionScope;
+                _motionScopeResolved = true;
+                return _cachedMotionScope;
+            }
 
             ancestor = LogicalTreeHelper.GetParent(ancestor) ?? VisualTreeHelper.GetParent(ancestor);
         }
@@ -393,6 +407,19 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     }
 
     protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
+    {
+        if (!ScrollPerfDiag.Enabled)
+        {
+            PrepareContainerForItemCore(element, item);
+            return;
+        }
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        PrepareContainerForItemCore(element, item);
+        ScrollPerfDiag.Log($"containerPrepare\t{stopwatch.Elapsed.TotalMilliseconds:F2}\tscope={ResolveHostingMotionScope()}");
+    }
+
+    private void PrepareContainerForItemCore(DependencyObject element, object item)
     {
         base.PrepareContainerForItemOverride(element, item);
         DashboardScrollRenderGate.TryStripContainerShadow(element);
@@ -516,9 +543,12 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         return null;
     }
 
-    private static void EnsureContainerCardInteractive(DependencyObject container)
+    private void EnsureContainerCardInteractive(DependencyObject container)
     {
-        if (FindDescendant(container, IsMotionEnabledCard) is { } card)
+        var scope = ResolveHostingMotionScope();
+
+        if (DashboardScrollRenderGate.ResolveMotionCard(container) is { } card
+            && CardSurfaceMotionBehavior.GetIsEnabled(card))
         {
             switch (CardSurfaceMotionBehavior.GetProfile(card))
             {
@@ -534,20 +564,21 @@ public class DashboardVirtualizedCardGrid : ItemsControl
             }
 
             IndicatorRevealMotionBehavior.SyncContainer(card);
-            DashboardMotionEngine.NotifyItemContainerRealized(card);
+            DashboardMotionEngine.NotifyItemContainerRealized(card, scope);
             return;
         }
 
         if (container is FrameworkElement containerElement)
         {
             CardSurfaceMotionBehavior.EnsureCardVisible(containerElement);
-            DashboardMotionEngine.NotifyItemContainerRealized(containerElement);
+            DashboardMotionEngine.NotifyItemContainerRealized(containerElement, scope);
         }
     }
 
     private static void ResetContainerMotion(DependencyObject container)
     {
-        if (FindDescendant(container, IsMotionEnabledCard) is FrameworkElement card)
+        if (DashboardScrollRenderGate.ResolveMotionCard(container) is FrameworkElement card
+            && CardSurfaceMotionBehavior.GetIsEnabled(card))
             CardSurfaceMotionBehavior.Cleanup(card);
     }
 
@@ -618,26 +649,5 @@ public class DashboardVirtualizedCardGrid : ItemsControl
             wrapFactory.SetValue(VirtualizingWrapPanel.ItemSizeProperty, ItemCellSize);
 
         ItemsPanel = new ItemsPanelTemplate(wrapFactory);
-    }
-
-    private static bool IsMotionEnabledCard(FrameworkElement element)
-        => CardSurfaceMotionBehavior.GetIsEnabled(element);
-
-    private static FrameworkElement? FindDescendant(DependencyObject root, Func<FrameworkElement, bool> predicate)
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            if (VisualTreeHelper.GetChild(root, i) is not FrameworkElement child)
-                continue;
-
-            if (predicate(child))
-                return child;
-
-            if (FindDescendant(child, predicate) is { } nested)
-                return nested;
-        }
-
-        return null;
     }
 }

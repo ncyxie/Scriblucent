@@ -204,6 +204,29 @@ public sealed class DashboardMotionEngine
         }
     }
 
+    /// <summary>
+    /// Same as <see cref="NotifyItemContainerRealized(FrameworkElement)"/>, but skips straight to
+    /// <paramref name="knownScope"/> instead of probing every <see cref="DashboardMotionScope"/> —
+    /// callers that host a single fixed scope (e.g. one dashboard grid per section) already know it.
+    /// Falls back to the exhaustive probe if the scope is unresolved.
+    /// </summary>
+    public static void NotifyItemContainerRealized(FrameworkElement element, DashboardMotionScope? knownScope)
+    {
+        if (knownScope is not { } scope)
+        {
+            NotifyItemContainerRealized(element);
+            return;
+        }
+
+        if (!DashboardMotionCardCatalog.TryResolveCard(element, scope, out _, out _, out var itemId))
+            return;
+
+        if (!ActiveByScope.TryGetValue(scope, out var engine))
+            return;
+
+        engine.OnItemContainerRealized(itemId);
+    }
+
     public static bool TryPrepareEnterState(FrameworkElement element)
     {
         foreach (var scope in Enum.GetValues<DashboardMotionScope>())

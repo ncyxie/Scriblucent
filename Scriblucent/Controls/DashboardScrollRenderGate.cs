@@ -65,8 +65,29 @@ internal static class DashboardScrollRenderGate
             Scriblucent.Services.ScrollPerfDiag.Log($"shadowResweep\t{reactivated}");
     }
 
+    private static readonly DependencyProperty CachedMotionCardProperty = DependencyProperty.RegisterAttached(
+        "CachedMotionCard", typeof(FrameworkElement), typeof(DashboardScrollRenderGate), new PropertyMetadata(null));
+
     public static void TryStripContainerShadow(DependencyObject container)
         => TryStripContainerShadow(container, out _);
+
+    /// <summary>
+    /// Same descendant search as <see cref="FindMotionCard"/>, but resolved once per container
+    /// instance and cached — recycled containers reuse a fixed ItemTemplate visual tree, so the
+    /// resolved motion-card descendant never changes across item swaps.
+    /// Matches CardSurfaceMotionBehavior OR ChromeHoverMotionBehavior; no current dashboard card
+    /// template sets ChromeHoverMotionBehavior, so callers that only care about CardSurface cards
+    /// must re-check CardSurfaceMotionBehavior.GetIsEnabled on the result themselves.
+    /// </summary>
+    internal static FrameworkElement? ResolveMotionCard(DependencyObject container)
+    {
+        if (container.ReadLocalValue(CachedMotionCardProperty) != DependencyProperty.UnsetValue)
+            return (FrameworkElement?)container.GetValue(CachedMotionCardProperty);
+
+        var card = FindMotionCard(container);
+        container.SetValue(CachedMotionCardProperty, card);
+        return card;
+    }
 
     private static void TryStripContainerShadow(DependencyObject container, out bool wasLive)
     {
@@ -75,7 +96,7 @@ internal static class DashboardScrollRenderGate
         if (!IsSmoothScrollRendering(container))
             return;
 
-        if (FindMotionCard(container) is not FrameworkElement card)
+        if (ResolveMotionCard(container) is not FrameworkElement card)
             return;
 
         if (ResolveShadowHost(card) is not FrameworkElement shadowHost)
