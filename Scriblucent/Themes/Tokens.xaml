@@ -84,8 +84,6 @@
       Elevation contract (x:Shared=False so each consumer gets its own effect instance):
         Thumb  · small drag grabbers (slider thumb, resize handles)
         Field  · inputs, and small clickable list rows/panels at rest
-        Card   · soft live elevation only for sparse non-tile surfaces that still need Effect;
-                 prefer CardShadowLayer nine-slice for any multi-instance / scrollable card surface
         Popup  · sort/filter menus, ComboBox lists, ContextMenu (must read on light chrome)
         Button · primary/danger/warning CTAs, FAB - never default/secondary buttons (flat, no shadow)
         Dialog · modal surfaces
@@ -106,13 +104,6 @@
                       Opacity="0.18"
                       BlurRadius="14"
                       ShadowDepth="2"
-                      Direction="270"/>
-    <DropShadowEffect x:Key="Elevation.Card"
-                      x:Shared="False"
-                      Color="#000000"
-                      Opacity="0.08"
-                      BlurRadius="14"
-                      ShadowDepth="1"
                       Direction="270"/>
     <!-- Floating menus/dropdowns: soft lift (Quality bias). Keep opacity moderate — too high
          reads as a gray plate; too low vanishes on light chrome.
@@ -148,14 +139,6 @@
                       BlurRadius="20"
                       ShadowDepth="0"/>
 
-    <!-- Back-compat alias used by existing chrome styles (match Elevation.Field). -->
-    <DropShadowEffect x:Key="ChromeFieldShadow"
-                      x:Shared="False"
-                      Color="#000000"
-                      Opacity="0.18"
-                      BlurRadius="14"
-                      ShadowDepth="2"
-                      Direction="270"/>
 
     <!-- Overlay scrim (fixed; works on both themes) -->
     <SolidColorBrush x:Key="OverlayScrim" Color="#66000000"/>
