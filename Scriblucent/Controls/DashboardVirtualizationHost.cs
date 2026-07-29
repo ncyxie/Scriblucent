@@ -539,10 +539,16 @@ public sealed class DashboardVirtualizationHost : Decorator
     {
         var previousOffset = _lastSyncedSliceOffset;
         var previousHeight = _lastSyncedSliceHeight;
+        // Height uses the same drift tolerance as offset (not the raw 1px SliceEquivalencePixels):
+        // GetExtentHeight() shifts by a few px between passes as specific realized cards' real
+        // heights replace the uniform estimate, and a 1px-exact threshold turned that convergence
+        // jitter into a long chain of full realize/derealize remeasures (10+ passes observed,
+        // each 40-300ms) before finally landing within 1px.
+        var equivalenceTolerance = ResolveSliceEquivalencePixels(grid);
         var offsetChanged = double.IsNaN(previousOffset)
             || Math.Abs(sliceOffset - previousOffset) >= SliceEquivalencePixels;
         var heightChanged = double.IsNaN(previousHeight)
-            || Math.Abs(measureHeight - previousHeight) >= SliceEquivalencePixels;
+            || Math.Abs(measureHeight - previousHeight) >= equivalenceTolerance;
         var hostMeasureStride = ResolveHostMeasureStride(grid);
         var requiresHostMeasure = double.IsNaN(previousOffset)
             || Math.Abs(sliceOffset - previousOffset) >= hostMeasureStride
@@ -587,11 +593,11 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private bool SlicesAreEquivalent(DashboardVirtualizedCardGrid grid, double sliceOffset, double measureHeight)
     {
-        var offsetTolerance = ResolveSliceEquivalencePixels(grid);
+        var tolerance = ResolveSliceEquivalencePixels(grid);
 
         return !double.IsNaN(_lastSyncedSliceOffset)
-            && Math.Abs(sliceOffset - _lastSyncedSliceOffset) < offsetTolerance
-            && Math.Abs(measureHeight - _lastSyncedSliceHeight) < SliceEquivalencePixels;
+            && Math.Abs(sliceOffset - _lastSyncedSliceOffset) < tolerance
+            && Math.Abs(measureHeight - _lastSyncedSliceHeight) < tolerance;
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -678,6 +684,8 @@ public sealed class DashboardVirtualizationHost : Decorator
             measureHeight = _frozenSliceHeight;
         }
 
+        var diagPrevChildCount = ScrollPerfDiag.Enabled ? grid.ResolveItemsPanel()?.Children.Count ?? -1 : -1;
+
         _sliceOffset = sliceOffset;
         _sliceHeight = measureHeight;
         _lastSyncedSliceOffset = sliceOffset;
@@ -685,6 +693,13 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         grid.ApplyPageViewport(sliceOffset, measureHeight);
         grid.Measure(new Size(width, measureHeight));
+
+        if (ScrollPerfDiag.Enabled)
+        {
+            var diagChildCount = grid.ResolveItemsPanel()?.Children.Count ?? -1;
+            ScrollPerfDiag.Log(
+                $"measureSlice\tsliceOffset={sliceOffset:F0}\theight={measureHeight:F0}\textent={_extentHeight:F0}\tcontentExtent={contentExtent:F0}\tchildren={diagPrevChildCount}->{diagChildCount}");
+        }
 
         if (grid.HasItems && measureHeight > 0 && !grid.HasRealizedContainers())
             RemeasureGridForRealization(grid, width, measureHeight, sliceOffset);
