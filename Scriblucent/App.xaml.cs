@@ -7,6 +7,12 @@ namespace Scriblucent;
 
 public partial class App : Application
 {
+    private static readonly string[] ElevationTokenKeys =
+    {
+        "Elevation.Thumb", "Elevation.Field", "Elevation.Popup",
+        "Elevation.Dialog", "Elevation.Button", "Elevation.Stage"
+    };
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // Multi-Core JIT: records which methods get JIT'd this run, then on every later run
@@ -26,6 +32,18 @@ public partial class App : Application
         catch
         {
             // Best-effort JIT warm-start only.
+        }
+
+        // The Elevation.* DropShadowEffect tokens (Tokens.xaml) are static, theme-invariant
+        // values that never change at runtime, so they can be shared as one instance instead of
+        // cloned per consumer (they used to be x:Shared="False" specifically because an unfrozen
+        // Freezable can only be owned by one property setter at a time — sharing one unfrozen
+        // instance across multiple buttons/popups/dialogs would throw). Freezing first, before
+        // any window is constructed, makes it safe to share.
+        foreach (var elevationKey in ElevationTokenKeys)
+        {
+            if (Resources[elevationKey] is System.Windows.Freezable freezable && freezable.CanFreeze)
+                freezable.Freeze();
         }
 
         DispatcherUnhandledException += (_, args) =>

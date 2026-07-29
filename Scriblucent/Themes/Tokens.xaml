@@ -92,14 +92,12 @@
       Never put RoundedClipBehavior on the same Border as Effect — clip eats the shadow.
     -->
     <DropShadowEffect x:Key="Elevation.Thumb"
-                      x:Shared="False"
                       Color="#000000"
                       Opacity="0.16"
                       BlurRadius="6"
                       ShadowDepth="1"
                       Direction="270"/>
     <DropShadowEffect x:Key="Elevation.Field"
-                      x:Shared="False"
                       Color="#000000"
                       Opacity="0.18"
                       BlurRadius="14"
@@ -110,7 +108,6 @@
          Consumers: transparent padding ~16–20px around the shadow host + HorizontalOffset
          so the panel stays aligned with its control while blur has room to fall off. -->
     <DropShadowEffect x:Key="Elevation.Popup"
-                      x:Shared="False"
                       Color="#000000"
                       Opacity="0.18"
                       BlurRadius="26"
@@ -118,14 +115,12 @@
                       Direction="270"
                       RenderingBias="Quality"/>
     <DropShadowEffect x:Key="Elevation.Dialog"
-                      x:Shared="False"
                       Color="#000000"
                       Opacity="0.30"
                       BlurRadius="36"
                       ShadowDepth="8"
                       Direction="270"/>
     <DropShadowEffect x:Key="Elevation.Button"
-                      x:Shared="False"
                       Color="#000000"
                       Opacity="0.18"
                       BlurRadius="12"
@@ -133,7 +128,6 @@
                       Direction="270"/>
     <!-- Soft ambient halo behind inset feature / editor stage shells -->
     <DropShadowEffect x:Key="Elevation.Stage"
-                      x:Shared="False"
                       Color="#000000"
                       Opacity="0.12"
                       BlurRadius="20"
