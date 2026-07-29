@@ -36,6 +36,22 @@ public static class SmoothScrollBehavior
     // near-instantly to the target, which is the desired outcome for a real stall.
     private const double MaxFrameSeconds = 1.0 / 5.0;
     private const double DirectScrollStepThreshold = 24;
+    // A UI-thread stall (e.g. a big virtualization realize pass) delays dispatch of queued
+    // PreviewMouseWheel events; once the thread frees up, the backlog lands as several AddImpulse
+    // calls in a row. With no bound, that pushes ImpulseTarget far ahead of Current, and the
+    // exponential approach then races Current toward it — after a multi-hundred-ms gap the
+    // smoothing formula intentionally snaps ~95% of the way to target in one Tick (see
+    // MaxFrameSeconds above), so an uncapped target means one huge post-stall jump. That jump
+    // then requires realizing a mostly non-recycled batch of new containers — another expensive,
+    // UI-thread-blocking pass that starves Tick/AddImpulse again, letting the next backlog (and
+    // jump) grow further: a self-reinforcing cascade. A loose cap (~2x viewport) was tried first
+    // and measured to make no real difference — the leash re-centers on Current each call, and
+    // Current itself is what jumps each Tick, so it just walks forward with it just as far over
+    // several Tick+backlog cycles. Only a cap close to what the realized-card cache buffer can
+    // absorb via recycling (well under a full viewport) keeps each individual post-stall snap
+    // cheap enough not to reblock the UI thread.
+    private const double MaxImpulseLeadViewports = 0.4;
+    private const double MinImpulseLeadPixels = 220;
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
@@ -306,13 +322,17 @@ public static class SmoothScrollBehavior
         if (vertical)
         {
             var baseTarget = state.ImpulseActiveY ? state.ImpulseTargetY : state.CurrentY;
-            state.ImpulseTargetY = Clamp(baseTarget + delta, 0, state.ScrollViewer.ScrollableHeight);
+            var maxLead = Math.Max(state.ScrollViewer.ViewportHeight * MaxImpulseLeadViewports, MinImpulseLeadPixels);
+            var proposed = Clamp(baseTarget + delta, state.CurrentY - maxLead, state.CurrentY + maxLead);
+            state.ImpulseTargetY = Clamp(proposed, 0, state.ScrollViewer.ScrollableHeight);
             state.ImpulseActiveY = true;
             return;
         }
 
         var baseTargetX = state.ImpulseActiveX ? state.ImpulseTargetX : state.CurrentX;
-        state.ImpulseTargetX = Clamp(baseTargetX + delta, 0, state.ScrollViewer.ScrollableWidth);
+        var maxLeadX = Math.Max(state.ScrollViewer.ViewportWidth * MaxImpulseLeadViewports, MinImpulseLeadPixels);
+        var proposedX = Clamp(baseTargetX + delta, state.CurrentX - maxLeadX, state.CurrentX + maxLeadX);
+        state.ImpulseTargetX = Clamp(proposedX, 0, state.ScrollViewer.ScrollableWidth);
         state.ImpulseActiveX = true;
     }
 
