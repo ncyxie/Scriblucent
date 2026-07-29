@@ -1406,7 +1406,9 @@ public class MainViewModel : ViewModelBase
     /// </summary>
     private void WarmMindMapPreviewsAtIdle()
     {
-        var pending = new Queue<MindMapViewModel>(MindMaps);
+        // Same reasoning as WarmNoteContentPreviewsAtIdle: warm in MindMapsView's actual
+        // display order, not raw MindMaps load order.
+        var pending = new Queue<MindMapViewModel>(MindMapsView.Cast<MindMapViewModel>());
         if (pending.Count == 0)
             return;
 
@@ -7347,7 +7349,11 @@ public class MainViewModel : ViewModelBase
     /// </summary>
     private void WarmNoteContentPreviewsAtIdle()
     {
-        var pending = new Queue<NoteCardViewModel>(Notes);
+        // Warm in the order notes are actually scrolled to (NotesView's pinned/sorted order),
+        // not raw load order (Notes) — the two diverge until a pin toggle physically reorders
+        // Notes to match, so warming raw Notes can spend the idle window on cards far from what
+        // the user sees first.
+        var pending = new Queue<NoteCardViewModel>(NotesView.Cast<NoteCardViewModel>());
         if (pending.Count == 0)
             return;
 
