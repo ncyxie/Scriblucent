@@ -493,7 +493,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         }
 
         EnsureContainerCardInteractive(element);
-        DashboardScrollRenderGate.TryStripContainerShadow(element);
     }
 
     protected override void ClearContainerForItemOverride(DependencyObject element, object item)

@@ -236,16 +236,37 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private double ResolveCardBudgetPixels(double targetExtraCards, double fallbackPixels)
     {
-        if (Grid is not { } grid || grid.ItemCellSize is not { Width: > 0, Height: > 0 } cell)
+        if (Grid is not { } grid)
             return fallbackPixels;
+
+        // DashboardVirtualizedNoteCardGrid never sets ItemCellSize (it drives the wrap panel's
+        // ItemSize from its own private constants instead), so without this special case Notes -
+        // the dashboard with the narrowest cards and therefore the most columns - silently never
+        // gets a column-aware budget. Mirrors the same idiom used in
+        // DashboardVirtualizedCardGrid.ResolveEffectiveCellWidth/Height and DashboardMotionEngine.
+        double cellWidth, cellHeight;
+        if (grid is DashboardVirtualizedNoteCardGrid)
+        {
+            cellWidth = 244;
+            cellHeight = 164;
+        }
+        else if (grid.ItemCellSize is { Width: > 0, Height: > 0 } cell)
+        {
+            cellWidth = cell.Width;
+            cellHeight = cell.Height;
+        }
+        else
+        {
+            return fallbackPixels;
+        }
 
         var width = _lastMeasureWidth > 0 ? _lastMeasureWidth : grid.ActualWidth;
         if (width <= 0)
             return fallbackPixels;
 
-        var columns = Math.Max(1, Math.Floor(width / cell.Width));
+        var columns = Math.Max(1, Math.Floor(width / cellWidth));
         var rows = Math.Max(1, targetExtraCards / columns);
-        var budgeted = rows * cell.Height;
+        var budgeted = rows * cellHeight;
         return Math.Clamp(budgeted, fallbackPixels * 0.4, fallbackPixels * 2.0);
     }
 
