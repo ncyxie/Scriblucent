@@ -92,6 +92,7 @@ public class DashboardVirtualizedCardGrid : ItemsControl
             _cachedMotionScope = null;
         };
         ItemContainerGenerator.StatusChanged += OnItemContainerGeneratorStatusChanged;
+        SizeChanged += OnGridSizeChanged;
     }
 
     internal void ApplyPageViewport(double verticalOffset, double viewportHeight)
@@ -158,9 +159,67 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     internal void SyncVirtualizationCache()
     {
         var compact = Items.Count >= CompactVirtualizationItemThreshold;
-        var before = compact ? CompactVirtualizationCacheBeforePixels : VirtualizationCacheBeforePixels;
-        var after = compact ? CompactVirtualizationCacheAfterPixels : VirtualizationCacheAfterPixels;
+        var fallbackBefore = compact ? CompactVirtualizationCacheBeforePixels : VirtualizationCacheBeforePixels;
+        var fallbackAfter = compact ? CompactVirtualizationCacheAfterPixels : VirtualizationCacheAfterPixels;
+        var before = ResolveColumnAwareCachePixels(fallbackBefore);
+        var after = ResolveColumnAwareCachePixels(fallbackAfter);
         VirtualizingPanel.SetCacheLength(this, new VirtualizationCacheLength(before, after));
+    }
+
+    // Notes never sets ItemCellSize (it configures VirtualizingWrapPanel.ItemSize directly from
+    // its own private 244/164 constants), so this mirrors the same fallback idiom already used
+    // for it in DashboardMotionEngine.ResolveGridReflowMetrics.
+    private double ResolveEffectiveCellWidth()
+        => this is DashboardVirtualizedNoteCardGrid ? 244 : ItemCellSize.Width > 0 ? ItemCellSize.Width : 244;
+
+    private double ResolveEffectiveCellHeight()
+        => this is DashboardVirtualizedNoteCardGrid ? 164 : ItemCellSize.Height > 0 ? ItemCellSize.Height : 164;
+
+    /// <summary>
+    /// A wrap grid on a maximized window packs far more columns per row than the same grid on a
+    /// narrower window, so a fixed pixel cache margin realizes (and every scroll frame composites)
+    /// proportionally more off-screen cards as the window widens. Scaling the margin down as
+    /// columns increase keeps the extra-card budget — and the per-frame compositing cost during
+    /// scroll — roughly window-size-invariant, mirroring DashboardVirtualizationHost.ResolveCardBudgetPixels.
+    /// </summary>
+    private double ResolveColumnAwareCachePixels(double fallbackPixels)
+    {
+        if (Layout != DashboardCardGridLayout.WrapGrid)
+            return fallbackPixels;
+
+        var cellWidth = ResolveEffectiveCellWidth();
+        var cellHeight = ResolveEffectiveCellHeight();
+        if (cellWidth <= 0 || cellHeight <= 0)
+            return fallbackPixels;
+
+        var width = ActualWidth;
+        if (width <= 0 && Parent is FrameworkElement parent)
+            width = parent.ActualWidth;
+        if (width <= 0)
+            return fallbackPixels;
+
+        var columns = Math.Max(1, Math.Floor(width / cellWidth));
+        var targetExtraCards = fallbackPixels / cellHeight;
+        var rows = Math.Max(1, targetExtraCards / columns);
+        var budgeted = rows * cellHeight;
+        return Math.Clamp(budgeted, fallbackPixels * 0.4, fallbackPixels * 2.0);
+    }
+
+    private void OnGridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!e.WidthChanged || Layout != DashboardCardGridLayout.WrapGrid)
+            return;
+
+        var cellWidth = ResolveEffectiveCellWidth();
+        if (cellWidth <= 0)
+            return;
+
+        var previousColumns = Math.Max(1, Math.Floor(e.PreviousSize.Width / cellWidth));
+        var newColumns = Math.Max(1, Math.Floor(e.NewSize.Width / cellWidth));
+        if (previousColumns == newColumns)
+            return;
+
+        SyncVirtualizationCache();
     }
 
     /// <summary>Stop container recycling during add so sorted inserts bind to the correct slot.</summary>
