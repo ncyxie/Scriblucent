@@ -26,7 +26,15 @@ public static class SmoothScrollBehavior
     private const double SmoothingRatePerMs = 0.014979; // ln(20)/200: ~95% settled after 200ms
     private const double DoneEpsilonPixels = 0.3;
     private const double MinFrameSeconds = 1.0 / 240.0;
-    private const double MaxFrameSeconds = 1.0 / 45.0;
+    // A maximized window composites more on-screen cards per frame, so a late render tick
+    // (>22ms) is common there, not pathological. Clamping the *measured* delta below the real
+    // one made the animation under-advance on those ticks — it never got to use the real elapsed
+    // time the frame-rate-independent formula above was designed to compose across, so motion
+    // visibly lagged instead of just running at a lower (but still smooth) rate. 200ms comfortably
+    // covers realistic late-tick ranges with zero distortion (the formula is already ~95% settled
+    // by 200ms per SmoothingRatePerMs above); a true multi-hundred-ms stall still correctly snaps
+    // near-instantly to the target, which is the desired outcome for a real stall.
+    private const double MaxFrameSeconds = 1.0 / 5.0;
     private const double DirectScrollStepThreshold = 24;
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(

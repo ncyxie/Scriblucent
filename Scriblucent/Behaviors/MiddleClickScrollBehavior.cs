@@ -21,7 +21,10 @@ public static class MiddleClickScrollBehavior
     private const double VelocitySmoothing = 18;
     private const double IndicatorSize = 40;
     private const double MinFrameSeconds = 1.0 / 240.0;
-    private const double MaxFrameSeconds = 1.0 / 45.0;
+    // See the matching rationale comment on SmoothScrollBehavior.MaxFrameSeconds — same clamp,
+    // same fix: a maximized window's heavier per-frame compositing makes late render ticks common,
+    // and clamping the measured delta below 200ms made autoscroll under-advance on those ticks.
+    private const double MaxFrameSeconds = 1.0 / 5.0;
     private const int MaxSubstepsPerFrame = 2;
 
     private static AutoscrollSession? _activeSession;
