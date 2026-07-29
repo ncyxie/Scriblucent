@@ -81,11 +81,18 @@ internal static class DashboardScrollRenderGate
     /// </summary>
     internal static FrameworkElement? ResolveMotionCard(DependencyObject container)
     {
-        if (container.ReadLocalValue(CachedMotionCardProperty) != DependencyProperty.UnsetValue)
-            return (FrameworkElement?)container.GetValue(CachedMotionCardProperty);
+        if (container.ReadLocalValue(CachedMotionCardProperty) is FrameworkElement cached)
+            return cached;
 
+        // Only cache a resolved card, never a miss: a freshly-generated ContentPresenter has no
+        // visual children yet at Prepare time (ContentTemplate materializes during Measure), so
+        // the very first resolve attempt on a new container legitimately finds nothing. Caching
+        // that null would poison the container for its entire lifetime. Leaving misses uncached
+        // lets the existing post-layout retries (OnLoaded, ContainersGenerated) resolve it once
+        // the visual tree actually exists.
         var card = FindMotionCard(container);
-        container.SetValue(CachedMotionCardProperty, card);
+        if (card is not null)
+            container.SetValue(CachedMotionCardProperty, card);
         return card;
     }
 
