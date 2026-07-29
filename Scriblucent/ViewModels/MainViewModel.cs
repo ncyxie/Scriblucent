@@ -1397,6 +1397,30 @@ public class MainViewModel : ViewModelBase
         NormalizeMindMapGroups();
         RebuildMindMapGroups();
         NotifyMindMapsChanged();
+        WarmMindMapPreviewsAtIdle();
+    }
+
+    /// <summary>
+    /// Pre-walks node counts + content previews in small idle-time slices so scrolling into
+    /// fresh mind map cards never re-walks the tree during card realization.
+    /// </summary>
+    private void WarmMindMapPreviewsAtIdle()
+    {
+        var pending = new Queue<MindMapViewModel>(MindMaps);
+        if (pending.Count == 0)
+            return;
+
+        void Pump()
+        {
+            var budget = System.Diagnostics.Stopwatch.StartNew();
+            while (pending.Count > 0 && budget.ElapsedMilliseconds < 4)
+                pending.Dequeue().WarmContentPreview();
+
+            if (pending.Count > 0)
+                Application.Current?.Dispatcher.BeginInvoke(Pump, DispatcherPriority.ApplicationIdle);
+        }
+
+        Application.Current?.Dispatcher.BeginInvoke(Pump, DispatcherPriority.ApplicationIdle);
     }
 
     public MindMapViewModel AddOrUpdateMindMap(MindMapDocument document)

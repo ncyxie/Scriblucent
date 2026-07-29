@@ -8,6 +8,9 @@ public sealed class MindMapViewModel : ViewModelBase
     private const int MaxPreviewItems = 7;
     private const int MaxHoverPreviewItems = 20;
     private bool _isSelectedInMassSelect;
+    private int? _cachedNodeCount;
+    private IReadOnlyList<string>? _cachedContentPreviewItems;
+    private IReadOnlyList<string>? _cachedHoverContentPreviewItems;
 
     public MindMapViewModel(MindMapDocument document)
     {
@@ -20,7 +23,17 @@ public sealed class MindMapViewModel : ViewModelBase
         ? LocalizationService.GetString("MindMapUntitled")
         : Document.Title.Trim();
 
-    public int NodeCount => CountNodes(Document.Root);
+    public int NodeCount
+    {
+        get
+        {
+            if (_cachedNodeCount is { } cached)
+                return cached;
+
+            _cachedNodeCount = CountNodes(Document.Root);
+            return _cachedNodeCount.Value;
+        }
+    }
 
     public string NodeCountText => string.Format(LocalizationService.GetString("MindMapNodeCountFormat"), NodeCount);
 
@@ -28,9 +41,40 @@ public sealed class MindMapViewModel : ViewModelBase
 
     public string BranchCountText => string.Format(LocalizationService.GetString("MindMapBranchCountFormat"), BranchCount);
 
-    public IReadOnlyList<string> ContentPreviewItems => BuildContentPreviewItems(Document.Root, MaxPreviewItems);
+    public IReadOnlyList<string> ContentPreviewItems
+    {
+        get
+        {
+            if (_cachedContentPreviewItems is not null)
+                return _cachedContentPreviewItems;
 
-    public IReadOnlyList<string> HoverContentPreviewItems => BuildContentPreviewItems(Document.Root, MaxHoverPreviewItems);
+            _cachedContentPreviewItems = BuildContentPreviewItems(Document.Root, MaxPreviewItems);
+            return _cachedContentPreviewItems;
+        }
+    }
+
+    public IReadOnlyList<string> HoverContentPreviewItems
+    {
+        get
+        {
+            if (_cachedHoverContentPreviewItems is not null)
+                return _cachedHoverContentPreviewItems;
+
+            _cachedHoverContentPreviewItems = BuildContentPreviewItems(Document.Root, MaxHoverPreviewItems);
+            return _cachedHoverContentPreviewItems;
+        }
+    }
+
+    /// <summary>
+    /// Pre-walks and caches node count + content previews eagerly so scrolling the dashboard
+    /// never re-walks the mind map tree while cards realize.
+    /// </summary>
+    internal void WarmContentPreview()
+    {
+        _ = NodeCount;
+        _ = ContentPreviewItems;
+        _ = HoverContentPreviewItems;
+    }
 
     public bool HasContentPreview => ContentPreviewItems.Count > 0;
 
@@ -67,6 +111,9 @@ public sealed class MindMapViewModel : ViewModelBase
 
     public void NotifyChanged()
     {
+        _cachedNodeCount = null;
+        _cachedContentPreviewItems = null;
+        _cachedHoverContentPreviewItems = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(NodeCount));
         OnPropertyChanged(nameof(NodeCountText));
