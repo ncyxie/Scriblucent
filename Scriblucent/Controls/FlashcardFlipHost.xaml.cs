@@ -175,6 +175,22 @@ public partial class FlashcardFlipHost : UserControl
         ApplyScale(flipped ? BackScale : FrontScale);
     }
 
+    /// <summary>
+    /// Clears every piece of per-instance state (in-flight animation, hidden shadow plates,
+    /// cached extents) before a virtualizing panel recycles this container for a different item.
+    /// None of <see cref="Loaded"/>/<see cref="OnSizeChanged"/>/<c>IsVisibleChanged</c> fire on
+    /// recycle, so without this a reused container can inherit a stale mid-flip or zeroed-opacity
+    /// state from whatever card it previously displayed.
+    /// </summary>
+    internal void PrepareForReuse()
+    {
+        RestoreBakedShadowPlates();
+        _isAnimating = false;
+        _suppressFlipSync = false;
+        ResetExtents();
+        ApplyFlippedVisual(IsFlipped);
+    }
+
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (_isAnimating)

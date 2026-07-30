@@ -4,11 +4,12 @@
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
+        xmlns:wpftoolkit="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
         x:Name="FlashcardsWindow"
         Title="{Binding [FlashcardsPreviewTitle], Source={StaticResource Loc}}"
-        Height="720"
+        Height="780"
         Width="980"
-        MinHeight="560"
+        MinHeight="620"
         MinWidth="720"
         WindowStartupLocation="CenterOwner"
         UseLayoutRounding="True"
@@ -19,6 +20,28 @@
         Closing="FlashcardsPreviewWindow_Closing">
     <Window.Resources>
         <ResourceDictionary>
+        <!-- Own ScrollViewer>ItemsPresenter template (matching ListBox's own default template
+             shape) so ScrollContentPresenter's IScrollInfo auto-discovery finds the virtualizing
+             panel. A hand-declared <ScrollViewer> wrapping a plain <ItemsControl> adds an extra
+             indirection layer that VirtualizingWrapPanel's IScrollInfo auto-discovery doesn't see
+             through, so the panel never re-virtualizes on scroll (confirmed via diagnostic
+             logging: PrepareContainerForItemOverride fired twice at startup and never again). -->
+        <Style TargetType="controls:FlashcardGridItemsControl">
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="controls:FlashcardGridItemsControl">
+                        <ScrollViewer Padding="{TemplateBinding Padding}"
+                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="CreateSetButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="MinHeight" Value="32"/>
@@ -597,6 +620,7 @@
         <Border x:Name="FlashcardsTagsBorder"
                 Grid.Row="1"
                 Margin="20,4,20,0"
+                Padding="10,0"
                 Style="{StaticResource ChromeFieldBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -774,19 +798,23 @@
                     Style="{StaticResource ChromePanelBorderStyle}"
                     Background="{DynamicResource WindowBackground}"
                     Padding="0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled"
-                              Padding="14">
-                    <ItemsControl x:Name="FlashcardsItemsControl"
-                                  Margin="16">
-                        <ItemsControl.ItemsPanel>
+                    <controls:FlashcardGridItemsControl x:Name="FlashcardsItemsControl"
+                                  Padding="14"
+                                  Margin="16"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel">
+                        <controls:FlashcardGridItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel IsItemsHost="True"/>
+                                <wpftoolkit:VirtualizingWrapPanel IsItemsHost="True"
+                                                                   ItemSize="332,240"/>
                             </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
+                        </controls:FlashcardGridItemsControl.ItemsPanel>
+                        <controls:FlashcardGridItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <controls:FlashcardFlipHost IsFlipped="{Binding IsFlipped, Mode=TwoWay}"
+                                                            Width="316"
+                                                            Height="224"
                                                             Margin="0,0,16,16"
                                                             ClipToBounds="False"
                                                             MouseLeftButtonUp="FlashcardCard_MouseLeftButtonUp">
@@ -800,9 +828,8 @@
                                     </controls:FlashcardFlipHost.BackContent>
                                 </controls:FlashcardFlipHost>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                        </controls:FlashcardGridItemsControl.ItemTemplate>
+                    </controls:FlashcardGridItemsControl>
             </Border>
 
             <Border x:Name="StudyModeViewBorder"
@@ -839,19 +866,20 @@
                                         Background="{DynamicResource AccentSuccess}"
                                         CornerRadius="2"/>
                             </Border>
-                            <TextBlock x:Name="StudyModeProgressText"
-                                       FontSize="{StaticResource Type.Caption}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColorSecondary}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,6,0,4"/>
-                            <TextBlock x:Name="StudyModeCompletionText"
-                                       Visibility="Collapsed"
-                                       FontSize="{StaticResource Type.Caption}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AccentSuccess}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,4,0,4"/>
+                            <Grid Margin="0,6,0,4">
+                                <TextBlock x:Name="StudyModeProgressText"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextColorSecondary}"
+                                           HorizontalAlignment="Center"/>
+                                <!-- Same layout slot as progress text so revealing it does not grow the panel. -->
+                                <TextBlock x:Name="StudyModeCompletionText"
+                                           Visibility="Collapsed"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentSuccess}"
+                                           HorizontalAlignment="Center"/>
+                            </Grid>
 
                             <!-- DownOnly: keep design size when roomy, scale down on short viewports. -->
                             <Viewbox Stretch="Uniform"
@@ -951,6 +979,8 @@
                             Width="120"
                             TickPlacement="None"
                             TickFrequency="100"
+                            SmallChange="100"
+                            LargeChange="100"
                             IsSnapToTickEnabled="True"
                             Height="20"
                             VerticalAlignment="Center"
@@ -959,7 +989,7 @@
                                FontSize="{StaticResource Type.Caption}"
                                Foreground="{DynamicResource TextColorSecondary}"
                                MinWidth="45">
-                        <Run Text="{Binding ElementName=FlipSpeedSlider, Path=Value}"/>
+                        <Run Text="{Binding ElementName=FlipSpeedSlider, Path=Value, StringFormat={}{0:0}}"/>
                         <Run Text="ms"/>
                     </TextBlock>
                 </StackPanel>
