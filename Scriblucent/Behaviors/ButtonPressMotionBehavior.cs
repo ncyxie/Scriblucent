@@ -9,14 +9,10 @@ namespace Scriblucent.Behaviors;
 
 /// <summary>
 /// Subtle press motion for chrome buttons (section toggles, calendar days, dialog actions)
-/// and pressable surfaces such as calendar event cards.
-/// Uses a downward nudge instead of scale so label text stays sharp while pressed.
-/// <para>
-/// Does not capture the mouse — capturing during PreviewMouseLeftButtonDown breaks WPF
-/// Button.Click routing (sidebar / top-bar would stop responding).
-/// </para>
-/// Optional <see cref="PressedBackgroundProperty"/> swaps fill for the press on non-Button
-/// surfaces (e.g. Border event cards), clearing the local value on release so style hover resumes.
+/// and pressable surfaces such as calendar event cards. Uses a downward nudge instead of scale
+/// so label text stays sharp while pressed. Does not capture the mouse - capturing during
+/// PreviewMouseLeftButtonDown breaks WPF Button.Click routing. Optional
+/// <see cref="PressedBackgroundProperty"/> swaps fill for the press on non-Button surfaces.
 /// </summary>
 public static class ButtonPressMotionBehavior
 {

@@ -570,7 +570,6 @@ public class MainViewModel : ViewModelBase
         {
             SetActiveDashboard(DashboardQuizzes);
         });
-        // 🔧 FIX – inicializuojam visus command, kad ViewModel nelūžtų
         MoveGroupsUpCommand = new RelayCommand(() => { });
         MoveGroupsDownCommand = new RelayCommand(() => { });
         MoveUngroupedUpCommand = new RelayCommand(() => { });
@@ -708,7 +707,7 @@ public class MainViewModel : ViewModelBase
         NewFlashcardQuestion = "";
         NewFlashcardAnswer = "";
 
-        SaveFlashcards(); // 🔥 svarbiausia
+        SaveFlashcards();
     }
 
     private void LoadFlashcards()
@@ -7003,7 +7002,7 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Ignore persistence errors for now
+            // Persistence errors are non-fatal; ignored.
         }
     }
 

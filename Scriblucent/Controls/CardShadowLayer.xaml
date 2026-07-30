@@ -6,24 +6,16 @@
              Focusable="False"
              Margin="-11,-9,-11,-12">
     <!--
-        Nine-slice shadow: a soft Gaussian-blurred shadow texture baked ONCE (see
-        CardShadowAsset) and reused as eight stretched image slices per card, instead of a
-        live DropShadowEffect. A DropShadowEffect forces every dirty repaint of the card
-        through an offscreen blur pass; a crowded dashboard scroll repaints many cards a
-        frame, and that per-card blur cost is what made scrolling choppy. Slicing/stretching
-        a shared pre-baked bitmap needs no blur pass at all, cached or not, so this layer is
-        cheap unconditionally - there is nothing to suspend during scroll, while still
-        looking like a real soft shadow rather than flat opacity bands. BitmapCache bakes
-        the eight image draws into one cached texture per card since this layer never changes.
+        Nine-slice shadow: a shadow texture baked ONCE (see CardShadowAsset) and reused as eight
+        stretched image slices per card, instead of a live DropShadowEffect - which forces an
+        offscreen blur pass on every dirty repaint, and a crowded dashboard repaints many cards a
+        frame. Slicing a pre-baked bitmap needs no blur pass, so this is cheap unconditionally.
+        BitmapCache bakes the eight draws into one cached texture per card since this never changes.
 
-        The bake composites ambient (centered contact) + key (downward cast). Default margin
-        is mildly bottom-biased so the underside has a bit more room while the top still
-        bleeds enough to separate white cards from white section shells. Negative values
-        bleed the plate past a full-scale card. Overridden per-instance for card templates
-        that render at a fixed sub-1.0 scale via a static RenderTransform on the card border
-        - see ungrouped Flashcard/Quiz/MindMap dashboard templates. This is plain layout
-        (Margin), not a transform, so it composes with the card's own transform predictably
-        instead of needing to match it.
+        Margin defaults are bottom-biased (more room under the card) and negative to bleed past a
+        full-scale card; overridden per-instance for templates that render at a sub-1.0 scale via a
+        RenderTransform (see ungrouped Flashcard/Quiz/MindMap templates), since Margin composes with
+        the card's own transform predictably instead of needing to match it.
     -->
     <Grid x:Name="ShadowRoot" Opacity="0.72">
         <Grid.ColumnDefinitions>

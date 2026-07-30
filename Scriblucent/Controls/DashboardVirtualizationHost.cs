@@ -211,13 +211,11 @@ public sealed class DashboardVirtualizationHost : Decorator
         return Math.Clamp(18 + viewport * 0.022, MinSmoothScrollSyncIntervalMs, MaxSmoothScrollSyncIntervalMs);
     }
 
-    // Rows realize (and get bitmap-cached) while still off screen, so their first-render
-    // cost is not paid on the frame they scroll into view. The margin is sized to a roughly
-    // constant CARD count, not a constant pixel/row count: a wrap grid on a maximized window
-    // packs far more columns per row than the same grid on a narrower window, so a fixed
-    // pixel margin realizes (and every scroll frame composites) proportionally more cards as
-    // the window widens. Scaling the margin down as columns increase keeps the extra-card
-    // budget — and the per-frame compositing cost during scroll — roughly window-size-invariant.
+    // Rows realize (and get bitmap-cached) while still off screen, so first-render cost isn't
+    // paid on the frame they scroll into view. Margin is sized to a roughly constant CARD count,
+    // not pixel/row count: a maximized window packs more columns per row, so a fixed pixel
+    // margin would realize proportionally more cards as the window widens. Scaling the margin
+    // down as columns increase keeps the compositing cost roughly window-size-invariant.
     private double ResolveViewportCachePixels()
     {
         if (!IsSmoothScrollActive)

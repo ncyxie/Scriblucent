@@ -16,40 +16,24 @@ public static class SmoothScrollBehavior
 {
     private const double WheelViewportRatio = 0.20;
 
-    // Exponential "approach the target" smoothing instead of a fixed-duration eased tween.
-    // Each wheel tick used to restart a 200ms cubic ease from elapsed=0, which snapped the
-    // velocity back up to the curve's start value every time a tick landed — with real wheel
-    // input (uneven tick spacing) that produced a visible velocity discontinuity on ~85% of
-    // ticks, independent of render performance. Exponential smoothing has no "restart": a
-    // moved target just changes where we're heading, current velocity carries over continuously,
-    // and it composes exactly across variable frame deltas (no substep loop needed).
+    // Exponential "approach the target" smoothing instead of a fixed-duration eased tween: a
+    // fixed tween restarts its ease curve on every wheel tick, causing a visible velocity
+    // discontinuity with real (uneven) wheel input. Exponential smoothing has no "restart" -
+    // current velocity carries over continuously and composes across variable frame deltas.
     private const double SmoothingRatePerMs = 0.014979; // ln(20)/200: ~95% settled after 200ms
     private const double DoneEpsilonPixels = 0.3;
     private const double MinFrameSeconds = 1.0 / 240.0;
-    // A maximized window composites more on-screen cards per frame, so a late render tick
-    // (>22ms) is common there, not pathological. Clamping the *measured* delta below the real
-    // one made the animation under-advance on those ticks — it never got to use the real elapsed
-    // time the frame-rate-independent formula above was designed to compose across, so motion
-    // visibly lagged instead of just running at a lower (but still smooth) rate. 200ms comfortably
-    // covers realistic late-tick ranges with zero distortion (the formula is already ~95% settled
-    // by 200ms per SmoothingRatePerMs above); a true multi-hundred-ms stall still correctly snaps
-    // near-instantly to the target, which is the desired outcome for a real stall.
+    // A maximized window composites more cards per frame, so a late render tick (>22ms) is
+    // common there, not pathological. Clamping delta below the real elapsed time made the
+    // animation under-advance and visibly lag; 200ms covers realistic late-tick ranges while
+    // still snapping near-instantly for a true multi-hundred-ms stall.
     private const double MaxFrameSeconds = 1.0 / 5.0;
     private const double DirectScrollStepThreshold = 24;
-    // A UI-thread stall (e.g. a big virtualization realize pass) delays dispatch of queued
-    // PreviewMouseWheel events; once the thread frees up, the backlog lands as several AddImpulse
-    // calls in a row. With no bound, that pushes ImpulseTarget far ahead of Current, and the
-    // exponential approach then races Current toward it — after a multi-hundred-ms gap the
-    // smoothing formula intentionally snaps ~95% of the way to target in one Tick (see
-    // MaxFrameSeconds above), so an uncapped target means one huge post-stall jump. That jump
-    // then requires realizing a mostly non-recycled batch of new containers — another expensive,
-    // UI-thread-blocking pass that starves Tick/AddImpulse again, letting the next backlog (and
-    // jump) grow further: a self-reinforcing cascade. A loose cap (~2x viewport) was tried first
-    // and measured to make no real difference — the leash re-centers on Current each call, and
-    // Current itself is what jumps each Tick, so it just walks forward with it just as far over
-    // several Tick+backlog cycles. Only a cap close to what the realized-card cache buffer can
-    // absorb via recycling (well under a full viewport) keeps each individual post-stall snap
-    // cheap enough not to reblock the UI thread.
+    // A UI-thread stall (e.g. a big virtualization realize pass) can queue several wheel
+    // impulses; with no bound, the target gets pushed far ahead and the post-stall snap
+    // triggers another expensive realize pass, which can starve the thread again - a
+    // self-reinforcing cascade. The cap must stay close to what the realized-card cache can
+    // absorb via recycling so each post-stall snap stays cheap.
     private const double MaxImpulseLeadViewports = 0.4;
     private const double MinImpulseLeadPixels = 220;
 

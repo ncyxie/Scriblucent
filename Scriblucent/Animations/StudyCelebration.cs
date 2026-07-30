@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Scriblucent.Services;
 
 namespace Scriblucent.Animations;
 
@@ -146,7 +147,7 @@ public static class StudyCelebration
         }
         catch (Exception ex)
         {
-            LogCelebrationFailure(ex);
+            CrashLog.Append("StudyCelebration", ex);
         }
     }
 
@@ -348,17 +349,4 @@ public static class StudyCelebration
 
     private static double GoldenRatioFraction(int index)
         => (index * 0.618033988749895) % 1.0;
-
-    private static void LogCelebrationFailure(Exception ex)
-    {
-        try
-        {
-            var path = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scriblucent-crash.log");
-            System.IO.File.AppendAllText(path, $"[{DateTime.Now:O}] StudyCelebration: {ex}\n\n");
-        }
-        catch
-        {
-            // Best-effort logging only.
-        }
-    }
 }

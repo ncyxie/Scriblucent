@@ -575,10 +575,9 @@ namespace Scriblucent
                     textRange.ApplyPropertyValue(TextElement.ForegroundProperty, foregroundBrush);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log or handle error silently - theme application shouldn't crash the app
-                System.Diagnostics.Debug.WriteLine($"Error applying RichTextBox theme: {ex.Message}");
+                // Non-critical - theme application shouldn't crash the app.
             }
         }
 
@@ -1741,7 +1740,6 @@ namespace Scriblucent
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading document: {ex.Message}");
                 ModernMessageBox.Show(
                     $"Error loading document: {ex.Message}",
                     "Load Error",
@@ -1942,9 +1940,8 @@ namespace Scriblucent
                 Clipboard.SetDataObject(dataObject, true);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to copy editor selection: {ex.Message}");
                 return false;
             }
         }
@@ -2006,9 +2003,8 @@ namespace Scriblucent
                 range.Save(stream, DataFormats.Rtf);
                 dataObject.SetData(DataFormats.Rtf, Encoding.ASCII.GetString(stream.ToArray()));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to add RTF clipboard data: {ex.Message}");
             }
         }
 
@@ -2729,38 +2725,13 @@ namespace Scriblucent
             StartAutoSaveTimer();
         }
 
-        // Content changed event handler - apply theme and update counter
-        private void ContentTextBox_TextChanged_Old(object sender, TextChangedEventArgs e)
-        {
-            UpdateCounter();
-        }
-
         private void AutoSaveCallback(object? state)
         {
-            // Debug: Log timer firing
-            System.Diagnostics.Debug.WriteLine($"[AutoSave] Timer fired at {DateTime.Now:HH:mm:ss}");
-
             // Switch to UI thread
             Application.Current.Dispatcher.Invoke(() =>
             {
-                if (_isAutoSaveEnabled && _currentDocument != null)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[AutoSave] Checking if content changed...");
-
-                    if (HasContentChanged())
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[AutoSave] Content changed, performing save...");
-                        PerformAutoSave();
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[AutoSave] No changes detected since last save");
-                    }
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[AutoSave] Disabled or no document: Enabled={_isAutoSaveEnabled}, Doc={_currentDocument != null}");
-                }
+                if (_isAutoSaveEnabled && _currentDocument != null && HasContentChanged())
+                    PerformAutoSave();
             });
         }
 
@@ -2953,8 +2924,8 @@ namespace Scriblucent
             }
             catch (Exception ex)
             {
-                // Log error but don't disturb user during auto-save
-                System.Diagnostics.Debug.WriteLine($"Auto-save failed: {ex.Message}");
+                // Don't disturb the user during auto-save; log for later diagnosis instead.
+                CrashLog.Append("AutoSave", ex);
             }
         }
 
@@ -3472,9 +3443,8 @@ namespace Scriblucent
                 range.Text = content;
                 return document;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to load PDF export content as rich text: {ex.Message}");
             }
 
             range.Text = content;
@@ -3655,9 +3625,8 @@ namespace Scriblucent
                 bitmap.Freeze();
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to decode PDF export image: {ex.Message}");
                 return null;
             }
         }
@@ -5532,9 +5501,8 @@ namespace Scriblucent
                 position = placeholder.TransformToAncestor(EditorSurface).Transform(new Point(0, 0));
                 return IsFinitePoint(position);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to position inline image overlay: {ex.Message}");
             }
 
             var container = FindInlineImagePlaceholderContainer(imageId);
@@ -5557,9 +5525,8 @@ namespace Scriblucent
                 position = ContentTextBox.TranslatePoint(new Point(rect.Left, rect.Top), EditorSurface);
                 return IsFinitePoint(position);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to resolve inline image text position: {ex.Message}");
                 return false;
             }
         }
@@ -5650,9 +5617,8 @@ namespace Scriblucent
                 container = new InlineUIContainer(CreateInlineImagePlaceholder(image), normalizedPosition);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to insert inline image placeholder: {ex.Message}");
                 return false;
             }
         }
@@ -5690,9 +5656,8 @@ namespace Scriblucent
                 paragraph.Inlines.Add(container);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to insert fallback inline image placeholder: {ex.Message}");
                 return false;
             }
         }
@@ -5945,9 +5910,8 @@ namespace Scriblucent
                     MoveImageFloating(image);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to change image layout: {ex.Message}");
                 return;
             }
 
@@ -5972,9 +5936,8 @@ namespace Scriblucent
             {
                 MoveInlineImageToTextPosition(image.ImageId, insertionPosition);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to move inline image by mouse: {ex.Message}");
             }
             finally
             {
@@ -6064,9 +6027,8 @@ namespace Scriblucent
                 if (IsParagraphEffectivelyEmpty(paragraph))
                     parentBlocks.Remove(paragraph);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to change inline image to floating: {ex.Message}");
                 if (image.Parent == null && inlineContainer.Child == null)
                     inlineContainer.Child = image;
 
@@ -6107,9 +6069,8 @@ namespace Scriblucent
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"Failed to place inline image: {ex.Message}");
                 RemoveInlineContainer(newPlaceholderContainer);
             }
         }

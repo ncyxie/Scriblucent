@@ -32,7 +32,6 @@
                 <TextBlock x:Name="ProgressText"
                            FontSize="{StaticResource Type.Body}"
                            Foreground="{DynamicResource TextColorSecondary}"/>
-                <!-- Pakeisti esamą TimerText į Border su TextBlock viduje: -->
                 <Border x:Name="TimerBorder" CornerRadius="6" Padding="8,4" Background="Transparent">
                     <TextBlock x:Name="TimerText"
                HorizontalAlignment="Right"

@@ -103,7 +103,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
-        // Užkrauti esamą progresą
         RefreshProgressPanel();
 
         _openNoteAction = openNoteAction;
@@ -353,8 +352,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 question.Question,
                 question.Explanation,
                 question.Hint ?? string.Empty,
-                question.PlainTextAnswer,  // ✅ ADD THIS
-                question.PlainTextCharLimit.ToString(CultureInfo.InvariantCulture),  // ✅ ADD THIS
+                question.PlainTextAnswer,
+                question.PlainTextCharLimit.ToString(CultureInfo.InvariantCulture),
                 question.PlainTextMatchCase.ToString(CultureInfo.InvariantCulture),
                 question.PlainTextIgnorePunctuation.ToString(CultureInfo.InvariantCulture),
                 optionsSnapshot);
@@ -602,7 +601,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 Owner = this
             };
             quizModeWindow.ShowDialog();
-            // Išsaugoti attempt į dokumento istoriją
             if (quizModeWindow.LastAttempt != null)
             {
                 _sourceDocument.Attempts ??= new List<QuizAttempt>();
@@ -635,7 +633,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         var count = _sourceDocument.Attempts.Count;
         var best = _sourceDocument.Attempts.Max(a => a.Percentage);
 
-        // Atnaujinti UI – HistoryPanel turi būti QuizPreviewWindow.xaml
         if (FindName("StatsAvgText") is System.Windows.Controls.TextBlock avgTb)
             avgTb.Text = $"{avg:F1}%";
         if (FindName("StatsTotalText") is System.Windows.Controls.TextBlock totalTb)
@@ -838,12 +835,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         var oldType = question.Type;
         question.Type = type;
 
-        // ✅ Reset options when switching to/from plain text
         if (type == QuizQuestionType.PlainText)
         {
             // Clear options for plain text questions
             question.Options.Clear();
-            // ✅ Initialize with empty answer if switching to plain text
             if (string.IsNullOrWhiteSpace(question.PlainTextAnswer))
                 question.PlainTextAnswer = string.Empty;
         }
@@ -1298,7 +1293,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             new() { Text = LocalizationService.GetString("NewQuizWrongAnswer"), IsCorrect = false },
             new() { Text = LocalizationService.GetString("NewQuizWrongAnswer"), IsCorrect = false }
             },
-            // ✅ Add defaults for plain text
             PlainTextAnswer = string.Empty,
             PlainTextCharLimit = 500,
             PlainTextMatchCase = false,
@@ -1515,8 +1509,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                     return;
 
                 _plainTextAnswer = value ?? string.Empty;
-                OnPropertyChanged();  // ✅ This notifies the UI
-                OnPropertyChanged(nameof(PlainTextAnswerCharCountText));  // ✅ And updates counter
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PlainTextAnswerCharCountText));
             }
         }
 
@@ -1586,10 +1580,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 OnPropertyChanged();
             }
         }
-        // ✅ NEW: Helper property to check if this is a plain text question
         public bool IsPlainText => Type == QuizQuestionType.PlainText;
 
-        // ✅ Update CanAddOption to exclude plain text
         public bool CanAddOption => Type != QuizQuestionType.TrueFalse && Type != QuizQuestionType.PlainText;
 
         public bool IsFocused
@@ -1918,7 +1910,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 Hint = Hint.Trim(),
                 SetIndex = Math.Max(1, _source.SetIndex),
                 Options = options,
-                // ✅ EXPLICITLY clear plain-text fields for non-PlainText questions
                 PlainTextAnswer = string.Empty,
                 PlainTextCharLimit = 500,
                 PlainTextMatchCase = false,
@@ -1947,7 +1938,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         {
             if (Type == QuizQuestionType.PlainText)
             {
-                // ✅ Plain text questions don't have options
                 Options.Clear();
                 return;
             }
@@ -2026,7 +2016,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(ResultBackground));
             OnPropertyChanged(nameof(HasVisibleExplanation));
             OnPropertyChanged(nameof(ExplanationText));
-            OnPropertyChanged(nameof(IsPlainText));  // ✅ Notify UI of type change
+            OnPropertyChanged(nameof(IsPlainText));
             OnPropertyChanged(nameof(PlainTextAnswerCharCountText));
             OnPropertyChanged(nameof(PlainTextPracticeCharCountText));
             OnPropertyChanged(nameof(ShowPlainTextCorrectAnswer));

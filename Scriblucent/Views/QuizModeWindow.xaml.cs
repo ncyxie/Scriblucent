@@ -66,15 +66,13 @@ public partial class QuizModeWindow : Window
                 _remainingTime -= TimeSpan.FromSeconds(1);
                 UpdateTimerDisplay(_remainingTime);
 
-                // ⚠️ Įspėjimas kai lieka mažai laiko (pvz. 30 sek)
                 if (_remainingTime.TotalSeconds <= 30 && !_timerWarningActive)
                     HighlightTimerWarning();
 
-                // ⏱️ Kai laikas baigiasi — automatiškai pateikti
                 if (_remainingTime <= TimeSpan.Zero)
                 {
                     _timer.Stop();
-                    ShowResults(); // arba pereiti prie kito klausimo
+                    ShowResults();
                 }
             }
             else
@@ -125,7 +123,6 @@ public partial class QuizModeWindow : Window
         if (FindName("QuestionTextBlock") is TextBlock questionTextBlock)
             questionTextBlock.Text = question.Question ?? string.Empty;
 
-        // ✅ Show question type indicator for multiple choice
         if (FindName("QuestionTypeIndicator") is StackPanel typeIndicator)
         {
             if (question.Type == QuizQuestionType.MultipleChoice)
@@ -196,7 +193,6 @@ public partial class QuizModeWindow : Window
         border.SetValue(FrameworkElement.NameProperty, "ButtonBorder");
         border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
 
-        // ✅ Bind Background/Border properties from Button to Border using RelativeSource.TemplatedParent
         border.SetBinding(Border.BackgroundProperty,
             new Binding { RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent), Path = new PropertyPath(Button.BackgroundProperty) });
         border.SetBinding(Border.BorderBrushProperty,
@@ -548,7 +544,6 @@ public partial class QuizModeWindow : Window
             selectedOptions.Add(clickedOption);
         }
 
-        // ✅ Update visuals - now works immediately since we removed interfering triggers
         UpdateOptionVisuals(selectedOptions);
     }
 

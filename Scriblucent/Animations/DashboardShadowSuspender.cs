@@ -7,13 +7,9 @@ namespace Scriblucent.Animations;
 /// <summary>
 /// Temporarily removes live <see cref="DropShadowEffect"/> instances from a scoped visual
 /// subtree (e.g. on window minimize/restore) to avoid WPF's black shadow bitmap flash while
-/// the compositor resizes.
-/// <para>
-/// Dashboard <b>tile</b> rest elevation uses bake-once <c>CardShadowLayer</c> nine-slices and
-/// does not need this suspender for scroll performance. Prefer this helper for leftover live
-/// effects (chrome, dialogs) and minimize/restore scopes — not as the primary scroll strategy
-/// for listing cards.
-/// </para>
+/// the compositor resizes. Dashboard tile rest elevation uses bake-once <c>CardShadowLayer</c>
+/// nine-slices instead, so this is for leftover live effects (chrome, dialogs) and
+/// minimize/restore scopes, not the primary scroll strategy for listing cards.
 /// </summary>
 internal static class DashboardShadowSuspender
 {
@@ -120,11 +116,9 @@ internal static class DashboardShadowSuspender
 
     /// <summary>
     /// Takes ownership of an effect a different system (a completing <see cref="UiMotion"/>
-    /// composited animation) was about to restore onto <paramref name="element"/>. Without this
-    /// hand-off, that restore would stomp an in-progress scroll suspension — the element's
-    /// shadow would go live again mid-gesture even though this scope still considers it
-    /// suspended. The effect stays remembered here and is reapplied by the normal
-    /// resume/staggered-resume path once this scope actually ends.
+    /// animation) was about to restore onto <paramref name="element"/>, so that restore doesn't
+    /// stomp an in-progress scroll suspension. Reapplied by the normal resume path once this
+    /// scope ends.
     /// </summary>
     public static void AdoptSuspendedEffect(object scopeKey, FrameworkElement element, DropShadowEffect effect)
     {

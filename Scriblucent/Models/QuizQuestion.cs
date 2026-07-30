@@ -17,7 +17,6 @@ public sealed class QuizQuestion
     public string Hint { get; set; } = string.Empty;  
     public int SetIndex { get; set; } = 1;
 
-    // ✅ NEW: Plain text question properties
     public string PlainTextAnswer { get; set; } = string.Empty;
     public int PlainTextCharLimit { get; set; } = 500;
     public bool PlainTextMatchCase { get; set; }

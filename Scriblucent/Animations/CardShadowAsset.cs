@@ -7,13 +7,12 @@ namespace Scriblucent.Animations;
 
 /// <summary>
 /// One shared, pre-rendered soft-shadow texture (baked once, frozen) reused as a nine-slice
-/// across every card. A live <see cref="DropShadowEffect"/> forces a real GPU blur pass on every
-/// dirty repaint of the element it is attached to; with many cards on screen during a scroll,
-/// that per-element blur cost is what made scrolling choppy (see NoteCardControl.xaml history).
-/// Baking the blur once into a small shared bitmap and slicing/stretching it costs nothing per
-/// card beyond a handful of cheap image draws - the same technique large UI toolkits (Material,
-/// Fluent, etc.) use for elevation shadows at scale. The bake composites a soft centered ambient
-/// contact with a downward key cast so tops stay readable on light shells without a live effect.
+/// across every card. A live <see cref="DropShadowEffect"/> forces a real GPU blur pass on
+/// every dirty repaint; with many cards on screen during a scroll, that per-element blur cost
+/// is what made scrolling choppy. Baking the blur once into a small shared bitmap and
+/// slicing/stretching it costs nothing per card beyond a handful of cheap image draws. The bake
+/// composites a soft centered ambient contact with a downward key cast so tops stay readable on
+/// light shells without a live effect.
 /// </summary>
 internal static class CardShadowAsset
 {

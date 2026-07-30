@@ -176,11 +176,10 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         => this is DashboardVirtualizedNoteCardGrid ? 164 : ItemCellSize.Height > 0 ? ItemCellSize.Height : 164;
 
     /// <summary>
-    /// A wrap grid on a maximized window packs far more columns per row than the same grid on a
-    /// narrower window, so a fixed pixel cache margin realizes (and every scroll frame composites)
-    /// proportionally more off-screen cards as the window widens. Scaling the margin down as
-    /// columns increase keeps the extra-card budget — and the per-frame compositing cost during
-    /// scroll — roughly window-size-invariant, mirroring DashboardVirtualizationHost.ResolveCardBudgetPixels.
+    /// A maximized window packs more columns per row, so a fixed pixel cache margin would
+    /// realize proportionally more off-screen cards as it widens. Scaling the margin down as
+    /// columns increase keeps compositing cost roughly window-size-invariant (mirrors
+    /// DashboardVirtualizationHost.ResolveViewportCachePixels).
     /// </summary>
     private double ResolveColumnAwareCachePixels(double fallbackPixels)
     {

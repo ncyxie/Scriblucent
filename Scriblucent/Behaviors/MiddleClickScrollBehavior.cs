@@ -21,14 +21,11 @@ public static class MiddleClickScrollBehavior
     private const double VelocitySmoothing = 18;
     private const double IndicatorSize = 40;
     private const double MinFrameSeconds = 1.0 / 240.0;
-    // Same root cause as SmoothScrollBehavior.MaxFrameSeconds (a maximized window's heavier
-    // per-frame compositing makes late render ticks common), but this behavior integrates
-    // VelocityY * deltaSeconds directly into position with no bound on total displacement -
-    // unlike SmoothScrollBehavior's asymptotic "approach a fixed target" formula, a late tick
-    // here moves further in direct proportion to the clamp. Kept tighter than that 200ms value
-    // so a genuine multi-hundred-ms stall (e.g. minimize/restore mid-drag) at saturated
-    // MaxAutoscrollSpeed can't produce an ~800px single-frame jump; 1/15s still covers the
-    // realistic maximized-window late-tick range with ~3x the old 1/45s headroom.
+    // Same root cause as SmoothScrollBehavior.MaxFrameSeconds (maximized windows have heavier
+    // per-frame compositing), but this integrates velocity*deltaSeconds directly with no bound
+    // on displacement, so a late tick moves further in direct proportion to the clamp. Kept
+    // tighter than that 200ms value so a genuine multi-hundred-ms stall at saturated speed
+    // can't produce an ~800px single-frame jump; 1/15s still covers the realistic late-tick range.
     private const double MaxFrameSeconds = 1.0 / 15.0;
     private const int MaxSubstepsPerFrame = 2;
 

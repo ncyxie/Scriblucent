@@ -468,10 +468,8 @@
                                          Margin="0,0,0,12"
                                          Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
 
-                                <!-- Grid.Row="2" - Question Content Area (Options OR PlainText Answer) -->
                                 <Grid Grid.Row="2">
 
-                                    <!-- ✅ Multiple choice / True-False options (hidden when PlainText) -->
                                     <ItemsControl ItemsSource="{Binding Options}"
                   Visibility="{Binding IsPlainText, Converter={StaticResource InverseBoolToVis}}">
                                         <ItemsControl.ItemTemplate>

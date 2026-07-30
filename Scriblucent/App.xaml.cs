@@ -46,22 +46,7 @@ public partial class App : Application
                 freezable.Freeze();
         }
 
-        DispatcherUnhandledException += (_, args) =>
-        {
-            try
-            {
-                var logPath = System.IO.Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory,
-                    "scriblucent-crash.log");
-                System.IO.File.AppendAllText(
-                    logPath,
-                    $"[{DateTime.Now:O}] {args.Exception}\n\n");
-            }
-            catch
-            {
-                // Best-effort crash logging only.
-            }
-        };
+        DispatcherUnhandledException += (_, args) => CrashLog.Append("Unhandled", args.Exception);
 
         AppSettingsService.MigrateLegacyDataFolder();
 
