@@ -909,7 +909,7 @@ public class MainViewModel : ViewModelBase
                 .ToList()
         };
 
-        var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = false });
         File.WriteAllText(path, json);
     }
 
@@ -1762,7 +1762,7 @@ public class MainViewModel : ViewModelBase
                 .ToList()
         };
 
-        var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = false });
         File.WriteAllText(path, json);
     }
 
@@ -2045,7 +2045,7 @@ public class MainViewModel : ViewModelBase
                 .ToList()
         };
 
-        var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = false });
         File.WriteAllText(path, json);
     }
 
@@ -2944,6 +2944,9 @@ public class MainViewModel : ViewModelBase
     private string _flashcardSearchQuery = string.Empty;
     private string _mindMapSearchQuery = string.Empty;
     private string _quizSearchQuery = string.Empty;
+    private DispatcherTimer? _searchFilterDebounceTimer;
+    private Action? _pendingSearchFilterApply;
+
     public string SearchQuery
     {
         get => _searchQuery;
@@ -2954,7 +2957,7 @@ public class MainViewModel : ViewModelBase
                 _searchQuery = value ?? string.Empty;
                 OnPropertyChanged(nameof(SearchQuery));
                 OnPropertyChanged(nameof(ActiveSearchQuery));
-                ApplyFilters();
+                QueueSearchFilterApply(ApplyFilters);
             }
         }
     }
@@ -2970,7 +2973,7 @@ public class MainViewModel : ViewModelBase
             _flashcardSearchQuery = value ?? string.Empty;
             OnPropertyChanged(nameof(FlashcardSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            ApplyFlashcardFilters();
+            QueueSearchFilterApply(ApplyFlashcardFilters);
         }
     }
 
@@ -2985,7 +2988,7 @@ public class MainViewModel : ViewModelBase
             _mindMapSearchQuery = value ?? string.Empty;
             OnPropertyChanged(nameof(MindMapSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            ApplyMindMapFilters();
+            QueueSearchFilterApply(ApplyMindMapFilters);
         }
     }
 
@@ -3000,8 +3003,30 @@ public class MainViewModel : ViewModelBase
             _quizSearchQuery = value ?? string.Empty;
             OnPropertyChanged(nameof(QuizSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            ApplyQuizFilters();
+            QueueSearchFilterApply(ApplyQuizFilters);
         }
+    }
+
+    // Search-as-you-type debounce: applying the filter re-evaluates the dashboard's
+    // ICollectionView (a full Reset, dropping realized containers/scroll position) and
+    // rebuilds the Recent/Calendar strips, so doing that on every keystroke is wasteful.
+    // The bound TextBox still updates immediately; only the filter pass is delayed.
+    private void QueueSearchFilterApply(Action applyFilters)
+    {
+        _pendingSearchFilterApply = applyFilters;
+        _searchFilterDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _searchFilterDebounceTimer.Stop();
+        _searchFilterDebounceTimer.Tick -= SearchFilterDebounceTimer_Tick;
+        _searchFilterDebounceTimer.Tick += SearchFilterDebounceTimer_Tick;
+        _searchFilterDebounceTimer.Start();
+    }
+
+    private void SearchFilterDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchFilterDebounceTimer?.Stop();
+        var applyFilters = _pendingSearchFilterApply;
+        _pendingSearchFilterApply = null;
+        applyFilters?.Invoke();
     }
 
     public string ActiveSearchQuery
@@ -6996,7 +7021,7 @@ public class MainViewModel : ViewModelBase
                     .ToList()
             };
 
-            var opts = new JsonSerializerOptions { WriteIndented = true };
+            var opts = new JsonSerializerOptions { WriteIndented = false };
             var json = JsonSerializer.Serialize(store, opts);
             File.WriteAllText(GetNotesFilePath(), json);
         }

@@ -58,12 +58,12 @@
                                     <TranslateTransform/>
                                 </Border.RenderTransform>
                                 <ScrollViewer x:Name="RecentNotesScrollViewer"
-                                              Style="{DynamicResource RecentItemsStripScrollViewerStyle}">
-                                    <ItemsControl Style="{DynamicResource RecentStripItemsStyle}"
+                                              Style="{StaticResource RecentItemsStripScrollViewerStyle}">
+                                    <ItemsControl Style="{StaticResource RecentStripItemsStyle}"
                                                   ItemsSource="{Binding RecentNotes}" ItemsPanel="{StaticResource RecentItemsStripPanelTemplate}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:NoteCardViewModel}">
-                                                <Button Style="{DynamicResource RecentNoteCardStyle}"
+                                                <Button Style="{StaticResource RecentNoteCardStyle}"
 													Tag="{Binding}"
 													Click="RecentNoteButton_Click">
                                                     <StackPanel MinWidth="118" MaxWidth="176">
@@ -88,7 +88,7 @@
                     <!-- All Notes + FAB -->
                         <ScrollViewer x:Name="NotesScrollViewer"
                                       Grid.Row="1"
-                                      Style="{DynamicResource DashboardListingScrollViewerStyle}"
+                                      Style="{StaticResource DashboardListingScrollViewerStyle}"
 								 VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Disabled"
                                  Background="Transparent"
@@ -203,7 +203,7 @@
                                                             <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type vm:CalendarScheduledItemViewModel}">
-                                                                        <Border Style="{DynamicResource CalendarScheduledItemCardStyle}"
+                                                                        <Border Style="{StaticResource CalendarScheduledItemCardStyle}"
 												Tag="{Binding}"
 												MouseLeftButtonUp="CalendarScheduledItemCard_MouseLeftButtonUp">
                                                                             <Grid>
@@ -618,7 +618,7 @@
                             Margin="0,0,49,96"
                             ToolTip="{Binding [ImportNotes], Source={StaticResource Loc}}"
                             Click="ImportButton_Click"/>
-                    <Button Style="{DynamicResource FabStyle}"
+                    <Button Style="{StaticResource FabStyle}"
                             IsEnabled="{Binding IsNotMassSelectMode}"
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Right"
