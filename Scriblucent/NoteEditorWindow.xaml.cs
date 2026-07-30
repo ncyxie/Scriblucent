@@ -3596,7 +3596,12 @@ namespace Scriblucent
 
         private static Image? CreatePdfImageElement(NoteImageAttachment attachment, double maximumImageWidth)
         {
-            var source = TryCreateImageSourceFromBase64(attachment.Data);
+            // The attachment already carries its display size from when it was inserted, so the
+            // target decode width is known up front - decode at (roughly) that size directly
+            // instead of decoding at full native resolution and downscaling via layout.
+            var decodePixelWidth = ResolvePdfImageDecodePixelWidth(attachment, maximumImageWidth);
+
+            var source = TryCreateImageSourceFromBase64(attachment.Data, decodePixelWidth);
             if (source == null)
                 return null;
 
@@ -3612,7 +3617,29 @@ namespace Scriblucent
             };
         }
 
-        private static BitmapImage? TryCreateImageSourceFromBase64(string imageData)
+        private static int ResolvePdfImageDecodePixelWidth(NoteImageAttachment attachment, double maximumImageWidth)
+        {
+            if (attachment.Width <= 0 || attachment.Height <= 0)
+                return 0; // Unknown display size - fall back to a full decode.
+
+            var width = attachment.Width;
+            var height = attachment.Height;
+
+            var maxWidth = maximumImageWidth > 0 ? maximumImageWidth : 680;
+            if (width > maxWidth)
+            {
+                height *= maxWidth / width;
+                width = maxWidth;
+            }
+
+            const double maxHeight = 880;
+            if (height > maxHeight)
+                width *= maxHeight / height;
+
+            return (int)Math.Ceiling(Math.Max(1, width));
+        }
+
+        private static BitmapImage? TryCreateImageSourceFromBase64(string imageData, int decodePixelWidth = 0)
         {
             try
             {
@@ -3621,6 +3648,8 @@ namespace Scriblucent
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                if (decodePixelWidth > 0)
+                    bitmap.DecodePixelWidth = decodePixelWidth;
                 bitmap.StreamSource = stream;
                 bitmap.EndInit();
                 bitmap.Freeze();
@@ -6993,15 +7022,16 @@ namespace Scriblucent
         {
             try
             {
-                // Create image from file
-                var bitmap = LoadBitmapFromFile(imagePath);
+                // Read dimensions only - no full pixel decode - so we can compute the
+                // target display size before ever decoding actual pixel data.
+                var (sourceWidth, sourceHeight) = ReadImagePixelSize(imagePath);
 
                 // Set a max width/height for the image to fit in the note
                 const double maxWidth = 400;
                 const double maxHeight = 300;
 
-                double displayWidth = bitmap.PixelWidth;
-                double displayHeight = bitmap.PixelHeight;
+                double displayWidth = sourceWidth;
+                double displayHeight = sourceHeight;
 
                 // Scale down if too large
                 if (displayWidth > maxWidth || displayHeight > maxHeight)
@@ -7044,6 +7074,18 @@ namespace Scriblucent
             {
                 throw new Exception($"{LocalizationService.GetString("ErrorLoadingImage")}: {ex.Message}", ex);
             }
+        }
+
+        /// <summary>
+        /// Reads an image's pixel dimensions from its header without decoding pixel data,
+        /// so callers can compute a target display/decode size before paying for a full decode.
+        /// </summary>
+        private static (int Width, int Height) ReadImagePixelSize(string imagePath)
+        {
+            using var stream = File.OpenRead(imagePath);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            var frame = decoder.Frames[0];
+            return (frame.PixelWidth, frame.PixelHeight);
         }
 
         private static BitmapImage LoadBitmapFromFile(string imagePath, int decodePixelWidth = 0)

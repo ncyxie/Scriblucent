@@ -45,7 +45,11 @@ public sealed class FlashcardSetGroupViewModel : ViewModelBase
     private static Brush CreateBrush(string backgroundColor)
     {
         if (ColorConverter.ConvertFromString(backgroundColor) is Color color)
-            return new SolidColorBrush(color);
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
+        }
 
         if (Application.Current.Resources.Contains("CardBackground"))
             return (Brush)Application.Current.Resources["CardBackground"];

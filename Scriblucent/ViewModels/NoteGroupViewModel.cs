@@ -45,7 +45,11 @@ public class NoteGroupViewModel : ViewModelBase
     private static Brush CreateBrush(string backgroundColor)
     {
         if (ColorConverter.ConvertFromString(backgroundColor) is Color color)
-            return new SolidColorBrush(color);
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
+        }
 
         // Return theme-aware default background instead of hardcoded white
         if (Application.Current.Resources.Contains("CardBackground"))

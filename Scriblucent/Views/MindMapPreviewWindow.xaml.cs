@@ -89,21 +89,28 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private static readonly Brush[] LightNodeBackgrounds =
     [
-        new SolidColorBrush(Color.FromRgb(63, 111, 232)),
-        new SolidColorBrush(Color.FromRgb(236, 253, 245)),
-        new SolidColorBrush(Color.FromRgb(239, 246, 255)),
-        new SolidColorBrush(Color.FromRgb(245, 243, 255)),
-        new SolidColorBrush(Color.FromRgb(255, 251, 235))
+        FrozenBrush(Color.FromRgb(63, 111, 232)),
+        FrozenBrush(Color.FromRgb(236, 253, 245)),
+        FrozenBrush(Color.FromRgb(239, 246, 255)),
+        FrozenBrush(Color.FromRgb(245, 243, 255)),
+        FrozenBrush(Color.FromRgb(255, 251, 235))
     ];
 
     private static readonly Brush[] DarkNodeBackgrounds =
     [
-        new SolidColorBrush(Color.FromRgb(63, 111, 232)),
-        new SolidColorBrush(Color.FromRgb(34, 56, 49)),
-        new SolidColorBrush(Color.FromRgb(30, 48, 69)),
-        new SolidColorBrush(Color.FromRgb(49, 39, 72)),
-        new SolidColorBrush(Color.FromRgb(73, 56, 37))
+        FrozenBrush(Color.FromRgb(63, 111, 232)),
+        FrozenBrush(Color.FromRgb(34, 56, 49)),
+        FrozenBrush(Color.FromRgb(30, 48, 69)),
+        FrozenBrush(Color.FromRgb(49, 39, 72)),
+        FrozenBrush(Color.FromRgb(73, 56, 37))
     ];
+
+    private static SolidColorBrush FrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
 
     public MindMapPreviewWindow(
         MindMapNode root,
@@ -1296,6 +1303,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
                 var geometry = new PathGeometry();
                 geometry.Figures.Add(figure);
+                geometry.Freeze();
 
                 var path = new ShapePath
                 {
@@ -1406,7 +1414,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
             var iconBadge = new Border
             {
-                Background = new SolidColorBrush(iconBadgeColor),
+                Background = FrozenBrush(iconBadgeColor),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(6, 4, 6, 4),
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -1646,7 +1654,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     {
         if (!string.IsNullOrWhiteSpace(node.BackgroundColor))
         {
-            return new SolidColorBrush((Color)ColorConverter.ConvertFromString(node.BackgroundColor));
+            return FrozenBrush((Color)ColorConverter.ConvertFromString(node.BackgroundColor));
         }
 
         return GetDefaultNodeBackground(depth);
