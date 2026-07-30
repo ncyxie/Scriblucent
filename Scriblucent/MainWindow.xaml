@@ -944,7 +944,16 @@
 							<ScrollViewer MaxHeight="230"
 										  VerticalScrollBarVisibility="Auto"
 										  Visibility="{Binding ActiveHasTagFilters, Converter={StaticResource BoolToVis}}">
-								<ItemsControl ItemsSource="{Binding ActiveTagFilters}">
+								<ItemsControl ItemsSource="{Binding ActiveTagFilters}"
+										  VirtualizingPanel.IsVirtualizing="True"
+										  VirtualizingPanel.VirtualizationMode="Recycling"
+										  VirtualizingPanel.ScrollUnit="Pixel"
+										  ScrollViewer.CanContentScroll="True">
+								<ItemsControl.ItemsPanel>
+									<ItemsPanelTemplate>
+										<VirtualizingStackPanel IsItemsHost="True"/>
+									</ItemsPanelTemplate>
+								</ItemsControl.ItemsPanel>
 									<ItemsControl.ItemTemplate>
 										<DataTemplate DataType="{x:Type vm:TagFilterItemViewModel}">
 											<CheckBox Content="{Binding Tag}"
