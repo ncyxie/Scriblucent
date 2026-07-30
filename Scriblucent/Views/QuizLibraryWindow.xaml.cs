@@ -51,6 +51,15 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         UpdateFilteredVisibility();
         _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
         WindowContentEnterHelper.AnimateOnLoaded(this);
+        Closed += QuizLibraryWindow_Closed;
+    }
+
+    private void QuizLibraryWindow_Closed(object? sender, EventArgs e)
+    {
+        Closed -= QuizLibraryWindow_Closed;
+        _mainViewModel.PropertyChanged -= MainViewModel_PropertyChanged;
+        foreach (var quiz in _quizzes)
+            quiz.PropertyChanged -= QuizWrapper_PropertyChanged;
     }
 
     public ObservableCollection<global::Scriblucent.Views.QuizLibraryItemViewModel> Quizzes => _quizzes;

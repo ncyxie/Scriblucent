@@ -71,6 +71,15 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         UpdateStatusText();
         _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
         WindowContentEnterHelper.AnimateOnLoaded(this);
+        Closed += FlashcardCombineWindow_Closed;
+    }
+
+    private void FlashcardCombineWindow_Closed(object? sender, EventArgs e)
+    {
+        Closed -= FlashcardCombineWindow_Closed;
+        _mainViewModel.PropertyChanged -= MainViewModel_PropertyChanged;
+        foreach (var item in _sets)
+            item.PropertyChanged -= Item_PropertyChanged;
     }
 
     public ObservableCollection<FlashcardCombineItem> Sets => _sets;
