@@ -765,6 +765,7 @@ public class MainViewModel : ViewModelBase
 
             NormalizeFlashcardSetGroups();
             RebuildFlashcardSetGroups();
+            RefreshAvailableFlashcardTags();
             NotifyFlashcardSetsChanged();
             return;
         }
@@ -793,6 +794,7 @@ public class MainViewModel : ViewModelBase
             Flashcards = new ObservableCollection<FlashcardItem>();
         }
 
+        RefreshAvailableFlashcardTags();
         NotifyFlashcardSetsChanged();
     }
     private void SaveFlashcards()
@@ -1348,6 +1350,7 @@ public class MainViewModel : ViewModelBase
         var path = GetMindMapsFilePath();
         if (!File.Exists(path))
         {
+            RefreshAvailableMindMapTags();
             NotifyMindMapsChanged();
             return;
         }
@@ -1396,6 +1399,7 @@ public class MainViewModel : ViewModelBase
 
         NormalizeMindMapGroups();
         RebuildMindMapGroups();
+        RefreshAvailableMindMapTags();
         NotifyMindMapsChanged();
         WarmMindMapPreviewsAtIdle();
     }
@@ -1891,6 +1895,7 @@ public class MainViewModel : ViewModelBase
         var path = GetQuizzesFilePath();
         if (!File.Exists(path))
         {
+            RefreshAvailableQuizTags();
             NotifyQuizzesChanged();
             return;
         }
@@ -1929,6 +1934,7 @@ public class MainViewModel : ViewModelBase
 
         NormalizeQuizGroups();
         RebuildQuizGroups();
+        RefreshAvailableQuizTags();
         NotifyQuizzesChanged();
     }
 
