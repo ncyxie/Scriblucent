@@ -112,6 +112,7 @@
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>
   <data name="RecentItemsLimit" xml:space="preserve"><value>Rodomų naujausių elementų skaičius</value></data>
   <data name="RecentItemsLimitUnit" xml:space="preserve"><value>vnt.</value></data>
+  <data name="RecentItemsLimitRangeWarning" xml:space="preserve"><value>Įveskite skaičių nuo {0} iki {1}.</value></data>
   <data name="ThemeLight" xml:space="preserve"><value>Šviesi</value></data>
   <data name="ThemeDark" xml:space="preserve"><value>Tamsi</value></data>
   <data name="ThemeSystem" xml:space="preserve"><value>Naudoti sistemos</value></data>

@@ -400,16 +400,23 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Column="0"
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="0"
                                    Text="{Binding [RecentItemsLimit], Source={StaticResource Loc}}"
                                    Style="{StaticResource FormOptionLabelStyle}"/>
 
-                        <StackPanel Grid.Column="1"
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="1"
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Right">
                             <!-- Level 5 form control: Chrome field E.Field + R (not a bare transparent box). -->
-                            <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                            <Border x:Name="RecentItemsLimitFieldBorder"
+                                    Style="{StaticResource ChromeFieldBorderStyle}"
                                     Padding="6,0"
                                     MinHeight="30"
                                     Margin="0,0,8,0">
@@ -425,6 +432,15 @@
                                        VerticalAlignment="Center"
                                        Style="{StaticResource FormHelperTextStyle}"/>
                         </StackPanel>
+
+                        <TextBlock x:Name="RecentItemsLimitWarningText"
+                                   Grid.Row="1"
+                                   Grid.Column="0"
+                                   Grid.ColumnSpan="2"
+                                   Margin="0,8,0,0"
+                                   Foreground="{DynamicResource AccentDangerHover}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"/>
                     </Grid>
                 </Border>
 

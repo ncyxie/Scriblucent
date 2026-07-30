@@ -925,12 +925,26 @@ namespace Scriblucent.Views
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
-            HideAnimated();
+            TryCloseAnimated();
         }
 
         private void OverlayDim_MouseDown(object sender, MouseButtonEventArgs e)
         {
+            TryCloseAnimated();
+        }
+
+        private bool TryCloseAnimated()
+        {
+            if (RecentItemsLimitTextBox is not null && !TryGetValidRecentItemsLimit(out _))
+            {
+                UpdateRecentItemsLimitWarning(false);
+                RecentItemsLimitTextBox.Focus();
+                RecentItemsLimitTextBox.SelectAll();
+                return false;
+            }
+
             HideAnimated();
+            return true;
         }
 
         private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
@@ -1054,6 +1068,51 @@ namespace Scriblucent.Views
                 textBox.Text = digitsOnly;
                 textBox.CaretIndex = caretIndex;
             }
+
+            UpdateRecentItemsLimitWarning(TryGetValidRecentItemsLimit(out _));
+        }
+
+        private bool TryGetValidRecentItemsLimit(out int limit)
+        {
+            if (RecentItemsLimitTextBox is null || !int.TryParse(RecentItemsLimitTextBox.Text, out limit))
+            {
+                limit = default;
+                return false;
+            }
+
+            return limit >= AppSettings.MinRecentItemsLimit && limit <= AppSettings.MaxRecentItemsLimit;
+        }
+
+        private void UpdateRecentItemsLimitWarning(bool isValid)
+        {
+            if (RecentItemsLimitFieldBorder is not null)
+            {
+                if (isValid)
+                {
+                    RecentItemsLimitFieldBorder.ClearValue(BorderBrushProperty);
+                    RecentItemsLimitFieldBorder.ClearValue(BorderThicknessProperty);
+                }
+                else
+                {
+                    RecentItemsLimitFieldBorder.BorderBrush = (System.Windows.Media.Brush)FindResource("AccentDanger");
+                    RecentItemsLimitFieldBorder.BorderThickness = new Thickness(2);
+                }
+            }
+
+            if (RecentItemsLimitWarningText is null)
+                return;
+
+            if (isValid)
+            {
+                UiMotion.AnimateInlineReveal(RecentItemsLimitWarningText, false, () => RecentItemsLimitWarningText.Text = string.Empty);
+                return;
+            }
+
+            RecentItemsLimitWarningText.Text = string.Format(
+                LocalizationService.GetString("RecentItemsLimitRangeWarning"),
+                AppSettings.MinRecentItemsLimit,
+                AppSettings.MaxRecentItemsLimit);
+            UiMotion.AnimateInlineReveal(RecentItemsLimitWarningText, true);
         }
 
         private void RecentItemsLimitTextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -1075,10 +1134,16 @@ namespace Scriblucent.Views
             if (_isApplyingSettings || RecentItemsLimitTextBox is null)
                 return;
 
-            if (!int.TryParse(RecentItemsLimitTextBox.Text, out var limit))
-                limit = AppSettingsService.Load().RecentItemsLimit;
+            if (TryGetValidRecentItemsLimit(out var limit))
+            {
+                ApplyRecentItemsLimit(limit);
+                return;
+            }
 
-            ApplyRecentItemsLimit(limit);
+            // Out-of-range/unparseable input is left as typed (not silently clamped) so the
+            // warning stays visible and accurate; the close handlers refuse to close while
+            // this state persists, so the user has to actually fix it.
+            UpdateRecentItemsLimitWarning(false);
         }
 
         private void ApplyRecentItemsLimit(int limit)
@@ -1107,6 +1172,8 @@ namespace Scriblucent.Views
             }
 
             _isApplyingSettings = wasApplyingSettings;
+
+            UpdateRecentItemsLimitWarning(true);
         }
 
         private void ReduceAnimationsCheckBox_Changed(object sender, RoutedEventArgs e)

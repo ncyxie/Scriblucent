@@ -112,6 +112,7 @@
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>
   <data name="RecentItemsLimit" xml:space="preserve"><value>Recent items shown</value></data>
   <data name="RecentItemsLimitUnit" xml:space="preserve"><value>items</value></data>
+  <data name="RecentItemsLimitRangeWarning" xml:space="preserve"><value>Enter a number between {0} and {1}.</value></data>
   <data name="ThemeLight" xml:space="preserve"><value>Light</value></data>
   <data name="ThemeDark" xml:space="preserve"><value>Dark</value></data>
   <data name="ThemeSystem" xml:space="preserve"><value>Use system</value></data>
