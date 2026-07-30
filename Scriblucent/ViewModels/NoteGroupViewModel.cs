@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
-using System.Windows;
 
 namespace Scriblucent.ViewModels;
 
@@ -14,7 +13,7 @@ public class NoteGroupViewModel : ViewModelBase
         GroupId = groupId;
         _name = name;
         BackgroundColor = backgroundColor;
-        _backgroundBrush = CreateBrush(backgroundColor);
+        _backgroundBrush = GroupBrushFactory.Create(backgroundColor);
         Notes = new ObservableCollection<NoteCardViewModel>(notes);
     }
 
@@ -39,22 +38,6 @@ public class NoteGroupViewModel : ViewModelBase
     public void SetBackground(string backgroundColor)
     {
         BackgroundColor = backgroundColor;
-        BackgroundBrush = CreateBrush(backgroundColor);
-    }
-
-    private static Brush CreateBrush(string backgroundColor)
-    {
-        if (ColorConverter.ConvertFromString(backgroundColor) is Color color)
-        {
-            var brush = new SolidColorBrush(color);
-            brush.Freeze();
-            return brush;
-        }
-
-        // Return theme-aware default background instead of hardcoded white
-        if (Application.Current.Resources.Contains("CardBackground"))
-            return (Brush)Application.Current.Resources["CardBackground"];
-
-        return Brushes.White;
+        BackgroundBrush = GroupBrushFactory.Create(backgroundColor);
     }
 }

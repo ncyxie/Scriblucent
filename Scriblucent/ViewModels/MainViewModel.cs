@@ -4482,32 +4482,46 @@ public class MainViewModel : ViewModelBase
             note.Document.GroupId.Value.ToString()[..4].ToUpperInvariant());
     }
 
-    private void RefreshAvailableTags()
+    private void RefreshTagFilters<TDoc>(
+        IEnumerable<TDoc> source,
+        Func<TDoc, List<string>?> tagsSelector,
+        HashSet<string> selectedTags,
+        ObservableCollection<TagFilterItemViewModel> targetFilters,
+        Action<string, bool> onSelectionChanged,
+        Action notifyChanged)
     {
-        var tags = Notes
-            .SelectMany(note => note.Document.Tags)
+        var tags = source
+            .SelectMany(item => tagsSelector(item) ?? new List<string>())
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .Select(tag => tag.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
 
-        _selectedTags.RemoveWhere(selected => !tags.Any(tag => string.Equals(tag, selected, StringComparison.OrdinalIgnoreCase)));
+        selectedTags.RemoveWhere(selected => !tags.Any(tag => string.Equals(tag, selected, StringComparison.OrdinalIgnoreCase)));
 
-        TagFilters.Clear();
+        targetFilters.Clear();
         foreach (var tag in tags)
         {
-            var isSelected = _selectedTags.Contains(tag);
-            TagFilters.Add(new TagFilterItemViewModel(tag, isSelected, SetTagFilterSelected));
+            var isSelected = selectedTags.Contains(tag);
+            targetFilters.Add(new TagFilterItemViewModel(tag, isSelected, onSelectionChanged));
         }
 
-        OnPropertyChanged(nameof(HasTagFilters));
-        OnPropertyChanged(nameof(ActiveHasTagFilters));
-        OnPropertyChanged(nameof(HasActiveTagFilters));
-        OnPropertyChanged(nameof(TagFilterButtonText));
-        OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
-        OnPropertyChanged(nameof(ActiveTagFilterButtonText));
+        notifyChanged();
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void RefreshAvailableTags()
+    {
+        RefreshTagFilters(Notes, note => note.Document.Tags, _selectedTags, TagFilters, SetTagFilterSelected, () =>
+        {
+            OnPropertyChanged(nameof(HasTagFilters));
+            OnPropertyChanged(nameof(ActiveHasTagFilters));
+            OnPropertyChanged(nameof(HasActiveTagFilters));
+            OnPropertyChanged(nameof(TagFilterButtonText));
+            OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
+            OnPropertyChanged(nameof(ActiveTagFilterButtonText));
+        });
     }
 
     private void ClearActiveTagFilters()
@@ -4664,83 +4678,38 @@ public class MainViewModel : ViewModelBase
 
     private void RefreshAvailableFlashcardTags()
     {
-        var tags = FlashcardSets
-            .SelectMany(set => set.Document.Tags ?? new List<string>())
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => tag.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-        _selectedFlashcardTags.RemoveWhere(selected => !tags.Any(tag => string.Equals(tag, selected, StringComparison.OrdinalIgnoreCase)));
-
-        FlashcardTagFilters.Clear();
-        foreach (var tag in tags)
+        RefreshTagFilters(FlashcardSets, set => set.Document.Tags, _selectedFlashcardTags, FlashcardTagFilters, SetFlashcardTagFilterSelected, () =>
         {
-            var isSelected = _selectedFlashcardTags.Contains(tag);
-            FlashcardTagFilters.Add(new TagFilterItemViewModel(tag, isSelected, SetFlashcardTagFilterSelected));
-        }
-
-        OnPropertyChanged(nameof(HasFlashcardTagFilters));
-        OnPropertyChanged(nameof(ActiveHasTagFilters));
-        OnPropertyChanged(nameof(HasActiveFlashcardTagFilters));
-        OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
-        OnPropertyChanged(nameof(ActiveTagFilterButtonText));
-        CommandManager.InvalidateRequerySuggested();
+            OnPropertyChanged(nameof(HasFlashcardTagFilters));
+            OnPropertyChanged(nameof(ActiveHasTagFilters));
+            OnPropertyChanged(nameof(HasActiveFlashcardTagFilters));
+            OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
+            OnPropertyChanged(nameof(ActiveTagFilterButtonText));
+        });
     }
 
     private void RefreshAvailableMindMapTags()
     {
-        var tags = MindMaps
-            .SelectMany(map => map.Document.Tags ?? new List<string>())
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => tag.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-        _selectedMindMapTags.RemoveWhere(selected => !tags.Any(tag => string.Equals(tag, selected, StringComparison.OrdinalIgnoreCase)));
-
-        MindMapTagFilters.Clear();
-        foreach (var tag in tags)
+        RefreshTagFilters(MindMaps, map => map.Document.Tags, _selectedMindMapTags, MindMapTagFilters, SetMindMapTagFilterSelected, () =>
         {
-            var isSelected = _selectedMindMapTags.Contains(tag);
-            MindMapTagFilters.Add(new TagFilterItemViewModel(tag, isSelected, SetMindMapTagFilterSelected));
-        }
-
-        OnPropertyChanged(nameof(HasMindMapTagFilters));
-        OnPropertyChanged(nameof(ActiveHasTagFilters));
-        OnPropertyChanged(nameof(HasActiveMindMapTagFilters));
-        OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
-        OnPropertyChanged(nameof(ActiveTagFilterButtonText));
-        CommandManager.InvalidateRequerySuggested();
+            OnPropertyChanged(nameof(HasMindMapTagFilters));
+            OnPropertyChanged(nameof(ActiveHasTagFilters));
+            OnPropertyChanged(nameof(HasActiveMindMapTagFilters));
+            OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
+            OnPropertyChanged(nameof(ActiveTagFilterButtonText));
+        });
     }
 
     private void RefreshAvailableQuizTags()
     {
-        var tags = Quizzes
-            .SelectMany(quiz => quiz.Document.Tags ?? new List<string>())
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Select(tag => tag.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-        _selectedQuizTags.RemoveWhere(selected => !tags.Any(tag => string.Equals(tag, selected, StringComparison.OrdinalIgnoreCase)));
-
-        QuizTagFilters.Clear();
-        foreach (var tag in tags)
+        RefreshTagFilters(Quizzes, quiz => quiz.Document.Tags, _selectedQuizTags, QuizTagFilters, SetQuizTagFilterSelected, () =>
         {
-            var isSelected = _selectedQuizTags.Contains(tag);
-            QuizTagFilters.Add(new TagFilterItemViewModel(tag, isSelected, SetQuizTagFilterSelected));
-        }
-
-        OnPropertyChanged(nameof(HasQuizTagFilters));
-        OnPropertyChanged(nameof(ActiveHasTagFilters));
-        OnPropertyChanged(nameof(HasActiveQuizTagFilters));
-        OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
-        OnPropertyChanged(nameof(ActiveTagFilterButtonText));
-        CommandManager.InvalidateRequerySuggested();
+            OnPropertyChanged(nameof(HasQuizTagFilters));
+            OnPropertyChanged(nameof(ActiveHasTagFilters));
+            OnPropertyChanged(nameof(HasActiveQuizTagFilters));
+            OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
+            OnPropertyChanged(nameof(ActiveTagFilterButtonText));
+        });
     }
 
     private void ApplyFlashcardFilters()

@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Windows;
 using System.Windows.Media;
 
 namespace Scriblucent.ViewModels;
@@ -14,7 +13,7 @@ public class MindMapGroupViewModel : ViewModelBase
         GroupId = groupId;
         _name = name;
         BackgroundColor = backgroundColor;
-        _backgroundBrush = CreateBrush(backgroundColor);
+        _backgroundBrush = GroupBrushFactory.Create(backgroundColor);
         MindMaps = new ObservableCollection<MindMapViewModel>(maps);
     }
 
@@ -39,21 +38,6 @@ public class MindMapGroupViewModel : ViewModelBase
     public void SetBackground(string backgroundColor)
     {
         BackgroundColor = backgroundColor;
-        BackgroundBrush = CreateBrush(backgroundColor);
-    }
-
-    private static Brush CreateBrush(string backgroundColor)
-    {
-        if (ColorConverter.ConvertFromString(backgroundColor) is Color color)
-        {
-            var brush = new SolidColorBrush(color);
-            brush.Freeze();
-            return brush;
-        }
-
-        if (Application.Current.Resources.Contains("CardBackground"))
-            return (Brush)Application.Current.Resources["CardBackground"];
-
-        return Brushes.White;
+        BackgroundBrush = GroupBrushFactory.Create(backgroundColor);
     }
 }
