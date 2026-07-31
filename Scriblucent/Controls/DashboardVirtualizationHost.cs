@@ -139,6 +139,21 @@ public sealed class DashboardVirtualizationHost : Decorator
     {
         ScrollPerfDiag.Log($"requestViewportRefresh\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tdeferred={_mutationReapplyDeferred}");
 
+        // This host's own position on the page may have shifted even though its item count
+        // didn't change - e.g. a sibling section above it just grew from a duplicate/add.
+        // Only the mutated host's own measure pass clears its cached _sectionTop (gated on
+        // itemCountChanged in MeasureHostContent/MeasureStaticHostContent); every other host
+        // in the scope only gets here, via the post-reflow RefreshVirtualizationViewportForScope
+        // sweep. Without clearing it too, TryUpdateSectionTop() keeps returning the stale
+        // pre-mutation position (_sectionTopIsCurrent stays true), so this host's visible-slice
+        // math stays offset from where WPF actually arranged it - a boundary gap at whichever
+        // edge the offset lands on. Confirmed via measureSliceStatic showing a downstream
+        // section's sectionTop never updating across a mutation that visibly grew the page above it.
+        _sectionTop = double.NaN;
+        _sectionTopIsCurrent = false;
+        _lastSyncedSliceOffset = double.NaN;
+        _lastSyncedSliceHeight = double.NaN;
+
         if (_mutationReapplyDeferred)
         {
             ApplyMutationRefresh();

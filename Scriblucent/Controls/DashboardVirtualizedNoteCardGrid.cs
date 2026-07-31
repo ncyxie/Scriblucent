@@ -140,8 +140,23 @@ public sealed class DashboardVirtualizedNoteCardGrid : DashboardVirtualizedCardG
         {
             extent = Items.Count * listRowHeight;
         }
-        else if (Items.Count >= 48)
+        else if (ShouldUseUniformWrapLayout())
         {
+            // Only take the cheap, uniform-row-height shortcut here when the panel's real
+            // arrangement is also going to be uniform (ShouldUseUniformWrapLayout, which for a
+            // Static/group host requires >= LargeListItemThreshold, not just this class's lower
+            // PageVirtualizedUniformThreshold - that lower bound only applies when this grid is
+            // actually hosted in a PageVirtualized dashboard). Using the flat 48-item threshold
+            // unconditionally here - as this used to do - made the estimate switch to a uniform
+            // GridCellHeight-per-row approximation well before a Static-mode group's real layout
+            // did (which still uses each card's true per-item height up to 200 items), so any
+            // group between 48 and 199 items containing taller-than-average cards got an
+            // underestimated contentExtent. DashboardVirtualizationHost.ComputeVisibleSlice
+            // clamps the renderable slice to that estimate, so the shortfall between the
+            // estimate and the group's real (larger) measured extent became a permanent blank
+            // gap at the tail of the group that scrolling could never reach. Confirmed via
+            // hostMeasureState showing a committed extent (from real per-item measurement)
+            // hundreds of pixels taller than the estimate driving measureSliceStatic's clamp.
             var perRow = Math.Max(1, (int)Math.Floor(width / GridCellWidth));
             var rows = (int)Math.Ceiling(Items.Count / (double)perRow);
             extent = rows * GridCellHeight;
