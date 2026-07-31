@@ -40,9 +40,17 @@ public sealed class NoteCardItemSizeProvider : IItemSizeProvider
         if (note.HasTags)
             height += 28;
 
-        var contentLines = EstimateLineCount(note.Content, charsPerLine: 36, maxLines: 6);
-        var extraContentLines = Math.Max(0, contentLines - 2);
-        height += extraContentLines * 15;
+        // note.Content lazily decodes+caches the RTF/Base64 preview on first access. During a bulk
+        // load, sizing dozens of not-yet-warmed cards here would force that decode synchronously on
+        // the UI thread for every one of them - exactly the stutter this estimate exists to avoid.
+        // Fall back to the tag-only estimate until WarmContentPreview has actually run for this card;
+        // the real measured extent corrects any difference once containers realize.
+        if (note.IsContentPreviewCached)
+        {
+            var contentLines = EstimateLineCount(note.Content, charsPerLine: 36, maxLines: 6);
+            var extraContentLines = Math.Max(0, contentLines - 2);
+            height += extraContentLines * 15;
+        }
 
         return new Size(GridWidth, Math.Clamp(height, GridMinHeight, GridMinHeight + 118));
     }
@@ -50,7 +58,8 @@ public sealed class NoteCardItemSizeProvider : IItemSizeProvider
     private static Size EstimateListSize(NoteCardViewModel note)
     {
         var lines = 2;
-        lines += EstimateLineCount(note.Content, ListPreviewCharsPerLine, maxLines: 2);
+        if (note.IsContentPreviewCached)
+            lines += EstimateLineCount(note.Content, ListPreviewCharsPerLine, maxLines: 2);
         if (note.HasTags)
             lines += 1;
 

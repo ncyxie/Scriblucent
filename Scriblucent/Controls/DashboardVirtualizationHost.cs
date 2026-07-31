@@ -126,6 +126,8 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     public void RequestViewportRefresh()
     {
+        ScrollPerfDiag.Log($"requestViewportRefresh\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tdeferred={_mutationReapplyDeferred}");
+
         if (_mutationReapplyDeferred)
         {
             ApplyMutationRefresh();
@@ -609,9 +611,10 @@ public sealed class DashboardVirtualizationHost : Decorator
             if (!ScrollPerfDiag.Enabled)
                 return MeasureHostContent(availableSize, grid);
 
+            var hadRealizedBefore = grid.HasRealizedContainers();
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var result = MeasureHostContent(availableSize, grid);
-            ScrollPerfDiag.Log($"hostMeasure\t{stopwatch.Elapsed.TotalMilliseconds:F2}\titems={grid.Items.Count}");
+            ScrollPerfDiag.Log($"hostMeasure\t{stopwatch.Elapsed.TotalMilliseconds:F2}\titems={grid.Items.Count}\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\thadRealized={hadRealizedBefore}");
             return result;
         }
         finally
@@ -696,7 +699,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         {
             var diagChildCount = grid.ResolveItemsPanel()?.Children.Count ?? -1;
             ScrollPerfDiag.Log(
-                $"measureSlice\tsliceOffset={sliceOffset:F0}\theight={measureHeight:F0}\textent={_extentHeight:F0}\tcontentExtent={contentExtent:F0}\tchildren={diagPrevChildCount}->{diagChildCount}");
+                $"measureSlice\tsliceOffset={sliceOffset:F0}\theight={measureHeight:F0}\textent={_extentHeight:F0}\tcontentExtent={contentExtent:F0}\tchildren={diagPrevChildCount}->{diagChildCount}\tsectionTop={_sectionTop:F0}\tviewportTop={ResolveEffectiveVerticalOffset():F0}\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}");
         }
 
         if (grid.HasItems && measureHeight > 0 && !grid.HasRealizedContainers())
@@ -761,6 +764,12 @@ public sealed class DashboardVirtualizationHost : Decorator
             measureHeight = Math.Max(1, Math.Min(contentExtent, ResolveViewportMeasureCap()));
         else if (measureHeight <= 0)
             measureHeight = Math.Max(contentExtent, 1);
+
+        if (ScrollPerfDiag.Enabled)
+        {
+            ScrollPerfDiag.Log(
+                $"measureSliceStatic\tsliceOffset={sliceOffset:F0}\theight={measureHeight:F0}\tcontentExtent={contentExtent:F0}\tsectionTop={_sectionTop:F0}\tviewportTop={ResolveEffectiveVerticalOffset():F0}\titems={grid.Items.Count}\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}");
+        }
 
         _sliceOffset = sliceOffset;
         _sliceHeight = measureHeight;

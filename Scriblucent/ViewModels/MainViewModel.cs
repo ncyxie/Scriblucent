@@ -678,6 +678,14 @@ public class MainViewModel : ViewModelBase
 
     private void ApplyLoadedNotes(NotesLoadResult result)
     {
+        // Set before any Notes mutation below (including the Clear() a few lines down): otherwise
+        // that Clear() fires OnNotesCollectionChanged while the guard is still false, arming a
+        // 300ms mutation-reaction timer (QueueNotesMutationReaction) that keeps re-deferring itself
+        // via ShouldDeferVirtualizationRefresh for as long as the subsequent batch load keeps the
+        // dashboard busy - then fires a fully redundant RebuildGroups() once things quiet down,
+        // re-realizing every card a second time right as the real load just finished.
+        _notesBatchAddInProgress = true;
+
         if (result.Status == NotesLoadStatus.ParseError)
         {
             // The file exists but failed to parse - do NOT create a starter note and save over it,
@@ -3169,7 +3177,7 @@ public class MainViewModel : ViewModelBase
                 _searchQuery = value ?? string.Empty;
                 OnPropertyChanged(nameof(SearchQuery));
                 OnPropertyChanged(nameof(ActiveSearchQuery));
-                QueueSearchFilterApply(ApplyFilters);
+                QueueSearchFilterApply(() => ApplyFilters());
             }
         }
     }
@@ -3185,7 +3193,7 @@ public class MainViewModel : ViewModelBase
             _flashcardSearchQuery = value ?? string.Empty;
             OnPropertyChanged(nameof(FlashcardSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            QueueSearchFilterApply(ApplyFlashcardFilters);
+            QueueSearchFilterApply(() => ApplyFlashcardFilters());
         }
     }
 
@@ -3200,7 +3208,7 @@ public class MainViewModel : ViewModelBase
             _mindMapSearchQuery = value ?? string.Empty;
             OnPropertyChanged(nameof(MindMapSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            QueueSearchFilterApply(ApplyMindMapFilters);
+            QueueSearchFilterApply(() => ApplyMindMapFilters());
         }
     }
 
@@ -3215,7 +3223,7 @@ public class MainViewModel : ViewModelBase
             _quizSearchQuery = value ?? string.Empty;
             OnPropertyChanged(nameof(QuizSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            QueueSearchFilterApply(ApplyQuizFilters);
+            QueueSearchFilterApply(() => ApplyQuizFilters());
         }
     }
 
@@ -4923,11 +4931,12 @@ public class MainViewModel : ViewModelBase
         ApplyQuizFilters();
     }
 
-    private void ApplyFilters()
+    private void ApplyFilters(bool rebuildGroups = true)
     {
         InvalidateUngroupedVisibleCount();
         _notesView.Refresh();
-        RebuildGroups();
+        if (rebuildGroups)
+            RebuildGroups();
         RefreshRecentNotes();
         RefreshCalendarScheduledNotes();
     }
@@ -4968,26 +4977,29 @@ public class MainViewModel : ViewModelBase
         });
     }
 
-    private void ApplyFlashcardFilters()
+    private void ApplyFlashcardFilters(bool rebuildGroups = true)
     {
         _flashcardSetsView.Refresh();
-        RebuildFlashcardSetGroups();
+        if (rebuildGroups)
+            RebuildFlashcardSetGroups();
         RefreshRecentFlashcardSets();
         NotifyFlashcardSetsChanged();
     }
 
-    private void ApplyMindMapFilters()
+    private void ApplyMindMapFilters(bool rebuildGroups = true)
     {
         _mindMapsView.Refresh();
-        RebuildMindMapGroups();
+        if (rebuildGroups)
+            RebuildMindMapGroups();
         RefreshRecentMindMaps();
         NotifyMindMapsChanged();
     }
 
-    private void ApplyQuizFilters()
+    private void ApplyQuizFilters(bool rebuildGroups = true)
     {
         _quizzesView.Refresh();
-        RebuildQuizGroups();
+        if (rebuildGroups)
+            RebuildQuizGroups();
         RefreshRecentQuizzes();
         NotifyQuizzesChanged();
     }
@@ -5525,7 +5537,12 @@ public class MainViewModel : ViewModelBase
 
         void AfterMotion()
         {
-            ApplyFilters();
+            // RebuildGroups() above already ran synchronously so containers exist for the enter
+            // animation. Nothing about Notes/grouping changes between then and here, so rebuilding
+            // again would just swap in fresh NoteGroupViewModel/host instances mid-flight, out from
+            // under whatever DashboardVirtualizationHost state has already settled for the previous
+            // instances - leaving stale cached extent/slice state and rendering as blank gaps.
+            ApplyFilters(rebuildGroups: false);
             RecalculateUngroupedVisibleCount();
             NotifyNotesChanged();
             RefreshActivityStats();
@@ -5580,7 +5597,9 @@ public class MainViewModel : ViewModelBase
             ReorderFlashcardSets();
             NormalizeFlashcardSetGroups();
             RefreshAvailableFlashcardTags();
-            ApplyFlashcardFilters();
+            // RebuildFlashcardSetGroups() already ran synchronously above the local function - see
+            // CompleteNotesBatchAdd for why rebuilding again here is redundant and unsafe.
+            ApplyFlashcardFilters(rebuildGroups: false);
             NotifyFlashcardSetsChanged();
             RefreshRecentFlashcardSets();
         }
@@ -5633,7 +5652,9 @@ public class MainViewModel : ViewModelBase
             ReorderMindMaps();
             NormalizeMindMapGroups();
             RefreshAvailableMindMapTags();
-            ApplyMindMapFilters();
+            // RebuildMindMapGroups() already ran synchronously above the local function - see
+            // CompleteNotesBatchAdd for why rebuilding again here is redundant and unsafe.
+            ApplyMindMapFilters(rebuildGroups: false);
             NotifyMindMapsChanged();
             RefreshRecentMindMaps();
         }
@@ -5686,7 +5707,9 @@ public class MainViewModel : ViewModelBase
             ReorderQuizzes();
             NormalizeQuizGroups();
             RefreshAvailableQuizTags();
-            ApplyQuizFilters();
+            // RebuildQuizGroups() already ran synchronously above the local function - see
+            // CompleteNotesBatchAdd for why rebuilding again here is redundant and unsafe.
+            ApplyQuizFilters(rebuildGroups: false);
             NotifyQuizzesChanged();
             RefreshRecentQuizzes();
         }
@@ -7073,6 +7096,7 @@ public class MainViewModel : ViewModelBase
 
     private void RebuildGroups()
     {
+        Scriblucent.Services.ScrollPerfDiag.Log($"rebuildGroups\tnotesCount={Notes.Count}\tnoteGroupsCountBefore={NoteGroups.Count}");
         _notesView.Refresh();
 
         var groupedByRecent = Notes

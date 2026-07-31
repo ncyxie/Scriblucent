@@ -98,6 +98,14 @@ public class NoteCardViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// True once <see cref="Content"/> has decoded and cached its preview at least once. Lets
+    /// layout-estimation code (<see cref="Controls.NoteCardItemSizeProvider"/>) avoid forcing that
+    /// decode just to size a card during a bulk load, before <see cref="WarmContentPreview"/> has
+    /// had a chance to run.
+    /// </summary>
+    internal bool IsContentPreviewCached => _cachedContentPreview is not null;
+
+    /// <summary>
     /// Builds and caches the preview eagerly so scrolling the dashboard never pays the
     /// RTF decode on the UI thread while cards realize.
     /// </summary>

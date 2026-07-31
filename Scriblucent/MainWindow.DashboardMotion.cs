@@ -420,19 +420,23 @@ public partial class MainWindow : IDashboardMotionHost
 
     private void RefreshVirtualizationViewportForScope(DashboardMotionScope scope)
     {
-        if (_dashboardMotionEngines.TryGetValue(scope, out var engine)
-            && engine.IsLayoutAnimationActive)
+        var animActive = _dashboardMotionEngines.TryGetValue(scope, out var engine) && engine.IsLayoutAnimationActive;
+        Scriblucent.Services.ScrollPerfDiag.Log($"refreshViewportForScope\tscope={scope}\tanimActive={animActive}");
+        if (animActive)
             return;
 
         if (ResolveDashboardRoot(scope) is { } root)
         {
             Dispatcher.BeginInvoke(() =>
             {
+                var count = 0;
                 foreach (var host in EnumerateDescendantVirtualizationHosts(root))
                 {
+                    count++;
                     host.FlushDeferredMutationRefresh();
                     host.RequestViewportRefresh();
                 }
+                Scriblucent.Services.ScrollPerfDiag.Log($"refreshViewportForScope-hostsRefreshed\tscope={scope}\tcount={count}");
 
                 EnsureDashboardCardGridsInteractive(scope);
                 IndicatorRevealMotionBehavior.FlushPending();
