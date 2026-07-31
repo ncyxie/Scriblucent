@@ -50,6 +50,7 @@ public sealed class DashboardVirtualizationHost : Decorator
     private bool _viewportSyncScheduled;
     private bool _mutationReapplyDeferred;
     private bool _motionViewportFrozen;
+    private long _motionViewportFrozenSinceMs;
     private double _frozenSliceOffset;
     private double _frozenSliceHeight;
     private bool _isInternalLayoutPass;
@@ -76,6 +77,16 @@ public sealed class DashboardVirtualizationHost : Decorator
     private const double UniformSliceEquivalencePixels = 32;
     private const double UniformHostMeasureStridePixels = 48;
     private const double MinViableViewportHeight = 64;
+
+    // Defense in depth: DashboardMotionEngine is expected to always call UnfreezeMotionViewport
+    // once its reflow completes. If a card's enter animation gets cancelled without notice while
+    // it's in flight (e.g. its container is recycled by an overlapping mutation - see
+    // DashboardMotionEngine's _pendingEnterCompletions comment for the full mechanism), that
+    // unfreeze can be missed, and this host would otherwise stop responding to scroll forever -
+    // the "scroll a tiny bit and every card vanishes" bug. Auto-clearing the freeze after a
+    // generous timeout means that failure mode is bounded here too, independently of whether the
+    // engine-side fix covers every case.
+    private const long MaxMotionViewportFreezeMs = 3000;
 
     public ScrollViewer? ScrollViewerElement
     {
@@ -159,8 +170,25 @@ public sealed class DashboardVirtualizationHost : Decorator
     public void FreezeMotionViewport()
     {
         _motionViewportFrozen = true;
+        _motionViewportFrozenSinceMs = Environment.TickCount64;
         _frozenSliceOffset = _sliceOffset;
         _frozenSliceHeight = Math.Max(_sliceHeight, 1);
+    }
+
+    /// <summary>
+    /// True if still frozen after clearing it if the freeze has outlived
+    /// <see cref="MaxMotionViewportFreezeMs"/> - see the comment on that constant.
+    /// </summary>
+    private bool IsMotionViewportStillFrozen()
+    {
+        if (!_motionViewportFrozen)
+            return false;
+
+        if (Environment.TickCount64 - _motionViewportFrozenSinceMs < MaxMotionViewportFreezeMs)
+            return true;
+
+        UnfreezeMotionViewport();
+        return false;
     }
 
     public void UnfreezeMotionViewport()
@@ -175,7 +203,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         _motionViewportFrozen = false;
         _frozenSliceOffset = 0;
         _frozenSliceHeight = 0;
-        InvalidateExtentForMutation();
+        InvalidateExtentForMutation(clearGridLayoutCache: true);
     }
 
     internal void NotifySmoothScrollStarted()
@@ -199,7 +227,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     internal void NotifyVisualScrollOffsetChanged()
     {
-        if (!IsSmoothScrollActive || _motionViewportFrozen || !IsScrollViewportViable())
+        if (!IsSmoothScrollActive || IsMotionViewportStillFrozen() || !IsScrollViewportViable())
             return;
 
         ScheduleViewportSync();
@@ -315,8 +343,14 @@ public sealed class DashboardVirtualizationHost : Decorator
         return Math.Max(0, ResolveEffectiveVerticalOffset() - _sectionTop);
     }
 
-    private void InvalidateExtentForMutation()
+    private void InvalidateExtentForMutation(bool clearGridLayoutCache = false)
     {
+        if (clearGridLayoutCache)
+        {
+            Grid?.ResetVirtualizationLayoutCache();
+            ScrollPerfDiag.Log($"resetVirtualizationLayoutCache\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}");
+        }
+
         BeginExtentRemeasure();
         InvalidateMeasure();
     }
@@ -349,6 +383,13 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // A host freshly entering the visual tree has no legitimate reason to already be
+        // motion-frozen - any such state is stale, left over from a previous lifecycle (see the
+        // comment on MaxMotionViewportFreezeMs). Clearing it here means a host can never come
+        // back from being unloaded/reloaded already broken.
+        _motionViewportFrozen = false;
+        _motionViewportFrozenSinceMs = 0;
+
         AttachScrollViewer(ScrollViewerElement ?? DashboardMotionViewport.FindScrollViewer(this));
 
         InvalidateMeasure();
@@ -364,6 +405,8 @@ public sealed class DashboardVirtualizationHost : Decorator
     {
         DashboardShadowSuspender.TryResume(this);
         DetachScrollViewer();
+        _motionViewportFrozen = false;
+        _motionViewportFrozenSinceMs = 0;
     }
 
     private void AttachScrollViewer(ScrollViewer? scrollViewer)
@@ -392,7 +435,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private void OnPageScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (_motionViewportFrozen || _isInternalLayoutPass || !IsScrollViewportViable())
+        if (IsMotionViewportStillFrozen() || _isInternalLayoutPass || !IsScrollViewportViable())
             return;
 
         if (Math.Abs(e.VerticalChange) < 0.01 && Math.Abs(e.ViewportHeightChange) < 0.01)
@@ -433,13 +476,13 @@ public sealed class DashboardVirtualizationHost : Decorator
             InvalidateMeasure();
         }
 
-        if (!_motionViewportFrozen)
+        if (!IsMotionViewportStillFrozen())
             ScheduleViewportSync();
     }
 
     private void ScheduleViewportSync()
     {
-        if (_motionViewportFrozen || _viewportSyncScheduled)
+        if (IsMotionViewportStillFrozen() || _viewportSyncScheduled)
             return;
 
         if (IsSmoothScrollActive)
@@ -472,7 +515,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private void ApplyViewportScroll(bool force = false)
     {
-        if (_motionViewportFrozen || !IsScrollViewportViable())
+        if (IsMotionViewportStillFrozen() || !IsScrollViewportViable())
             return;
 
         if (Grid is not { } grid)
@@ -494,7 +537,12 @@ public sealed class DashboardVirtualizationHost : Decorator
         var extentHint = ResolveEffectiveExtent(grid, width, contentExtent);
         ComputeVisibleSlice(width, extentHint, out var sliceOffset, out var sliceHeight);
         var measureHeight = ResolveMeasureHeight(sliceHeight, extentHint);
-        if (measureHeight <= 0 && contentExtent > 0)
+        // Only pad up to a minimum-viable slice when visibility is genuinely uncertain (viewport
+        // not yet known). If ResolveMeasureHeight/IsSectionPotentiallyVisible already determined
+        // this section is definitively off-screen, forcing a slice here would apply the wrong
+        // (stale, offset-0) region as if it were visible - see the comment on this same pattern in
+        // MeasureStaticHostContent for the full mechanism and how it was diagnosed.
+        if (measureHeight <= 0 && contentExtent > 0 && IsSectionPotentiallyVisible(extentHint))
             measureHeight = Math.Max(1, Math.Min(contentExtent, ResolveViewportMeasureCap()));
 
         if (measureHeight <= 0)
@@ -611,6 +659,14 @@ public sealed class DashboardVirtualizationHost : Decorator
             if (!ScrollPerfDiag.Enabled)
                 return MeasureHostContent(availableSize, grid);
 
+            var viewportHeight = _pageScrollViewer?.ViewportHeight ?? -1;
+            var owningWindowMinimized = IsOwningWindowMinimized(this);
+            var viewportViable = !owningWindowMinimized
+                && (_pageScrollViewer is null || viewportHeight >= MinViableViewportHeight);
+            var preservesSnapshot = !viewportViable && _extentHeight > ExtentBottomPadding;
+            ScrollPerfDiag.Log(
+                $"hostMeasureState\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\tmode={HostMode}\titems={grid.Items.Count}\textent={_extentHeight:F0}\tviewportHeight={viewportHeight:F0}\tminimized={owningWindowMinimized}\tviable={viewportViable}\tpreserve={preservesSnapshot}\tmotionFrozen={_motionViewportFrozen}");
+
             var hadRealizedBefore = grid.HasRealizedContainers();
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var result = MeasureHostContent(availableSize, grid);
@@ -638,10 +694,11 @@ public sealed class DashboardVirtualizationHost : Decorator
         {
             var addedItems = grid.Items.Count > previousItemCount;
             _lastItemCount = grid.Items.Count;
-            if (!_motionViewportFrozen || addedItems)
+            var stillFrozen = IsMotionViewportStillFrozen();
+            if (!stillFrozen || addedItems)
             {
                 BeginExtentRemeasure();
-                if (!_motionViewportFrozen)
+                if (!stillFrozen)
                     ClearSliceSyncState();
             }
         }
@@ -675,10 +732,13 @@ public sealed class DashboardVirtualizationHost : Decorator
         var extentHint = ResolveEffectiveExtent(grid, width, contentExtent);
         ComputeVisibleSlice(width, extentHint, out var sliceOffset, out var sliceHeight);
         var measureHeight = ResolveMeasureHeight(sliceHeight, extentHint);
-        if (measureHeight <= 0 && contentExtent > 0)
+        // See the matching comment in ApplyViewportScroll/MeasureStaticHostContent: only pad up to
+        // a minimum-viable slice when visibility is genuinely uncertain, not when it's already been
+        // determined this section is definitively scrolled out of view.
+        if (measureHeight <= 0 && contentExtent > 0 && IsSectionPotentiallyVisible(extentHint))
             measureHeight = Math.Max(1, Math.Min(contentExtent, ResolveViewportMeasureCap()));
 
-        if (_motionViewportFrozen && _frozenSliceHeight > 0)
+        if (IsMotionViewportStillFrozen() && _frozenSliceHeight > 0)
         {
             sliceOffset = _frozenSliceOffset;
             sliceHeight = _frozenSliceHeight;
@@ -705,11 +765,11 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (grid.HasItems && measureHeight > 0 && !grid.HasRealizedContainers())
             RemeasureGridForRealization(grid, width, measureHeight, sliceOffset);
 
-        var measuredExtent = grid.GetExtentHeight();
-        if (measuredExtent <= 0)
-            measuredExtent = contentExtent;
-
-        measuredExtent = Math.Max(measuredExtent, contentExtent);
+        var measuredExtent = ResolveMeasuredExtent(
+            grid,
+            contentExtent,
+            out var panelExtent,
+            out var extentSource);
 
         var cappedHeight = CapGridMeasureHeight(grid, sliceOffset, measureHeight, measuredExtent, contentExtent);
         if (Math.Abs(cappedHeight - measureHeight) > 0.5)
@@ -719,8 +779,11 @@ public sealed class DashboardVirtualizationHost : Decorator
             _lastSyncedSliceHeight = measureHeight;
             grid.ApplyPageViewport(sliceOffset, measureHeight);
             grid.Measure(new Size(width, measureHeight));
-            measuredExtent = Math.Max(measuredExtent, grid.GetExtentHeight());
-            measuredExtent = Math.Max(measuredExtent, contentExtent);
+            measuredExtent = ResolveMeasuredExtent(
+                grid,
+                contentExtent,
+                out panelExtent,
+                out extentSource);
         }
         else
         {
@@ -730,6 +793,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         }
 
         CommitMeasuredExtent(measuredExtent);
+        LogMeasuredExtent(grid, contentExtent, panelExtent, measuredExtent, extentSource);
 
         return new Size(width, Math.Max(_extentHeight, 0));
     }
@@ -760,10 +824,23 @@ public sealed class DashboardVirtualizationHost : Decorator
         var contentExtent = EstimateContentExtent(grid, width);
         ComputeVisibleSlice(width, contentExtent, out var sliceOffset, out var sliceHeight);
         var measureHeight = ResolveMeasureHeight(sliceHeight, contentExtent);
-        if (measureHeight <= 0 && contentExtent > 0)
-            measureHeight = Math.Max(1, Math.Min(contentExtent, ResolveViewportMeasureCap()));
-        else if (measureHeight <= 0)
-            measureHeight = Math.Max(contentExtent, 1);
+        // ResolveMeasureHeight already returns >0 whenever IsSectionPotentiallyVisible was true
+        // (falling back to a viewport-sized slice); it only returns 0 when that check explicitly
+        // determined this section is scrolled out of view. Padding it back up here regardless of
+        // that - as this used to do unconditionally - forces the panel to realize its content
+        // starting at sliceOffset 0 (this section's own top) even when the real scroll position is
+        // deep inside or past it, leaving everything beyond that first forced slice unrealized: a
+        // blank gap where the rest of this group's cards should be. Confirmed via
+        // measureSliceStatic diagnostic logging showing sliceOffset stuck at 0 with viewportTop far
+        // past sectionTop + contentExtent. Only pad when visibility is genuinely uncertain (e.g.
+        // the page ScrollViewer isn't attached yet), matching IsSectionPotentiallyVisible's own
+        // "assume visible" default for that case.
+        if (measureHeight <= 0 && IsSectionPotentiallyVisible(contentExtent))
+        {
+            measureHeight = contentExtent > 0
+                ? Math.Max(1, Math.Min(contentExtent, ResolveViewportMeasureCap()))
+                : Math.Max(contentExtent, 1);
+        }
 
         if (ScrollPerfDiag.Enabled)
         {
@@ -782,11 +859,11 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (grid.HasItems && measureHeight > 0 && !grid.HasRealizedContainers())
             RemeasureGridForRealization(grid, width, measureHeight, sliceOffset);
 
-        var measuredExtent = grid.GetExtentHeight();
-        if (measuredExtent <= 0)
-            measuredExtent = contentExtent;
-
-        measuredExtent = Math.Max(measuredExtent, contentExtent);
+        var measuredExtent = ResolveMeasuredExtent(
+            grid,
+            contentExtent,
+            out var panelExtent,
+            out var extentSource);
 
         var cappedHeight = CapGridMeasureHeight(grid, sliceOffset, measureHeight, measuredExtent, contentExtent);
         if (Math.Abs(cappedHeight - measureHeight) > 0.5)
@@ -796,7 +873,11 @@ public sealed class DashboardVirtualizationHost : Decorator
             _lastSyncedSliceHeight = measureHeight;
             grid.ApplyPageViewport(sliceOffset, measureHeight);
             grid.Measure(new Size(width, measureHeight));
-            measuredExtent = Math.Max(measuredExtent, grid.GetExtentHeight());
+            measuredExtent = ResolveMeasuredExtent(
+                grid,
+                contentExtent,
+                out panelExtent,
+                out extentSource);
         }
         else
         {
@@ -806,6 +887,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         }
 
         CommitMeasuredExtent(measuredExtent);
+        LogMeasuredExtent(grid, contentExtent, panelExtent, measuredExtent, extentSource);
 
         return new Size(width, Math.Max(_extentHeight, 0));
     }
@@ -869,6 +951,38 @@ public sealed class DashboardVirtualizationHost : Decorator
         return contentExtent;
     }
 
+    private static double ResolveMeasuredExtent(
+        DashboardVirtualizedCardGrid grid,
+        double contentExtent,
+        out double panelExtent,
+        out string extentSource)
+    {
+        panelExtent = grid.GetPanelExtentHeight();
+        if (contentExtent > 0 && grid.UsesUniformPanelLayout())
+        {
+            extentSource = "estimate";
+            return contentExtent;
+        }
+
+        extentSource = "grid";
+        var gridExtent = grid.GetExtentHeight();
+        return gridExtent > 0 ? Math.Max(gridExtent, contentExtent) : contentExtent;
+    }
+
+    private void LogMeasuredExtent(
+        DashboardVirtualizedCardGrid grid,
+        double contentExtent,
+        double panelExtent,
+        double measuredExtent,
+        string extentSource)
+    {
+        if (!ScrollPerfDiag.Enabled)
+            return;
+
+        ScrollPerfDiag.Log(
+            $"measureExtent\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\tmode={HostMode}\titems={grid.Items.Count}\tcontentExtent={contentExtent:F0}\tpanelExtent={panelExtent:F0}\tcommittedExtent={measuredExtent:F0}\tsource={extentSource}");
+    }
+
     private static double EstimateContentExtent(DashboardVirtualizedCardGrid grid, double width)
     {
         if (grid.Items.Count == 0 || width <= 0)
@@ -906,7 +1020,7 @@ public sealed class DashboardVirtualizationHost : Decorator
     private void ApplyMutationRefresh()
     {
         _mutationReapplyDeferred = false;
-        InvalidateExtentForMutation();
+        InvalidateExtentForMutation(clearGridLayoutCache: true);
     }
 
     private void BeginExtentRemeasure()

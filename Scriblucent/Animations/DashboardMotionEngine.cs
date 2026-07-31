@@ -54,8 +54,23 @@ public sealed class DashboardMotionEngine
     private readonly HashSet<Guid> _playingEnterIds = new();
     private readonly HashSet<Guid> _instantEnterIds = new();
     private int _layoutAnimationDepth;
-    private bool _batchMutationActive;
+    private int _batchMutationDepth;
+    private bool _batchMutationInFlight;
+    private bool _batchMutationReflowRunning;
+    private readonly List<Action> _batchMutationAfterMotion = new();
     private Action? _onReflowComplete;
+
+    // Keyed by item id so a card that leaves the tree mid-animation (its RenderTransitionClock
+    // gets Stop()'d by NoteCardControl.OnUnloaded -> CardSurfaceMotionBehavior.Cleanup ->
+    // UiMotion.Cleanup, which silently drops the completion callback - RenderTransitionClock.Stop
+    // clears _onAllComplete without invoking it) can still have ITS specific AnimateReflow pass's
+    // completion retired from outside that pass's own closure. Without this, one dropped callback
+    // means that pass's remainingEnters-equivalent count never reaches zero, FinishReflow() never
+    // runs, and every DashboardVirtualizationHost in the scope stays frozen (see
+    // FreezeVirtualizationViewports/UnfreezeVirtualizationViewports) for the rest of the process's
+    // life - the dashboard stops responding to scroll and a small scroll makes cards vanish.
+    private readonly Dictionary<Guid, Action> _pendingEnterCompletions = new();
+    private DispatcherTimer? _reflowSafetyTimer;
 
     public Action? OnCollectionLayoutChanged { get; set; }
 
@@ -333,10 +348,15 @@ public sealed class DashboardMotionEngine
 
     public void BeginBatchMutation()
     {
-        if (_batchMutationActive)
+        _batchMutationDepth++;
+        if (_batchMutationInFlight)
+        {
+            ScrollPerfDiag.Log($"batchMutationBegin\tscope={_scope}\tdepth={_batchMutationDepth}\tcoalesced=true\treflowRunning={_batchMutationReflowRunning}");
             return;
+        }
 
-        _batchMutationActive = true;
+        _batchMutationInFlight = true;
+        ScrollPerfDiag.Log($"batchMutationBegin\tscope={_scope}\tdepth={_batchMutationDepth}\tcoalesced=false\treflowRunning={_batchMutationReflowRunning}");
         if (!IsLayoutAnimationActive)
             BeginLayoutAnimation();
 
@@ -346,7 +366,7 @@ public sealed class DashboardMotionEngine
     public void RegisterBatchItemAdd(Guid itemId, bool grouped = false)
     {
         _ = grouped;
-        if (!_batchMutationActive)
+        if (!_batchMutationInFlight)
             BeginBatchMutation();
 
         _enteringItemIds.Add(itemId);
@@ -354,11 +374,27 @@ public sealed class DashboardMotionEngine
 
     public void CompleteBatchAdd(IReadOnlyList<Guid> enterItemIds, Action? afterMotion = null)
     {
-        _batchMutationActive = false;
-        _onReflowComplete = afterMotion;
+        if (_batchMutationDepth > 0)
+            _batchMutationDepth--;
+
+        if (afterMotion is not null)
+            _batchMutationAfterMotion.Add(afterMotion);
+
         foreach (var itemId in enterItemIds)
             _scheduledEnterIds.Add(itemId);
 
+        ScrollPerfDiag.Log($"batchMutationComplete\tscope={_scope}\tdepth={_batchMutationDepth}\tinFlight={_batchMutationInFlight}\treflowRunning={_batchMutationReflowRunning}\tpendingEnters={_scheduledEnterIds.Count}");
+
+        if (_batchMutationDepth > 0)
+            return;
+
+        // Deliberately NOT also gating on _batchMutationReflowRunning here: that flag is only
+        // cleared inside FinishReflow's terminal branch, so if a reflow pass ever fails to reach
+        // it (see the _pendingEnterCompletions comment - a dropped enter-animation completion is
+        // the known way that happens), this flag would get stuck true and permanently prevent
+        // every future duplicate/add on this scope from ever scheduling a reflow again.
+        // ScheduleReflowAfterLayout()'s own _reflowScheduled guard already prevents redundant
+        // concurrent scheduling, so this doesn't need a second gate.
         ScheduleReflowAfterLayout();
     }
 
@@ -390,16 +426,18 @@ public sealed class DashboardMotionEngine
 
     private void RunReflowDispatcherWork()
     {
-        var enterIds = _scheduledEnterIds.ToList();
-        var waitForItemId = enterIds.Count == 1 ? enterIds[0] : (Guid?)null;
+        var waitForItemId = _scheduledEnterIds.Count == 1 ? _scheduledEnterIds.First() : (Guid?)null;
 
         ScheduleAfterLayoutReady(() =>
         {
+            var enterIds = _scheduledEnterIds.ToList();
             _reflowScheduled = false;
             _scheduledEnterIds.Clear();
+            _batchMutationReflowRunning = _batchMutationInFlight;
+            ScrollPerfDiag.Log($"reflowStart\tscope={_scope}\tbatchInFlight={_batchMutationInFlight}\tbatchDepth={_batchMutationDepth}\tenterCount={enterIds.Count}");
             AnimateReflow(enterIds);
 
-            if (_scheduledEnterIds.Count > 0)
+            if (_scheduledEnterIds.Count > 0 && !_batchMutationReflowRunning)
                 ScheduleReflowAfterLayout();
         }, waitForItemId);
     }
@@ -642,6 +680,51 @@ public sealed class DashboardMotionEngine
         _deleteBatchSafetyTimer.Start();
     }
 
+    /// <summary>
+    /// Bounds how long an add/duplicate reflow pass can stay waiting on card-enter completions.
+    /// Mirrors ArmDeleteBatchSafety. This is the last line of defense: even if a card's enter
+    /// animation gets cancelled without notice (see the comment on _pendingEnterCompletions) and
+    /// SweepOrphanedEnterCompletions doesn't get a chance to run again, this guarantees the pass
+    /// - and therefore UnfreezeVirtualizationViewports - completes within a bounded time instead
+    /// of leaving every host in the scope frozen for the rest of the process's life.
+    /// </summary>
+    private void ArmReflowSafety()
+    {
+        _reflowSafetyTimer?.Stop();
+        _reflowSafetyTimer = new DispatcherTimer(DispatcherPriority.Loaded)
+        {
+            Interval = TimeSpan.FromMilliseconds(
+                UiMotion.NoteAddEnterMs + UiMotion.NoteAddReflowMs + UiMotion.ReflowStaggerCapMs + 300)
+        };
+        _reflowSafetyTimer.Tick += (_, _) => ForceFinishStuckEnters();
+        _reflowSafetyTimer.Start();
+    }
+
+    private void MaybeDisarmReflowSafety()
+    {
+        if (_pendingEnterCompletions.Count > 0)
+            return;
+
+        _reflowSafetyTimer?.Stop();
+        _reflowSafetyTimer = null;
+    }
+
+    private void ForceFinishStuckEnters()
+    {
+        _reflowSafetyTimer?.Stop();
+        _reflowSafetyTimer = null;
+
+        if (_pendingEnterCompletions.Count == 0)
+            return;
+
+        ScrollPerfDiag.Log($"reflowSafetyForceFinish\tscope={_scope}\tstuckCount={_pendingEnterCompletions.Count}");
+        foreach (var (itemId, retire) in _pendingEnterCompletions.ToList())
+        {
+            _ = itemId;
+            retire();
+        }
+    }
+
     private void CommitDeleteBatch(Action commitDelete, Action? afterMotion = null)
     {
         if (_deleteBatchCommitted)
@@ -778,6 +861,12 @@ public sealed class DashboardMotionEngine
         RefreshLayoutRootReferences();
         ForceLayout();
 
+        // A prior reflow pass (e.g. from an overlapping duplicate/add that started before this
+        // one) may still have entries here whose card left the tree before its enter animation's
+        // completion callback fired. Retire those now, using this pass's freshly-refreshed view
+        // of the tree, so a dropped callback from an earlier pass can never block indefinitely.
+        SweepOrphanedEnterCompletions();
+
         foreach (var grid in GetReflowGrids())
             grid.EnsureRealizedCardsInteractive();
 
@@ -812,23 +901,56 @@ public sealed class DashboardMotionEngine
             TryCompleteAddMotion();
         });
 
-        var remainingEnters = enterItemIds.Count;
-        void OnEnterAnimationComplete()
+        var remainingEnters = new HashSet<Guid>(enterItemIds);
+        void RetireEnter(Guid itemId)
         {
-            remainingEnters--;
-            if (remainingEnters > 0)
+            if (!remainingEnters.Remove(itemId))
+                return;
+
+            _pendingEnterCompletions.Remove(itemId);
+            MaybeDisarmReflowSafety();
+            if (remainingEnters.Count > 0)
                 return;
 
             enterComplete = true;
             TryCompleteAddMotion();
         }
 
+        // Registered per-id so SweepOrphanedEnterCompletions (called from a LATER AnimateReflow
+        // pass, or from the reflow safety-timer watchdog) can retire a specific stuck id and
+        // correctly drive THIS pass's completion, even though remainingEnters/TryCompleteAddMotion
+        // are local to this call and not otherwise reachable from outside it.
+        foreach (var enterItemId in enterItemIds)
+            _pendingEnterCompletions[enterItemId] = () => RetireEnter(enterItemId);
+
+        ArmReflowSafety();
+
         var enterDelay = 0;
         foreach (var enterItemId in enterItemIds)
         {
-            TryPlayEnterForItem(enterItemId, OnEnterAnimationComplete, enterDelay);
+            TryPlayEnterForItem(enterItemId, () => RetireEnter(enterItemId), enterDelay);
             if (animatedEnterIds.Contains(enterItemId))
                 enterDelay = Math.Min(enterDelay + UiMotion.ReflowStaggerMs, UiMotion.ReflowStaggerCapMs);
+        }
+    }
+
+    /// <summary>
+    /// Retires any pending enter-completion whose card is no longer findable in the tree - the
+    /// symptom of a dropped RenderTransitionClock completion (see the comment on
+    /// _pendingEnterCompletions). Safe to call whenever the tree/layout is known-fresh.
+    /// </summary>
+    private void SweepOrphanedEnterCompletions()
+    {
+        if (_pendingEnterCompletions.Count == 0)
+            return;
+
+        foreach (var (itemId, retire) in _pendingEnterCompletions.ToList())
+        {
+            if (FindEnterLayoutRoot(itemId) is not null)
+                continue;
+
+            ScrollPerfDiag.Log($"enterSweepOrphaned\tscope={_scope}\titemId={itemId}");
+            retire();
         }
     }
 
@@ -933,10 +1055,23 @@ public sealed class DashboardMotionEngine
 
     private void FinishReflow()
     {
+        if (_batchMutationInFlight && _scheduledEnterIds.Count > 0)
+        {
+            _batchMutationReflowRunning = false;
+            ScrollPerfDiag.Log($"reflowContinue\tscope={_scope}\tbatchDepth={_batchMutationDepth}\tpendingEnters={_scheduledEnterIds.Count}");
+            ScheduleReflowAfterLayout();
+            return;
+        }
+
         ClearMotionCaches();
         _instantEnterIds.Clear();
         _relocatingItemIds.Clear();
-        _batchMutationActive = false;
+        _batchMutationDepth = 0;
+        _batchMutationInFlight = false;
+        _batchMutationReflowRunning = false;
+        _pendingEnterCompletions.Clear();
+        _reflowSafetyTimer?.Stop();
+        _reflowSafetyTimer = null;
         EndAddMotionLayoutOnGrids();
         UnfreezeVirtualizationViewports();
         EndLayoutAnimation();
@@ -945,6 +1080,13 @@ public sealed class DashboardMotionEngine
         var afterMotion = _onReflowComplete;
         _onReflowComplete = null;
         afterMotion?.Invoke();
+
+        var batchAfterMotion = _batchMutationAfterMotion.ToArray();
+        _batchMutationAfterMotion.Clear();
+        foreach (var callback in batchAfterMotion)
+            callback();
+
+        ScrollPerfDiag.Log($"reflowFinish\tscope={_scope}\tbatchCallbacks={batchAfterMotion.Length}");
 
         if (_deferredEnterIds.Count == 0)
             return;
@@ -1272,6 +1414,9 @@ public sealed class DashboardMotionEngine
         _playingEnterIds.Remove(itemId);
         _instantEnterIds.Remove(itemId);
         _scheduledEnterIds.Remove(itemId);
+
+        if (_pendingEnterCompletions.Remove(itemId, out var retire))
+            retire();
     }
 
     private static DashboardVirtualizationHost? TryFindVirtualizationHost(DashboardVirtualizedCardGrid grid)
@@ -1989,9 +2134,21 @@ public sealed class DashboardMotionEngine
         _deferredEnterIds.Clear();
         _playingEnterIds.Clear();
         _instantEnterIds.Clear();
-        _batchMutationActive = false;
-        _onReflowComplete?.Invoke();
+        _batchMutationDepth = 0;
+        _batchMutationInFlight = false;
+        _batchMutationReflowRunning = false;
+        _pendingEnterCompletions.Clear();
+        _reflowSafetyTimer?.Stop();
+        _reflowSafetyTimer = null;
+        var afterMotion = _onReflowComplete;
         _onReflowComplete = null;
+        afterMotion?.Invoke();
+
+        var batchAfterMotion = _batchMutationAfterMotion.ToArray();
+        _batchMutationAfterMotion.Clear();
+        foreach (var callback in batchAfterMotion)
+            callback();
+
         ClearMotionCaches();
     }
 }

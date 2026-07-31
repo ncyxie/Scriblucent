@@ -283,6 +283,15 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         return Math.Max(panelExtent, Math.Max(uniformExtent, estimatedExtent));
     }
 
+    internal double GetPanelExtentHeight()
+        => ResolvePanelExtentHeight();
+
+    internal void ResetVirtualizationLayoutCache()
+    {
+        if (ResolveItemsPanel() is VirtualizingWrapPanel wrapPanel)
+            wrapPanel.ClearItemSizeCache();
+    }
+
     internal virtual bool UsesUniformPanelLayout()
     {
         if (this is DashboardVirtualizedNoteCardGrid { IsListLayout: false } && Items.Count >= LargeListItemThreshold)
