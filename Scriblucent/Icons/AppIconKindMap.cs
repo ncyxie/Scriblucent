@@ -63,6 +63,9 @@ public static class AppIconKindMap
         AppIconKind.Lightbulb => PackIconLucideKind.Lightbulb,
         AppIconKind.Refresh => PackIconLucideKind.RefreshCw,
         AppIconKind.Warning => PackIconLucideKind.TriangleAlert,
+        AppIconKind.Info => PackIconLucideKind.Info,
+        AppIconKind.Error => PackIconLucideKind.CircleAlert,
+        AppIconKind.Question => PackIconLucideKind.CircleQuestionMark,
         AppIconKind.Github => PackIconLucideKind.Github,
         _ => PackIconLucideKind.CircleQuestionMark
     };

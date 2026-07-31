@@ -117,7 +117,6 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Grid.Style>
-                                    <controls:CardShadowLayer/>
                                     <Border Background="{DynamicResource CardBackground}"
                                         BorderThickness="0"
                                         CornerRadius="{StaticResource Radius.Card}"
@@ -322,7 +321,6 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Grid.Style>
-                                    <controls:CardShadowLayer/>
                                     <Border Background="{DynamicResource CardBackground}"
                                         BorderThickness="0"
                                         CornerRadius="{StaticResource Radius.Card}"
@@ -505,7 +503,7 @@
                                                                 <TextBlock Grid.Column="4"
                                    Text="{Binding Name}"
                                    FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"
+                                   Foreground="{Binding ForegroundBrush}"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
                                    Margin="8,0,0,0"/>

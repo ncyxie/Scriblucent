@@ -15,6 +15,8 @@ public class NoteCardViewModel : ViewModelBase
     private bool _isMenuVisible;
     private bool _isSelectedInMassSelect;
     private string? _cachedContentPreview;
+    private string? _cachedTagsDisplay;
+    private string? _cachedTagsSearchText;
     private readonly Action<NoteCardViewModel> _deleteAction;
     private readonly Action<NoteCardViewModel>? _removeFromGroupAction;
     private readonly Action<NoteCardViewModel>? _duplicateAction;
@@ -48,12 +50,15 @@ public class NoteCardViewModel : ViewModelBase
     {
         get
         {
-            if (!HasTags)
-                return string.Empty;
+            if (_cachedTagsDisplay is not null)
+                return _cachedTagsDisplay;
 
-            return string.Join("   ", Document.Tags
-                .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                .Select(tag => $"#{tag.Trim()}"));
+            _cachedTagsDisplay = !HasTags
+                ? string.Empty
+                : string.Join("   ", Document.Tags
+                    .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                    .Select(tag => $"#{tag.Trim()}"));
+            return _cachedTagsDisplay;
         }
     }
 
@@ -61,12 +66,15 @@ public class NoteCardViewModel : ViewModelBase
     {
         get
         {
-            if (!HasTags)
-                return string.Empty;
+            if (_cachedTagsSearchText is not null)
+                return _cachedTagsSearchText;
 
-            return string.Join(" ", Document.Tags
-                .Where(tag => !string.IsNullOrWhiteSpace(tag))
-                .Select(tag => tag.Trim()));
+            _cachedTagsSearchText = !HasTags
+                ? string.Empty
+                : string.Join(" ", Document.Tags
+                    .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                    .Select(tag => tag.Trim()));
+            return _cachedTagsSearchText;
         }
     }
 
@@ -139,9 +147,10 @@ public class NoteCardViewModel : ViewModelBase
         {
             return CapPreviewLength(ReplaceImageMarkers(raw, Document.Images));
         }
-        catch
+        catch (Exception ex)
         {
-            return string.Empty;
+            Scriblucent.Services.CrashLog.Append("NoteCardViewModel.BuildContentPreview", ex);
+            return CapPreviewLength(ReplaceImageMarkers(raw, Document.Images));
         }
     }
 
@@ -184,6 +193,8 @@ public class NoteCardViewModel : ViewModelBase
     public void NotifyContentChanged()
     {
         _cachedContentPreview = null;
+        _cachedTagsDisplay = null;
+        _cachedTagsSearchText = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Content));
         OnPropertyChanged(nameof(HasTags));

@@ -51,6 +51,14 @@ public static class DashboardDropGlowVisual
             ? fromBrush.Color.A / 255d
             : 0d;
 
+        // Reuse one mutable brush per glow instead of allocating a new SolidColorBrush every
+        // animation frame - only the alpha channel changes, so mutating Color in place is enough.
+        if (glow.Background is not SolidColorBrush fillBrush || fillBrush.IsFrozen)
+        {
+            fillBrush = new SolidColorBrush(Color.FromArgb((byte)Math.Round(fromBackgroundAlpha * 255), DropFillColor.R, DropFillColor.G, DropFillColor.B));
+            glow.Background = fillBrush;
+        }
+
         UiMotion.Run(
             glow,
             new[]
@@ -61,12 +69,11 @@ public static class DashboardDropGlowVisual
                     UiMotion.OutQuad,
                     fromBackgroundAlpha,
                     opacity > 0 ? ActiveBackgroundAlpha : 0,
-                    value => glow.Background = new SolidColorBrush(
-                        Color.FromArgb(
-                            (byte)Math.Round(value * 255),
-                            DropFillColor.R,
-                            DropFillColor.G,
-                            DropFillColor.B))),
+                    value => fillBrush.Color = Color.FromArgb(
+                        (byte)Math.Round(value * 255),
+                        DropFillColor.R,
+                        DropFillColor.G,
+                        DropFillColor.B)),
                 new RenderTransitionClock.Track(
                     UiMotion.QuickMs,
                     UiMotion.OutQuad,

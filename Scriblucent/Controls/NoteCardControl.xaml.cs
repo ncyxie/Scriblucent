@@ -501,7 +501,11 @@ public partial class NoteCardControl : UserControl
                             {
                                 // 4) Try Lithuanian code page
                                 try { content = System.Text.Encoding.GetEncoding(1257).GetString(rawBytes); }
-                                catch { content = string.Empty; }
+                                catch (Exception ex)
+                                {
+                                    content = string.Empty;
+                                    Scriblucent.Services.CrashLog.Append("NoteCardControl.ImportTextFile", ex);
+                                }
                             }
                         }
                     }

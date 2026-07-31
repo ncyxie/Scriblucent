@@ -11,13 +11,17 @@ namespace Scriblucent.Animations;
 /// </summary>
 internal static class DpiAwareBitmapCache
 {
-    public static BitmapCache Create(Visual visual, bool enableClearType = true, double contentScale = 1.0)
+    public static BitmapCache Create(
+        Visual visual,
+        bool enableClearType = true,
+        double contentScale = 1.0,
+        bool snapsToDevicePixels = true)
     {
         var renderScale = ResolveRenderScale(visual) * Math.Max(1.0, contentScale);
         return new BitmapCache(renderScale)
         {
             EnableClearType = enableClearType,
-            SnapsToDevicePixels = true
+            SnapsToDevicePixels = snapsToDevicePixels
         };
     }
 

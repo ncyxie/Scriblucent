@@ -7,6 +7,7 @@ public sealed class QuizGroupViewModel : ViewModelBase
 {
     private string _name;
     private Brush _backgroundBrush;
+    private Brush _foregroundBrush;
 
     public QuizGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<QuizViewModel> quizzes)
     {
@@ -14,6 +15,7 @@ public sealed class QuizGroupViewModel : ViewModelBase
         _name = name;
         BackgroundColor = backgroundColor;
         _backgroundBrush = GroupBrushFactory.Create(backgroundColor);
+        _foregroundBrush = GroupBrushFactory.CreateForeground(backgroundColor);
         Quizzes = new ObservableCollection<QuizViewModel>(quizzes);
     }
 
@@ -33,11 +35,18 @@ public sealed class QuizGroupViewModel : ViewModelBase
         private set => SetProperty(ref _backgroundBrush, value);
     }
 
+    public Brush ForegroundBrush
+    {
+        get => _foregroundBrush;
+        private set => SetProperty(ref _foregroundBrush, value);
+    }
+
     public ObservableCollection<QuizViewModel> Quizzes { get; }
 
     public void SetBackground(string backgroundColor)
     {
         BackgroundColor = backgroundColor;
         BackgroundBrush = GroupBrushFactory.Create(backgroundColor);
+        ForegroundBrush = GroupBrushFactory.CreateForeground(backgroundColor);
     }
 }

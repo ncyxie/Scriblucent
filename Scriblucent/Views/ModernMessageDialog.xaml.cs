@@ -1,4 +1,5 @@
 using Scriblucent.Animations;
+using Scriblucent.Icons;
 using Scriblucent.Localization;
 using System.Media;
 using System.Windows;
@@ -17,7 +18,7 @@ public partial class ModernMessageDialog : Window
 
     public string TitleText { get; }
     public string MessageText { get; }
-    public string IconGlyph { get; }
+    public AppIconKind IconKind { get; }
     public Brush IconBackground { get; }
     public Brush IconBorder { get; }
     public Brush IconForeground { get; }
@@ -53,7 +54,7 @@ public partial class ModernMessageDialog : Window
         DialogImage = image;
         DialogTone = ResolveTone(image);
 
-        (IconGlyph, IconBackground, IconBorder, IconForeground) = ResolveIcon(DialogTone);
+        (IconKind, IconBackground, IconBorder, IconForeground) = ResolveIcon(DialogTone);
         (PrimaryText, PrimaryResult, PrimaryVisibility, NoText, NoVisibility, CancelText, CancelVisibility, EscapeResult) =
             ResolveButtons(button);
 
@@ -70,7 +71,6 @@ public partial class ModernMessageDialog : Window
         InitializeComponent();
         _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         ApplyPrimaryButtonStyle(DialogTone);
-        ConfigureButtonLayout();
         Scriblucent.Services.WindowThemeService.Register(this);
         DataContext = this;
         Loaded += ModernMessageDialog_Loaded;
@@ -93,7 +93,7 @@ public partial class ModernMessageDialog : Window
         DialogTone = tone;
         DialogImage = ToneToImage(tone);
 
-        (IconGlyph, IconBackground, IconBorder, IconForeground) = ResolveIcon(tone);
+        (IconKind, IconBackground, IconBorder, IconForeground) = ResolveIcon(tone);
 
         PrimaryText = primaryText;
         PrimaryResult = MessageBoxResult.OK;
@@ -133,7 +133,6 @@ public partial class ModernMessageDialog : Window
             primaryStyle ?? DefaultPrimaryButtonStyleForTone(tone),
             secondaryStyle,
             cancelStyle);
-        ConfigureButtonLayout();
         Scriblucent.Services.WindowThemeService.Register(this);
         DataContext = this;
         Loaded += ModernMessageDialog_Loaded;
@@ -238,32 +237,32 @@ public partial class ModernMessageDialog : Window
         };
     }
 
-    private static (string Glyph, Brush Background, Brush Border, Brush Foreground) ResolveIcon(ModernDialogTone tone)
+    private static (AppIconKind Kind, Brush Background, Brush Border, Brush Foreground) ResolveIcon(ModernDialogTone tone)
     {
         return tone switch
         {
             ModernDialogTone.Success => (
-                "✓",
+                AppIconKind.Checkmark,
                 ResolveResourceBrush("AccentSuccessSubtle", "#E8F8F0"),
                 ResolveResourceBrush("AccentSuccessSubtleBorder", "#B7E6CC"),
                 ResolveResourceBrush("AccentSuccessSubtleForeground", "#096B3F")),
             ModernDialogTone.Danger or ModernDialogTone.Error => (
-                "!",
+                AppIconKind.Error,
                 ResolveResourceBrush("AccentDangerSubtle", "#F6DEDE"),
                 ResolveResourceBrush("AccentDangerSubtleBorder", "#D7A6A6"),
                 ResolveResourceBrush("AccentDangerSubtleForeground", "#9F2D2D")),
             ModernDialogTone.Warning => (
-                "!",
+                AppIconKind.Warning,
                 ResolveResourceBrush("AccentWarningSubtle", "#FFF9E6"),
                 ResolveResourceBrush("AccentWarningSubtleBorder", "#F59E0B"),
                 ResolveResourceBrush("AccentWarningSubtleForeground", "#92400E")),
             ModernDialogTone.Question => (
-                "?",
+                AppIconKind.Question,
                 ResolveResourceBrush("AccentPrimarySubtle", "#EEF0FE"),
                 ResolveResourceBrush("AccentPrimary", "#435CEC"),
                 ResolveResourceBrush("AccentPrimary", "#435CEC")),
             _ => (
-                "i",
+                AppIconKind.Info,
                 ResolveResourceBrush("AccentPrimarySubtle", "#EEF0FE"),
                 ResolveResourceBrush("AccentPrimary", "#435CEC"),
                 ResolveResourceBrush("AccentPrimary", "#435CEC"))
@@ -396,38 +395,6 @@ public partial class ModernMessageDialog : Window
 
         if (TryFindResource(styleKey) is Style style)
             button.Style = style;
-    }
-
-    private void ConfigureButtonLayout()
-    {
-        var visibleButtonCount =
-            (CancelVisibility == Visibility.Visible ? 1 : 0) +
-            (NoVisibility == Visibility.Visible ? 1 : 0) +
-            (PrimaryVisibility == Visibility.Visible ? 1 : 0);
-        var labelLength = CancelText.Length + NoText.Length + PrimaryText.Length;
-
-        if (visibleButtonCount < 3 || labelLength <= 32)
-            return;
-
-        ButtonPanel.Orientation = System.Windows.Controls.Orientation.Vertical;
-        ButtonPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
-
-        ConfigureStackedButton(
-            CancelButton,
-            CancelVisibility == Visibility.Visible && (NoVisibility == Visibility.Visible || PrimaryVisibility == Visibility.Visible));
-        ConfigureStackedButton(
-            NoButton,
-            NoVisibility == Visibility.Visible && PrimaryVisibility == Visibility.Visible);
-        ConfigureStackedButton(PrimaryButton, false);
-    }
-
-    private static void ConfigureStackedButton(System.Windows.Controls.Button button, bool addBottomMargin)
-    {
-        button.HorizontalAlignment = HorizontalAlignment.Stretch;
-        button.MinWidth = 0;
-        button.Margin = addBottomMargin
-            ? new Thickness(0, 0, 0, 10)
-            : new Thickness(0);
     }
 
     private void PrimaryButton_Click(object sender, RoutedEventArgs e)

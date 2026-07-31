@@ -17,6 +17,9 @@ public partial class CardShadowLayer : UserControl
     {
         Loaded -= OnLoaded;
         if (FindName("ShadowRoot") is FrameworkElement shadowRoot)
-            shadowRoot.CacheMode = DpiAwareBitmapCache.Create(shadowRoot, enableClearType: false);
+            shadowRoot.CacheMode = DpiAwareBitmapCache.Create(
+                shadowRoot,
+                enableClearType: false,
+                snapsToDevicePixels: false);
     }
 }

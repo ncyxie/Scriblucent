@@ -357,7 +357,12 @@ public static class ChromeHoverMotionBehavior
 
         if (profile != ChromeHoverMotionProfile.RecentCard
             || element is not Control control)
+        {
+            // Fab/FloatingSecondary animate a live DropShadowEffect.Opacity on hover; caching the
+            // host avoids re-rasterizing the blur every frame for what's otherwise a cheap opacity tween.
+            host.CacheMode ??= new BitmapCache();
             return UiMotion.EnsureShadow(host);
+        }
 
         control.ApplyTemplate();
         var shadowName = GetMotionHostName(element);

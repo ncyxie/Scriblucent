@@ -186,6 +186,7 @@
 
         <Border Grid.Row="1"
                 Margin="20,4,20,0"
+                Padding="10,0"
                 Style="{StaticResource ChromeFieldBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>

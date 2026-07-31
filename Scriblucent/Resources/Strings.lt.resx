@@ -98,8 +98,8 @@
   <data name="QuizSubmitDialogCancel" xml:space="preserve"><value>Atšaukti</value></data>
   <data name="KeepNotesUngrouped" xml:space="preserve"><value>Palikti užrašus nesugrupuotus</value></data>
   <data name="DeleteGroupNotes" xml:space="preserve"><value>Ištrinti grupės užrašus</value></data>
-  <data name="KeepItemsUngrouped" xml:space="preserve"><value>Palikti elementus nesugrupuotus</value></data>
-  <data name="DeleteGroupItems" xml:space="preserve"><value>Ištrinti grupės elementus</value></data>
+  <data name="KeepItemsUngrouped" xml:space="preserve"><value>Palikti nesugrupuotus</value></data>
+  <data name="DeleteGroupItems" xml:space="preserve"><value>Ištrinti elementus</value></data>
   <data name="Theme" xml:space="preserve"><value>Tema:</value></data>
   <data name="ViewMode" xml:space="preserve"><value>Peržiūros režimas</value></data>
   <data name="ViewModeGrid" xml:space="preserve"><value>Tinklelis</value></data>
@@ -162,6 +162,10 @@
   <data name="StatsCharactersTypedFormat" xml:space="preserve"><value>Įvesta simbolių: {0}</value></data>
   <data name="StatsTimeSpentFormat" xml:space="preserve"><value>Praleistas laikas: {0}</value></data>
   <data name="StatsLastActiveFormat" xml:space="preserve"><value>Paskutinis aktyvumas: {0}</value></data>
+  <data name="ResetActivitySummary" xml:space="preserve"><value>Atstatyti veiklos suvestinę</value></data>
+  <data name="ResetActivitySummaryTitle" xml:space="preserve"><value>Atstatyti veiklos suvestinę</value></data>
+  <data name="ResetActivitySummaryPrompt" xml:space="preserve"><value>Tai išvalys įvestų žodžių, simbolių ir praleisto laiko statistiką. Užrašų skaičius nesikeičia. Tęsti?</value></data>
+  <data name="ResetActivitySummarySuccess" xml:space="preserve"><value>Veiklos suvestinė atstatyta.</value></data>
   <data name="NotAvailable" xml:space="preserve"><value>Nėra duomenų</value></data>
   <data name="NoteEditorTitle" xml:space="preserve"><value>Užrašo redagavimas</value></data>
   <data name="Undo" xml:space="preserve"><value>Anuliuoti</value></data>
@@ -256,6 +260,13 @@
   <data name="ImageAspectRatioUnlockTooltip" xml:space="preserve"><value>Atrakinti nuotraukos proporcijas</value></data>
   <data name="ImageResizeTooltip" xml:space="preserve"><value>Laikykite Shift ir tempkite, kad keistumėte dydį
 Dešiniu pelės mygtuku pašalinsite</value></data>
+  <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Nepavyko nuskaityti užrašų failo</value></data>
+  <data name="NotesLoadFailedWithBackupFormat" xml:space="preserve"><value>Panašu, kad jūsų užrašų failas yra pažeistas ir jo nepavyko atverti. Niekas nebuvo ištrinta ar perrašyta - originalaus failo kopija išsaugota čia:
+
+{0}
+
+Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</value></data>
+  <data name="NotesLoadFailedNoBackup" xml:space="preserve"><value>Panašu, kad jūsų užrašų failas yra pažeistas ir jo nepavyko atverti. Niekas nebuvo ištrinta ar perrašyta. Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</value></data>
   <data name="FirstNoteTitle" xml:space="preserve"><value>Sveiki atvykę į Scriblucent</value></data>
   <data name="FirstNoteContent" xml:space="preserve"><value>Pradėkite nuo pirmojo užrašo: pridėkite žymes ir suskirstykite užrašus į grupes.</value></data>
   <data name="NewNoteTitle" xml:space="preserve"><value>Naujas užrašas</value></data>
@@ -388,8 +399,8 @@ Dešiniu pelės mygtuku pašalinsite</value></data>
   <data name="UnsavedChanges" xml:space="preserve"><value>Neišsaugoti pakeitimai</value></data>
   <data name="UnsavedChangesConfirmation" xml:space="preserve"><value>Yra neišsaugotų pakeitimų. Išeiti jų neišsaugojus?</value></data>
   <data name="UnsavedChangesConfirmationFormat" xml:space="preserve"><value>„{0}“ turi neišsaugotų pakeitimų. Ką daryti?</value></data>
-  <data name="LeaveWithoutSaving" xml:space="preserve"><value>Išeiti neišsaugojus</value></data>
-  <data name="SaveAndExit" xml:space="preserve"><value>Išsaugoti ir išeiti</value></data>
+  <data name="LeaveWithoutSaving" xml:space="preserve"><value>Neišsaugoti</value></data>
+  <data name="SaveAndExit" xml:space="preserve"><value>Išsaugoti</value></data>
   <data name="EditedIndicator" xml:space="preserve"><value>Redaguota</value></data>
   <data name="TabCloseWarning" xml:space="preserve"><value>Šis skirtukas turi neiššaugotus pakeitimus. Uždaryti vis tiek?</value></data>
   <data name="SelectMultiple" xml:space="preserve"><value>Pažymėti elementą</value></data>

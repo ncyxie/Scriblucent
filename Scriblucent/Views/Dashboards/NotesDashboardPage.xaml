@@ -103,7 +103,7 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <!-- Level 3 section shell: CardBackground + E.Card, no box stroke. -->
+                                <!-- Level 3 section shell: CardBackground, no box stroke. -->
                                 <Grid x:Name="CalendarSectionContainer"
 									Visibility="{Binding IsCalendarSectionVisible, Converter={StaticResource BoolToVis}}"
 									Margin="0,0,0,14"
@@ -120,7 +120,6 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Grid.Style>
-                                    <controls:CardShadowLayer/>
                                     <Border Background="{DynamicResource CardBackground}"
 									BorderThickness="0"
                                     CornerRadius="{StaticResource Radius.Card}"
@@ -325,7 +324,6 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Grid.Style>
-                                    <controls:CardShadowLayer/>
                                     <Border Background="{DynamicResource CardBackground}"
                                     BorderThickness="0"
                                     CornerRadius="{StaticResource Radius.Card}"
@@ -501,9 +499,9 @@
                                                                         </Button.ContextMenu>
                                                                     </Button>
                                                                     <TextBlock Grid.Column="4"
-																   Text="{Binding Name}"
+                                                                   Text="{Binding Name}"
 																   FontWeight="SemiBold"
-																   Foreground="{DynamicResource TextColor}"
+																   Foreground="{Binding ForegroundBrush}"
 																   VerticalAlignment="Center"
 																   TextTrimming="CharacterEllipsis"
 																   Margin="8,0,0,0"/>

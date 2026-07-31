@@ -15,7 +15,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using ShapePath = System.Windows.Shapes.Path;
 
@@ -46,6 +45,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private readonly HashSet<MindMapNode> _selectedNodes = new();
     private readonly List<MindMapNode> _searchMatches = [];
     private string _searchQuery = string.Empty;
+    private DispatcherTimer? _searchDebounceTimer;
     private int _currentSearchMatchIndex = -1;
     private HashSet<MindMapNode>? _renderOnlyNodes;
     private MindMapLayoutMode _selectedLayoutMode = MindMapLayoutMode.BalancedTree;
@@ -728,6 +728,19 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         _searchQuery = SearchTextBox.Text ?? string.Empty;
+
+        // RebuildMap() recreates every node/connection visual and recomputes the whole tree layout -
+        // real work, so debounce it instead of running on every keystroke.
+        _searchDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _searchDebounceTimer.Stop();
+        _searchDebounceTimer.Tick -= SearchDebounceTimer_Tick;
+        _searchDebounceTimer.Tick += SearchDebounceTimer_Tick;
+        _searchDebounceTimer.Start();
+    }
+
+    private void SearchDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchDebounceTimer?.Stop();
         RefreshSearchMatches(resetIndex: true);
         RebuildMap();
     }
@@ -1147,21 +1160,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private static void ApplyNodeDragChrome(Border border, bool isDragging)
     {
-        if (isDragging)
-        {
-            border.Cursor = Cursors.SizeAll;
-            border.Effect = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                Opacity = 0.28,
-                BlurRadius = 18,
-                ShadowDepth = 4
-            };
-            return;
-        }
-
-        border.Cursor = Cursors.Hand;
-        border.Effect = null;
+        border.Cursor = isDragging ? Cursors.SizeAll : Cursors.Hand;
     }
 
     private void CancelManualDragPending()
@@ -1230,7 +1229,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         var defaultThickness = node.BorderThickness > 0 ? node.BorderThickness : 1;
         border.BorderThickness = new Thickness(defaultThickness);
         border.BorderBrush = !string.IsNullOrWhiteSpace(node.BorderColor)
-            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(node.BorderColor))
+            ? FrozenBrush((Color)ColorConverter.ConvertFromString(node.BorderColor))
             : isRoot
                 ? GetThemeBrush("MindMapNodeRootBorderBrush", Color.FromRgb(47, 92, 208))
                 : GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220));
@@ -1940,7 +1939,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _selectedLayoutMode = ParseLayoutMode(selectedItem.Tag as string);
         _hasCenteredOnRootInitially = false;
-        RebuildMap();
+        RebuildMap(animate: false);
         Dispatcher.BeginInvoke(new Action(CenterViewOnRoot), DispatcherPriority.Loaded);
     }
 
@@ -1954,7 +1953,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _suppressManualPositioningToggleChanged = false;
         UpdateManualPositioningVisualState();
 
-        RebuildMap();
+        RebuildMap(animate: false);
         Dispatcher.BeginInvoke(new Action(CenterViewOnRoot), DispatcherPriority.Loaded);
     }
     private void ManualPositioningToggle_Checked(object sender, RoutedEventArgs e)
@@ -1965,7 +1964,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _isManualPositioningMode = true;
         CaptureVisibleLayoutAsManualPositions();
         UpdateManualPositioningVisualState();
-        RebuildMap();
+        RebuildMap(animate: false);
     }
 
     private void ManualPositioningToggle_Unchecked(object sender, RoutedEventArgs e)
@@ -1977,7 +1976,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _manualPositions.Clear();
         ClearManualPositions(_root);
         UpdateManualPositioningVisualState();
-        RebuildMap();
+        RebuildMap(animate: false);
     }
 
     private static void SetExpanded(MindMapNode node, bool isExpanded)
@@ -2606,7 +2605,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (TryFindResource(resourceKey) is Brush brush)
             return brush;
 
-        return new SolidColorBrush(fallbackColor);
+        return FrozenBrush(fallbackColor);
     }
 
     private Brush GetNodeForeground(Brush nodeBackground, bool isRoot, MindMapNode node)

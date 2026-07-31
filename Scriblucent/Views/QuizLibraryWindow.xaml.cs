@@ -10,6 +10,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace Scriblucent.Views;
 
@@ -24,6 +25,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private string _combinedQuizTitle = "Combined quiz";
     private bool _shuffleCombinedQuestions = true;
     private bool _skipDuplicateQuestions = true;
+    private DispatcherTimer? _searchFilterDebounceTimer;
 
     public string QuizSearchQuery
     {
@@ -32,10 +34,23 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         {
             if (_searchText == value) return;
             _searchText = value ?? string.Empty;
-            UpdateFilteredVisibility();
-            UpdateStatusText();
             OnPropertyChanged(nameof(QuizSearchQuery));
+
+            // MatchesFilter scans every question/option of every quiz in the library - debounce
+            // instead of running that on every keystroke (mirrors MainViewModel's dashboard search).
+            _searchFilterDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _searchFilterDebounceTimer.Stop();
+            _searchFilterDebounceTimer.Tick -= SearchFilterDebounceTimer_Tick;
+            _searchFilterDebounceTimer.Tick += SearchFilterDebounceTimer_Tick;
+            _searchFilterDebounceTimer.Start();
         }
+    }
+
+    private void SearchFilterDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchFilterDebounceTimer?.Stop();
+        UpdateFilteredVisibility();
+        UpdateStatusText();
     }
 
     public QuizLibraryWindow(MainViewModel mainViewModel)

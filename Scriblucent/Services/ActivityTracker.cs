@@ -68,4 +68,17 @@ public static class ActivityTracker
         AppSettingsService.Save(settings);
         ActivityUpdated?.Invoke();
     }
+
+    public static void Reset()
+    {
+        _startTime = DateTime.Now;
+
+        var settings = AppSettingsService.Load();
+        settings.TotalTimeSpentSeconds = 0;
+        settings.TotalWordsTyped = 0;
+        settings.TotalCharactersTyped = 0;
+        settings.LastActiveDate = DateTime.Now;
+        AppSettingsService.Save(settings);
+        ActivityUpdated?.Invoke();
+    }
 }

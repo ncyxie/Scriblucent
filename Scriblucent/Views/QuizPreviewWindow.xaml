@@ -356,8 +356,6 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Grid Margin="0,0,0,12" ClipToBounds="False">
-                            <!-- Bake-once plate so question text/inputs keep ClearType -->
-                            <controls:CardShadowLayer/>
                             <Border Padding="16"
                                     Background="{DynamicResource CardBackground}"
                                     CornerRadius="{StaticResource Radius.Card}"

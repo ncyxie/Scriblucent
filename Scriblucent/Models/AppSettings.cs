@@ -121,19 +121,23 @@ public class AppSettings
     public List<AiToolSettingsItem> AiTools { get; set; } = new();
     public string? LastView { get; set; }
 
-    public const int MinFlashcardFlipDelayMilliseconds = 120;
+    public const int MinFlashcardFlipDelayMilliseconds = 100;
     public const int MaxFlashcardFlipDelayMilliseconds = 1000;
-    public const int DefaultFlashcardFlipDelayMilliseconds = 380;
+    public const int FlashcardFlipDelayStepMilliseconds = 100;
+    public const int DefaultFlashcardFlipDelayMilliseconds = 400;
 
     public int FlashcardFlipDelayMilliseconds { get; set; } = DefaultFlashcardFlipDelayMilliseconds;
 
     public static int NormalizeFlashcardFlipDelayMilliseconds(int milliseconds)
     {
-        // 0 / missing JSON values must not clamp to Min (120) — treat as default.
+        // 0 / missing JSON values must not clamp to Min — treat as default.
         if (milliseconds <= 0)
             return DefaultFlashcardFlipDelayMilliseconds;
 
-        return Math.Clamp(milliseconds, MinFlashcardFlipDelayMilliseconds, MaxFlashcardFlipDelayMilliseconds);
+        var clamped = Math.Clamp(milliseconds, MinFlashcardFlipDelayMilliseconds, MaxFlashcardFlipDelayMilliseconds);
+        var steps = (int)Math.Round(clamped / (double)FlashcardFlipDelayStepMilliseconds);
+        var snapped = steps * FlashcardFlipDelayStepMilliseconds;
+        return Math.Clamp(snapped, MinFlashcardFlipDelayMilliseconds, MaxFlashcardFlipDelayMilliseconds);
     }
 
     // Activity Tracking

@@ -29,6 +29,7 @@ public partial class NoteEditorTabsWindow : Window
 
     private readonly Dictionary<Guid, EditorTabState> _tabsByDocumentId = new();
     private bool _isWindowClosing;
+    private bool _skipCloseConfirmation;
 
     private TabItem? _dragTab;
     private bool _isDraggingTab;
@@ -228,6 +229,14 @@ public partial class NoteEditorTabsWindow : Window
 
         if (ReferenceEquals(_dragTab, state.TabItem))
             EndTabDrag();
+
+        // Last tab: close the window so the shared sink animation runs with content still mounted.
+        if (!_isWindowClosing && _tabsByDocumentId.Count == 1)
+        {
+            _skipCloseConfirmation = true;
+            Close();
+            return true;
+        }
 
         if (!UiMotion.PrefersReducedMotion && state.HostedContent is FrameworkElement content)
         {
@@ -549,6 +558,9 @@ public partial class NoteEditorTabsWindow : Window
         if (WindowContentEnterHelper.ShouldBypassCloseHandling(this))
             return;
 
+        if (_skipCloseConfirmation)
+            return;
+
         foreach (var state in _tabsByDocumentId.Values.ToList())
         {
             if (state.Editor.ConfirmCloseIfNeeded())
@@ -562,6 +574,7 @@ public partial class NoteEditorTabsWindow : Window
     private void FinalizeWindowClose()
     {
         _isWindowClosing = true;
+        _skipCloseConfirmation = false;
 
         foreach (var state in _tabsByDocumentId.Values.ToList())
             FinishCloseTab(state);

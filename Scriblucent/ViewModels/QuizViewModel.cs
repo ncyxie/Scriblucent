@@ -6,6 +6,8 @@ namespace Scriblucent.ViewModels;
 public sealed class QuizViewModel : ViewModelBase
 {
     private bool _isSelectedInMassSelect;
+    private string? _cachedTagsDisplay;
+    private string? _cachedNextScheduleDisplay;
 
     public QuizViewModel(QuizDocument document)
     {
@@ -24,7 +26,7 @@ public sealed class QuizViewModel : ViewModelBase
 
     public bool HasTags => Document.Tags?.Any(tag => !string.IsNullOrWhiteSpace(tag)) == true;
 
-    public string TagsDisplay => HasTags
+    public string TagsDisplay => _cachedTagsDisplay ??= HasTags
         ? string.Join("   ", Document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => $"#{tag.Trim()}"))
         : string.Empty;
 
@@ -38,7 +40,7 @@ public sealed class QuizViewModel : ViewModelBase
 
     public bool HasSchedule => Document.Schedules?.Any() == true;
 
-    public string NextScheduleDisplay => HasSchedule
+    public string NextScheduleDisplay => _cachedNextScheduleDisplay ??= HasSchedule
         ? Document.Schedules
             .OrderBy(schedule => schedule.ScheduledAt)
             .First()
@@ -53,6 +55,8 @@ public sealed class QuizViewModel : ViewModelBase
 
     public void NotifyChanged()
     {
+        _cachedTagsDisplay = null;
+        _cachedNextScheduleDisplay = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(QuestionCount));
         OnPropertyChanged(nameof(QuestionCountText));

@@ -175,12 +175,13 @@
                 </Setter>
             </Style>
 
-            <!-- Level 1 grabber: soft fill + Elevation.Thumb (no rest stroke). -->
+            <!-- Level 1 grabber: theme fill + accent ring so the thumb reads on card/window chrome. -->
             <ControlTemplate x:Key="ModernSliderThumbTemplate" TargetType="{x:Type Thumb}">
                 <Ellipse Width="14"
                          Height="14"
-                         Fill="{DynamicResource CardBackground}"
-                         StrokeThickness="0"
+                         Fill="{DynamicResource SliderThumbBackground}"
+                         Stroke="{DynamicResource SliderThumbBorder}"
+                         StrokeThickness="2"
                          Effect="{StaticResource Elevation.Thumb}"/>
             </ControlTemplate>
 
@@ -195,7 +196,7 @@
                                 <Border Height="4"
                                         CornerRadius="2"
                                         VerticalAlignment="Center"
-                                        Background="{DynamicResource BorderColor}"/>
+                                        Background="{DynamicResource SliderTrackBackground}"/>
                                 <Track x:Name="PART_Track" Focusable="False">
                                     <Track.DecreaseRepeatButton>
                                         <RepeatButton Command="Slider.DecreaseLarge"

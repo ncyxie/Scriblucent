@@ -98,8 +98,8 @@
   <data name="QuizSubmitDialogCancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="KeepNotesUngrouped" xml:space="preserve"><value>Keep notes ungrouped</value></data>
   <data name="DeleteGroupNotes" xml:space="preserve"><value>Delete group notes</value></data>
-  <data name="KeepItemsUngrouped" xml:space="preserve"><value>Keep items ungrouped</value></data>
-  <data name="DeleteGroupItems" xml:space="preserve"><value>Delete group items</value></data>
+  <data name="KeepItemsUngrouped" xml:space="preserve"><value>Keep ungrouped</value></data>
+  <data name="DeleteGroupItems" xml:space="preserve"><value>Delete items</value></data>
   <data name="Theme" xml:space="preserve"><value>Theme:</value></data>
   <data name="ViewMode" xml:space="preserve"><value>View mode</value></data>
   <data name="ViewModeGrid" xml:space="preserve"><value>Grid</value></data>
@@ -162,6 +162,10 @@
   <data name="StatsCharactersTypedFormat" xml:space="preserve"><value>Characters typed: {0}</value></data>
   <data name="StatsTimeSpentFormat" xml:space="preserve"><value>Time spent: {0}</value></data>
   <data name="StatsLastActiveFormat" xml:space="preserve"><value>Last active: {0}</value></data>
+  <data name="ResetActivitySummary" xml:space="preserve"><value>Reset activity summary</value></data>
+  <data name="ResetActivitySummaryTitle" xml:space="preserve"><value>Reset activity summary</value></data>
+  <data name="ResetActivitySummaryPrompt" xml:space="preserve"><value>This will clear words typed, characters typed, and time spent. Note counts are unchanged. Continue?</value></data>
+  <data name="ResetActivitySummarySuccess" xml:space="preserve"><value>Activity summary has been reset.</value></data>
   <data name="NotAvailable" xml:space="preserve"><value>N/A</value></data>
   <data name="NoteEditorTitle" xml:space="preserve"><value>Note Editor</value></data>
   <data name="Undo" xml:space="preserve"><value>Undo</value></data>
@@ -256,6 +260,13 @@
   <data name="ImageAspectRatioUnlockTooltip" xml:space="preserve"><value>Unlock picture proportions</value></data>
   <data name="ImageResizeTooltip" xml:space="preserve"><value>Shift+Drag to resize image
 Right-click to remove</value></data>
+  <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Notes file couldn't be read</value></data>
+  <data name="NotesLoadFailedWithBackupFormat" xml:space="preserve"><value>Your notes file appears to be damaged and couldn't be opened. Nothing was deleted or overwritten - a copy of the original file was saved to:
+
+{0}
+
+Please contact support if you'd like help recovering your notes.</value></data>
+  <data name="NotesLoadFailedNoBackup" xml:space="preserve"><value>Your notes file appears to be damaged and couldn't be opened. Nothing was deleted or overwritten. Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FirstNoteTitle" xml:space="preserve"><value>Welcome to Scriblucent</value></data>
   <data name="FirstNoteContent" xml:space="preserve"><value>Start by creating your first note, adding tags, and organizing notes into groups.</value></data>
   <data name="NewNoteTitle" xml:space="preserve"><value>New Note</value></data>
@@ -440,8 +451,8 @@ Right-click to remove</value></data>
   <data name="UnsavedChanges" xml:space="preserve"><value>Unsaved changes</value></data>
   <data name="UnsavedChangesConfirmation" xml:space="preserve"><value>You have unsaved changes. Leave without saving them?</value></data>
   <data name="UnsavedChangesConfirmationFormat" xml:space="preserve"><value>"{0}" has unsaved changes. What would you like to do?</value></data>
-  <data name="LeaveWithoutSaving" xml:space="preserve"><value>Leave without saving</value></data>
-  <data name="SaveAndExit" xml:space="preserve"><value>Save and exit</value></data>
+  <data name="LeaveWithoutSaving" xml:space="preserve"><value>Don't save</value></data>
+  <data name="SaveAndExit" xml:space="preserve"><value>Save</value></data>
   <data name="EditedIndicator" xml:space="preserve"><value>Edited</value></data>
   <data name="TabCloseWarning" xml:space="preserve"><value>This tab has unsaved changes. Close anyway?</value></data>
   <data name="SelectMultiple" xml:space="preserve"><value>Select item</value></data>

@@ -67,6 +67,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private string _searchText = string.Empty;
     private string _modelDisplayName = string.Empty;
     private string _lastSavedSnapshot = string.Empty;
+    private DispatcherTimer? _editedIndicatorDebounceTimer;
+    private DispatcherTimer? _searchFilterDebounceTimer;
     private bool _isInitializing = true;
     private bool _studyModeLayoutVisible;
     private bool _allowCloseWithoutPrompt;
@@ -291,6 +293,18 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void EditorField_TextChanged(object sender, TextChangedEventArgs e)
     {
+        // GetEditorSnapshot() re-joins every card's Question/Answer/Category even though only
+        // Title/Tags changed here, so debounce instead of paying that cost on every keystroke.
+        _editedIndicatorDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _editedIndicatorDebounceTimer.Stop();
+        _editedIndicatorDebounceTimer.Tick -= EditedIndicatorDebounceTimer_Tick;
+        _editedIndicatorDebounceTimer.Tick += EditedIndicatorDebounceTimer_Tick;
+        _editedIndicatorDebounceTimer.Start();
+    }
+
+    private void EditedIndicatorDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _editedIndicatorDebounceTimer?.Stop();
         UpdateEditedIndicator();
     }
 
@@ -885,6 +899,17 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void FlashcardSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         _searchText = FlashcardSearchTextBox.Text ?? string.Empty;
+
+        _searchFilterDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _searchFilterDebounceTimer.Stop();
+        _searchFilterDebounceTimer.Tick -= SearchFilterDebounceTimer_Tick;
+        _searchFilterDebounceTimer.Tick += SearchFilterDebounceTimer_Tick;
+        _searchFilterDebounceTimer.Start();
+    }
+
+    private void SearchFilterDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchFilterDebounceTimer?.Stop();
         ApplyFilters();
     }
 
@@ -1536,19 +1561,23 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         if (FlipSpeedSlider is null)
             return;
 
-        FlipSpeedSlider.ValueChanged += FlipSpeedSlider_ValueChanged;
-
-        var settings = AppSettingsService.Load();
-        // Prefer this set's saved delay; otherwise app-wide flashcard preference.
+        // Per-collection only: unset (0) uses the built-in default, never another set's speed.
         var initialDelay = preferredFlipDelayMilliseconds > 0
             ? preferredFlipDelayMilliseconds
-            : settings.FlashcardFlipDelayMilliseconds;
+            : AppSettings.DefaultFlashcardFlipDelayMilliseconds;
 
+        // Guard before Min/Max/Value changes — setting Minimum can clamp Value and fire
+        // ValueChanged, which would otherwise overwrite the real preference with 100ms.
+        _isApplyingFlipSpeed = true;
         FlipSpeedSlider.Minimum = AppSettings.MinFlashcardFlipDelayMilliseconds;
         FlipSpeedSlider.Maximum = AppSettings.MaxFlashcardFlipDelayMilliseconds;
-        _isApplyingFlipSpeed = true;
+        FlipSpeedSlider.TickFrequency = AppSettings.FlashcardFlipDelayStepMilliseconds;
+        FlipSpeedSlider.SmallChange = AppSettings.FlashcardFlipDelayStepMilliseconds;
+        FlipSpeedSlider.LargeChange = AppSettings.FlashcardFlipDelayStepMilliseconds;
         FlipSpeedSlider.Value = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(initialDelay);
         _isApplyingFlipSpeed = false;
+
+        FlipSpeedSlider.ValueChanged += FlipSpeedSlider_ValueChanged;
     }
 
     private void FlipSpeedSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1556,11 +1585,16 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         if (_isApplyingFlipSpeed || FlipSpeedSlider is null)
             return;
 
-        // Keep app-wide default in sync so new sets inherit the last chosen speed.
-        var settings = AppSettingsService.Load();
-        settings.FlashcardFlipDelayMilliseconds = GetFlipAnimationDurationMs();
-        AppSettingsService.Save(settings);
+        // Snap the thumb to a clean step (100, 200, …) even if drag lands between ticks.
+        var snapped = GetFlipAnimationDurationMs();
+        if (Math.Abs(FlipSpeedSlider.Value - snapped) > 0.01)
+        {
+            _isApplyingFlipSpeed = true;
+            FlipSpeedSlider.Value = snapped;
+            _isApplyingFlipSpeed = false;
+        }
 
+        // Persist on this set only (ToDocument / autosave → FlipDelayMilliseconds).
         if (!_isInitializing)
             UpdateEditedIndicator();
     }
@@ -1765,6 +1799,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void ApplyStudyModeLayout(bool showStudyMode)
     {
+        ApplyStudyModeEditorChrome(showStudyMode);
+
         if (_isInitializing || UiMotion.PrefersReducedMotion || showStudyMode == _studyModeLayoutVisible)
         {
             SetStudyModeLayoutImmediate(showStudyMode);
@@ -1800,12 +1836,25 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         StudyModeViewBorder.Opacity = 1;
     }
 
+    /// <summary>
+    /// Tags/filters are editor chrome — hide while studying so the card fits without scrolling.
+    /// </summary>
+    private void ApplyStudyModeEditorChrome(bool showStudyMode)
+    {
+        var chromeVisibility = showStudyMode ? Visibility.Collapsed : Visibility.Visible;
+        if (FlashcardsTagsBorder is not null)
+            FlashcardsTagsBorder.Visibility = chromeVisibility;
+        if (FlashcardsFiltersBorder is not null)
+            FlashcardsFiltersBorder.Visibility = chromeVisibility;
+    }
+
     private void ShowStudyModeCompletionText()
     {
         StudyModeCompletionText.Text = LocalizationService.GetString("StudyModeComplete");
         if (StudyModeCompletionText.Visibility == Visibility.Visible)
             return;
 
+        StudyModeProgressText.Visibility = Visibility.Collapsed;
         StudyModeCompletionText.Visibility = Visibility.Visible;
 
         if (_studyCelebrationShown)
@@ -1823,7 +1872,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void HideStudyModeCompletionText()
     {
         if (StudyModeCompletionText.Visibility != Visibility.Visible)
+        {
+            StudyModeProgressText.Visibility = Visibility.Visible;
             return;
+        }
 
         StudyCelebration.Stop(CelebrationOverlay);
 
@@ -1836,6 +1888,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             {
                 StudyModeCompletionText.Visibility = Visibility.Collapsed;
                 StudyModeCompletionText.Opacity = 1;
+                StudyModeProgressText.Visibility = Visibility.Visible;
             });
     }
 

@@ -117,7 +117,6 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Grid.Style>
-                                    <controls:CardShadowLayer/>
                                     <Border Background="{DynamicResource CardBackground}"
                                         BorderThickness="0"
                                         CornerRadius="{StaticResource Radius.Card}"
@@ -300,7 +299,7 @@
                                 </Border>
                                 </Grid>
 
-                                <!-- Level 3 section shell: S + E.Card (same shape as Notes/Flashcards/MindMaps). -->
+                                <!-- Level 3 section shell: surface only (same shape as Notes/Flashcards/MindMaps). -->
                                 <Grid x:Name="QuizzesDashboardContentHost"
                                         Margin="0,0,0,14"
                                         UseLayoutRounding="True"
@@ -323,7 +322,6 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Grid.Style>
-                                    <controls:CardShadowLayer/>
                                     <Border Background="{DynamicResource CardBackground}"
                                         BorderThickness="0"
                                         CornerRadius="{StaticResource Radius.Card}"
@@ -524,7 +522,7 @@
                                                                 <TextBlock Grid.Column="4"
                                                                            Text="{Binding Name}"
                                                                            FontWeight="SemiBold"
-                                                                           Foreground="{DynamicResource TextColor}"
+                                                                           Foreground="{Binding ForegroundBrush}"
                                                                            VerticalAlignment="Center"
                                                                            TextTrimming="CharacterEllipsis"
                                                                            Margin="8,0,0,0"/>

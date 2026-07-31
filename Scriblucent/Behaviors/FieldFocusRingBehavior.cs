@@ -1,3 +1,4 @@
+using Scriblucent;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -38,6 +39,8 @@ public static class FieldFocusRingBehavior
     private static readonly HashSet<State> ActiveRings = new();
     private static bool _renderingHooked;
     private static bool _rendering;
+    private static bool _appEventsHooked;
+    private static bool _appIsActive = true;
 
     public static void SetIsEnabled(DependencyObject element, bool value)
         => element.SetValue(IsEnabledProperty, value);
@@ -191,7 +194,9 @@ public static class FieldFocusRingBehavior
 
     private static void EnsureRenderingHook()
     {
-        if (_renderingHooked)
+        EnsureAppEventsHooked();
+
+        if (_renderingHooked || !_appIsActive)
             return;
 
         CompositionTarget.Rendering += OnRendering;
@@ -205,6 +210,29 @@ public static class FieldFocusRingBehavior
 
         CompositionTarget.Rendering -= OnRendering;
         _renderingHooked = false;
+    }
+
+    // The per-frame sync is only useful while some window is actually visible on screen.
+    // WPF does not clear IsKeyboardFocusWithin on minimize/deactivate, so without this the
+    // render hook (and ActiveRings) would otherwise stay alive and keep ticking every frame
+    // forever after a field was ever focused, even with the app minimized or backgrounded.
+    private static void EnsureAppEventsHooked()
+    {
+        if (_appEventsHooked || Application.Current is not { } app)
+            return;
+
+        _appEventsHooked = true;
+        app.Activated += (_, _) =>
+        {
+            _appIsActive = true;
+            if (ActiveRings.Count > 0)
+                EnsureRenderingHook();
+        };
+        app.Deactivated += (_, _) =>
+        {
+            _appIsActive = false;
+            TeardownRenderingHook();
+        };
     }
 
     private static void OnRendering(object? sender, EventArgs e)
@@ -310,20 +338,50 @@ public static class FieldFocusRingBehavior
             drawingContext.DrawRoundedRectangle(null, pen, rect, radius, radius);
         }
 
+        // Field.FocusBorderThickness/AccentPrimary are global theme constants, not per-element
+        // values, so caching them once (invalidated on theme change) avoids re-walking the resource
+        // tree on every CompositionTarget.Rendering-driven redraw while a field is focused.
+        private static double? _cachedThickness;
+        private static bool _brushCached;
+        private static Brush? _cachedBrush;
+        private static bool _themeChangedHooked;
+
+        private static void EnsureThemeInvalidationHooked()
+        {
+            if (_themeChangedHooked)
+                return;
+
+            _themeChangedHooked = true;
+            ThemeManager.ThemeChanged += (_, _) =>
+            {
+                _cachedThickness = null;
+                _brushCached = false;
+                _cachedBrush = null;
+            };
+        }
+
         private static double ResolveThickness(FrameworkElement fe)
         {
-            if (FindThemeResource(fe, "Field.FocusBorderThickness") is Thickness t)
-                return Math.Max(t.Left, Math.Max(t.Top, Math.Max(t.Right, t.Bottom)));
+            EnsureThemeInvalidationHooked();
+            if (_cachedThickness is { } cached)
+                return cached;
 
-            return 2;
+            var thickness = FindThemeResource(fe, "Field.FocusBorderThickness") is Thickness t
+                ? Math.Max(t.Left, Math.Max(t.Top, Math.Max(t.Right, t.Bottom)))
+                : 2;
+            _cachedThickness = thickness;
+            return thickness;
         }
 
         private static Brush? ResolveBrush(FrameworkElement fe)
         {
-            if (FindThemeResource(fe, "AccentPrimary") is Brush brush)
-                return brush;
+            EnsureThemeInvalidationHooked();
+            if (_brushCached)
+                return _cachedBrush;
 
-            return null;
+            _cachedBrush = FindThemeResource(fe, "AccentPrimary") as Brush;
+            _brushCached = true;
+            return _cachedBrush;
         }
 
         private static double ResolveRadius(FrameworkElement fe)

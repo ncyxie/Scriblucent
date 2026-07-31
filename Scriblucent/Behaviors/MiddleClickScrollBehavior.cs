@@ -56,6 +56,7 @@ public static class MiddleClickScrollBehavior
         public MouseButtonEventHandler? WindowMouseDownHandler;
         public KeyEventHandler? WindowKeyDownHandler;
         public DependencyPropertyChangedEventHandler? VisibilityHandler;
+        public EventHandler? WindowDeactivatedHandler;
     }
 
     private sealed class IndicatorVisual
@@ -226,10 +227,14 @@ public static class MiddleClickScrollBehavior
             if (args.NewValue is false)
                 EndSession();
         };
+        // Alt-Tab/minimize doesn't fire any of the handlers above (window stays visible, no
+        // click/key/visibility change) - without this the autoscroll keeps running in the background.
+        session.WindowDeactivatedHandler = (_, _) => EndSession();
 
         window.PreviewMouseDown += session.WindowMouseDownHandler;
         window.PreviewKeyDown += session.WindowKeyDownHandler;
         scrollViewer.IsVisibleChanged += session.VisibilityHandler;
+        window.Deactivated += session.WindowDeactivatedHandler;
 
         session.CurrentX = scrollViewer.HorizontalOffset;
         session.CurrentY = scrollViewer.VerticalOffset;
@@ -358,6 +363,8 @@ public static class MiddleClickScrollBehavior
             session.Window.PreviewKeyDown -= session.WindowKeyDownHandler;
         if (session.VisibilityHandler != null)
             session.ScrollViewer.IsVisibleChanged -= session.VisibilityHandler;
+        if (session.WindowDeactivatedHandler != null)
+            session.Window.Deactivated -= session.WindowDeactivatedHandler;
 
         StopRendering();
     }

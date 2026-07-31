@@ -1464,6 +1464,7 @@ public static class UiMotion
         {
             var surface = ResolvePopupMotionSurface(root);
             StopPopupOpacityAnimation(surface);
+            EndMotionPrep(surface);
             StopPopupOpacityAnimation(root);
             root.Opacity = 1;
             surface.Opacity = 0;
@@ -1489,6 +1490,7 @@ public static class UiMotion
 
             StopPopupOpacityAnimation(surface);
             surface.Opacity = 0;
+            BeginMotionPrep(surface, suppressEffect: false);
 
             var animation = new DoubleAnimation
             {
@@ -1511,6 +1513,10 @@ public static class UiMotion
                 catch
                 {
                     // ignore
+                }
+                finally
+                {
+                    EndMotionPrep(surface);
                 }
             };
             animation.Completed += completed;

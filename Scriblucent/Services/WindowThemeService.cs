@@ -16,6 +16,10 @@ internal static class WindowThemeService
     private const uint RdwFrame = 0x0400;
     private const uint RdwUpdateNow = 0x0100;
 
+    /// <summary>DWMWA_BORDER_COLOR is supported starting with Windows 11 build 22000.</summary>
+    private static bool SupportsDwmBorderColor
+        => Environment.OSVersion.Version.Build >= 22000;
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
 
@@ -104,8 +108,11 @@ internal static class WindowThemeService
             isDarkMode ? Colors.White : Color.FromRgb(0x1C, 0x1C, 0x1C));
 
         SetDwmColor(handle, DwmaCaptionColor, captionColor);
-        SetDwmColor(handle, DwmaBorderColor, borderColor);
         SetDwmColor(handle, DwmaTextColor, textColor);
+        ShellWindowChrome.ApplyCaptionFrameBorder(window, isDarkMode);
+        // Tint OS L/R/B only where DWMWA_BORDER_COLOR is supported (Win11+).
+        if (SupportsDwmBorderColor)
+            SetDwmColor(handle, DwmaBorderColor, borderColor);
     }
 
     private static Color ResolveColor(Window window, string resourceKey, Color fallback)

@@ -24,12 +24,12 @@ public static class DashboardDragGhost
     private const double GhostFloatYOffset = -5;
     private const double GhostLiftAboveGrabY = 14;
     private const double GhostShadowPad = 24;
-    // Match CardShadowLayer default margin (-11,-9,-11,-12) and ShadowRoot opacity.
-    private const double GhostShadowBleedLeft = 11;
-    private const double GhostShadowBleedTop = 9;
-    private const double GhostShadowBleedRight = 11;
-    private const double GhostShadowBleedBottom = 12;
-    private const double GhostShadowPlateOpacity = 0.72;
+    // Match CardShadowLayer default margin (-14,-12,-14,-16) and ShadowRoot opacity.
+    private const double GhostShadowBleedLeft = 14;
+    private const double GhostShadowBleedTop = 12;
+    private const double GhostShadowBleedRight = 14;
+    private const double GhostShadowBleedBottom = 16;
+    private const double GhostShadowPlateOpacity = 0.58;
     private const double CaptureMargin = 16;
     private const double NoteCardRestWidth = 220;
     private const double NoteCardRestMinHeight = 140;
@@ -40,6 +40,7 @@ public static class DashboardDragGhost
     private static NoteCardControl? _activeNoteDragSource;
     private static object? _activeDraggedListing;
     private static FrameworkElement? _activeListingDragSource;
+    private static readonly List<CardShadowLayer> HiddenShadowPlates = new();
 
     public static bool IsActiveDragSource(FrameworkElement element)
         => _activeDragSource?.TryGetTarget(out var source) == true
@@ -201,6 +202,7 @@ public static class DashboardDragGhost
             _activeNoteDragSource = null;
             _activeDraggedListing = null;
             _activeListingDragSource = null;
+            RestoreShadowPlates();
             ForceCloseActiveGhost(ghostWindow);
 
             if (Window.GetWindow(dragSource) is MainWindow mainWindow)
@@ -254,13 +256,29 @@ public static class DashboardDragGhost
         translate.X = 0;
         translate.Y = 0;
 
-        ResetShadowToRest(ResolveShadowHost(dragSource));
+        // Listing motion/hover lives on the named face Border, not the outer drag host.
+        if (TryResolveListingFace(dragSource, out var face) && !ReferenceEquals(face, dragSource))
+        {
+            UiMotion.Stop(face);
+            var (faceScale, faceTranslate) = UiMotion.EnsureScaleTranslateGroup(face);
+            faceScale.ScaleX = 1;
+            faceScale.ScaleY = 1;
+            faceTranslate.X = 0;
+            faceTranslate.Y = 0;
+            ResetShadowToRest(face);
+        }
+        else
+        {
+            ResetShadowToRest(ResolveShadowHost(dragSource));
+        }
+
         dragSource.UpdateLayout();
     }
 
     private static void DimDragSource(FrameworkElement dragSource)
     {
         ResetShadowToRest(ResolveShadowHost(dragSource));
+        HideShadowPlates(dragSource);
 
         if (dragSource is NoteCardControl noteCard)
             noteCard.SetDragDimmed(true, NoteSourceOpacityDuringDrag);
@@ -270,10 +288,48 @@ public static class DashboardDragGhost
 
     private static void RestoreDragSource(FrameworkElement dragSource)
     {
+        RestoreShadowPlates();
+
         if (dragSource is NoteCardControl noteCard)
             noteCard.SetDragDimmed(false);
         else
             dragSource.ClearValue(UIElement.OpacityProperty);
+    }
+
+    private static void HideShadowPlates(FrameworkElement dragSource)
+    {
+        RestoreShadowPlates();
+
+        foreach (var plate in EnumerateCardShadowLayers(dragSource))
+        {
+            if (plate.Visibility == Visibility.Collapsed)
+                continue;
+
+            HiddenShadowPlates.Add(plate);
+            plate.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private static void RestoreShadowPlates()
+    {
+        foreach (var plate in HiddenShadowPlates)
+            plate.ClearValue(UIElement.VisibilityProperty);
+
+        HiddenShadowPlates.Clear();
+    }
+
+    private static IEnumerable<CardShadowLayer> EnumerateCardShadowLayers(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is CardShadowLayer layer)
+                yield return layer;
+
+            foreach (var nested in EnumerateCardShadowLayers(child))
+                yield return nested;
+        }
     }
 
     private static FrameworkElement ResolveShadowHost(FrameworkElement dragSource)
@@ -281,16 +337,8 @@ public static class DashboardDragGhost
         if (dragSource.FindName("CardBorder") is FrameworkElement cardBorder)
             return cardBorder;
 
-        if (CardSurfaceMotionBehavior.GetIsEnabled(dragSource)
-            && CardSurfaceMotionBehavior.GetProfile(dragSource) == CardSurfaceMotionProfile.Listing)
-        {
-            var childCount = VisualTreeHelper.GetChildrenCount(dragSource);
-            for (var i = 0; i < childCount; i++)
-            {
-                if (VisualTreeHelper.GetChild(dragSource, i) is Border innerBorder)
-                    return innerBorder;
-            }
-        }
+        if (TryResolveListingFace(dragSource, out var listingFace))
+            return listingFace;
 
         return dragSource;
     }
@@ -312,14 +360,6 @@ public static class DashboardDragGhost
             return (
                 NoteCardRestWidth,
                 Math.Max(NoteCardRestMinHeight, captureSurface.ActualHeight));
-        }
-
-        if (IsListingDragSource(dragSource))
-        {
-            dragSource.UpdateLayout();
-            return (
-                Math.Max(1, dragSource.ActualWidth),
-                Math.Max(1, dragSource.ActualHeight));
         }
 
         captureSurface.UpdateLayout();
@@ -552,8 +592,9 @@ public static class DashboardDragGhost
         if (dragSource.FindName("CardBorder") is FrameworkElement cardBorder)
             return cardBorder;
 
-        if (IsListingDragSource(dragSource))
-            return dragSource;
+        // Listing hosts wrap CardShadowLayer + face; capture the face only (notes already do).
+        if (TryResolveListingFace(dragSource, out var listingFace))
+            return listingFace;
 
         var childCount = VisualTreeHelper.GetChildrenCount(dragSource);
         for (var i = 0; i < childCount; i++)
@@ -563,6 +604,60 @@ public static class DashboardDragGhost
         }
 
         return dragSource;
+    }
+
+    private static bool TryResolveListingFace(FrameworkElement dragSource, out FrameworkElement face)
+    {
+        face = null!;
+        if (!IsListingDragSource(dragSource))
+            return false;
+
+        var shadowName = CardSurfaceMotionBehavior.GetShadowElementName(dragSource);
+        if (!string.IsNullOrWhiteSpace(shadowName)
+            && dragSource.FindName(shadowName) is FrameworkElement namedFace)
+        {
+            face = namedFace;
+            return true;
+        }
+
+        if (FindListingFaceBesideShadowPlate(dragSource) is { } siblingFace)
+        {
+            face = siblingFace;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Border? FindListingFaceBesideShadowPlate(FrameworkElement dragSource)
+    {
+        var childCount = VisualTreeHelper.GetChildrenCount(dragSource);
+        for (var i = 0; i < childCount; i++)
+        {
+            if (VisualTreeHelper.GetChild(dragSource, i) is not Panel panel)
+                continue;
+
+            Border? face = null;
+            var hasShadowPlate = false;
+            var panelChildCount = VisualTreeHelper.GetChildrenCount(panel);
+            for (var j = 0; j < panelChildCount; j++)
+            {
+                switch (VisualTreeHelper.GetChild(panel, j))
+                {
+                    case CardShadowLayer:
+                        hasShadowPlate = true;
+                        break;
+                    case Border border when face is null:
+                        face = border;
+                        break;
+                }
+            }
+
+            if (hasShadowPlate && face is not null)
+                return face;
+        }
+
+        return null;
     }
 
     private static ImageSource RenderDrawingToBitmap(

@@ -19,6 +19,7 @@ using System.Windows.Media;
 
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Scriblucent.Controls;
 
 namespace Scriblucent
@@ -33,6 +34,7 @@ namespace Scriblucent
         private bool _lastFindMatchCase;
         private bool _lastFindWholeWord;
         private bool _lastFindWrapAround = true;
+        private bool _hasFindHighlights;
 
         // Auto-save fields
         public event Action<NoteDocument>? DocumentAutoSaved;
@@ -40,12 +42,17 @@ namespace Scriblucent
         public static event EventHandler? AiGenerationStateChanged;
         private static int _activeAiGenerationCount;
         private System.Threading.Timer? _autoSaveTimer;
+        private DispatcherTimer? _counterUpdateDebounceTimer;
         private bool _isAutoSaveEnabled = true;
         private int _autoSaveIntervalMs = 30000; // 30 seconds (default)
         private DateTime _lastAutoSaveTime = DateTime.MinValue;
         private string _lastSavedContent = string.Empty;
         private string _lastSavedSnapshot = string.Empty;
         private NoteDocument? _currentDocument;
+        // Keyed by ResizableImage.ImageId. Lets CreateImageAttachment skip the resize+JPEG-encode
+        // work (real CPU cost, run synchronously on every save including autosave) for images whose
+        // Source/target size haven't changed since the last time they were actually encoded.
+        private readonly Dictionary<Guid, (ImageSource? Source, double Width, double Height)> _lastEncodedImageSignatures = new();
         private const int MaxEditHistoryEntries = 100;
         private readonly FlashcardConversionService _flashcardConversionService = new();
         private readonly MindMapConversionService _mindMapConversionService = new();
@@ -57,12 +64,18 @@ namespace Scriblucent
         private bool _isConvertingToTest;
         private CancellationTokenSource? _testConversionCancellationSource;
         private bool _isSyncingFontSelectors;
+        private bool _isApplyingTypography;
         private bool _isLoadingDocument;
         private bool _isSerializingEditorContent;
         private bool _allowCloseWithoutPrompt;
         private bool _isFontPanelOpen;
         private bool _isSyncingLineSpacingSelector;
         private bool _isSyncingIndentSizeSelector;
+        private readonly Dictionary<string, ComboBoxItem> _fontFamilyItemsByName =
+            new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ComboBoxItem> _fontSizeItemsByContent =
+            new(StringComparer.Ordinal);
+        private string? _lastFontButtonTooltip;
         private double _lineSpacingMultiplier = 1.0;
         private double _indentSize = DefaultIndentSize;
         private string _measurementUnitSystem = AppSettings.UnitSystemImperial;
@@ -204,16 +217,26 @@ namespace Scriblucent
             PopulateFontSizeOptions();
         }
 
-        private void PopulateFontFamilyOptions()
+        // Fonts.SystemFontFamilies enumerates every installed font via OS interop (commonly
+        // 150-400+ on a real machine) - too expensive to redo on every NoteEditorWindow
+        // construction (i.e. every note opened). The installed font set doesn't change during a
+        // session, so compute the deduplicated, sorted name list once per process and reuse it.
+        private static List<string>? _cachedFontNames;
+
+        private static List<string> GetOrBuildFontNames()
         {
+            if (_cachedFontNames is { } cached)
+                return cached;
+
             var fontNames = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             void AddFontName(string? fontName)
             {
                 if (string.IsNullOrWhiteSpace(fontName))
                     return;
 
-                if (fontNames.Any(existing => string.Equals(existing, fontName, StringComparison.OrdinalIgnoreCase)))
+                if (!seen.Add(fontName))
                     return;
 
                 fontNames.Add(fontName);
@@ -229,16 +252,33 @@ namespace Scriblucent
                 AddFontName(fontFamily);
             }
 
+            _cachedFontNames = fontNames;
+            return fontNames;
+        }
+
+        private void PopulateFontFamilyOptions()
+        {
             FontFamilyBox.Items.Clear();
-            foreach (var fontName in fontNames)
-                FontFamilyBox.Items.Add(CreateEditorComboBoxItem(fontName));
+            _fontFamilyItemsByName.Clear();
+            foreach (var fontName in GetOrBuildFontNames())
+            {
+                var item = CreateEditorComboBoxItem(fontName);
+                FontFamilyBox.Items.Add(item);
+                _fontFamilyItemsByName[fontName] = item;
+            }
         }
 
         private void PopulateFontSizeOptions()
         {
             FontSizeBox.Items.Clear();
+            _fontSizeItemsByContent.Clear();
             foreach (var fontSize in WordFontSizes)
-                FontSizeBox.Items.Add(CreateEditorComboBoxItem(FormatFontSize(fontSize), fontSize));
+            {
+                var content = FormatFontSize(fontSize);
+                var item = CreateEditorComboBoxItem(content, fontSize);
+                FontSizeBox.Items.Add(item);
+                _fontSizeItemsByContent[content] = item;
+            }
         }
 
         private void PopulateIndentSizeOptions()
@@ -466,6 +506,7 @@ namespace Scriblucent
         public void DisposeHostedEditor()
         {
             StopAutoSaveTimer();
+            _counterUpdateDebounceTimer?.Stop();
             DetachContentScrollViewer();
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
@@ -502,6 +543,7 @@ namespace Scriblucent
         private void PerformEditorCloseCleanup()
         {
             StopAutoSaveTimer();
+            _counterUpdateDebounceTimer?.Stop();
             DetachContentScrollViewer();
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
@@ -552,9 +594,13 @@ namespace Scriblucent
 
         private void ClearAllHighlights()
         {
+            if (!_hasFindHighlights)
+                return;
+
             var doc = ContentTextBox.Document;
             var textRange = new TextRange(doc.ContentStart, doc.ContentEnd);
             textRange.ApplyPropertyValue(TextElement.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+            _hasFindHighlights = false;
         }
 
         private void ApplyRichTextBoxTheme()
@@ -562,9 +608,8 @@ namespace Scriblucent
             try
             {
                 // Get the foreground color from the application theme resources
-                if (Application.Current.Resources.Contains("RichTextBoxForeground"))
+                if (TryGetRichTextBoxForeground(out var foregroundBrush))
                 {
-                    var foregroundBrush = (Brush)Application.Current.Resources["RichTextBoxForeground"];
                     var doc = ContentTextBox.Document;
 
                     // Set default foreground for the entire document
@@ -573,12 +618,28 @@ namespace Scriblucent
                     // Apply foreground to entire document text range
                     var textRange = new TextRange(doc.ContentStart, doc.ContentEnd);
                     textRange.ApplyPropertyValue(TextElement.ForegroundProperty, foregroundBrush);
+
+                    // List markers use List/ListItem Foreground, not Run colors from the TextRange.
+                    SyncListMarkerAppearance(CollectAllDocumentLists(), foreground: foregroundBrush);
                 }
             }
             catch (Exception)
             {
                 // Non-critical - theme application shouldn't crash the app.
             }
+        }
+
+        private static bool TryGetRichTextBoxForeground(out Brush foregroundBrush)
+        {
+            if (Application.Current.Resources.Contains("RichTextBoxForeground")
+                && Application.Current.Resources["RichTextBoxForeground"] is Brush brush)
+            {
+                foregroundBrush = brush;
+                return true;
+            }
+
+            foregroundBrush = Brushes.Black;
+            return false;
         }
 
         private void UpdateCounter()
@@ -615,9 +676,10 @@ namespace Scriblucent
 
         private void ContentTextBox_SelectionChanged(object sender, RoutedEventArgs e)
         {
-            // If selection is empty (deselected), clear highlights
+            // If selection is empty (deselected), clear find highlights when present.
+            // Gated so toolbar ComboBox Focus() does not rewrite the whole document background.
             var sel = ContentTextBox.Selection;
-            if (sel == null || sel.IsEmpty)
+            if (_hasFindHighlights && (sel == null || sel.IsEmpty))
             {
                 ClearAllHighlights();
             }
@@ -627,9 +689,10 @@ namespace Scriblucent
             }
 
             UpdateOnlineSearchAvailability();
-            SyncFontSelectorsFromSelection();
+            // Tooltip only — do not sync ComboBox SelectedItem here; that invalidates FontPanel
+            // and the shared RootGrid, which visually refreshes the RichTextBox.
+            UpdateFontButtonText();
             UpdateListRemoveButtonState();
-            UpdateCounter();
         }
 
         private void ContentTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -639,11 +702,34 @@ namespace Scriblucent
 
             MarkEditorContentChanged();
 
+            // Dropdown typography ApplyPropertyValue fires TextChanged; skip chrome that the
+            // Changed handlers already refresh explicitly to avoid a double flash/jump.
+            if (_isApplyingTypography)
+                return;
+
             // Only update counter, not theme (theme is applied during load and on theme change)
-            UpdateCounter();
+            ScheduleCounterUpdate();
             UpdateEditedIndicator();
             UpdateListRemoveButtonState();
             ScheduleFloatingImageOverlayLayoutUpdate();
+        }
+
+        // UpdateCounter() walks the entire document text (TextRange extraction, multiple full-string
+        // Replace/Split passes) - too expensive to run synchronously on every keystroke in a long note.
+        // Debounce it the same way every other per-keystroke hot path in this app is debounced.
+        private void ScheduleCounterUpdate()
+        {
+            _counterUpdateDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _counterUpdateDebounceTimer.Stop();
+            _counterUpdateDebounceTimer.Tick -= CounterUpdateDebounceTimer_Tick;
+            _counterUpdateDebounceTimer.Tick += CounterUpdateDebounceTimer_Tick;
+            _counterUpdateDebounceTimer.Start();
+        }
+
+        private void CounterUpdateDebounceTimer_Tick(object? sender, EventArgs e)
+        {
+            _counterUpdateDebounceTimer?.Stop();
+            UpdateCounter();
         }
 
         private void EditorField_TextChanged(object sender, TextChangedEventArgs e)
@@ -1615,6 +1701,8 @@ namespace Scriblucent
                     TextElement.BackgroundProperty,
                     i == activeIndex ? activeBrush : matchBrush);
             }
+
+            _hasFindHighlights = matches.Count > 0;
         }
 
         private void SelectMatch(FindMatch match)
@@ -1648,6 +1736,7 @@ namespace Scriblucent
                 {
                     _isLoadingDocument = true;
                     _currentDocument = document; // Set current document
+                    _lastEncodedImageSignatures.Clear();
                     TitleTextBox.Text = document.Title;
                     TagsTextBox.Text = string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
 
@@ -2962,6 +3051,7 @@ namespace Scriblucent
         public void SetCurrentDocument(NoteDocument document)
         {
             _currentDocument = document;
+            _lastEncodedImageSignatures.Clear();
             MarkCurrentStateSaved();
         }
 
@@ -3249,9 +3339,8 @@ namespace Scriblucent
             var printableDocument = CreatePdfFixedDocument(exportDoc, exportNote.Images);
             var printDialog = new PrintDialog();
 
-            var printQueue = new System.Printing.PrintQueue(
-                new System.Printing.PrintServer(),
-                "Microsoft Print to PDF");
+            using var printServer = new System.Printing.PrintServer();
+            using var printQueue = new System.Printing.PrintQueue(printServer, "Microsoft Print to PDF");
 
             printDialog.PrintQueue = printQueue;
             var queuedJobsBefore = GetQueuedJobCount(printQueue);
@@ -3443,8 +3532,9 @@ namespace Scriblucent
                 range.Text = content;
                 return document;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                CrashLog.Append("NoteEditorWindow.LoadFlowDocumentFromStoredContent", ex);
             }
 
             range.Text = content;
@@ -3625,8 +3715,9 @@ namespace Scriblucent
                 bitmap.Freeze();
                 return bitmap;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                CrashLog.Append("NoteEditorWindow.TryCreateImageSourceFromBase64", ex);
                 return null;
             }
         }
@@ -3881,17 +3972,24 @@ namespace Scriblucent
                 return;
 
             var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
-            ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, CreateEditorFontFamily(fontName));
+            _isApplyingTypography = true;
+            try
+            {
+                ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, CreateEditorFontFamily(fontName));
+            }
+            finally
+            {
+                _isApplyingTypography = false;
+            }
+
             SavePreferredFontFamily(GetPrimaryFontFamily(fontName));
-            SyncFontSelectorsFromSelection();
+            UpdateFontButtonText();
 
             if (selectionChangesDocument)
             {
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
             }
-
-            ContentTextBox.Focus();
         }
 
         private void FontSizeBox_Changed(object sender, SelectionChangedEventArgs e)
@@ -3906,19 +4004,37 @@ namespace Scriblucent
             }
 
             size = NormalizeEditorFontSize(size);
-            var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
-            ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
-            ApplyLineSpacingToInlineFormattingTarget(size);
-            SavePreferredFontSize(size);
-            SyncFontSelectorsFromSelection();
+            var selection = ContentTextBox.Selection;
+            var selectionStart = selection?.Start;
+            var selectionEnd = selection?.End;
+            var selectionChangesDocument = selection is { IsEmpty: false };
+            var activeLists = GetActiveDocumentLists();
 
-            if (selectionChangesDocument)
+            ContentTextBox.Focus();
+            _isApplyingTypography = true;
+            try
+            {
+                ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
+                Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
+                SyncListMarkerAppearance(activeLists, size, markerForeground);
+                ApplyLineSpacingToInlineFormattingTargetIfNeeded(size);
+            }
+            finally
+            {
+                _isApplyingTypography = false;
+            }
+
+            if (selectionStart is not null && selectionEnd is not null)
+                RefreshEditorSelectionLayout(selectionStart, selectionEnd);
+
+            SavePreferredFontSize(size);
+            UpdateFontButtonText();
+
+            if (selectionChangesDocument || activeLists.Count > 0)
             {
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
             }
-
-            ContentTextBox.Focus();
         }
 
         private void LineSpacingBox_Changed(object sender, SelectionChangedEventArgs e)
@@ -3937,11 +4053,19 @@ namespace Scriblucent
             }
 
             _lineSpacingMultiplier = NormalizeLineSpacingMultiplier(spacing);
-            ApplyLineSpacingToTargetParagraphs(_lineSpacingMultiplier);
+            _isApplyingTypography = true;
+            try
+            {
+                ApplyLineSpacingToTargetParagraphs(_lineSpacingMultiplier);
+            }
+            finally
+            {
+                _isApplyingTypography = false;
+            }
+
             SavePreferredLineSpacing(_lineSpacingMultiplier);
             MarkEditorContentChanged();
             UpdateEditedIndicator();
-            ContentTextBox.Focus();
         }
 
         private void IndentSizeBox_Changed(object sender, SelectionChangedEventArgs e)
@@ -3965,7 +4089,6 @@ namespace Scriblucent
 
             _indentSize = NormalizeIndentSize(indentSize);
             SavePreferredIndentSize(_indentSize);
-            ContentTextBox.Focus();
         }
 
         private void FontSettings_Click(object sender, RoutedEventArgs e)
@@ -3984,6 +4107,9 @@ namespace Scriblucent
             }
 
             UpdateEditorToolButtonStates();
+
+            if (isOpen)
+                SyncFontSelectorsFromSelection();
 
             if (!animate)
             {
@@ -4051,6 +4177,21 @@ namespace Scriblucent
         {
             foreach (var paragraph in GetTargetParagraphsForInlineFormatting())
                 ApplyLineSpacingToParagraph(paragraph, _lineSpacingMultiplier, minimumFontSize);
+        }
+
+        private void ApplyLineSpacingToInlineFormattingTargetIfNeeded(double minimumFontSize)
+        {
+            foreach (var paragraph in GetTargetParagraphsForInlineFormatting())
+            {
+                var targetLineHeight = ResolveParagraphLineHeight(paragraph, _lineSpacingMultiplier, minimumFontSize);
+                if (paragraph.LineStackingStrategy == LineStackingStrategy.BlockLineHeight
+                    && Math.Abs(paragraph.LineHeight - targetLineHeight) < 0.01)
+                {
+                    continue;
+                }
+
+                ApplyLineSpacingToParagraph(paragraph, _lineSpacingMultiplier, minimumFontSize);
+            }
         }
 
         private void ApplyCurrentLineSpacingToDocument()
@@ -4460,6 +4601,10 @@ namespace Scriblucent
         {
             ContentTextBox.Focus();
 
+            var selection = ContentTextBox.Selection;
+            var selectionStart = selection?.Start;
+            var selectionEnd = selection?.End;
+
             var activeLists = GetActiveDocumentLists();
             if (activeLists.Count == 0)
             {
@@ -4478,10 +4623,68 @@ namespace Scriblucent
                 list.MarkerStyle = markerStyle;
             }
 
+            var markerSize = ResolveCurrentSelectionTypography().FontSize;
+            if (markerSize <= 0)
+                markerSize = ContentTextBox.FontSize;
+            Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
+            SyncListMarkerAppearance(activeLists, markerSize, markerForeground);
+
+            if (selectionStart is not null && selectionEnd is not null)
+                RefreshEditorSelectionLayout(selectionStart, selectionEnd);
+
             MarkEditorContentChanged();
             UpdateEditedIndicator();
             UpdateListRemoveButtonState();
             ContentTextBox.Focus();
+        }
+
+        /// <summary>
+        /// WPF draws list markers from List/ListItem FontSize and Foreground, not from Runs inside the paragraph.
+        /// Keep those in sync so bullets/numbers match the text size and theme.
+        /// </summary>
+        private static void SyncListMarkerAppearance(
+            IEnumerable<System.Windows.Documents.List> lists,
+            double? fontSize = null,
+            Brush? foreground = null)
+        {
+            double? normalizedSize = fontSize is double size
+                ? NormalizeEditorFontSize(size)
+                : null;
+
+            foreach (var list in lists)
+            {
+                if (normalizedSize.HasValue)
+                    list.FontSize = normalizedSize.Value;
+
+                if (foreground != null)
+                    list.Foreground = foreground;
+
+                list.ClearValue(System.Windows.Documents.List.MarkerOffsetProperty);
+
+                foreach (ListItem item in list.ListItems)
+                {
+                    if (normalizedSize.HasValue)
+                        item.FontSize = normalizedSize.Value;
+
+                    if (foreground != null)
+                        item.Foreground = foreground;
+                }
+            }
+        }
+
+        private void RefreshEditorSelectionLayout(TextPointer selectionStart, TextPointer selectionEnd)
+        {
+            ContentTextBox.InvalidateVisual();
+            ContentTextBox.UpdateLayout();
+
+            try
+            {
+                ContentTextBox.Selection.Select(selectionStart, selectionEnd);
+            }
+            catch
+            {
+                // Layout refresh should keep pointers valid; formatting itself already succeeded.
+            }
         }
 
         private void UpdateListRemoveButtonState()
@@ -4513,6 +4716,44 @@ namespace Scriblucent
 
             AddActiveDocumentList(ContentTextBox.CaretPosition, lists);
             return lists;
+        }
+
+        private HashSet<System.Windows.Documents.List> CollectAllDocumentLists()
+        {
+            var lists = new HashSet<System.Windows.Documents.List>();
+            CollectAllDocumentLists(ContentTextBox.Document.Blocks, lists);
+            return lists;
+        }
+
+        private static void CollectAllDocumentLists(
+            BlockCollection blocks,
+            ISet<System.Windows.Documents.List> lists)
+        {
+            foreach (Block block in blocks)
+            {
+                switch (block)
+                {
+                    case System.Windows.Documents.List list:
+                        lists.Add(list);
+                        foreach (ListItem item in list.ListItems)
+                            CollectAllDocumentLists(item.Blocks, lists);
+                        break;
+                    case Section section:
+                        CollectAllDocumentLists(section.Blocks, lists);
+                        break;
+                    case Table table:
+                        foreach (TableRowGroup rowGroup in table.RowGroups)
+                        {
+                            foreach (TableRow row in rowGroup.Rows)
+                            {
+                                foreach (TableCell cell in row.Cells)
+                                    CollectAllDocumentLists(cell.Blocks, lists);
+                            }
+                        }
+
+                        break;
+                }
+            }
         }
 
         private static void CollectDocumentLists(
@@ -4615,7 +4856,12 @@ namespace Scriblucent
             var mixedText = GetMixedSelectionText();
             var fontFamily = typography.HasMixedFontFamily ? mixedText : typography.FontFamily;
             var fontSize = typography.HasMixedFontSize ? mixedText : FormatFontSize(typography.FontSize);
-            fontButton.ToolTip = string.Format(LocalizationService.GetString("FontButtonFormat"), fontFamily, fontSize);
+            var tooltip = string.Format(LocalizationService.GetString("FontButtonFormat"), fontFamily, fontSize);
+            if (string.Equals(_lastFontButtonTooltip, tooltip, StringComparison.Ordinal))
+                return;
+
+            _lastFontButtonTooltip = tooltip;
+            fontButton.ToolTip = tooltip;
         }
 
         private void SyncFontSelectorsFromSelection()
@@ -4626,14 +4872,24 @@ namespace Scriblucent
             try
             {
                 if (typography.HasMixedFontFamily)
-                    FontFamilyBox.SelectedIndex = -1;
+                {
+                    if (FontFamilyBox.SelectedIndex != -1)
+                        FontFamilyBox.SelectedIndex = -1;
+                }
                 else
-                    SelectOrAddComboBoxItemByContent(FontFamilyBox, typography.FontFamily, null, StringComparison.OrdinalIgnoreCase);
+                {
+                    SelectOrAddFontFamilyItem(typography.FontFamily);
+                }
 
                 if (typography.HasMixedFontSize)
-                    FontSizeBox.SelectedIndex = -1;
+                {
+                    if (FontSizeBox.SelectedIndex != -1)
+                        FontSizeBox.SelectedIndex = -1;
+                }
                 else
-                    SelectOrAddComboBoxItemByContent(FontSizeBox, FormatFontSize(typography.FontSize), typography.FontSize, StringComparison.Ordinal);
+                {
+                    SelectOrAddFontSizeItem(typography.FontSize);
+                }
             }
             finally
             {
@@ -4789,18 +5045,63 @@ namespace Scriblucent
             return !string.IsNullOrWhiteSpace(content);
         }
 
-        private void SelectOrAddComboBoxItemByContent(
-            ComboBox comboBox,
-            string content,
-            object? tag,
-            StringComparison comparison)
+        private void SelectOrAddFontFamilyItem(string fontFamily)
         {
-            if (TrySelectComboBoxItemByContent(comboBox, content, comparison))
+            if (TrySelectFontFamilyItem(fontFamily))
                 return;
 
-            var item = CreateEditorComboBoxItem(content, tag);
-            comboBox.Items.Add(item);
-            comboBox.SelectedItem = item;
+            var item = CreateEditorComboBoxItem(fontFamily);
+            FontFamilyBox.Items.Add(item);
+            _fontFamilyItemsByName[fontFamily] = item;
+            FontFamilyBox.SelectedItem = item;
+        }
+
+        private void SelectOrAddFontSizeItem(double fontSize)
+        {
+            var content = FormatFontSize(fontSize);
+            if (TrySelectFontSizeItem(content))
+                return;
+
+            var item = CreateEditorComboBoxItem(content, fontSize);
+            FontSizeBox.Items.Add(item);
+            _fontSizeItemsByContent[content] = item;
+            FontSizeBox.SelectedItem = item;
+        }
+
+        private bool TrySelectFontFamilyItem(string fontFamily)
+        {
+            if (TryGetSelectedComboBoxContent(FontFamilyBox, out var current)
+                && string.Equals(current, fontFamily, StringComparison.OrdinalIgnoreCase)
+                && FontFamilyBox.SelectedIndex >= 0)
+            {
+                return true;
+            }
+
+            if (!_fontFamilyItemsByName.TryGetValue(fontFamily, out var item))
+                return false;
+
+            if (!ReferenceEquals(FontFamilyBox.SelectedItem, item))
+                FontFamilyBox.SelectedItem = item;
+
+            return true;
+        }
+
+        private bool TrySelectFontSizeItem(string content)
+        {
+            if (TryGetSelectedComboBoxContent(FontSizeBox, out var current)
+                && string.Equals(current, content, StringComparison.Ordinal)
+                && FontSizeBox.SelectedIndex >= 0)
+            {
+                return true;
+            }
+
+            if (!_fontSizeItemsByContent.TryGetValue(content, out var item))
+                return false;
+
+            if (!ReferenceEquals(FontSizeBox.SelectedItem, item))
+                FontSizeBox.SelectedItem = item;
+
+            return true;
         }
 
         private static void SelectComboBoxItemByContent(ComboBox comboBox, string preferredContent, string fallbackContent, StringComparison comparison)
@@ -4815,16 +5116,37 @@ namespace Scriblucent
 
         private static bool TrySelectComboBoxItemByContent(ComboBox comboBox, string content, StringComparison comparison)
         {
+            if (TryGetSelectedComboBoxContentStatic(comboBox, out var current)
+                && string.Equals(current, content, comparison)
+                && comboBox.SelectedIndex >= 0)
+            {
+                return true;
+            }
+
             foreach (var option in comboBox.Items.OfType<ComboBoxItem>())
             {
                 if (!string.Equals(option.Content?.ToString(), content, comparison))
                     continue;
 
-                comboBox.SelectedItem = option;
+                if (!ReferenceEquals(comboBox.SelectedItem, option))
+                    comboBox.SelectedItem = option;
+
                 return true;
             }
 
             return false;
+        }
+
+        private static bool TryGetSelectedComboBoxContentStatic(ComboBox comboBox, out string content)
+        {
+            if (comboBox.SelectedItem is ComboBoxItem { Content: not null } item)
+            {
+                content = item.Content.ToString() ?? string.Empty;
+                return !string.IsNullOrWhiteSpace(content);
+            }
+
+            content = comboBox.SelectedItem?.ToString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(content);
         }
 
         private static bool TrySelectComboBoxItemByTag(ComboBox comboBox, double tagValue)
@@ -4837,7 +5159,9 @@ namespace Scriblucent
                     continue;
                 }
 
-                comboBox.SelectedItem = option;
+                if (!ReferenceEquals(comboBox.SelectedItem, option))
+                    comboBox.SelectedItem = option;
+
                 return true;
             }
 
@@ -6342,10 +6666,12 @@ namespace Scriblucent
             var image = new ResizableImage
             {
                 ImageId = attachment.Id == Guid.Empty ? Guid.NewGuid() : attachment.Id,
-                ImageData = attachment.Data,
                 LayoutMode = NormalizeImageLayout(attachment.Layout),
+                // Width/Height must be set before ImageData - OnImageDataChanged reads the display
+                // size to pick a DecodePixelWidth, instead of decoding the source at full resolution.
                 Width = Math.Max(50, attachment.Width),
                 Height = Math.Max(50, attachment.Height),
+                ImageData = attachment.Data,
                 PreserveAspectRatio = attachment.PreserveAspectRatio
             };
 
@@ -6471,14 +6797,33 @@ namespace Scriblucent
 
             var width = ResolveElementWidth(image);
             var height = ResolveElementHeight(image);
-            var encodedSource = TryEncodeImageSource(image.Source, width, height);
             var existingData = image.ImageData;
+
+            // Re-encoding is real CPU work (resize + JPEG encode + base64) and this runs on every
+            // save including autosave - skip it when nothing about the image has changed since the
+            // last time it was actually encoded (same Source instance, same target size).
+            string encodedSource;
+            if (!string.IsNullOrWhiteSpace(existingData)
+                && _lastEncodedImageSignatures.TryGetValue(image.ImageId, out var lastEncoded)
+                && ReferenceEquals(lastEncoded.Source, image.Source)
+                && lastEncoded.Width.Equals(width)
+                && lastEncoded.Height.Equals(height))
+            {
+                encodedSource = existingData;
+            }
+            else
+            {
+                encodedSource = TryEncodeImageSource(image.Source, width, height);
+            }
+
             var data = SelectCompactImageData(existingData, encodedSource);
             if (string.IsNullOrWhiteSpace(data))
                 return null;
 
             if (!string.Equals(image.ImageData, data, StringComparison.Ordinal))
                 image.ImageData = data;
+
+            _lastEncodedImageSignatures[image.ImageId] = (image.Source, width, height);
 
             var layout = forcedLayout ?? NormalizeImageLayout(image.LayoutMode);
             var isFloating = string.Equals(layout, NoteImageLayout.Floating, StringComparison.OrdinalIgnoreCase);

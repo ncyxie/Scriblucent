@@ -996,6 +996,28 @@ namespace Scriblucent.Views
             }
         }
 
+        private void ResetActivitySummary_Click(object sender, RoutedEventArgs e)
+        {
+            var confirmed = ModernDialog.ConfirmWarning(
+                Window.GetWindow(this),
+                LocalizationService.GetString("ResetActivitySummaryTitle"),
+                LocalizationService.GetString("ResetActivitySummaryPrompt"),
+                LocalizationService.GetString("ResetActivitySummary"));
+
+            if (!confirmed)
+                return;
+
+            ActivityTracker.Reset();
+
+            if (Application.Current?.MainWindow?.DataContext is MainViewModel mainVm)
+                mainVm.RefreshActivityStats();
+
+            ModernDialog.ShowSuccess(
+                Window.GetWindow(this),
+                LocalizationService.GetString("Success"),
+                LocalizationService.GetString("ResetActivitySummarySuccess"));
+        }
+
         private void ResetFactorySettings_Click(object sender, RoutedEventArgs e)
         {
             var message = string.Concat(

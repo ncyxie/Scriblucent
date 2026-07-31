@@ -16,12 +16,12 @@ namespace Scriblucent.Animations;
 /// </summary>
 internal static class CardShadowAsset
 {
-    public const double CornerTileSize = 22;
+    public const double CornerTileSize = 28;
 
     private const double ShapeCornerRadius = 14;
-    private const double BlurRadius = 9;
-    private const double EdgeStripThickness = 4;
-    private const double SwatchSize = CornerTileSize * 2 + 24;
+    private const double BlurRadius = 14;
+    private const double EdgeStripThickness = 6;
+    private const double SwatchSize = CornerTileSize * 2 + 32;
     private const double RenderScale = 2.0;
 
     private static readonly Lazy<BitmapSource> Swatch = new(Bake);
@@ -61,19 +61,19 @@ internal static class CardShadowAsset
         {
             // Ambient (centered) + key (offset down) in one blur pass: top contact stays
             // readable on white section shells while the underside reads as a cast.
-            const double castOffsetY = 2.5;
+            const double castOffsetY = 3;
             var inset = BlurRadius + 3;
             var size = SwatchSize - inset * 2;
             var ambient = new Rect(inset, inset, size, size);
             var key = new Rect(inset, inset + castOffsetY, size, size);
             dc.DrawRoundedRectangle(
-                new SolidColorBrush(Color.FromArgb(95, 0, 0, 0)),
+                new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)),
                 null,
                 ambient,
                 ShapeCornerRadius,
                 ShapeCornerRadius);
             dc.DrawRoundedRectangle(
-                new SolidColorBrush(Color.FromArgb(145, 0, 0, 0)),
+                new SolidColorBrush(Color.FromArgb(100, 0, 0, 0)),
                 null,
                 key,
                 ShapeCornerRadius,

@@ -7,6 +7,7 @@ public class NoteGroupViewModel : ViewModelBase
 {
     private string _name;
     private Brush _backgroundBrush;
+    private Brush _foregroundBrush;
 
     public NoteGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<NoteCardViewModel> notes)
     {
@@ -14,6 +15,7 @@ public class NoteGroupViewModel : ViewModelBase
         _name = name;
         BackgroundColor = backgroundColor;
         _backgroundBrush = GroupBrushFactory.Create(backgroundColor);
+        _foregroundBrush = GroupBrushFactory.CreateForeground(backgroundColor);
         Notes = new ObservableCollection<NoteCardViewModel>(notes);
     }
 
@@ -33,11 +35,18 @@ public class NoteGroupViewModel : ViewModelBase
         private set => SetProperty(ref _backgroundBrush, value);
     }
 
+    public Brush ForegroundBrush
+    {
+        get => _foregroundBrush;
+        private set => SetProperty(ref _foregroundBrush, value);
+    }
+
     public ObservableCollection<NoteCardViewModel> Notes { get; }
 
     public void SetBackground(string backgroundColor)
     {
         BackgroundColor = backgroundColor;
         BackgroundBrush = GroupBrushFactory.Create(backgroundColor);
+        ForegroundBrush = GroupBrushFactory.CreateForeground(backgroundColor);
     }
 }

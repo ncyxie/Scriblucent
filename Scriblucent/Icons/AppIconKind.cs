@@ -57,5 +57,8 @@ public enum AppIconKind
     Lightbulb,
     Refresh,
     Warning,
+    Info,
+    Error,
+    Question,
     Github
 }

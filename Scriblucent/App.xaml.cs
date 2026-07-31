@@ -55,6 +55,7 @@ public partial class App : Application
         ReducedMotionPreferences.Refresh();
         LocalizationService.SetCulture(settings.Language);
         ThemeManager.SetTheme(settings.Theme);
+        ThemeManager.FreezeCurrentThemeDictionary();
         GlobalScrollBarSettingsService.Apply(settings);
         EventManager.RegisterClassHandler(
             typeof(Window),
@@ -83,5 +84,6 @@ public partial class App : Application
     {
         BundledModelHostService.Instance.Stop();
         base.OnExit(e);
+        AppSettingsService.Flush();
     }
 }

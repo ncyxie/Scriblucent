@@ -148,6 +148,11 @@
     <SolidColorBrush x:Key="ScrollBarThumbHoverBackground" Color="#5A5A5A"/>
     <SolidColorBrush x:Key="ScrollBarThumbPressedBackground" Color="#686868"/>
 
+    <!-- Slider (flip speed, zoom, etc.): bright thumb + accent ring on dark chrome -->
+    <SolidColorBrush x:Key="SliderTrackBackground" Color="#5E5E5E"/>
+    <SolidColorBrush x:Key="SliderThumbBackground" Color="#F2F2F2"/>
+    <SolidColorBrush x:Key="SliderThumbBorder" Color="#5568F0"/>
+
     <!-- Mind map search highlight colors -->
     <SolidColorBrush x:Key="MindMapSearchMatchBorderBrush" Color="#F5B84D"/>
     <SolidColorBrush x:Key="MindMapSearchActiveBorderBrush" Color="#FF8E3A"/>

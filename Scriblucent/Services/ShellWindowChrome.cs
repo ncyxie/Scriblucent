@@ -301,12 +301,97 @@ internal static class ShellWindowChrome
         EnsureAnimationStyles(window);
         if (window.WindowState == WindowState.Maximized)
             ForceFrameChanged(window);
+
+        var isDarkMode = string.Equals(ThemeManager.CurrentTheme, "Dark", StringComparison.OrdinalIgnoreCase);
+        ApplyCaptionFrameBorder(window, isDarkMode);
     }
 
     private static void OnWindowActivationChanged(object? sender, EventArgs e)
     {
         if (sender is Window window)
             UpdateCaptionActiveState(window);
+    }
+
+    /// <summary>
+    /// Keeps the caption top hairline in sync with theme / OS frame.
+    /// Maximized: match the title-bar fill (no visible OS frame edge).
+    /// Win10 light restored: system window-frame color.
+    /// Dark / Win11 restored: theme BorderColor.
+    /// </summary>
+    internal static void ApplyCaptionFrameBorder(Window window, bool isDarkMode)
+    {
+        if (window.GetValue(CaptionHostProperty) is Border caption)
+            ApplyCaptionFrameBorder(window, caption, isDarkMode);
+    }
+
+    private static void ApplyCaptionFrameBorder(Window window, Border caption, bool isDarkMode)
+    {
+        if (window.WindowState == WindowState.Maximized)
+        {
+            caption.SetResourceReference(Border.BorderBrushProperty, GetShellFrameBackgroundKey(window));
+            return;
+        }
+
+        var useThemeBorder = isDarkMode || Environment.OSVersion.Version.Build >= 22000;
+        if (useThemeBorder)
+        {
+            caption.SetResourceReference(Border.BorderBrushProperty, "BorderColor");
+            return;
+        }
+
+        // Win10 light: match the untinted OS frame; keep WindowFrame when unfocused so the
+        // hairline does not wash out to InactiveBorderColor.
+        var brush = new SolidColorBrush(SystemColors.WindowFrameColor);
+        if (brush.CanFreeze)
+            brush.Freeze();
+        caption.BorderBrush = brush;
+    }
+
+    /// <summary>
+    /// Sharp 1px top line for full-bleed overlays so the frame edge stays synced while the
+    /// caption (and its hairline) are covered by the blurred scrim.
+    /// </summary>
+    /// <param name="frameActive">
+    /// Whether the window whose OS L/R/B are visible is active. Overlay dialogs cover an inactive
+    /// owner — pass the owner's IsActive so Win10 light matches InactiveBorderColor.
+    /// </param>
+    /// <param name="frameWindow">Window whose chrome the hairline should match (usually the owner).</param>
+    internal static void ApplyOverlayFrameHairline(
+        Border hairline,
+        bool isDarkMode,
+        bool frameActive = true,
+        Window? frameWindow = null)
+    {
+        hairline.Height = 1;
+        hairline.BorderThickness = new Thickness(0);
+        hairline.SnapsToDevicePixels = true;
+        hairline.IsHitTestVisible = false;
+        hairline.VerticalAlignment = VerticalAlignment.Top;
+        hairline.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+        if (frameWindow?.WindowState == WindowState.Maximized)
+        {
+            hairline.SetResourceReference(
+                Border.BackgroundProperty,
+                GetShellFrameBackgroundKey(frameWindow));
+            return;
+        }
+
+        var useThemeBorder = isDarkMode || Environment.OSVersion.Version.Build >= 22000;
+        if (useThemeBorder)
+        {
+            hairline.SetResourceReference(Border.BackgroundProperty, "BorderColor");
+            return;
+        }
+
+        // Win10 light: match the live OS frame (active vs inactive).
+        var color = frameActive
+            ? SystemColors.WindowFrameColor
+            : SystemColors.InactiveBorderColor;
+        var brush = new SolidColorBrush(color);
+        if (brush.CanFreeze)
+            brush.Freeze();
+        hairline.Background = brush;
     }
 
     private static void ApplyShellFrame(Window window)
@@ -405,11 +490,14 @@ internal static class ShellWindowChrome
             Height = CaptionHeight,
             SnapsToDevicePixels = true,
             Cursor = Cursors.Arrow,
-            // Top hairline only — matches DWM L/R/B border without leaving NC space (that resurfaces OS caption).
+            // Top hairline only — color applied by ApplyCaptionFrameBorder (theme / OS frame).
             BorderThickness = new Thickness(0, 1, 0, 0)
         };
         caption.SetResourceReference(Border.BackgroundProperty, GetShellFrameBackgroundKey(window));
-        caption.SetResourceReference(Border.BorderBrushProperty, "BorderColor");
+        ApplyCaptionFrameBorder(
+            window,
+            caption,
+            string.Equals(ThemeManager.CurrentTheme, "Dark", StringComparison.OrdinalIgnoreCase));
         caption.MouseLeftButtonDown += (_, e) => OnCaptionMouseLeftButtonDown(window, e);
         caption.MouseRightButtonUp += (_, e) =>
         {

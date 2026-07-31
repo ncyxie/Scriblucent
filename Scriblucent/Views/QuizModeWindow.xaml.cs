@@ -50,6 +50,13 @@ public partial class QuizModeWindow : Window
         StartTimer();
         LoadQuestion();
         WindowContentEnterHelper.AnimateOnLoaded(this);
+        Closed += QuizModeWindow_Closed;
+    }
+
+    private void QuizModeWindow_Closed(object? sender, System.EventArgs e)
+    {
+        Closed -= QuizModeWindow_Closed;
+        _timer?.Stop();
     }
 
     private void StartTimer()

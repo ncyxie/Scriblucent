@@ -1007,10 +1007,18 @@
                 <Grid.RenderTransform>
                     <TranslateTransform Y="-12"/>
                 </Grid.RenderTransform>
-                <controls:CardShadowLayer/>
+                <!-- Shadow plate is a sibling so toolbar text is not rasterized by DropShadowEffect
+                     (same pattern as ComboBox/ContextMenu popups). -->
                 <Border Background="{DynamicResource CardBackground}"
                         BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        IsHitTestVisible="False"
+                        Effect="{StaticResource Elevation.Popup}"/>
+                <Border x:Name="MassSelectCard"
+                        Background="{DynamicResource CardBackground}"
+                        BorderThickness="0"
                         Padding="6"
+                        VerticalAlignment="Top"
                         CornerRadius="{StaticResource Radius.Card}">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -1067,10 +1075,14 @@
                                         Click="ToggleMassSelectMoreActionsButton_Click"/>
                             </StackPanel>
                         </Border>
-                        <!-- Level 2 role L: separator line, not a box stroke. -->
-                        <Border Width="1"
+                        <!-- Shown only while more-actions is expanded (toggled in code-behind). -->
+                        <Border x:Name="MassSelectMoreActionsSeparator"
+                                Width="1"
+                                Height="30"
                                 Margin="0,3,7,3"
-                                Background="{DynamicResource SidebarSeparator}"/>
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource SidebarSeparator}"
+                                Visibility="Collapsed"/>
 
                         <Border x:Name="MassSelectMoreActionsPanel"
                                 Margin="0"
@@ -1118,7 +1130,7 @@
                             Padding="8,0,0,0"
                             BorderBrush="{DynamicResource SidebarSeparator}"
                             BorderThickness="1,0,0,0"
-                            VerticalAlignment="Stretch">
+                            VerticalAlignment="Center">
                         <Button Style="{StaticResource MassActionIconButtonStyle}"
                                 Margin="0"
                                 Content="{icons:Icon Close}"

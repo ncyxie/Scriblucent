@@ -4,7 +4,7 @@
              xmlns:anim="clr-namespace:Scriblucent.Animations"
              IsHitTestVisible="False"
              Focusable="False"
-             Margin="-11,-9,-11,-12">
+             Margin="-14,-12,-14,-16">
     <!--
         Nine-slice shadow: a shadow texture baked ONCE (see CardShadowAsset) and reused as eight
         stretched image slices per card, instead of a live DropShadowEffect - which forces an
@@ -17,24 +17,24 @@
         RenderTransform (see ungrouped Flashcard/Quiz/MindMap templates), since Margin composes with
         the card's own transform predictably instead of needing to match it.
     -->
-    <Grid x:Name="ShadowRoot" Opacity="0.72">
+    <Grid x:Name="ShadowRoot" Opacity="0.58">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="22"/>
+            <ColumnDefinition Width="28"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="22"/>
+            <ColumnDefinition Width="28"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
-            <RowDefinition Height="22"/>
+            <RowDefinition Height="28"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="22"/>
+            <RowDefinition Height="28"/>
         </Grid.RowDefinitions>
-        <Image Grid.Row="0" Grid.Column="0" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.TopLeft}"/>
-        <Image Grid.Row="0" Grid.Column="1" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.TopEdge}"/>
-        <Image Grid.Row="0" Grid.Column="2" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.TopRight}"/>
-        <Image Grid.Row="1" Grid.Column="0" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.LeftEdge}"/>
-        <Image Grid.Row="1" Grid.Column="2" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.RightEdge}"/>
-        <Image Grid.Row="2" Grid.Column="0" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.BottomLeft}"/>
-        <Image Grid.Row="2" Grid.Column="1" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.BottomEdge}"/>
-        <Image Grid.Row="2" Grid.Column="2" Stretch="Fill" Source="{x:Static anim:CardShadowAsset.BottomRight}"/>
+        <Image Grid.Row="0" Grid.Column="0" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.TopLeft}"/>
+        <Image Grid.Row="0" Grid.Column="1" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.TopEdge}"/>
+        <Image Grid.Row="0" Grid.Column="2" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.TopRight}"/>
+        <Image Grid.Row="1" Grid.Column="0" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.LeftEdge}"/>
+        <Image Grid.Row="1" Grid.Column="2" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.RightEdge}"/>
+        <Image Grid.Row="2" Grid.Column="0" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.BottomLeft}"/>
+        <Image Grid.Row="2" Grid.Column="1" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.BottomEdge}"/>
+        <Image Grid.Row="2" Grid.Column="2" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:CardShadowAsset.BottomRight}"/>
     </Grid>
 </UserControl>

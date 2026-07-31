@@ -142,6 +142,7 @@ namespace Scriblucent
         private FrameworkElement? MindMapDashboardGroupsSectionContainerElement => FindDashboardName("MindMapDashboardGroupsSectionContainer") as FrameworkElement;
         private FrameworkElement? MassSelectOverlayToolbarElement => FindDashboardName("MassSelectOverlayToolbar") as FrameworkElement;
         private FrameworkElement? MassSelectMoreActionsPanelElement => FindDashboardName("MassSelectMoreActionsPanel") as FrameworkElement;
+        private FrameworkElement? MassSelectMoreActionsSeparatorElement => FindDashboardName("MassSelectMoreActionsSeparator") as FrameworkElement;
         private Button? MassSelectMoreActionsToggleButtonElement => FindDashboardName("MassSelectMoreActionsToggleButton") as Button;
         private Popup? SortNotesPopupElement => FindDashboardName("SortNotesPopup") as Popup;
         private Popup? DashboardSectionsPopupElement => FindDashboardName("DashboardSectionsPopup") as Popup;
@@ -755,9 +756,6 @@ namespace Scriblucent
                     AnimateSectionVisibility(MindMapDashboardUngroupedSectionBodyElement, vm.IsMindMapDashboardUngroupedSectionExpanded, ScheduleMindMapVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.HasGroups))
                 {
-                    if (vm.HasGroups && !_notesHadGroups && vm.IsDashboardRevealMotionEnabled)
-                        PlayGroupsSectionReveal(DashboardMotionScope.Notes);
-
                     _notesHadGroups = vm.HasGroups;
                     EnsureExpandedSectionsNotClipped(vm);
                     QueueNotesLayoutRefresh();
@@ -808,25 +806,16 @@ namespace Scriblucent
                 }
                 else if (e.PropertyName == nameof(MainViewModel.HasFlashcardSetGroups))
                 {
-                    if (vm.HasFlashcardSetGroups && !_flashcardsHadGroups && vm.IsDashboardRevealMotionEnabled)
-                        PlayGroupsSectionReveal(DashboardMotionScope.Flashcards);
-
                     _flashcardsHadGroups = vm.HasFlashcardSetGroups;
                     QueueDashboardLayoutRefresh();
                 }
                 else if (e.PropertyName == nameof(MainViewModel.HasQuizGroups))
                 {
-                    if (vm.HasQuizGroups && !_quizzesHadGroups && vm.IsDashboardRevealMotionEnabled)
-                        PlayGroupsSectionReveal(DashboardMotionScope.Quizzes);
-
                     _quizzesHadGroups = vm.HasQuizGroups;
                     QueueDashboardLayoutRefresh();
                 }
                 else if (e.PropertyName == nameof(MainViewModel.HasMindMapGroups))
                 {
-                    if (vm.HasMindMapGroups && !_mindMapsHadGroups && vm.IsDashboardRevealMotionEnabled)
-                        PlayGroupsSectionReveal(DashboardMotionScope.MindMaps);
-
                     _mindMapsHadGroups = vm.HasMindMapGroups;
                     QueueDashboardLayoutRefresh();
                 }
@@ -949,6 +938,9 @@ namespace Scriblucent
             UiMotion.Clear(scale, ScaleTransform.ScaleXProperty);
             UiMotion.Clear(scale, ScaleTransform.ScaleYProperty);
 
+            if (MassSelectMoreActionsSeparatorElement is { } separator)
+                separator.Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed;
+
             if (isExpanded)
             {
                 panel.Visibility = Visibility.Visible;
@@ -980,6 +972,9 @@ namespace Scriblucent
             var panel = MassSelectMoreActionsPanelElement;
             if (panel is null)
                 return;
+
+            if (MassSelectMoreActionsSeparatorElement is { } separator)
+                separator.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
 
             UiMotion.ScaleFadePanel(panel, expand, durationMs: UiMotion.FastMs);
         }

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,6 +23,7 @@ public sealed class DashboardMotionEngine
     private const int MaxLayoutWaitAttempts = 12;
 
     private static readonly Dictionary<DashboardMotionScope, DashboardMotionEngine> ActiveByScope = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, object> CardExitMotionKeys = new();
 
     private readonly Dispatcher _dispatcher;
     private readonly DashboardMotionScope _scope;
@@ -176,13 +178,16 @@ public sealed class DashboardMotionEngine
     {
         foreach (var scope in Enum.GetValues<DashboardMotionScope>())
         {
-            if (!DashboardMotionCardCatalog.TryResolveCard(element, scope, out var layoutRoot, out var motionSurface, out var itemId))
+            if (!DashboardMotionCardCatalog.TryResolveCard(element, scope, out var layoutRoot, out _, out var itemId))
                 continue;
 
             if (ShouldHoldCollapsedEnter(scope, itemId))
                 return true;
 
-            if (!layoutRoot.IsHitTestVisible && motionSurface.Opacity < 0.99)
+            // Exit (and similar holds) set IsHitTestVisible false before opacity animates.
+            // Do not require Opacity < 0.99 — post-drag PrepareRecycled* would otherwise
+            // UiMotion.Stop the exit and drop CommitMoveAfterExit's onComplete.
+            if (!layoutRoot.IsHitTestVisible)
                 return true;
         }
 
@@ -493,6 +498,21 @@ public sealed class DashboardMotionEngine
         if (!IsLayoutAnimationActive)
             BeginLayoutAnimation();
 
+        // Drop handlers run inside DoDragDrop while the drag ghost still dims the source.
+        // Defer exit until after RestoreDragSource / ghost teardown on the dispatcher.
+        _dispatcher.BeginInvoke(
+            () => ExecuteMoveExitBatch(ids, commitMove, afterMotion),
+            DispatcherPriority.Input);
+    }
+
+    private void ExecuteMoveExitBatch(
+        Guid[] ids,
+        Action commitMove,
+        Action? afterMotion)
+    {
+        if (_moveBatchCommitted)
+            return;
+
         RealizeItemsForIds(ids);
         CapturePositions(ungroupedOnly: false, freezeViewport: true);
         ArmMoveBatchSafety(ids, commitMove, afterMotion);
@@ -503,7 +523,6 @@ public sealed class DashboardMotionEngine
             return;
         }
 
-        var scrollViewer = _scrollViewer ?? DashboardMotionViewport.FindScrollViewer(_dashboardRoot);
         var exitTargets = new List<(FrameworkElement LayoutRoot, FrameworkElement MotionSurface)>(ids.Length);
         var resolvedIds = new HashSet<Guid>();
         foreach (var itemId in ids)
@@ -517,9 +536,7 @@ public sealed class DashboardMotionEngine
             if (layoutRoot is null)
                 continue;
 
-            if (scrollViewer is not null && !DashboardMotionViewport.IntersectsViewport(layoutRoot, scrollViewer))
-                continue;
-
+            // Do not cull by viewport — drag-time opacity/hit-test quirks falsely skip on-screen cards.
             exitTargets.Add((layoutRoot, DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope)));
         }
 
@@ -554,7 +571,7 @@ public sealed class DashboardMotionEngine
     {
         _moveBatchSafetyTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(UiMotion.NoteDeleteMs + UiMotion.NoteAddEnterMs + UiMotion.ReflowMs + UiMotion.ReflowStaggerCapMs + 80)
+            Interval = TimeSpan.FromMilliseconds(UiMotion.NoteDeleteMs + 120)
         };
         _moveBatchSafetyTimer.Tick += (_, _) => CommitMoveAfterExit(enterItemIds, commitMove, afterMotion);
         _moveBatchSafetyTimer.Start();
@@ -1821,9 +1838,18 @@ public sealed class DashboardMotionEngine
         FrameworkElement motionSurface,
         Action? onComplete = null)
     {
-        UiMotion.Stop(layoutRoot);
+        // Dedicated reference key so UiMotion.Stop(layoutRoot) from hover/recycle/cleanup
+        // cannot cancel this exit and drop CommitMoveAfterExit's onComplete.
+        var exitKey = CardExitMotionKeys.GetValue(layoutRoot, static _ => new object());
+        UiMotion.Stop(exitKey);
         UiMotion.Stop(motionSurface);
+
         layoutRoot.IsHitTestVisible = false;
+        HideCardShadowPlates(layoutRoot);
+
+        // Force full opacity — drag ghost may have left the source at ~0.18.
+        layoutRoot.Opacity = 1;
+        motionSurface.Opacity = 1;
 
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(motionSurface);
         translate.X = 0;
@@ -1831,15 +1857,26 @@ public sealed class DashboardMotionEngine
         scale.ScaleX = 1;
         scale.ScaleY = 1;
 
-        var startOpacity = motionSurface.Opacity;
-        if (startOpacity <= 0.01)
-            startOpacity = 1;
+        void Complete()
+        {
+            UiMotion.EndMotionPrep(layoutRoot);
+            FinalizeExitedCard(layoutRoot, motionSurface);
+            onComplete?.Invoke();
+        }
 
-        UiMotion.RunComposited(
-            motionSurface,
+        if (UiMotion.PrefersReducedMotion)
+        {
+            FinalizeExitedCard(layoutRoot, motionSurface);
+            onComplete?.Invoke();
+            return;
+        }
+
+        UiMotion.BeginMotionPrep(layoutRoot, suppressEffect: true);
+        UiMotion.Run(
+            exitKey,
             new[]
             {
-                UiMotion.Track(UiMotion.NoteDeleteMs, UiMotion.InCubic, startOpacity, 0, value => motionSurface.Opacity = value),
+                UiMotion.Track(UiMotion.NoteDeleteMs, UiMotion.InCubic, 1, 0, value => layoutRoot.Opacity = value),
                 UiMotion.Track(UiMotion.NoteDeleteMs, UiMotion.InCubic, 1, UiMotion.ExitScale, value =>
                 {
                     scale.ScaleX = value;
@@ -1847,16 +1884,26 @@ public sealed class DashboardMotionEngine
                 }),
                 UiMotion.Track(UiMotion.NoteDeleteMs, UiMotion.InCubic, 0, -UiMotion.CardEnterLiftY * 0.75, value => translate.Y = value)
             },
-            () =>
-            {
-                FinalizeExitedCard(layoutRoot, motionSurface);
-                onComplete?.Invoke();
-            });
+            Complete);
+    }
+
+    private static void HideCardShadowPlates(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is CardShadowLayer layer)
+                layer.Visibility = Visibility.Collapsed;
+            else
+                HideCardShadowPlates(child);
+        }
     }
 
     private static void FinalizeExitedCard(FrameworkElement layoutRoot, FrameworkElement motionSurface)
     {
         layoutRoot.IsHitTestVisible = false;
+        layoutRoot.Opacity = 0;
         motionSurface.Opacity = 0;
     }
 

@@ -90,6 +90,13 @@ namespace Scriblucent.Controls
             set => SetValue(ImageDataProperty, value);
         }
 
+        // Headroom multiplier above the control's current display width: the image can still be
+        // drag-resized larger after insertion (which doesn't re-trigger a decode), so decoding at
+        // the exact display size would go visibly soft the moment someone enlarges it. A larger
+        // DecodePixelWidth than the source's native size is a safe no-op (WPF just decodes at
+        // native resolution, never upscales), so this only trims genuinely oversized sources.
+        private const double DecodeWidthHeadroomFactor = 3.0;
+
         private static void OnImageDataChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is ResizableImage control && e.NewValue is string base64 && !string.IsNullOrEmpty(base64))
@@ -101,6 +108,9 @@ namespace Scriblucent.Controls
                     var bmp = new BitmapImage();
                     bmp.BeginInit();
                     bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    var decodePixelWidth = ResolveDecodePixelWidth(control);
+                    if (decodePixelWidth > 0)
+                        bmp.DecodePixelWidth = decodePixelWidth;
                     bmp.StreamSource = ms;
                     bmp.EndInit();
                     bmp.Freeze();
@@ -109,8 +119,20 @@ namespace Scriblucent.Controls
                     control.SetCurrentValue(SourceProperty, displaySource);
                     control.RefreshVisualState();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Scriblucent.Services.CrashLog.Append("ResizableImage.OnImageDataChanged", ex);
+                }
             }
+        }
+
+        private static int ResolveDecodePixelWidth(ResizableImage control)
+        {
+            var width = !double.IsNaN(control.Width) && control.Width > 0 ? control.Width : control.ActualWidth;
+            if (width <= 0)
+                return 0; // Display size not known yet - fall back to a full decode.
+
+            return (int)Math.Ceiling(width * DecodeWidthHeadroomFactor);
         }
 
         public static readonly DependencyProperty SourceProperty =

@@ -348,8 +348,8 @@
                 Grid.Row="2"
                 Grid.Column="0"
                 Margin="20,8,20,0"
-                Style="{StaticResource ChromeFieldBorderStyle}"
-                Padding="10,4"
+                Style="{StaticResource ChromePanelBorderStyle}"
+                Padding="10,7"
                 Opacity="0"
                 Visibility="Collapsed">
             <Border.RenderTransform>

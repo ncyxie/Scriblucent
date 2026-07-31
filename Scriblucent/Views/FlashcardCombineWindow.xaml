@@ -198,7 +198,16 @@
                                        Margin="0,0,0,12"/>
                             <ScrollViewer VerticalScrollBarVisibility="Auto"
                                           MaxHeight="180">
-                                <ItemsControl ItemsSource="{Binding CategoryFilters}">
+                                <ItemsControl ItemsSource="{Binding CategoryFilters}"
+                                              VirtualizingPanel.IsVirtualizing="True"
+                                              VirtualizingPanel.VirtualizationMode="Recycling"
+                                              VirtualizingPanel.ScrollUnit="Pixel"
+                                              ScrollViewer.CanContentScroll="True">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel IsItemsHost="True"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <CheckBox Content="{Binding Tag}"

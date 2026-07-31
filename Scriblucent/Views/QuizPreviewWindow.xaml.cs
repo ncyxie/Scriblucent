@@ -65,6 +65,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private bool _isSubmitted;
     private QuizNoteLinkOption? _selectedLinkedNote;
     private string _lastSavedSnapshot = string.Empty;
+    // Cheap stand-in for a full questions/options snapshot - bumped on every tracked question/option
+    // change instead of re-joining every field of every question and option on every keystroke.
+    private long _questionsChangeVersion;
     private bool _isInitializing = true;
     private bool _allowCloseWithoutPrompt;
 
@@ -219,6 +222,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 AttachQuestionChangeTracking(question);
         }
 
+        _questionsChangeVersion++;
         UpdateEditedIndicator();
     }
 
@@ -254,7 +258,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
 
         if (IsSavedQuestionProperty(e.PropertyName))
+        {
+            _questionsChangeVersion++;
             UpdateEditedIndicator();
+        }
     }
 
     private void QuizOptions_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -283,13 +290,17 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             }
         }
 
+        _questionsChangeVersion++;
         UpdateEditedIndicator();
     }
 
     private void QuizOption_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (IsSavedOptionProperty(e.PropertyName))
+        {
+            _questionsChangeVersion++;
             UpdateEditedIndicator();
+        }
     }
 
     private static bool IsSavedQuestionProperty(string? propertyName)
@@ -340,25 +351,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private string GetEditorSnapshot()
     {
-        var questionsSnapshot = string.Join('\u001E', _questions.Select(question =>
-        {
-            var optionsSnapshot = string.Join('\u001C', question.Options.Select(option =>
-                string.Join('\u001B', option.Text, option.IsCorrect.ToString())));
-
-            return string.Join(
-                '\u001D',
-                question.Number.ToString(CultureInfo.InvariantCulture),
-                question.Type.ToString(),
-                question.Question,
-                question.Explanation,
-                question.Hint ?? string.Empty,
-                question.PlainTextAnswer,
-                question.PlainTextCharLimit.ToString(CultureInfo.InvariantCulture),
-                question.PlainTextMatchCase.ToString(CultureInfo.InvariantCulture),
-                question.PlainTextIgnorePunctuation.ToString(CultureInfo.InvariantCulture),
-                optionsSnapshot);
-        }));
-
+        // Question/option text and structure are represented by _questionsChangeVersion instead of
+        // re-joining every field of every question and option here - that rebuild used to run on every
+        // keystroke while editing a question, explanation, or answer option.
         var attemptsSnapshot = string.Join('\u001E', (_sourceDocument.Attempts ?? []).Select(attempt =>
             string.Join(
                 '\u001D',
@@ -375,7 +370,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             GetSourceNoteIdForSnapshot(),
             string.Join('\u001E', _sourceDocument.Tags ?? []),
             (_sourceDocument.GroupId?.ToString() ?? string.Empty),
-            questionsSnapshot,
+            _questionsChangeVersion.ToString(CultureInfo.InvariantCulture),
             attemptsSnapshot);
     }
 

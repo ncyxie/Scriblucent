@@ -65,6 +65,8 @@ namespace Scriblucent
             else
                 dict.Source = new Uri("pack://application:,,,/Scriblucent;component/Themes/LightTheme.xaml", UriKind.Absolute);
 
+            FreezeBrushes(dict);
+
             // Find and replace existing theme dictionary, preserving other dictionaries
             var themeDictIndex = -1;
             for (int i = 0; i < Application.Current.Resources.MergedDictionaries.Count; i++)
@@ -92,6 +94,32 @@ namespace Scriblucent
             var refreshVersion = ++_nativeThemeRefreshVersion;
             ApplyNativeThemeToOpenWindows(_currentTheme, invalidateVisuals: true, rebuildFrame: true);
             RefreshNativeThemeAfterLayout(_currentTheme, refreshVersion);
+        }
+
+        /// <summary>Freezes the theme dictionary currently merged into Application.Resources. Needed once at
+        /// startup because App.xaml statically merges LightTheme.xaml, and SetTheme("Light") short-circuits
+        /// ApplyTheme (and therefore the freeze pass below) when Light is already the resolved theme.</summary>
+        public static void FreezeCurrentThemeDictionary()
+        {
+            foreach (var dict in Application.Current.Resources.MergedDictionaries)
+            {
+                if (dict.Source != null && (dict.Source.OriginalString.Contains("DarkTheme") || dict.Source.OriginalString.Contains("LightTheme")))
+                {
+                    FreezeBrushes(dict);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Freezes every Freezable resource (brushes, gradients) in a theme dictionary. Safe because
+        /// theme switches always swap in a freshly-loaded dictionary rather than mutating brushes in place.</summary>
+        internal static void FreezeBrushes(ResourceDictionary dictionary)
+        {
+            foreach (var key in dictionary.Keys)
+            {
+                if (dictionary[key] is System.Windows.Freezable freezable && freezable.CanFreeze)
+                    freezable.Freeze();
+            }
         }
 
         private static void ApplyBrandLogoResource(string theme)
