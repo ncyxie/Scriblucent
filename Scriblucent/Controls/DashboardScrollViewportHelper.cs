@@ -41,13 +41,13 @@ internal static class DashboardScrollViewportHelper
             host.NotifySmoothScrollStarted();
     }
 
-    public static void NotifyVisualScrollOffsetChanged(ScrollViewer scrollViewer)
+    public static void NotifyVisualScrollOffsetChanged(ScrollViewer scrollViewer, double velocityPxPerMs = 0)
     {
         if (scrollViewer.GetValue(SessionHostsProperty) is not List<DashboardVirtualizationHost> hosts)
             return;
 
         foreach (var host in hosts)
-            host.NotifyVisualScrollOffsetChanged();
+            host.NotifyVisualScrollOffsetChanged(velocityPxPerMs);
     }
 
     public static void EndAnimatedScroll(ScrollViewer scrollViewer, double? finalX = null, double? finalY = null)

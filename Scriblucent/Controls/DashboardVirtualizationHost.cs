@@ -63,6 +63,12 @@ public sealed class DashboardVirtualizationHost : Decorator
     private int _smoothScrollDepth;
     private DateTime _lastSmoothScrollSyncUtc = DateTime.MinValue;
 
+    // Signed EMA of visual scroll speed (positive = scrolling down), sourced from
+    // SmoothScrollBehavior.Tick's own frame-to-frame position delta - see the comment on
+    // RaiseForVelocity for why this exists and why it's read from there rather than sampled
+    // from this host's own view of the ScrollViewer.
+    private double _smoothScrollVelocityPxPerMs;
+
     private const double ViewportCachePixels = 320;
     private const double ViewportCacheAbovePixels = 240;
     private const double TargetExtraCardsAhead = 10;
@@ -77,6 +83,27 @@ public sealed class DashboardVirtualizationHost : Decorator
     private const double UniformSliceEquivalencePixels = 32;
     private const double UniformHostMeasureStridePixels = 48;
     private const double MinViableViewportHeight = 64;
+
+    // Rise fast (~3 frames to reach ~90% of a step change) so the enlarged cache margin is in
+    // place well before a wheel impulse settles; decay slow (~5 frames to halve) so one
+    // jittery/skipped frame mid-fling can't collapse the margin right when it's still needed.
+    private const double VelocityRiseAlpha = 0.55;
+    private const double VelocityDecayAlpha = 0.12;
+
+    // Covers DispatcherPriority.Background scheduling latency, the measure pass itself, and
+    // SmoothScrollSliceEquivalencePixels (a sync that fires but moves less than 88px is
+    // discarded) - see the comment on RaiseForVelocity for the full mechanism this closes.
+    private const double VelocityLeadSafetyFactor = 1.6;
+
+    // The gap only opens at the leading edge of scroll direction; the trailing edge only needs
+    // enough margin to survive an immediate direction reversal, not the full lead.
+    private const double TrailingVelocityLeadShare = 0.5;
+
+    // Hard ceiling on how far velocity can raise the cache margin, relative to the existing
+    // ViewportCachePixels/ViewportCacheAbovePixels fallback. Past this, a truly extreme fling
+    // degrades to a smaller residual gap rather than removing the compositing-cost bound this
+    // margin exists to enforce - an explicit, bounded trade-off.
+    private const double MaxVelocityCacheMultiplier = 3.0;
 
     // Defense in depth: DashboardMotionEngine is expected to always call UnfreezeMotionViewport
     // once its reflow completes. If a card's enter animation gets cancelled without notice while
@@ -224,6 +251,8 @@ public sealed class DashboardVirtualizationHost : Decorator
     internal void NotifySmoothScrollStarted()
     {
         _smoothScrollDepth++;
+        if (_smoothScrollDepth == 1)
+            _smoothScrollVelocityPxPerMs = 0;
     }
 
     internal void NotifySmoothScrollEnded()
@@ -235,17 +264,27 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (_smoothScrollDepth != 0)
             return;
 
+        _smoothScrollVelocityPxPerMs = 0;
         _lastSmoothScrollSyncUtc = DateTime.MinValue;
         ForceViewportSync();
         Grid?.FlushDeferredInteractiveSweep();
     }
 
-    internal void NotifyVisualScrollOffsetChanged()
+    internal void NotifyVisualScrollOffsetChanged(double velocityPxPerMs = 0)
     {
         if (!IsSmoothScrollActive || IsMotionViewportStillFrozen() || !IsScrollViewportViable())
             return;
 
+        UpdateSmoothScrollVelocity(velocityPxPerMs);
         ScheduleViewportSync();
+    }
+
+    private void UpdateSmoothScrollVelocity(double instantaneousPxPerMs)
+    {
+        var alpha = Math.Abs(instantaneousPxPerMs) > Math.Abs(_smoothScrollVelocityPxPerMs)
+            ? VelocityRiseAlpha
+            : VelocityDecayAlpha;
+        _smoothScrollVelocityPxPerMs += (instantaneousPxPerMs - _smoothScrollVelocityPxPerMs) * alpha;
     }
 
     private bool IsSmoothScrollActive => _smoothScrollDepth > 0;
@@ -266,7 +305,8 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (!IsSmoothScrollActive)
             return ViewportCachePixels;
 
-        return ResolveCardBudgetPixels(TargetExtraCardsAhead, ViewportCachePixels);
+        var budget = ResolveCardBudgetPixels(TargetExtraCardsAhead, ViewportCachePixels);
+        return RaiseForVelocity(budget, ViewportCachePixels, isAheadMargin: true);
     }
 
     private double ResolveViewportCacheAbovePixels()
@@ -274,7 +314,44 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (!IsSmoothScrollActive)
             return ViewportCacheAbovePixels;
 
-        return ResolveCardBudgetPixels(TargetExtraCardsBehind, ViewportCacheAbovePixels);
+        var budget = ResolveCardBudgetPixels(TargetExtraCardsBehind, ViewportCacheAbovePixels);
+        return RaiseForVelocity(budget, ViewportCacheAbovePixels, isAheadMargin: false);
+    }
+
+    /// <summary>
+    /// The visual scroll position advances every animation frame with no speed cap (a fling can
+    /// hold several thousand px/s), but the actual re-slice is throttled to
+    /// ResolveSmoothScrollSyncIntervalMs() (22-68ms) and even then only applies once the slice
+    /// has moved past SmoothScrollSliceEquivalencePixels. At fling speeds within normal
+    /// mouse-wheel use, the visual position can outrun the static card-count cache margin
+    /// between two throttled syncs - the realized region's leading edge falls behind where
+    /// content is actually drawn, a real (if brief) blank strip that heals on the next sync.
+    /// Raising the margin to cover the distance travelable in one sync interval at the current
+    /// velocity closes that window. Quantized to SmoothScrollHostMeasureStridePixels so the
+    /// margin doesn't change on every single frame (which would otherwise flip heightChanged in
+    /// ApplyViewportSlice and force a full host remeasure each frame instead of only when the
+    /// slice genuinely needs to grow), and capped at MaxVelocityCacheMultiplier so a truly
+    /// extreme fling degrades to a smaller residual gap rather than removing the compositing-cost
+    /// bound this margin exists to enforce in the first place.
+    /// </summary>
+    private double RaiseForVelocity(double budgetPixels, double fallbackPixels, bool isAheadMargin)
+    {
+        var speed = Math.Abs(_smoothScrollVelocityPxPerMs);
+        if (speed <= 0)
+            return budgetPixels;
+
+        // Positive velocity = scrolling down = the "ahead" (below) margin is the leading edge;
+        // negative velocity = scrolling up = the "above" margin is the leading edge instead. The
+        // trailing margin only needs enough to survive an immediate direction reversal, not the
+        // full lead.
+        var isLeadingEdge = isAheadMargin ? _smoothScrollVelocityPxPerMs >= 0 : _smoothScrollVelocityPxPerMs <= 0;
+        var share = isLeadingEdge ? 1.0 : TrailingVelocityLeadShare;
+
+        var lead = speed * ResolveSmoothScrollSyncIntervalMs() * VelocityLeadSafetyFactor * share;
+        lead = Math.Ceiling(lead / SmoothScrollHostMeasureStridePixels) * SmoothScrollHostMeasureStridePixels;
+
+        var cap = fallbackPixels * MaxVelocityCacheMultiplier;
+        return Math.Max(budgetPixels, Math.Min(lead, cap));
     }
 
     private double ResolveCardBudgetPixels(double targetExtraCards, double fallbackPixels)
@@ -525,6 +602,12 @@ public sealed class DashboardVirtualizationHost : Decorator
                 _lastSmoothScrollSyncUtc = DateTime.UtcNow;
 
             ApplyViewportScroll();
+
+            if (ScrollPerfDiag.Enabled && IsSmoothScrollActive)
+            {
+                ScrollPerfDiag.Log(
+                    $"sliceSync\tviewportTop={ResolveEffectiveVerticalOffset():F0}\tsliceOffset={_lastSyncedSliceOffset:F0}\tcoverBottom={_sectionTop + _lastSyncedSliceOffset + _lastSyncedSliceHeight:F0}\tvel={_smoothScrollVelocityPxPerMs:F3}\tahead={ResolveViewportCachePixels():F0}\tabove={ResolveViewportCacheAbovePixels():F0}\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}");
+            }
         }, priority);
     }
 

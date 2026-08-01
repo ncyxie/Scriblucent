@@ -485,6 +485,7 @@ public static class SmoothScrollBehavior
 
         var compositorActive = SmoothScrollCompositor.IsActive(state.ScrollViewer);
         var smoothing = 1.0 - Math.Exp(-SmoothingRatePerMs * deltaSeconds * 1000.0);
+        var previousY = state.CurrentY;
 
         if (state.ImpulseActiveY)
             state.CurrentY = ApproachTarget(state.CurrentY, state.ImpulseTargetY, smoothing, out state.ImpulseActiveY);
@@ -495,7 +496,17 @@ public static class SmoothScrollBehavior
         ApplyOffset(state, state.CurrentX, state.CurrentY, forceCommit: false);
 
         if (compositorActive)
-            DashboardScrollViewportHelper.NotifyVisualScrollOffsetChanged(state.ScrollViewer);
+        {
+            // Sourced from state.CurrentY's own frame-to-frame delta - the value that DRIVES
+            // SmoothScrollCompositor's visual position, not something re-derived from reading
+            // the ScrollViewer/compositor back afterward. That avoids a real hazard on the
+            // read-back side: SmoothScrollCompositor.Commit sets its CommittedY immediately but
+            // ScrollViewer.VerticalOffset only catches up on the next Render-priority layout
+            // pass, so sampling position from outside briefly dips backward then jumps forward
+            // across a commit. This signal has no such artifact.
+            var velocityPxPerMs = deltaSeconds > 0 ? (state.CurrentY - previousY) / (deltaSeconds * 1000.0) : 0;
+            DashboardScrollViewportHelper.NotifyVisualScrollOffsetChanged(state.ScrollViewer, velocityPxPerMs);
+        }
 
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
             Scriblucent.Services.ScrollPerfDiag.Log($"posY\t{state.CurrentY:F3}");
