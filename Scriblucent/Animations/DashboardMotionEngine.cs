@@ -52,6 +52,18 @@ public sealed class DashboardMotionEngine
     private readonly HashSet<Guid> _scheduledEnterIds = new();
     private readonly HashSet<Guid> _deferredEnterIds = new();
     private readonly HashSet<Guid> _playingEnterIds = new();
+
+    // An item can be marked "playing" by a completely untracked, un-watchdogged replay attempt -
+    // OnItemContainerRealized or FinishReflow's deferred-retry continuation both call
+    // TryPlayEnterForItem with onComplete = null when a container wasn't found on the item's
+    // first (tracked) attempt. If that replay's RenderTransitionClock gets Stop()'d before
+    // completing (same drop-on-cancel mechanism as _pendingEnterCompletions), nothing ever
+    // removes the id from _playingEnterIds, and TryPlayEnterForItem's first guard then silently
+    // skips this item's animation forever - it just appears wherever the interrupted animation
+    // visually left it. This timestamp bounds how long "playing" is trusted before it's treated
+    // as stale and eligible for replay/snap-to-final, mirroring the MaxMotionViewportFreezeMs
+    // idiom in DashboardVirtualizationHost.
+    private readonly Dictionary<Guid, long> _playingEnterStartedAtMs = new();
     private readonly HashSet<Guid> _instantEnterIds = new();
     private int _layoutAnimationDepth;
     private int _batchMutationDepth;
@@ -796,12 +808,40 @@ public sealed class DashboardMotionEngine
         TryPlayEnterForItem(itemId);
     }
 
+    private static int MaxEnterPlayMs => UiMotion.NoteAddEnterMs + UiMotion.ReflowStaggerCapMs + 500;
+
+    private bool IsStalePlayingEnter(Guid itemId)
+        => _playingEnterStartedAtMs.TryGetValue(itemId, out var startedAt)
+           && Environment.TickCount64 - startedAt > MaxEnterPlayMs;
+
+    private void ClearPlayingEnter(Guid itemId)
+    {
+        _playingEnterIds.Remove(itemId);
+        _playingEnterStartedAtMs.Remove(itemId);
+    }
+
     private void TryPlayEnterForItem(Guid itemId, Action? onComplete = null, int startDelayMs = 0)
     {
-        if (!_enteringItemIds.Contains(itemId) || _playingEnterIds.Contains(itemId))
+        if (!_enteringItemIds.Contains(itemId))
         {
             onComplete?.Invoke();
             return;
+        }
+
+        if (_playingEnterIds.Contains(itemId))
+        {
+            if (!IsStalePlayingEnter(itemId))
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            // The previous "playing" attempt never called back to remove this id - almost
+            // certainly a replay started from OnItemContainerRealized/FinishReflow's deferred
+            // retry (untracked, no watchdog) whose clock got Stop()'d mid-animation. Treat it as
+            // abandoned and let this call start a real replay instead of skipping forever.
+            ScrollPerfDiag.Log($"enterPlayStaleReplay\tscope={_scope}\titemId={itemId}");
+            ClearPlayingEnter(itemId);
         }
 
         var entering = FindEnterLayoutRoot(itemId);
@@ -816,6 +856,7 @@ public sealed class DashboardMotionEngine
 
         _deferredEnterIds.Remove(itemId);
         _playingEnterIds.Add(itemId);
+        _playingEnterStartedAtMs[itemId] = Environment.TickCount64;
 
         var motionSurface = DashboardMotionCardCatalog.ResolveMotionSurface(entering, _scope);
         var scrollViewer = _scrollViewer ?? DashboardMotionViewport.FindScrollViewer(_dashboardRoot);
@@ -823,7 +864,7 @@ public sealed class DashboardMotionEngine
         {
             CompleteEnteredCard(entering, motionSurface, itemId);
             _instantEnterIds.Remove(itemId);
-            _playingEnterIds.Remove(itemId);
+            ClearPlayingEnter(itemId);
             onComplete?.Invoke();
             return;
         }
@@ -831,7 +872,7 @@ public sealed class DashboardMotionEngine
         PlayCardEnter(entering, motionSurface, itemId, () =>
         {
             _instantEnterIds.Remove(itemId);
-            _playingEnterIds.Remove(itemId);
+            ClearPlayingEnter(itemId);
             onComplete?.Invoke();
         }, startDelayMs);
     }
@@ -1088,9 +1129,12 @@ public sealed class DashboardMotionEngine
 
         ScrollPerfDiag.Log($"reflowFinish\tscope={_scope}\tbatchCallbacks={batchAfterMotion.Length}");
 
-        if (_deferredEnterIds.Count == 0)
-            return;
-
+        // Always scheduled, not gated on _deferredEnterIds.Count > 0: a card leaked into
+        // _playingEnterIds by an interrupted untracked replay (see the comment on
+        // _playingEnterStartedAtMs) is usually NOT in _deferredEnterIds - it was removed from
+        // there the moment that replay started - so gating this on deferred-only would skip the
+        // one sweep most likely to catch it. The deferred-replay loop below iterates an empty
+        // list when there's nothing actually deferred, so this is safe to always run.
         var deferredIds = _deferredEnterIds.ToList();
         _dispatcher.BeginInvoke(() =>
         {
@@ -1110,7 +1154,7 @@ public sealed class DashboardMotionEngine
             {
                 _enteringItemIds.Remove(itemId);
                 _deferredEnterIds.Remove(itemId);
-                _playingEnterIds.Remove(itemId);
+                ClearPlayingEnter(itemId);
                 continue;
             }
 
@@ -1119,7 +1163,18 @@ public sealed class DashboardMotionEngine
             {
                 _enteringItemIds.Remove(itemId);
                 _deferredEnterIds.Remove(itemId);
-                _playingEnterIds.Remove(itemId);
+                ClearPlayingEnter(itemId);
+                continue;
+            }
+
+            // A stale "playing" id can be stuck at ANY intermediate opacity/scale/position, not
+            // just near-invisible - snap it to final state unconditionally rather than requiring
+            // Opacity < 0.05 the way the non-stale branch below does.
+            if (IsStalePlayingEnter(itemId))
+            {
+                ScrollPerfDiag.Log($"enterStuckSnap\tscope={_scope}\titemId={itemId}\topacity={motionSurface.Opacity:F2}\tsource=orphanSweep");
+                ClearPlayingEnter(itemId);
+                CompleteEnteredCard(layoutRoot, motionSurface, itemId);
                 continue;
             }
 
@@ -1411,7 +1466,7 @@ public sealed class DashboardMotionEngine
     {
         _enteringItemIds.Remove(itemId);
         _deferredEnterIds.Remove(itemId);
-        _playingEnterIds.Remove(itemId);
+        ClearPlayingEnter(itemId);
         _instantEnterIds.Remove(itemId);
         _scheduledEnterIds.Remove(itemId);
 
@@ -2106,7 +2161,20 @@ public sealed class DashboardMotionEngine
             var motionSurface = DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope);
 
             if (_enteringItemIds.Contains(itemId))
+            {
+                // Second, recurring chance to heal a leaked _playingEnterIds entry beyond the
+                // one-shot FinalizeOrphanedEnteringCards sweep right after FinishReflow - this
+                // runs on every later mutation/dashboard-switch via
+                // MainWindow.EnsureListingCardsInteractive, so a card that goes stale after that
+                // first sweep already ran still gets cleaned up eventually.
+                if (!IsStalePlayingEnter(itemId))
+                    continue;
+
+                ScrollPerfDiag.Log($"enterStuckSnap\tscope={_scope}\titemId={itemId}\topacity={motionSurface.Opacity:F2}\tsource=release");
+                ClearPlayingEnter(itemId);
+                CompleteEnteredCard(layoutRoot, motionSurface, itemId);
                 continue;
+            }
 
             if (layoutRoot.IsHitTestVisible && motionSurface.Opacity < 0.05)
                 FinalizeEnteredCard(layoutRoot, motionSurface);
@@ -2133,6 +2201,7 @@ public sealed class DashboardMotionEngine
         _reflowScheduled = false;
         _deferredEnterIds.Clear();
         _playingEnterIds.Clear();
+        _playingEnterStartedAtMs.Clear();
         _instantEnterIds.Clear();
         _batchMutationDepth = 0;
         _batchMutationInFlight = false;

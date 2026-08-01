@@ -12,6 +12,7 @@ namespace Scriblucent;
 public partial class MainWindow : IDashboardMotionHost
 {
     private readonly Dictionary<DashboardMotionScope, DashboardMotionEngine> _dashboardMotionEngines = new();
+    private readonly HashSet<DashboardMotionScope> _pendingGeometryCorrections = new();
     private bool _skipGroupRemoveAnimation;
 
     private DashboardMotionEngine EnsureDashboardMotionEngine(DashboardMotionScope scope)
@@ -440,6 +441,7 @@ public partial class MainWindow : IDashboardMotionHost
 
                 EnsureDashboardCardGridsInteractive(scope);
                 IndicatorRevealMotionBehavior.FlushPending();
+                ScheduleSectionGeometryCorrection(scope);
             }, DispatcherPriority.Loaded);
             return;
         }
@@ -449,6 +451,47 @@ public partial class MainWindow : IDashboardMotionHost
             EnsureDashboardCardGridsInteractive(scope);
             IndicatorRevealMotionBehavior.FlushPending();
         }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// A second, deliberately-delayed sweep after RefreshVirtualizationViewportForScope's own
+    /// Loaded-priority pass. A section created in the same mutation as this refresh (e.g. a new
+    /// group from GroupSelectedNotes) may not have generated its DashboardVirtualizationHost yet,
+    /// or may not have settled to its final arranged height yet, when that first sweep runs -
+    /// existing SIBLING hosts swept at that point can latch a _sectionTop computed against the
+    /// still-settling section, with no second correction ever scheduled (TryUpdateSectionTop only
+    /// recomputes when _sectionTopIsCurrent is false). Background priority is strictly lower than
+    /// Loaded/Render, so this cannot run until any layout pass from the new section's own first
+    /// measure/arrange has fully drained, making it safe to unconditionally re-latch here.
+    /// </summary>
+    private void ScheduleSectionGeometryCorrection(DashboardMotionScope scope)
+    {
+        if (!_pendingGeometryCorrections.Add(scope))
+            return;
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            _pendingGeometryCorrections.Remove(scope);
+
+            if (_dashboardMotionEngines.TryGetValue(scope, out var engine) && engine.IsLayoutAnimationActive)
+                return;
+
+            AttachDashboardVirtualizationHosts();
+
+            if (ResolveDashboardRoot(scope) is not { } root)
+                return;
+
+            var count = 0;
+            foreach (var host in EnumerateDescendantVirtualizationHosts(root))
+            {
+                count++;
+                host.InvalidateSectionGeometry();
+                host.RequestViewportRefresh();
+            }
+
+            Scriblucent.Services.ScrollPerfDiag.Log($"sectionGeometryCorrection\tscope={scope}\thosts={count}");
+            EnsureDashboardCardGridsInteractive(scope);
+        }, DispatcherPriority.Background);
     }
 
     private void EnsureDashboardCardGridsInteractive(DashboardMotionScope scope)

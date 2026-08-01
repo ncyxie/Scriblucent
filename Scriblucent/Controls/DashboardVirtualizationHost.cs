@@ -407,11 +407,17 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         AttachScrollViewer(ScrollViewerElement ?? DashboardMotionViewport.FindScrollViewer(this));
 
-        InvalidateMeasure();
+        // A host freshly entering the tree may already hold a _sectionTop latched from a
+        // pre-arrange, pre-AttachScrollViewer measure - stale in the same way a sibling's cached
+        // position can go stale when a new section is still settling (see the comment on
+        // ScheduleSectionGeometryCorrection in MainWindow.DashboardMotion.cs). Invalidate the
+        // cached geometry, not just the measure, so this host is guaranteed to re-derive its true
+        // position on its first real pass.
+        InvalidateSectionGeometry();
 
         Dispatcher.BeginInvoke(() =>
         {
-            InvalidateMeasure();
+            InvalidateSectionGeometry();
             Grid?.EnsureRealizedCardsInteractive();
         }, DispatcherPriority.Loaded);
     }
