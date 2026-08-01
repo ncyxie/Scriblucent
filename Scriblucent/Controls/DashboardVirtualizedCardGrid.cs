@@ -34,6 +34,7 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     private const double CompactVirtualizationCacheBeforePixels = 220;
     private const double CompactVirtualizationCacheAfterPixels = 320;
     private const int CompactVirtualizationItemThreshold = 48;
+    private const double StablePanelExtentEpsilonPixels = 1;
 
     public static readonly DependencyProperty LayoutProperty = DependencyProperty.Register(
         nameof(Layout),
@@ -49,6 +50,8 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
     private double _pageVerticalOffset;
     private double _pageViewportHeight;
+    private int _lastMeasuredItemCount = -1;
+    private double _lastPanelExtentHeight = double.NaN;
     private MainViewModel? _mainViewModel;
     private bool _isSyncingMassSelectChrome;
     private bool _addMotionLayoutActive;
@@ -125,11 +128,58 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         if (height <= 0)
             height = 1;
 
+        // VirtualizingWrapPanel.SetVerticalOffset clamps against the panel's OWN ExtentHeight/
+        // ViewportHeight, but those fields are only refreshed inside its MeasureOverride AFTER
+        // RealizeAndVirtualizeItems. On a pass where the item count just jumped (duplicate-all),
+        // a single Apply-then-Measure cycle realizes the wrong band against the stale extent;
+        // Arrange then re-applies the true offset and shifts that wrong band off-screen - blank
+        // reserved space. Two-phase measure when a non-zero page offset is requested:
+        // 1) measure once so ExtentHeight reflects the current item count
+        // 2) re-apply the target offset against the fresh extent
+        // 3) measure again so realization uses the real offset
         ApplyPageViewportToPanel();
         var result = base.MeasureOverride(new Size(width, height));
 
+        if (_pageVerticalOffset > 0.5)
+        {
+            var itemCount = Items.Count;
+            var panel = ResolveItemsPanel() as IScrollInfo;
+            var panelExtent = panel?.ExtentHeight ?? double.NaN;
+            var offsetMatches = panel is not null
+                && Math.Abs(panel.VerticalOffset - _pageVerticalOffset) <= 0.5;
+            var countStable = itemCount == _lastMeasuredItemCount;
+            var extentStable = !double.IsNaN(_lastPanelExtentHeight)
+                && !double.IsNaN(panelExtent)
+                && Math.Abs(panelExtent - _lastPanelExtentHeight) <= StablePanelExtentEpsilonPixels;
+            var skipPhase2 = offsetMatches && countStable && extentStable;
+
+            if (!skipPhase2)
+            {
+                if (ScrollPerfDiag.Enabled && !offsetMatches && panel is not null)
+                {
+                    ScrollPerfDiag.Log(
+                        $"panelOffsetClampCorrected\trequested={_pageVerticalOffset:F0}\tgotClampedTo={panel.VerticalOffset:F0}\titems={itemCount}\tscope={ResolveHostingMotionScope()}");
+                }
+
+                ApplyPageViewportToPanel();
+                result = base.MeasureOverride(new Size(width, height));
+
+                if (ScrollPerfDiag.Enabled
+                    && ResolveItemsPanel() is IScrollInfo afterTwoPhase
+                    && Math.Abs(afterTwoPhase.VerticalOffset - _pageVerticalOffset) > 0.5)
+                {
+                    ScrollPerfDiag.Log(
+                        $"panelOffsetMismatchAfterTwoPhase\trequested={_pageVerticalOffset:F0}\tgot={afterTwoPhase.VerticalOffset:F0}\textent={afterTwoPhase.ExtentHeight:F0}\tviewport={afterTwoPhase.ViewportHeight:F0}\titems={Items.Count}\tscope={ResolveHostingMotionScope()}");
+                }
+            }
+        }
+
         if (HasItems && height > 1 && !HasRealizedContainers())
             result = RemeasureForRealization(width, height);
+
+        _lastMeasuredItemCount = Items.Count;
+        if (ResolveItemsPanel() is IScrollInfo measuredPanel)
+            _lastPanelExtentHeight = measuredPanel.ExtentHeight;
 
         return result;
     }
@@ -261,6 +311,15 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     {
         if (ResolveItemsPanel() is not IScrollInfo scrollInfo)
             return;
+
+        // Hybrid contract: page ScrollViewer owns scroll; this panel should not have a
+        // ScrollOwner. If one appears, nested scroll or template regress is fighting the host.
+        if (ScrollPerfDiag.Enabled
+            && scrollInfo is VirtualizingPanelBase { ScrollOwner: not null } owned)
+        {
+            ScrollPerfDiag.Log(
+                $"panelUnexpectedScrollOwner\townerType={owned.ScrollOwner.GetType().Name}\trequestedOffset={_pageVerticalOffset:F0}\titems={Items.Count}\tscope={ResolveHostingMotionScope()}");
+        }
 
         scrollInfo.SetVerticalOffset(_pageVerticalOffset);
 

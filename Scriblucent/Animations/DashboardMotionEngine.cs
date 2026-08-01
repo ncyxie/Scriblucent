@@ -84,6 +84,24 @@ public sealed class DashboardMotionEngine
     private readonly Dictionary<Guid, Action> _pendingEnterCompletions = new();
     private DispatcherTimer? _reflowSafetyTimer;
 
+    // Watchdog escape hatch for a pass stuck on the REFLOW side, not just the enter side -
+    // UiMotion.Run keys one clock per key, so a closely-overlapping second reflow pass on the
+    // same _reflowBatchKey silently drops the first pass's sibling-reflow completion callback,
+    // meaning reflowComplete can never become true for that pass. The existing retire-based
+    // watchdog only ever forces enterComplete, so it cannot rescue this case on its own. Set by
+    // AnimateReflow at the start of each pass, invoked by ForceFinishStuckEnters after the
+    // retire loop, cleared once FinishReflow actually runs for that pass.
+    private Action? _forceFinishPass;
+
+    // Per-pass caches so resolving thousands of entering items' layout roots doesn't cost a
+    // fresh O(m) scan (plus a full synchronous layout pass - see FindEnterLayoutRoot) per item.
+    // Built lazily on first use within a pass, invalidated wherever the tree is already
+    // known-fresh or the item collection changed - see InvalidatePassLookups callers.
+    private Dictionary<Guid, (DashboardVirtualizedCardGrid Grid, object Item)>? _enterItemLookup;
+    private Dictionary<Guid, int>? _displayIndexLookup;
+    private List<DashboardVirtualizedCardGrid>? _passGrids;
+    private readonly HashSet<DashboardVirtualizedCardGrid> _layoutSyncedThisPass = new();
+
     public Action? OnCollectionLayoutChanged { get; set; }
 
     public bool IsLayoutAnimationActive => _layoutAnimationDepth > 0;
@@ -714,7 +732,14 @@ public sealed class DashboardMotionEngine
 
     private void MaybeDisarmReflowSafety()
     {
-        if (_pendingEnterCompletions.Count > 0)
+        // Keep the timer alive while a pass still needs the reflow-side escape hatch
+        // (_forceFinishPass), even if every enter completion has already retired. Disarming
+        // here when only reflowComplete is still false is exactly the overlapping-duplicate
+        // failure mode that hatch exists for: UiMotion drops the sibling-reflow callback, every
+        // enter retires normally, this method used to kill the timer, and every host in the
+        // scope stayed frozen until the 3s viewport-freeze timeout - visible as large blank
+        // gaps in groups/ungrouped until something finally scrolled/remeasured.
+        if (_pendingEnterCompletions.Count > 0 || _forceFinishPass is not null)
             return;
 
         _reflowSafetyTimer?.Stop();
@@ -726,14 +751,27 @@ public sealed class DashboardMotionEngine
         _reflowSafetyTimer?.Stop();
         _reflowSafetyTimer = null;
 
-        if (_pendingEnterCompletions.Count == 0)
-            return;
-
-        ScrollPerfDiag.Log($"reflowSafetyForceFinish\tscope={_scope}\tstuckCount={_pendingEnterCompletions.Count}");
-        foreach (var (itemId, retire) in _pendingEnterCompletions.ToList())
+        if (_pendingEnterCompletions.Count > 0)
         {
-            _ = itemId;
-            retire();
+            ScrollPerfDiag.Log($"reflowSafetyForceFinish\tscope={_scope}\tstuckCount={_pendingEnterCompletions.Count}\tentering={_enteringItemIds.Count}\tplaying={_playingEnterIds.Count}");
+            foreach (var (itemId, retire) in _pendingEnterCompletions.ToList())
+            {
+                _ = itemId;
+                retire();
+            }
+        }
+
+        // The retire loop above only ever forces enterComplete for entries still in
+        // _pendingEnterCompletions - it does nothing if that dict is already empty (every enter
+        // retired normally) but reflowComplete is the side still stuck (see the comment on
+        // _forceFinishPass). Always give the current pass, if any, a chance to force through
+        // regardless of which side the retire loop did or didn't touch.
+        var forceFinishPass = _forceFinishPass;
+        _forceFinishPass = null;
+        if (forceFinishPass is not null)
+        {
+            ScrollPerfDiag.Log($"reflowSafetyForceFinishPass\tscope={_scope}\tentering={_enteringItemIds.Count}");
+            forceFinishPass();
         }
     }
 
@@ -892,6 +930,12 @@ public sealed class DashboardMotionEngine
             return;
         }
 
+        // This pass's item collection may differ from whatever an earlier pass last built
+        // EnterItemLookup()/DisplayIndexLookup() from (items were just added/duplicated) -
+        // start every pass with a fresh lookup instead of risking a stale one that resolves a
+        // newly-entering item to nothing, or to a wrong/recycled container.
+        InvalidatePassLookups();
+
         StabilizeMotionLayout(_dashboardRoot);
 
         var animatedEnterIds = ResolveAnimatedEnterIds(enterItemIds);
@@ -927,12 +971,14 @@ public sealed class DashboardMotionEngine
 
         var reflowComplete = false;
         var enterComplete = false;
+        var passFinished = false;
 
         void TryCompleteAddMotion()
         {
-            if (!reflowComplete || !enterComplete)
+            if (!reflowComplete || !enterComplete || passFinished)
                 return;
 
+            passFinished = true;
             FinishReflow();
         }
 
@@ -965,6 +1011,23 @@ public sealed class DashboardMotionEngine
             _pendingEnterCompletions[enterItemId] = () => RetireEnter(enterItemId);
 
         ArmReflowSafety();
+
+        // Escape hatch for a pass stuck on the REFLOW side, not just the enter side (see the
+        // comment on the _forceFinishPass field): UiMotion.Run keys one clock per key, so a
+        // closely-overlapping second pass on the same _reflowBatchKey can silently drop THIS
+        // pass's sibling-reflow completion, leaving reflowComplete stuck false forever even
+        // after every enter-completion above has retired normally. Routed through
+        // TryCompleteAddMotion (not FinishReflow directly) so the passFinished guard prevents a
+        // late-arriving genuine completion from calling FinishReflow a second time.
+        _forceFinishPass = () =>
+        {
+            foreach (var itemId in enterItemIds)
+                SnapEnterToFinal(itemId);
+
+            reflowComplete = true;
+            enterComplete = true;
+            TryCompleteAddMotion();
+        };
 
         var enterDelay = 0;
         foreach (var enterItemId in enterItemIds)
@@ -1074,17 +1137,7 @@ public sealed class DashboardMotionEngine
     }
 
     private bool TryResolveDisplayIndex(Guid itemId, out int index)
-    {
-        index = -1;
-        foreach (var grid in GetReflowGrids())
-        {
-            var map = BuildCurrentIndexMap(grid);
-            if (map.TryGetValue(itemId, out index))
-                return true;
-        }
-
-        return false;
-    }
+        => DisplayIndexLookup().TryGetValue(itemId, out index);
 
     private DashboardMotionViewport.GridReflowMetrics? ResolvePrimaryGridMetrics()
     {
@@ -1111,11 +1164,19 @@ public sealed class DashboardMotionEngine
         _batchMutationInFlight = false;
         _batchMutationReflowRunning = false;
         _pendingEnterCompletions.Clear();
+        _forceFinishPass = null;
         _reflowSafetyTimer?.Stop();
         _reflowSafetyTimer = null;
         EndAddMotionLayoutOnGrids();
         UnfreezeVirtualizationViewports();
         EndLayoutAnimation();
+
+        // After a bulk duplicate/add the unfreeze path may have cleared per-host slice state
+        // because item count grew during the freeze; also drop any sibling _sectionTop latched
+        // against pre-growth geometry before OnCollectionLayoutChanged's viewport refresh runs.
+        foreach (var host in EnumerateVirtualizationHosts(_dashboardRoot))
+            host.InvalidateSectionGeometry();
+
         OnCollectionLayoutChanged?.Invoke();
 
         var afterMotion = _onReflowComplete;
@@ -1178,9 +1239,34 @@ public sealed class DashboardMotionEngine
                 continue;
             }
 
-            if (!_playingEnterIds.Contains(itemId) && motionSurface.Opacity < 0.05)
+            // Widened from a plain "Opacity < 0.05" check: a card whose animation got dropped
+            // mid-flight (not just never-started) can be stuck at ANY intermediate opacity, or
+            // fully opaque but never re-enabled for hit-testing (PlayCardEnter's completion sets
+            // both together - see PrepareEnterHoldSlot/CompleteEnteredCard). Snap either.
+            if (!_playingEnterIds.Contains(itemId) && (motionSurface.Opacity < 0.95 || !layoutRoot.IsHitTestVisible))
                 CompleteEnteredCard(layoutRoot, motionSurface, itemId);
         }
+    }
+
+    /// <summary>
+    /// Force-resolves one still-entering item to its final visible state, bypassing the normal
+    /// animation entirely. Used by the reflow-safety watchdog's <see cref="_forceFinishPass"/>
+    /// escape hatch, where waiting any longer for the real animation/reflow handshake to
+    /// complete is no longer an option.
+    /// </summary>
+    private void SnapEnterToFinal(Guid itemId)
+    {
+        var layoutRoot = FindEnterLayoutRoot(itemId) ?? FindLayoutRootById(itemId);
+        if (layoutRoot is null)
+        {
+            _enteringItemIds.Remove(itemId);
+            _deferredEnterIds.Remove(itemId);
+            ClearPlayingEnter(itemId);
+            return;
+        }
+
+        ClearPlayingEnter(itemId);
+        CompleteEnteredCard(layoutRoot, DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope), itemId);
     }
 
     private void AnimateSiblingReflow(HashSet<Guid>? enteringIdSet, Action? onComplete = null)
@@ -1908,6 +1994,63 @@ public sealed class DashboardMotionEngine
         _reflowTargetByItemId.Clear();
         _indexSnapshots.Clear();
         _activeReflowTargets.Clear();
+        InvalidatePassLookups();
+    }
+
+    /// <summary>
+    /// Drops the per-pass entering-item lookup built by <see cref="EnterItemLookup"/>/
+    /// <see cref="DisplayIndexLookup"/> - cheap, since both rebuild lazily on next use. Call
+    /// wherever the tracked item set changed or the tree is already known-fresh, so a stale
+    /// lookup never causes a newly-tracked item to resolve to nothing (or an old container).
+    /// </summary>
+    private void InvalidatePassLookups()
+    {
+        _enterItemLookup = null;
+        _displayIndexLookup = null;
+        _passGrids = null;
+        _layoutSyncedThisPass.Clear();
+    }
+
+    private Dictionary<Guid, (DashboardVirtualizedCardGrid Grid, object Item)> EnterItemLookup()
+    {
+        if (_enterItemLookup is not null)
+            return _enterItemLookup;
+
+        var map = new Dictionary<Guid, (DashboardVirtualizedCardGrid, object)>();
+        foreach (var grid in PassGrids())
+        {
+            foreach (var item in EnumerateDisplayItems(grid))
+            {
+                if (DashboardMotionCardCatalog.TryGetItemIdFromGridItem(item, _scope, out var id))
+                    map.TryAdd(id, (grid, item)); // first grid wins, matching FindEnterLayoutRoot's old scan order
+            }
+        }
+
+        return _enterItemLookup = map;
+    }
+
+    private Dictionary<Guid, int> DisplayIndexLookup()
+    {
+        if (_displayIndexLookup is not null)
+            return _displayIndexLookup;
+
+        var map = new Dictionary<Guid, int>();
+        foreach (var grid in PassGrids())
+        {
+            foreach (var entry in BuildCurrentIndexMap(grid))
+                map.TryAdd(entry.Key, entry.Value); // first grid wins, matching TryResolveDisplayIndex's old scan order
+        }
+
+        return _displayIndexLookup = map;
+    }
+
+    private List<DashboardVirtualizedCardGrid> PassGrids()
+        => _passGrids ??= GetReflowGrids().ToList();
+
+    private void EnsureGridLayoutSynced(DashboardVirtualizedCardGrid grid)
+    {
+        if (_layoutSyncedThisPass.Add(grid))
+            grid.SyncLayoutForMotion();
     }
 
     private bool IsAuthorizedEnterLayoutRoot(FrameworkElement layoutRoot, Guid itemId)
@@ -1920,36 +2063,28 @@ public sealed class DashboardMotionEngine
 
     private FrameworkElement? FindEnterLayoutRoot(Guid itemId)
     {
-        foreach (var grid in GetReflowGrids())
-        {
-            object? item = null;
-            foreach (var candidate in EnumerateDisplayItems(grid))
-            {
-                if (DashboardMotionCardCatalog.TryGetItemIdFromGridItem(candidate, _scope, out var id)
-                    && id == itemId)
-                {
-                    item = candidate;
-                    break;
-                }
-            }
+        // Was a fresh O(m) linear scan (EnumerateDisplayItems over the grid's entire
+        // ItemsSource) PLUS a full synchronous SyncLayoutForMotion (== UpdateLayout()) call, on
+        // every single invocation. Callers resolve this per entering item, so a batch of
+        // thousands (e.g. "duplicate all" on the real library) turned into thousands of full
+        // layout passes over a multi-thousand-item grid - multiple seconds of UI-thread block.
+        // EnterItemLookup() builds the id->item map once per pass (O(m) total, not O(n*m)), and
+        // EnsureGridLayoutSynced only syncs each grid once per pass instead of once per item.
+        if (!EnterItemLookup().TryGetValue(itemId, out var entry))
+            return null;
 
-            if (item is null)
-                continue;
+        var (grid, item) = entry;
+        EnsureGridLayoutSynced(grid);
 
-            grid.SyncLayoutForMotion();
+        if (grid.ItemContainerGenerator.ContainerFromItem(item) is not DependencyObject container)
+            return null;
 
-            if (grid.ItemContainerGenerator.ContainerFromItem(item) is not DependencyObject container)
-                continue;
+        if (FindLayoutRootInContainer(container, _scope) is not { } layoutRoot)
+            return null;
 
-            if (FindLayoutRootInContainer(container, _scope) is not { } layoutRoot)
-                continue;
-
-            _layoutRootByItemId[itemId] = layoutRoot;
-            _reflowTargetByItemId[itemId] = ResolveReflowTarget(layoutRoot);
-            return layoutRoot;
-        }
-
-        return null;
+        _layoutRootByItemId[itemId] = layoutRoot;
+        _reflowTargetByItemId[itemId] = ResolveReflowTarget(layoutRoot);
+        return layoutRoot;
     }
 
     private bool TryResolveContainerItemId(

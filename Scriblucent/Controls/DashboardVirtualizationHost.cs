@@ -53,6 +53,7 @@ public sealed class DashboardVirtualizationHost : Decorator
     private long _motionViewportFrozenSinceMs;
     private double _frozenSliceOffset;
     private double _frozenSliceHeight;
+    private int _itemCountAtFreeze = -1;
     private bool _isInternalLayoutPass;
     private double _lastSyncedSliceOffset = double.NaN;
     private double _lastSyncedSliceHeight = double.NaN;
@@ -99,11 +100,12 @@ public sealed class DashboardVirtualizationHost : Decorator
     // enough margin to survive an immediate direction reversal, not the full lead.
     private const double TrailingVelocityLeadShare = 0.5;
 
-    // Hard ceiling on how far velocity can raise the cache margin, relative to the existing
-    // ViewportCachePixels/ViewportCacheAbovePixels fallback. Past this, a truly extreme fling
-    // degrades to a smaller residual gap rather than removing the compositing-cost bound this
-    // margin exists to enforce - an explicit, bounded trade-off.
+    // Hard ceiling on how far velocity can raise the cache margin, relative to the
+    // column-aware quiet-scroll budget. Narrow layouts keep ~3x; dense maximized grids taper
+    // toward ~1.6x so fling cannot undo ResolveCardBudgetPixels and re-expand toward a
+    // fixed-fallback × 3 window (the maximized lag path).
     private const double MaxVelocityCacheMultiplier = 3.0;
+    private const double MinVelocityCacheMultiplier = 1.6;
 
     // Defense in depth: DashboardMotionEngine is expected to always call UnfreezeMotionViewport
     // once its reflow completes. If a card's enter animation gets cancelled without notice while
@@ -213,8 +215,34 @@ public sealed class DashboardVirtualizationHost : Decorator
     {
         _motionViewportFrozen = true;
         _motionViewportFrozenSinceMs = Environment.TickCount64;
+        _itemCountAtFreeze = Grid?.Items.Count ?? 0;
+
+        // BeginExtentRemeasure() zeroes _extentHeight the moment a corrective remeasure is
+        // queued (InvalidateExtentForMutation/InvalidateMeasure), but that remeasure only
+        // actually runs on a later WPF layout pass - not synchronously. If a second overlapping
+        // mutation re-freezes before that pass has run, _sliceOffset/_sliceHeight here still
+        // describe the PRE-mutation tree. Flush the pending pass now, while it's still safe to
+        // (this is never called from inside an existing measure/arrange pass - see
+        // _isInternalLayoutPass - and the item collection is already in sync with the grid by
+        // the time either caller of this method runs).
+        if (!_isInternalLayoutPass && _extentHeight <= ExtentBottomPadding)
+            UpdateLayout();
+
+        if (_extentHeight <= ExtentBottomPadding || _sliceHeight <= 0)
+        {
+            // Still not settled (or this host has simply never been measured yet). The old
+            // Math.Max(_sliceHeight, 1) here would pin the realized window to a single pixel -
+            // guaranteed-blank - for the whole freeze. Freeze scroll-driven resync as normal,
+            // but leave nothing to pin: MeasureHostContent's "&& _frozenSliceHeight > 0" guard
+            // then lets the real, freshly-computed slice through instead of stale/empty values.
+            _frozenSliceOffset = 0;
+            _frozenSliceHeight = 0;
+            ScrollPerfDiag.Log($"motionFreezeNoPin\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\textent={_extentHeight:F0}\tsliceOffset={_sliceOffset:F0}\tsliceHeight={_sliceHeight:F0}");
+            return;
+        }
+
         _frozenSliceOffset = _sliceOffset;
-        _frozenSliceHeight = Math.Max(_sliceHeight, 1);
+        _frozenSliceHeight = _sliceHeight;
     }
 
     /// <summary>
@@ -238,13 +266,37 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (!_motionViewportFrozen)
             return;
 
-        _sliceOffset = _frozenSliceOffset;
-        _sliceHeight = _frozenSliceHeight;
-        _lastSyncedSliceOffset = _frozenSliceOffset;
-        _lastSyncedSliceHeight = _frozenSliceHeight;
+        var itemCountGrewDuringFreeze = Grid is { } grid
+            && _itemCountAtFreeze >= 0
+            && grid.Items.Count != _itemCountAtFreeze;
+
+        // A zero frozen height means FreezeMotionViewport() deliberately left nothing to
+        // restore (see its comment). An item-count change during the freeze (duplicate-all /
+        // bulk add) means the pinned pre-mutation slice no longer matches the grown extent -
+        // restoring it would leave blank reserved bands. Clear slice-sync state in both cases
+        // so the next measure derives a fresh visible window.
+        if (_frozenSliceHeight > 0 && !itemCountGrewDuringFreeze)
+        {
+            _sliceOffset = _frozenSliceOffset;
+            _sliceHeight = _frozenSliceHeight;
+            _lastSyncedSliceOffset = _frozenSliceOffset;
+            _lastSyncedSliceHeight = _frozenSliceHeight;
+        }
+        else
+        {
+            if (itemCountGrewDuringFreeze && ScrollPerfDiag.Enabled)
+            {
+                ScrollPerfDiag.Log(
+                    $"motionUnfreezeClearSlice\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\tfrozenItems={_itemCountAtFreeze}\tnowItems={Grid?.Items.Count ?? -1}");
+            }
+
+            ClearSliceSyncState();
+        }
+
         _motionViewportFrozen = false;
         _frozenSliceOffset = 0;
         _frozenSliceHeight = 0;
+        _itemCountAtFreeze = -1;
         InvalidateExtentForMutation(clearGridLayoutCache: true);
     }
 
@@ -292,7 +344,16 @@ public sealed class DashboardVirtualizationHost : Decorator
     private double ResolveSmoothScrollSyncIntervalMs()
     {
         var viewport = _pageScrollViewer?.ViewportHeight ?? BootstrapViewportHeight;
-        return Math.Clamp(18 + viewport * 0.022, MinSmoothScrollSyncIntervalMs, MaxSmoothScrollSyncIntervalMs);
+        var baseInterval = Math.Clamp(18 + viewport * 0.022, MinSmoothScrollSyncIntervalMs, MaxSmoothScrollSyncIntervalMs);
+
+        // Wider layouts pack more cards per remasure; push toward the upper end of the interval
+        // so dense maximized flings sync less often when each sync is more expensive.
+        var columns = ResolveLayoutColumns();
+        if (columns <= 2)
+            return baseInterval;
+
+        var densityBoost = Math.Min((columns - 2) * 8.0, MaxSmoothScrollSyncIntervalMs - baseInterval);
+        return Math.Min(baseInterval + densityBoost, MaxSmoothScrollSyncIntervalMs);
     }
 
     // Rows realize (and get bitmap-cached) while still off screen, so first-render cost isn't
@@ -306,7 +367,7 @@ public sealed class DashboardVirtualizationHost : Decorator
             return ViewportCachePixels;
 
         var budget = ResolveCardBudgetPixels(TargetExtraCardsAhead, ViewportCachePixels);
-        return RaiseForVelocity(budget, ViewportCachePixels, isAheadMargin: true);
+        return RaiseForVelocity(budget, isAheadMargin: true);
     }
 
     private double ResolveViewportCacheAbovePixels()
@@ -315,7 +376,7 @@ public sealed class DashboardVirtualizationHost : Decorator
             return ViewportCacheAbovePixels;
 
         var budget = ResolveCardBudgetPixels(TargetExtraCardsBehind, ViewportCacheAbovePixels);
-        return RaiseForVelocity(budget, ViewportCacheAbovePixels, isAheadMargin: false);
+        return RaiseForVelocity(budget, isAheadMargin: false);
     }
 
     /// <summary>
@@ -330,11 +391,10 @@ public sealed class DashboardVirtualizationHost : Decorator
     /// velocity closes that window. Quantized to SmoothScrollHostMeasureStridePixels so the
     /// margin doesn't change on every single frame (which would otherwise flip heightChanged in
     /// ApplyViewportSlice and force a full host remeasure each frame instead of only when the
-    /// slice genuinely needs to grow), and capped at MaxVelocityCacheMultiplier so a truly
-    /// extreme fling degrades to a smaller residual gap rather than removing the compositing-cost
-    /// bound this margin exists to enforce in the first place.
+    /// slice genuinely needs to grow), and capped at a density-aware multiple of the quiet-scroll
+    /// budget so a maximized fling cannot undo column-aware budgeting.
     /// </summary>
-    private double RaiseForVelocity(double budgetPixels, double fallbackPixels, bool isAheadMargin)
+    private double RaiseForVelocity(double budgetPixels, bool isAheadMargin)
     {
         var speed = Math.Abs(_smoothScrollVelocityPxPerMs);
         if (speed <= 0)
@@ -350,37 +410,71 @@ public sealed class DashboardVirtualizationHost : Decorator
         var lead = speed * ResolveSmoothScrollSyncIntervalMs() * VelocityLeadSafetyFactor * share;
         lead = Math.Ceiling(lead / SmoothScrollHostMeasureStridePixels) * SmoothScrollHostMeasureStridePixels;
 
-        var cap = fallbackPixels * MaxVelocityCacheMultiplier;
+        var cap = budgetPixels * ResolveVelocityCapMultiplier(ResolveLayoutColumns());
         return Math.Max(budgetPixels, Math.Min(lead, cap));
     }
 
-    private double ResolveCardBudgetPixels(double targetExtraCards, double fallbackPixels)
+    private static double ResolveVelocityCapMultiplier(double columns)
     {
+        if (columns <= 2)
+            return MaxVelocityCacheMultiplier;
+
+        // 2 cols → 3.0, 5+ cols → ~1.6
+        var t = Math.Clamp((columns - 2) / 3.0, 0, 1);
+        return MaxVelocityCacheMultiplier + (MinVelocityCacheMultiplier - MaxVelocityCacheMultiplier) * t;
+    }
+
+    private double ResolveLayoutColumns()
+    {
+        if (!TryResolveCellSize(out var cellWidth, out _))
+            return 1;
+
+        var width = _lastMeasureWidth > 0 ? _lastMeasureWidth : Grid?.ActualWidth ?? 0;
+        if (width <= 0 && _pageScrollViewer is { ViewportWidth: > 0 } viewer)
+            width = viewer.ViewportWidth;
+
+        if (width <= 0)
+            return 1;
+
+        return Math.Max(1, Math.Floor(width / cellWidth));
+    }
+
+    private bool TryResolveCellSize(out double cellWidth, out double cellHeight)
+    {
+        cellWidth = 0;
+        cellHeight = 0;
+
         if (Grid is not { } grid)
-            return fallbackPixels;
+            return false;
 
         // DashboardVirtualizedNoteCardGrid never sets ItemCellSize (it drives the wrap panel's
         // ItemSize from its own private constants instead), so without this special case Notes -
         // the dashboard with the narrowest cards and therefore the most columns - silently never
         // gets a column-aware budget. Mirrors the same idiom used in
         // DashboardVirtualizedCardGrid.ResolveEffectiveCellWidth/Height and DashboardMotionEngine.
-        double cellWidth, cellHeight;
         if (grid is DashboardVirtualizedNoteCardGrid)
         {
             cellWidth = 244;
             cellHeight = 164;
+            return true;
         }
-        else if (grid.ItemCellSize is { Width: > 0, Height: > 0 } cell)
+
+        if (grid.ItemCellSize is { Width: > 0, Height: > 0 } cell)
         {
             cellWidth = cell.Width;
             cellHeight = cell.Height;
-        }
-        else
-        {
-            return fallbackPixels;
+            return true;
         }
 
-        var width = _lastMeasureWidth > 0 ? _lastMeasureWidth : grid.ActualWidth;
+        return false;
+    }
+
+    private double ResolveCardBudgetPixels(double targetExtraCards, double fallbackPixels)
+    {
+        if (!TryResolveCellSize(out var cellWidth, out var cellHeight))
+            return fallbackPixels;
+
+        var width = _lastMeasureWidth > 0 ? _lastMeasureWidth : Grid?.ActualWidth ?? 0;
         if (width <= 0)
             return fallbackPixels;
 
@@ -481,6 +575,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         // back from being unloaded/reloaded already broken.
         _motionViewportFrozen = false;
         _motionViewportFrozenSinceMs = 0;
+        _itemCountAtFreeze = -1;
 
         AttachScrollViewer(ScrollViewerElement ?? DashboardMotionViewport.FindScrollViewer(this));
 
@@ -505,6 +600,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         DetachScrollViewer();
         _motionViewportFrozen = false;
         _motionViewportFrozenSinceMs = 0;
+        _itemCountAtFreeze = -1;
     }
 
     private void AttachScrollViewer(ScrollViewer? scrollViewer)
@@ -519,6 +615,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         _pageScrollViewer.ScrollChanged += OnPageScrollChanged;
         _pageScrollViewer.SizeChanged += OnPageScrollViewerSizeChanged;
+        TryPrewarmScrollSurfaceCaches();
     }
 
     private void DetachScrollViewer()
@@ -576,6 +673,36 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         if (!IsMotionViewportStillFrozen())
             ScheduleViewportSync();
+
+        TryPrewarmScrollSurfaceCaches();
+    }
+
+    internal void TryPrewarmScrollSurfaceCaches()
+    {
+        if (_pageScrollViewer is null || Grid is not { } grid)
+            return;
+
+        if (grid.ResolveItemsPanel() is not Panel panel)
+            return;
+
+        List<FrameworkElement>? surfaces = null;
+        for (var i = 0; i < panel.Children.Count; i++)
+        {
+            if (panel.Children[i] is not DependencyObject container)
+                continue;
+
+            if (DashboardScrollRenderGate.ResolveMotionCard(container) is not FrameworkElement card)
+                continue;
+
+            if (DashboardScrollRenderGate.ResolveShadowHost(card) is not FrameworkElement shadowHost)
+                continue;
+
+            surfaces ??= new List<FrameworkElement>();
+            surfaces.Add(shadowHost);
+        }
+
+        if (surfaces is { Count: > 0 })
+            DashboardScrollSurfaceCache.Prewarm(_pageScrollViewer, surfaces);
     }
 
     private void ScheduleViewportSync()
@@ -648,6 +775,8 @@ public sealed class DashboardVirtualizationHost : Decorator
         // MeasureStaticHostContent for the full mechanism and how it was diagnosed.
         if (measureHeight <= 0 && contentExtent > 0 && IsSectionPotentiallyVisible(extentHint))
             measureHeight = Math.Max(1, Math.Min(contentExtent, ResolveViewportMeasureCap()));
+
+        measureHeight = ClampMeasureHeightToRemainingContent(measureHeight, sliceOffset, extentHint);
 
         if (measureHeight <= 0)
             return;
@@ -848,6 +977,10 @@ public sealed class DashboardVirtualizationHost : Decorator
             sliceHeight = _frozenSliceHeight;
             measureHeight = _frozenSliceHeight;
         }
+        else
+        {
+            measureHeight = ClampMeasureHeightToRemainingContent(measureHeight, sliceOffset, extentHint);
+        }
 
         var diagPrevChildCount = ScrollPerfDiag.Enabled ? grid.ResolveItemsPanel()?.Children.Count ?? -1 : -1;
 
@@ -946,6 +1079,8 @@ public sealed class DashboardVirtualizationHost : Decorator
                 : Math.Max(contentExtent, 1);
         }
 
+        measureHeight = ClampMeasureHeightToRemainingContent(measureHeight, sliceOffset, contentExtent);
+
         if (ScrollPerfDiag.Enabled)
         {
             ScrollPerfDiag.Log(
@@ -1005,13 +1140,34 @@ public sealed class DashboardVirtualizationHost : Decorator
     {
         var viewportCap = ResolveViewportMeasureCap();
         var effectiveExtent = Math.Max(measuredExtent, contentExtent);
+        // Never measure the panel taller than the remaining content below sliceOffset.
+        // VirtualizingWrapPanel 2.5.4's SetVerticalOffset/EnsureValidScrollOffset force the
+        // offset to 0 whenever ViewportHeight >= ExtentHeight; measuring with a viewport-sized
+        // height against a shorter section made that fire for any mid-section slice, so the
+        // panel realized the wrong rows and Arrange then shifted them into a blank gap.
+        var remainingCapped = ClampMeasureHeightToRemainingContent(
+            Math.Min(Math.Max(measureHeight, 1), viewportCap),
+            sliceOffset,
+            effectiveExtent);
 
         if (sliceOffset < 1
             && effectiveExtent > measureHeight + 0.5
             && (grid.Items.Count <= 12 || effectiveExtent <= viewportCap))
             return Math.Min(effectiveExtent, viewportCap);
 
-        return Math.Min(Math.Max(measureHeight, 1), viewportCap);
+        return remainingCapped;
+    }
+
+    private static double ClampMeasureHeightToRemainingContent(
+        double measureHeight,
+        double sliceOffset,
+        double contentExtent)
+    {
+        if (measureHeight <= 0 || contentExtent <= 0)
+            return measureHeight;
+
+        var remaining = Math.Max(contentExtent - Math.Max(sliceOffset, 0), 1);
+        return Math.Min(measureHeight, remaining);
     }
 
     private double ResolveViewportMeasureCap()

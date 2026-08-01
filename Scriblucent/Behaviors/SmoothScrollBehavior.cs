@@ -33,9 +33,13 @@ public static class SmoothScrollBehavior
     // impulses; with no bound, the target gets pushed far ahead and the post-stall snap
     // triggers another expensive realize pass, which can starve the thread again - a
     // self-reinforcing cascade. The cap must stay close to what the realized-card cache can
-    // absorb via recycling so each post-stall snap stays cheap.
+    // absorb via recycling so each post-stall snap stays cheap. Wide layouts (many ~244px
+    // Notes columns) scale the lead down so the visual target cannot run as far ahead of
+    // realizes when each viewport of content is denser.
     private const double MaxImpulseLeadViewports = 0.4;
     private const double MinImpulseLeadPixels = 220;
+    private const double DenseViewportWidthThreshold = 1200;
+    private const double DenseImpulseLeadFactor = 0.7;
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
@@ -303,10 +307,13 @@ public static class SmoothScrollBehavior
 
     private static void AddImpulse(State state, bool vertical, double delta)
     {
+        var leadFactor = ResolveImpulseLeadFactor(state.ScrollViewer);
         if (vertical)
         {
             var baseTarget = state.ImpulseActiveY ? state.ImpulseTargetY : state.CurrentY;
-            var maxLead = Math.Max(state.ScrollViewer.ViewportHeight * MaxImpulseLeadViewports, MinImpulseLeadPixels);
+            var maxLead = Math.Max(
+                state.ScrollViewer.ViewportHeight * MaxImpulseLeadViewports * leadFactor,
+                MinImpulseLeadPixels);
             var proposed = Clamp(baseTarget + delta, state.CurrentY - maxLead, state.CurrentY + maxLead);
             state.ImpulseTargetY = Clamp(proposed, 0, state.ScrollViewer.ScrollableHeight);
             state.ImpulseActiveY = true;
@@ -314,11 +321,18 @@ public static class SmoothScrollBehavior
         }
 
         var baseTargetX = state.ImpulseActiveX ? state.ImpulseTargetX : state.CurrentX;
-        var maxLeadX = Math.Max(state.ScrollViewer.ViewportWidth * MaxImpulseLeadViewports, MinImpulseLeadPixels);
+        var maxLeadX = Math.Max(
+            state.ScrollViewer.ViewportWidth * MaxImpulseLeadViewports * leadFactor,
+            MinImpulseLeadPixels);
         var proposedX = Clamp(baseTargetX + delta, state.CurrentX - maxLeadX, state.CurrentX + maxLeadX);
         state.ImpulseTargetX = Clamp(proposedX, 0, state.ScrollViewer.ScrollableWidth);
         state.ImpulseActiveX = true;
     }
+
+    private static double ResolveImpulseLeadFactor(ScrollViewer scrollViewer)
+        => scrollViewer.ViewportWidth >= DenseViewportWidthThreshold
+            ? DenseImpulseLeadFactor
+            : 1.0;
 
     private static void OnScrollChanged(State state, ScrollChangedEventArgs e)
     {

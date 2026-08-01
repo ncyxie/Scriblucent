@@ -9,7 +9,8 @@ namespace Scriblucent.Controls;
 /// On large viewports, rasterizes card surfaces to bitmaps during compositor scroll so
 /// per-frame translate repaints stay cheap. Work is spread across frames to avoid start hitches,
 /// and caches survive brief pauses between wheel bursts (see SmoothScrollCompositor's surface hold)
-/// so cards are not re-rasterized on every burst.
+/// so cards are not re-rasterized on every burst. Idle <see cref="Prewarm"/> fills the same
+/// caches before the first maximized fling so warm-up and glide are not paid together.
 /// </summary>
 internal static class DashboardScrollSurfaceCache
 {
@@ -22,6 +23,7 @@ internal static class DashboardScrollSurfaceCache
     private static readonly Dictionary<FrameworkElement, CacheMode?> Applied = new();
     private static Queue<FrameworkElement>? _releaseQueue;
     private static bool _sessionActive;
+    private static bool _prewarmActive;
     private static bool _largeViewport;
     private static bool _flushScheduled;
 
@@ -30,16 +32,24 @@ internal static class DashboardScrollSurfaceCache
 
     public static void BeginSession(ScrollViewer scrollViewer)
     {
-        EndSession();
+        // Keep any idle-prewarmed Applied caches; only abandon pending release and pending queue.
+        Pending.Clear();
+        _releaseQueue = null;
+        _flushScheduled = false;
+        _prewarmActive = false;
 
         _largeViewport = IsLargeViewport(scrollViewer);
         _sessionActive = _largeViewport;
+
+        if (!_sessionActive)
+            EndSession();
     }
 
     /// <summary>Reactivates a session whose caches were kept alive through a surface hold.</summary>
     public static void ResumeSession(ScrollViewer scrollViewer)
     {
         _releaseQueue = null;
+        _prewarmActive = false;
         _largeViewport = IsLargeViewport(scrollViewer);
         _sessionActive = _largeViewport;
 
@@ -55,11 +65,25 @@ internal static class DashboardScrollSurfaceCache
         if (FindScrollViewer(surface) is not { } scrollViewer || !SmoothScrollCompositor.IsActive(scrollViewer))
             return;
 
-        if (surface.CacheMode is BitmapCache || Applied.ContainsKey(surface))
+        EnqueueSurface(surface);
+    }
+
+    /// <summary>
+    /// Idle path: queue realized card surfaces for bitmap cache without an active compositor
+    /// session. Only runs on large viewports; mid-prewarm scroll sessions reclaim Applied as usual.
+    /// </summary>
+    public static void Prewarm(ScrollViewer scrollViewer, IEnumerable<FrameworkElement> surfaces)
+    {
+        if (!IsLargeViewport(scrollViewer))
             return;
 
-        Pending.Enqueue(surface);
-        ScheduleFlush();
+        // Reclaim any staggered release so prewarm does not fight EndSessionStaggered.
+        _releaseQueue = null;
+        _largeViewport = true;
+        _prewarmActive = true;
+
+        foreach (var surface in surfaces)
+            EnqueueSurface(surface);
     }
 
     public static void EndSession()
@@ -68,6 +92,7 @@ internal static class DashboardScrollSurfaceCache
         _releaseQueue = null;
         _flushScheduled = false;
         _sessionActive = false;
+        _prewarmActive = false;
         _largeViewport = false;
 
         foreach (var (surface, cacheMode) in Applied.ToList())
@@ -85,6 +110,7 @@ internal static class DashboardScrollSurfaceCache
         Pending.Clear();
         _flushScheduled = false;
         _sessionActive = false;
+        _prewarmActive = false;
         _largeViewport = false;
 
         if (Applied.Count == 0)
@@ -95,6 +121,15 @@ internal static class DashboardScrollSurfaceCache
 
         _releaseQueue = new Queue<FrameworkElement>(Applied.Keys);
         ScheduleRelease();
+    }
+
+    private static void EnqueueSurface(FrameworkElement surface)
+    {
+        if (surface.CacheMode is BitmapCache || Applied.ContainsKey(surface))
+            return;
+
+        Pending.Enqueue(surface);
+        ScheduleFlush();
     }
 
     private static void ScheduleRelease()
@@ -110,8 +145,8 @@ internal static class DashboardScrollSurfaceCache
 
     private static void ReleaseBatch()
     {
-        // A resumed session reclaims the caches; abandon the pending release.
-        if (_sessionActive || _releaseQueue is not { } queue)
+        // A resumed session or prewarm reclaims the caches; abandon the pending release.
+        if (_sessionActive || _prewarmActive || _releaseQueue is not { } queue)
             return;
 
         var released = 0;
@@ -148,7 +183,7 @@ internal static class DashboardScrollSurfaceCache
     private static void FlushBatch()
     {
         _flushScheduled = false;
-        if (!_sessionActive)
+        if (!_sessionActive && !_prewarmActive)
         {
             Pending.Clear();
             return;
@@ -171,6 +206,8 @@ internal static class DashboardScrollSurfaceCache
 
         if (Pending.Count > 0)
             ScheduleFlush();
+        else if (_prewarmActive && !_sessionActive)
+            _prewarmActive = false;
     }
 
     private static bool IsLargeViewport(ScrollViewer scrollViewer)
