@@ -978,6 +978,18 @@
                             </Grid>
                         </ScrollViewer>
                     </Grid>
+                    <Button x:Name="ImportButton"
+                            Style="{DynamicResource FloatingSecondaryButtonStyle}"
+                            Width="32"
+                            Height="30"
+                            FontSize="{StaticResource Type.Meta}"
+                            IsEnabled="{Binding IsNotMassSelectMode}"
+                            VerticalAlignment="Bottom"
+                            HorizontalAlignment="Right"
+                            Content="{icons:Icon Import}"
+                            Margin="0,0,49,96"
+                            ToolTip="{Binding [MindMapImport], Source={StaticResource Loc}}"
+                            Click="ImportButton_Click"/>
                     <Button Style="{StaticResource FabStyle}"
                             IsEnabled="{Binding IsNotMassSelectMode}"
                             VerticalAlignment="Bottom"

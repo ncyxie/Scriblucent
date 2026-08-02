@@ -18,6 +18,9 @@
         Background="{DynamicResource FeatureFrameBackground}"
         Closing="MindMapPreviewWindow_Closing">
     <Window.Resources>
+        <!-- Footer + linked-note + layout-combo + manual-positioning-toggle styles - the icon
+             toolbar itself now uses the shared Editor* family from Themes/Controls/Buttons.xaml
+             (promoted from NoteEditorWindow so both editors share one definition). -->
         <Style x:Key="MindMapToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
             <Setter Property="Padding" Value="14,7"/>
             <Setter Property="MinHeight" Value="32"/>
@@ -28,27 +31,10 @@
 
         <Style x:Key="MindMapLinkedNoteButtonStyle" TargetType="Button" BasedOn="{StaticResource LinkedNoteToolbarButtonStyle}"/>
 
-        <Style x:Key="MindMapToolbarCompactButtonStyle" TargetType="Button" BasedOn="{StaticResource MindMapToolbarButtonStyle}">
-            <Setter Property="MinWidth" Value="90"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
-        </Style>
-
         <Style x:Key="MindMapToolbarNarrowButtonStyle" TargetType="Button" BasedOn="{StaticResource MindMapToolbarButtonStyle}">
             <Setter Property="MinWidth" Value="64"/>
             <Setter Property="Padding" Value="12,7"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
-        </Style>
-
-        <Style x:Key="MindMapToolbarSectionStyle" TargetType="StackPanel">
-            <Setter Property="Margin" Value="0,0,20,0"/>
-            <Setter Property="VerticalAlignment" Value="Top"/>
-        </Style>
-
-        <Style x:Key="MindMapToolbarSectionLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
 
         <Style x:Key="MindMapLayoutComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource FeatureToolbarComboBoxStyle}">
@@ -98,8 +84,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <Style x:Key="MindMapToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarPrimaryButtonStyle}"/>
     </Window.Resources>
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Body><Grid x:Name="ContentRoot"
@@ -152,35 +136,121 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                    <ComboBox ItemsSource="{Binding ElementName=MindMapWindow, Path=NoteLinkOptions}"
-                              SelectedItem="{Binding ElementName=MindMapWindow, Path=SelectedLinkedNote, Mode=TwoWay}"
-                              DisplayMemberPath="Title"
-                              Style="{StaticResource MindMapLinkedNoteComboBoxStyle}"
-                              SelectedValuePath="Id"
-                              ToolTip="{Binding [QuizLinkedNoteSelectorTooltip], Source={StaticResource Loc}}"/>
-                    <Button x:Name="LinkedNoteButton"
-                            Content="{Binding ElementName=MindMapWindow, Path=LinkedNoteButtonText}"
-                            Style="{StaticResource MindMapLinkedNoteButtonStyle}"
-                            Click="LinkedNoteButton_Click"
-                            ToolTip="{Binding ElementName=MindMapWindow, Path=LinkedNoteButtonToolTip}"
-                            TextOptions.TextFormattingMode="Ideal"/>
-                    <Border x:Name="AiGeneratedInfoBadge"
-                            Width="30"
-                            Height="30"
-                            CornerRadius="15"
-                            Background="{DynamicResource IconButtonBackground}"
-                            BorderThickness="0"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            ToolTipService.InitialShowDelay="180"
-                            Visibility="Collapsed">
-                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
-                    </Border>
-                </StackPanel>
+                <!-- White chrome strip matching title field (InputSurface + field elevation; no focus ring) -
+                     mirrors NoteEditorWindow's dense icon-toolbar strip so both editors share one look. -->
+                <Border Grid.Column="1"
+                        Background="{DynamicResource InputSurface}"
+                        CornerRadius="{StaticResource Radius.Control}"
+                        VerticalAlignment="Center"
+                        Padding="8,6"
+                        Effect="{StaticResource Elevation.Field}"
+                        behaviors:RoundedClipBehavior.IsEnabled="True"
+                        SnapsToDevicePixels="True">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <Button x:Name="UndoButton"
+                                Content="{icons:Icon Undo}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [Undo], Source={StaticResource Loc}}"
+                                Click="UndoButton_Click"/>
+                        <Button x:Name="RedoButton"
+                                Content="{icons:Icon Redo}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [Redo], Source={StaticResource Loc}}"
+                                Click="RedoButton_Click"/>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="2,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button x:Name="AddNodeMenuButton"
+                                Content="{icons:Icon Plus}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapAddNode], Source={StaticResource Loc}}"
+                                Click="AddNodeMenuButton_Click">
+                            <Button.ContextMenu>
+                                <ContextMenu Placement="Bottom">
+                                    <MenuItem Header="{Binding [MindMapAddChild], Source={StaticResource Loc}}" Click="AddChildButton_Click"/>
+                                    <MenuItem Header="{Binding [MindMapAddSibling], Source={StaticResource Loc}}" Click="AddSiblingButton_Click"/>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+                        <Button Content="{icons:Icon Delete}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,6,0"
+                                Style="{StaticResource EditorDangerToolButtonStyle}"
+                                ToolTip="{Binding [Delete], Source={StaticResource Loc}}"
+                                Click="DeleteNodeButton_Click"/>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="2,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button Content="{icons:Icon ChevronDown}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapExpandAll], Source={StaticResource Loc}}"
+                                Click="ExpandAllButton_Click"/>
+                        <Button Content="{icons:Icon ChevronUp}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapCollapseAll], Source={StaticResource Loc}}"
+                                Click="CollapseAllButton_Click"/>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="2,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button x:Name="ArrangePanelToggleButton"
+                                Content="{icons:Icon Settings}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapToolbarArrange], Source={StaticResource Loc}}"
+                                Click="ArrangePanelToggleButton_Click"/>
+                        <Button x:Name="SearchPanelToggleButton"
+                                Content="{icons:Icon Search}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapToolbarSearch], Source={StaticResource Loc}}"
+                                Click="SearchPanelToggleButton_Click"/>
+                        <Button x:Name="FontPanelToggleButton"
+                                Content="{icons:Icon Font}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapToolbarFont], Source={StaticResource Loc}}"
+                                Click="FontPanelToggleButton_Click"/>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="2,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button x:Name="LinkedNoteButton"
+                                Content="{Binding ElementName=MindMapWindow, Path=LinkedNoteButtonText}"
+                                Style="{StaticResource MindMapLinkedNoteButtonStyle}"
+                                Click="LinkedNoteButton_Click"
+                                ToolTip="{Binding ElementName=MindMapWindow, Path=LinkedNoteButtonToolTip}"
+                                TextOptions.TextFormattingMode="Ideal"/>
+                        <Border x:Name="AiGeneratedInfoBadge"
+                                Width="30"
+                                Height="30"
+                                Margin="4,0,0,0"
+                                CornerRadius="15"
+                                Background="{DynamicResource IconButtonBackground}"
+                                BorderThickness="0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                ToolTipService.InitialShowDelay="180"
+                                Visibility="Collapsed">
+                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="8,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button Content="{icons:Icon Save}"
+                                Style="{StaticResource EditorPrimarySaveButtonStyle}"
+                                ToolTip="{Binding [Save], Source={StaticResource Loc}}"
+                                Click="SaveButton_Click"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
@@ -208,164 +278,292 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="2"
-                Margin="20,10,20,0"
+        <!-- Collapsible "Arrange & View" panel - hidden by default, toggled via ArrangePanelToggleButton,
+             mirrors NoteEditorWindow's FontPanel show/hide animation (see SetArrangePanelOpen/AnimateChromePanel). -->
+        <Border x:Name="ArrangePanel"
+                Grid.Row="2"
+                Margin="20,8,20,0"
                 Style="{StaticResource ChromePanelBorderStyle}"
-                Padding="12,10">
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Disabled"
-                          CanContentScroll="False"
-                          Padding="0">
-                <WrapPanel Orientation="Horizontal"
-                           HorizontalAlignment="Left">
-                    <StackPanel Style="{StaticResource MindMapToolbarSectionStyle}">
-                        <TextBlock Text="{Binding [MindMapToolbarNodes], Source={StaticResource Loc}}"
-                                   Style="{StaticResource MindMapToolbarSectionLabelStyle}"/>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="{Binding [MindMapAddChild], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarCompactButtonStyle}"
-                                    Click="AddChildButton_Click"/>
-                            <Button Content="{Binding [MindMapAddSibling], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarCompactButtonStyle}"
-                                    Click="AddSiblingButton_Click"/>
-                            <Button Content="{Binding [MindMapExpandAll], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarCompactButtonStyle}"
-                                    Click="ExpandAllButton_Click"/>
-                            <Button Content="{Binding [MindMapCollapseAll], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarCompactButtonStyle}"
-                                    Margin="0"
-                                    Click="CollapseAllButton_Click"/>
-                        </StackPanel>
-                    </StackPanel>
+                Padding="12,10"
+                Opacity="0"
+                Visibility="Collapsed">
+            <Border.RenderTransform>
+                <TranslateTransform Y="-6"/>
+            </Border.RenderTransform>
+            <WrapPanel VerticalAlignment="Center">
+                <ComboBox x:Name="LayoutModeComboBox"
+                          Width="178"
+                          Height="32"
+                          Margin="0,0,6,10"
+                          Style="{StaticResource MindMapLayoutComboBoxStyle}"
+                          VerticalContentAlignment="Center"
+                          ToolTip="{Binding [MindMapToolbarArrange], Source={StaticResource Loc}}"
+                          SelectionChanged="LayoutModeComboBox_SelectionChanged">
+                    <ComboBoxItem Content="{Binding [MindMapLayoutBalancedTree], Source={StaticResource Loc}}"
+                                  Tag="BalancedTree"/>
+                    <ComboBoxItem Content="{Binding [MindMapLayoutRightTree], Source={StaticResource Loc}}"
+                                  Tag="RightTree"/>
+                    <ComboBoxItem Content="{Binding [MindMapLayoutLeftTree], Source={StaticResource Loc}}"
+                                  Tag="LeftTree"/>
+                    <ComboBoxItem Content="{Binding [MindMapLayoutTopDown], Source={StaticResource Loc}}"
+                                  Tag="TopDown"/>
+                    <ComboBoxItem Content="{Binding [MindMapLayoutRadial], Source={StaticResource Loc}}"
+                                  Tag="Radial"/>
+                </ComboBox>
+                <Button Content="{icons:Icon Refresh}"
+                        Style="{StaticResource EditorToolIconButtonStyle}"
+                        Margin="0,0,14,10"
+                        ToolTip="{Binding [MindMapAutoLayout], Source={StaticResource Loc}}"
+                        Click="AutoLayoutButton_Click"/>
 
-                    <StackPanel Style="{StaticResource MindMapToolbarSectionStyle}">
-                        <TextBlock Text="{Binding [MindMapToolbarArrange], Source={StaticResource Loc}}"
-                                   Style="{StaticResource MindMapToolbarSectionLabelStyle}"/>
-                        <StackPanel Orientation="Horizontal">
-                            <ComboBox x:Name="LayoutModeComboBox"
-                                      Width="178"
-                                      Height="32"
-                                      Margin="0,0,6,0"
-                                      Style="{StaticResource MindMapLayoutComboBoxStyle}"
-                                      VerticalContentAlignment="Center"
-                                      SelectionChanged="LayoutModeComboBox_SelectionChanged">
-                                <ComboBoxItem Content="{Binding [MindMapLayoutBalancedTree], Source={StaticResource Loc}}"
-                                              Tag="BalancedTree"/>
-                                <ComboBoxItem Content="{Binding [MindMapLayoutRightTree], Source={StaticResource Loc}}"
-                                              Tag="RightTree"/>
-                                <ComboBoxItem Content="{Binding [MindMapLayoutLeftTree], Source={StaticResource Loc}}"
-                                              Tag="LeftTree"/>
-                                <ComboBoxItem Content="{Binding [MindMapLayoutTopDown], Source={StaticResource Loc}}"
-                                              Tag="TopDown"/>
-                                <ComboBoxItem Content="{Binding [MindMapLayoutRadial], Source={StaticResource Loc}}"
-                                              Tag="Radial"/>
-                            </ComboBox>
-                            <Button Content="{Binding [MindMapAutoLayout], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarCompactButtonStyle}"
-                                    MinWidth="112"
-                                    Click="AutoLayoutButton_Click"/>
-                            <ToggleButton x:Name="ManualPositioningToggle"
-                                          Margin="0"
-                                          Style="{StaticResource MindMapToolbarToggleButtonStyle}"
-                                          Checked="ManualPositioningToggle_Checked"
-                                          Unchecked="ManualPositioningToggle_Unchecked">
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <Ellipse x:Name="ManualPositioningStatusDot"
-                                             Width="8"
-                                             Height="8"
-                                             Fill="{DynamicResource TextColorSecondary}"
-                                             Margin="0,0,8,0"/>
-                                    <TextBlock Text="{Binding [MindMapManualPositioning], Source={StaticResource Loc}}"
-                                               VerticalAlignment="Center"
-                                               FontWeight="SemiBold"/>
-                                    <Border x:Name="ManualPositioningStateBadge"
-                                            Margin="9,0,0,0"
-                                            Padding="6,2"
-                                            CornerRadius="{StaticResource Radius.Control}"
-                                            Background="{DynamicResource IconButtonBackground}"
-                                            BorderThickness="0">
-                                        <TextBlock x:Name="ManualPositioningStateText"
-                                                   Text="{Binding [MindMapManualPositioningOff], Source={StaticResource Loc}}"
-                                                   FontSize="{StaticResource Type.Chip}"
-                                                   FontWeight="Bold"
-                                                   Foreground="{DynamicResource TextColorSecondary}"/>
-                                    </Border>
-                                </StackPanel>
-                            </ToggleButton>
-                        </StackPanel>
-                    </StackPanel>
+                <Border Width="1"
+                        Height="20"
+                        Margin="0,6,14,16"
+                        Background="{DynamicResource BorderColor}"/>
 
-                    <StackPanel Style="{StaticResource MindMapToolbarSectionStyle}">
-                        <TextBlock Text="{Binding [MindMapToolbarView], Source={StaticResource Loc}}"
-                                   Style="{StaticResource MindMapToolbarSectionLabelStyle}"/>
-                        <StackPanel Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <Button Content="{Binding [ZoomReset], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarCompactButtonStyle}"
-                                    Click="ResetZoomButton_Click"/>
-                            <TextBlock Text="{Binding [MindMapZoom], Source={StaticResource Loc}}"
-                                       VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Caption}"
+                <ToggleButton x:Name="ManualPositioningToggle"
+                              Margin="0,0,14,10"
+                              Style="{StaticResource MindMapToolbarToggleButtonStyle}"
+                              Checked="ManualPositioningToggle_Checked"
+                              Unchecked="ManualPositioningToggle_Unchecked">
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Ellipse x:Name="ManualPositioningStatusDot"
+                                 Width="8"
+                                 Height="8"
+                                 Fill="{DynamicResource TextColorSecondary}"
+                                 Margin="0,0,8,0"/>
+                        <TextBlock Text="{Binding [MindMapManualPositioning], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"/>
+                        <Border x:Name="ManualPositioningStateBadge"
+                                Margin="9,0,0,0"
+                                Padding="6,2"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                Background="{DynamicResource IconButtonBackground}"
+                                BorderThickness="0">
+                            <TextBlock x:Name="ManualPositioningStateText"
+                                       Text="{Binding [MindMapManualPositioningOff], Source={StaticResource Loc}}"
+                                       FontSize="{StaticResource Type.Chip}"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource TextColorSecondary}"/>
+                        </Border>
+                    </StackPanel>
+                </ToggleButton>
+
+                <Border Width="1"
+                        Height="20"
+                        Margin="0,6,14,16"
+                        Background="{DynamicResource BorderColor}"/>
+
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,10">
+                    <Button Content="{icons:Icon ZoomReset}"
+                            Style="{StaticResource EditorToolIconButtonStyle}"
+                            ToolTip="{Binding [ZoomReset], Source={StaticResource Loc}}"
+                            Click="ResetZoomButton_Click"/>
+                    <TextBlock Text="{Binding [MindMapZoom], Source={StaticResource Loc}}"
+                               VerticalAlignment="Center"
+                               FontSize="{StaticResource Type.Caption}"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               Margin="2,0,8,0"/>
+                    <Slider x:Name="ZoomSlider"
+                            Width="136"
+                            Minimum="0.45"
+                            Maximum="1.8"
+                            Value="1"
+                            TickFrequency="0.05"
+                            IsSnapToTickEnabled="False"
+                            VerticalAlignment="Center"
+                            ValueChanged="ZoomSlider_ValueChanged"/>
+                </StackPanel>
+
+                <Border Width="1"
+                        Height="20"
+                        Margin="14,6,14,16"
+                        Background="{DynamicResource BorderColor}"/>
+
+                <ComboBox ItemsSource="{Binding ElementName=MindMapWindow, Path=NoteLinkOptions}"
+                          SelectedItem="{Binding ElementName=MindMapWindow, Path=SelectedLinkedNote, Mode=TwoWay}"
+                          DisplayMemberPath="Title"
+                          Style="{StaticResource MindMapLinkedNoteComboBoxStyle}"
+                          SelectedValuePath="Id"
+                          Margin="0,0,0,10"
+                          ToolTip="{Binding [QuizLinkedNoteSelectorTooltip], Source={StaticResource Loc}}"/>
+            </WrapPanel>
+        </Border>
+
+        <!-- Collapsible search bar - hidden by default, toggled via SearchPanelToggleButton, same
+             panel-reveal mechanism as ArrangePanel (mutually exclusive - opening one closes the other). -->
+        <Border x:Name="SearchPanel"
+                Grid.Row="2"
+                Margin="20,8,20,0"
+                Style="{StaticResource ChromePanelBorderStyle}"
+                Padding="12,10"
+                Opacity="0"
+                Visibility="Collapsed">
+            <Border.RenderTransform>
+                <TranslateTransform Y="-6"/>
+            </Border.RenderTransform>
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <Border Width="260"
+                        Height="32"
+                        MinHeight="32"
+                        Padding="6,0"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}">
+                    <DockPanel LastChildFill="True">
+                        <icons:AppIcon Kind="Search"
+                                       Width="14"
+                                       Height="14"
                                        Foreground="{DynamicResource TextColorSecondary}"
-                                       Margin="2,0,8,0"/>
-                            <Slider x:Name="ZoomSlider"
-                                    Width="136"
-                                    Minimum="0.45"
-                                    Maximum="1.8"
-                                    Value="1"
-                                    TickFrequency="0.05"
-                                    IsSnapToTickEnabled="False"
-                                    VerticalAlignment="Center"
-                                    ValueChanged="ZoomSlider_ValueChanged"/>
-                        </StackPanel>
+                                       Margin="2,0,8,0"
+                                       VerticalAlignment="Center"/>
+                        <TextBox x:Name="SearchTextBox"
+                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="{StaticResource Type.Caption}"
+                                 TextChanged="SearchTextBox_TextChanged"
+                                 ToolTip="{Binding [MindMapSearchHint], Source={StaticResource Loc}}"/>
+                    </DockPanel>
+                </Border>
+                <Button Content="{Binding [MindMapSearchPrevious], Source={StaticResource Loc}}"
+                        Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
+                        Margin="0,0,6,0"
+                        Click="SearchPreviousButton_Click"/>
+                <Button Content="{Binding [MindMapSearchNext], Source={StaticResource Loc}}"
+                        Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
+                        Margin="0,0,6,0"
+                        Click="SearchNextButton_Click"/>
+                <TextBlock x:Name="SearchResultsTextBlock"
+                           VerticalAlignment="Center"
+                           FontSize="{StaticResource Type.Caption}"
+                           MinWidth="56"
+                           Foreground="{DynamicResource TextColorSecondary}"
+                           Text="{Binding [MindMapSearchNoResults], Source={StaticResource Loc}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Collapsible font panel - hidden by default, toggled via FontPanelToggleButton, same
+             panel-reveal mechanism as ArrangePanel/SearchPanel (mutually exclusive with both).
+             Edits apply live to whatever single node is currently selected - see
+             RefreshFontPanelFromSelection, which also disables everything here when there isn't
+             exactly one node selected to edit. -->
+        <Border x:Name="FontPanel"
+                Grid.Row="2"
+                Margin="20,8,20,0"
+                Style="{StaticResource ChromePanelBorderStyle}"
+                Padding="12,10"
+                Opacity="0"
+                Visibility="Collapsed">
+            <Border.RenderTransform>
+                <TranslateTransform Y="-6"/>
+            </Border.RenderTransform>
+            <StackPanel>
+                <WrapPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,14,0">
+                        <TextBlock Text="{Binding [FontLabel], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"/>
+                        <ComboBox x:Name="FontFamilyBox"
+                                  Width="200"
+                                  Height="32"
+                                  Style="{StaticResource MindMapLayoutComboBoxStyle}"
+                                  SelectedValuePath="Tag"
+                                  IsTextSearchEnabled="True"
+                                  SelectionChanged="FontFamilyBox_SelectionChanged"/>
                     </StackPanel>
 
-                    <StackPanel Style="{StaticResource MindMapToolbarSectionStyle}"
-                                Margin="0">
-                        <TextBlock Text="{Binding [MindMapToolbarSearch], Source={StaticResource Loc}}"
-                                   Style="{StaticResource MindMapToolbarSectionLabelStyle}"/>
-                        <StackPanel Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <!-- Same chrome field as main/flashcard search; WindowBackground inset so it reads on the white toolbar plate. -->
-                            <Border Width="220"
-                                    Height="32"
-                                    MinHeight="32"
-                                    Padding="6,0"
-                                    Margin="0,0,8,0"
-                                    Style="{StaticResource ChromeFieldBorderStyle}"
-                                    Background="{DynamicResource WindowBackground}">
-                                <DockPanel LastChildFill="True">
-                                    <icons:AppIcon Kind="Search"
-                                                   Width="14"
-                                                   Height="14"
-                                                   Foreground="{DynamicResource TextColorSecondary}"
-                                                   Margin="2,0,8,0"
-                                                   VerticalAlignment="Center"/>
-                                    <TextBox x:Name="SearchTextBox"
-                                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                             VerticalContentAlignment="Center"
-                                             FontSize="{StaticResource Type.Caption}"
-                                             TextChanged="SearchTextBox_TextChanged"
-                                             ToolTip="{Binding [MindMapSearchHint], Source={StaticResource Loc}}"/>
-                                </DockPanel>
-                            </Border>
-                            <Button Content="{Binding [MindMapSearchPrevious], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
-                                    Click="SearchPreviousButton_Click"/>
-                            <Button Content="{Binding [MindMapSearchNext], Source={StaticResource Loc}}"
-                                    Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
-                                    Click="SearchNextButton_Click"/>
-                            <TextBlock x:Name="SearchResultsTextBlock"
-                                       VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Caption}"
-                                       MinWidth="56"
-                                       Foreground="{DynamicResource TextColorSecondary}"
-                                       Text="{Binding [MindMapSearchNoResults], Source={StaticResource Loc}}"/>
-                        </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,14,0">
+                        <TextBlock Text="{Binding [SizeLabel], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"/>
+                        <ComboBox x:Name="FontSizeBox"
+                                  Width="88"
+                                  Height="32"
+                                  Style="{StaticResource MindMapLayoutComboBoxStyle}"
+                                  SelectedValuePath="Tag"
+                                  SelectionChanged="FontSizeBox_SelectionChanged">
+                            <ComboBoxItem Content="{Binding [MindMapFontDefault], Source={StaticResource Loc}}" Tag=""/>
+                            <ComboBoxItem Content="8" Tag="8"/>
+                            <ComboBoxItem Content="9" Tag="9"/>
+                            <ComboBoxItem Content="10" Tag="10"/>
+                            <ComboBoxItem Content="11" Tag="11"/>
+                            <ComboBoxItem Content="12" Tag="12"/>
+                            <ComboBoxItem Content="14" Tag="14"/>
+                            <ComboBoxItem Content="16" Tag="16"/>
+                            <ComboBoxItem Content="18" Tag="18"/>
+                            <ComboBoxItem Content="20" Tag="20"/>
+                            <ComboBoxItem Content="24" Tag="24"/>
+                            <ComboBoxItem Content="28" Tag="28"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <Border Width="1"
+                            Height="20"
+                            Margin="0,6,14,6"
+                            Background="{DynamicResource BorderColor}"/>
+
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,14,0">
+                        <ToggleButton x:Name="FontBoldToggleButton"
+                                      Content="B"
+                                      FontWeight="Bold"
+                                      Style="{StaticResource EditorToolIconToggleButtonStyle}"
+                                      ToolTip="{Binding [Bold], Source={StaticResource Loc}}"
+                                      Click="FontBoldToggleButton_Click"/>
+                        <ToggleButton x:Name="FontItalicToggleButton"
+                                      Content="I"
+                                      FontStyle="Italic"
+                                      Style="{StaticResource EditorToolIconToggleButtonStyle}"
+                                      ToolTip="{Binding [Italic], Source={StaticResource Loc}}"
+                                      Click="FontItalicToggleButton_Click"/>
+                    </StackPanel>
+
+                    <Border Width="1"
+                            Height="20"
+                            Margin="0,6,14,6"
+                            Background="{DynamicResource BorderColor}"/>
+
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding [NodeTextColor], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"/>
+                        <Button x:Name="FontColorButton"
+                                Style="{StaticResource EditorColorSwatchButtonStyle}"
+                                Click="FontColorButton_Click"
+                                ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
+                        <Button Content="{icons:Icon Kind=Close, Size=12}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                Width="28" Height="28"
+                                Click="FontColorClearButton_Click"
+                                ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
                     </StackPanel>
                 </WrapPanel>
-            </ScrollViewer>
+
+                <TextBlock x:Name="FontPanelHintText"
+                           Text="{Binding [MindMapFontNoSelectionHint], Source={StaticResource Loc}}"
+                           Margin="0,8,0,0"
+                           FontSize="{StaticResource Type.Caption}"
+                           FontStyle="Italic"
+                           Foreground="{DynamicResource TextColorSecondary}"
+                           Visibility="Collapsed"/>
+            </StackPanel>
         </Border>
 
         <Grid Grid.Row="3" Margin="20,10,20,10">
@@ -378,6 +576,7 @@
                     ClipToBounds="True"
                     SnapsToDevicePixels="True">
             <ScrollViewer x:Name="MapScrollViewer"
+                          Focusable="True"
                           HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto"
                           Background="Transparent"
@@ -412,10 +611,6 @@
                             Style="{StaticResource MindMapToolbarButtonStyle}"
                             MinWidth="150"
                             Click="ExportAllButton_Click"/>
-                    <Button Content="{Binding [MindMapImport], Source={StaticResource Loc}}"
-                            Style="{StaticResource MindMapToolbarButtonStyle}"
-                            MinWidth="120"
-                            Click="ImportButton_Click"/>
                     <Button Content="{Binding [MindMapExportSelectedBranch], Source={StaticResource Loc}}"
                             Style="{StaticResource MindMapToolbarButtonStyle}"
                             MinWidth="170"
@@ -425,10 +620,6 @@
                 <WrapPanel Grid.Column="1"
                            Orientation="Horizontal"
                            HorizontalAlignment="Right">
-                    <Button Content="{Binding [Save], Source={StaticResource Loc}}"
-                            Style="{StaticResource MindMapToolbarPrimaryButtonStyle}"
-                            MinWidth="110"
-                            Click="SaveButton_Click"/>
                     <Button Content="{Binding [Close], Source={StaticResource Loc}}"
                             Style="{StaticResource MindMapToolbarButtonStyle}"
                             MinWidth="110"

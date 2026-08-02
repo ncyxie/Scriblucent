@@ -51,6 +51,9 @@
   <data name="ContinueAnyway" xml:space="preserve"><value>Continue anyway</value></data>
   <data name="FlashcardsGeneratedWithModel" xml:space="preserve"><value>Generated with model: {0}</value></data>
   <data name="QuizLinkedNoteNone" xml:space="preserve"><value>No linked note</value></data>
+  <data name="MindMapNodeLink" xml:space="preserve"><value>Linked note</value></data>
+  <data name="MindMapOpenLinkedNote" xml:space="preserve"><value>Open linked note</value></data>
+  <data name="MindMapRemoveCrossLinks" xml:space="preserve"><value>Remove cross-links</value></data>
   <data name="QuizLinkedNoteNoneTooltip" xml:space="preserve"><value>This item is not linked to a note.</value></data>
   <data name="QuizLinkedNoteOpenTooltip" xml:space="preserve"><value>Open linked note: {0}</value></data>
   <data name="QuizLinkedNoteSelectorTooltip" xml:space="preserve"><value>Select the source note linked to this item.</value></data>
@@ -669,6 +672,9 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapCollapseAll" xml:space="preserve"><value>Collapse all</value></data>
   <data name="MindMapExpandNode" xml:space="preserve"><value>Expand branch</value></data>
   <data name="MindMapCollapseNode" xml:space="preserve"><value>Collapse branch</value></data>
+  <data name="MindMapExpandThisNode" xml:space="preserve"><value>Expand this node</value></data>
+  <data name="MindMapCollapseThisNode" xml:space="preserve"><value>Collapse this node</value></data>
+  <data name="MindMapHiddenNodesCountFormat" xml:space="preserve"><value>{0} hidden node(s)</value></data>
   <data name="DeleteMindMap" xml:space="preserve"><value>Delete mind map</value></data>
   <data name="DeleteMindMapConfirmationFormat" xml:space="preserve"><value>Are you sure you want to delete "{0}"? This action cannot be undone.</value></data>
   <data name="MindMapDeleteNodeTitle" xml:space="preserve"><value>Delete branch node</value></data>
@@ -676,6 +682,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapNodeDefaultName" xml:space="preserve"><value>Untitled node</value></data>
   <data name="MindMapAddChild" xml:space="preserve"><value>Add child branch</value></data>
   <data name="MindMapAddSibling" xml:space="preserve"><value>Add sibling branch</value></data>
+  <data name="MindMapAddNode" xml:space="preserve"><value>Add node</value></data>
   <data name="MindMapAddChildPrompt" xml:space="preserve"><value>Enter child branch text:</value></data>
   <data name="MindMapAddSiblingPrompt" xml:space="preserve"><value>Enter sibling branch text:</value></data>
   <data name="MindMapEditNodePrompt" xml:space="preserve"><value>Enter the branch name:</value></data>
@@ -689,9 +696,12 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapManualPositioningOnHint" xml:space="preserve"><value>Manual positioning is on. Drag nodes to arrange them.</value></data>
   <data name="MindMapManualPositioningOffHint" xml:space="preserve"><value>Manual positioning is off. Turn it on to drag nodes.</value></data>
   <data name="MindMapToolbarNodes" xml:space="preserve"><value>Nodes</value></data>
-  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Arrange</value></data>
+  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Options</value></data>
   <data name="MindMapToolbarView" xml:space="preserve"><value>View</value></data>
   <data name="MindMapToolbarSearch" xml:space="preserve"><value>Search</value></data>
+  <data name="MindMapToolbarFont" xml:space="preserve"><value>Font</value></data>
+  <data name="MindMapFontDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="MindMapFontNoSelectionHint" xml:space="preserve"><value>Select a single node to edit its font.</value></data>
   <data name="MindMapLayoutMode" xml:space="preserve"><value>Layout:</value></data>
   <data name="MindMapLayoutBalancedTree" xml:space="preserve"><value>Balanced tree</value></data>
   <data name="MindMapLayoutRightTree" xml:space="preserve"><value>Right tree</value></data>
@@ -702,6 +712,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapStyleOrganizeTitle" xml:space="preserve"><value>Mind map style</value></data>
   <data name="NodeBackgroundColor" xml:space="preserve"><value>Background color</value></data>
   <data name="NodeBorderColor" xml:space="preserve"><value>Border color</value></data>
+  <data name="NodeTextStyle" xml:space="preserve"><value>Text style</value></data>
+  <data name="NodeTextColor" xml:space="preserve"><value>Text color</value></data>
   <data name="NodeBorderThickness" xml:space="preserve"><value>Border thickness</value></data>
   <data name="NodeShape" xml:space="preserve"><value>Shape</value></data>
   <data name="ShapeRectangle" xml:space="preserve"><value>Rectangle</value></data>
@@ -710,6 +722,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ShapeEllipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="NodeIcon" xml:space="preserve"><value>Icon</value></data>
   <data name="NodeIconBadgeColor" xml:space="preserve"><value>Icon badge color</value></data>
+  <data name="NodeNote" xml:space="preserve"><value>Note</value></data>
+  <data name="MindMapClickToViewNote" xml:space="preserve"><value>Click to view note</value></data>
   <data name="SelectIcon" xml:space="preserve"><value>Custom icon</value></data>
   <data name="EnterCustomIconEmoji" xml:space="preserve"><value>Enter an emoji or symbol for this node.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Add custom icon</value></data>
@@ -723,20 +737,26 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapSearchNext" xml:space="preserve"><value>▶</value></data>
   <data name="MindMapSearchNoResults" xml:space="preserve"><value>No search results</value></data>
   <data name="MindMapSearchResultsFormat" xml:space="preserve"><value>{0} / {1}</value></data>
+  <data name="MindMapCopyStyle" xml:space="preserve"><value>Copy style</value></data>
+  <data name="MindMapPasteStyle" xml:space="preserve"><value>Paste style</value></data>
+  <data name="MindMapCannotCutRoot" xml:space="preserve"><value>The root node can't be cut.</value></data>
+  <data name="MindMapPasteAsOutline" xml:space="preserve"><value>Paste as outline</value></data>
   <data name="MindMapImport" xml:space="preserve"><value>Import mind map</value></data>
   <data name="MindMapImportDialogTitle" xml:space="preserve"><value>Import mind map</value></data>
-  <data name="MindMapImportDialogFilter" xml:space="preserve"><value>Mind map files (*.mm;*.mmap)|*.mm;*.mmap|All files (*.*)|*.*</value></data>
+  <data name="MindMapImportDialogFilter" xml:space="preserve"><value>Mind map files (*.scribmap;*.mm;*.mmap)|*.scribmap;*.mm;*.mmap|Scriblucent mind map (*.scribmap)|*.scribmap|FreeMind file (*.mm;*.mmap)|*.mm;*.mmap|All files (*.*)|*.*</value></data>
   <data name="MindMapImportSuccess" xml:space="preserve"><value>Mind map imported successfully.</value></data>
+  <data name="MindMapImportSuccessCount" xml:space="preserve"><value>Successfully imported {0} mind map(s)</value></data>
   <data name="MindMapImportFailed" xml:space="preserve"><value>The selected file does not contain a valid mind map.</value></data>
   <data name="MindMapImportFileNotFound" xml:space="preserve"><value>File not found.</value></data>
   <data name="MindMapImportUnsupportedFormat" xml:space="preserve"><value>Unsupported mind map file format.</value></data>
+  <data name="MindMapImportUnsupportedVersion" xml:space="preserve"><value>This mind map file was created by a newer version of Scriblucent and can't be opened here.</value></data>
   <data name="MindMapImportReadFailed" xml:space="preserve"><value>Unable to read the mind map XML file.</value></data>
   <data name="MindMapImportInvalidRoot" xml:space="preserve"><value>File is not a valid mind map. The root map element is missing.</value></data>
   <data name="MindMapExportAll" xml:space="preserve"><value>Export all</value></data>
   <data name="MindMapExportSelectedBranch" xml:space="preserve"><value>Export selected branch</value></data>
   <data name="MindMapExportSelectBranchFirst" xml:space="preserve"><value>Select a branch node first.</value></data>
   <data name="MindMapExportDialogTitle" xml:space="preserve"><value>Export mind map</value></data>
-  <data name="MindMapExportDialogFilter" xml:space="preserve"><value>PNG image (*.png)|*.png|FreeMind file (*.mm)|*.mm|Scriblucent mind map (*.mmap)|*.mmap</value></data>
+  <data name="MindMapExportDialogFilter" xml:space="preserve"><value>PNG image (*.png)|*.png|JPEG image (*.jpg)|*.jpg|Scriblucent mind map (*.scribmap)|*.scribmap</value></data>
   <data name="MindMapExportUnsupportedFormat" xml:space="preserve"><value>Unsupported export format.</value></data>
   <data name="MindMapExportSuccess" xml:space="preserve"><value>Mind map exported successfully.</value></data>
   <data name="MindMapExportFailedFormat" xml:space="preserve"><value>Failed to export mind map: {0}</value></data>

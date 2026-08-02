@@ -4,6 +4,7 @@ using Scriblucent.Models;
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 
 using Scriblucent.Controls;
@@ -16,10 +17,13 @@ namespace Scriblucent.Views
         public string? BorderColor { get; set; }
         public new double BorderThickness { get; set; } = 1.0;
         public string? NodeShape { get; set; } = "Rectangle";
-        public new string? Icon { get; set; }
+        public List<string> Icons { get; set; } = new();
         public string? IconBadgeColor { get; set; } = "#F59E0B"; // Default amber
-
-        private Button? _selectedIconButton;
+        public bool IsBold { get; set; }
+        public bool IsItalic { get; set; }
+        public string? TextColor { get; set; }
+        public string? Note { get; set; }
+        public Guid? LinkedNoteId { get; set; }
 
     private readonly OverlayDialogAnimator _overlayAnimator;
     private bool _pendingDialogResult;
@@ -61,8 +65,13 @@ namespace Scriblucent.Views
             BorderColor = node.BorderColor;
             BorderThickness = node.BorderThickness;
             NodeShape = node.NodeShape ?? "Rectangle";
-            Icon = node.Icon;
+            Icons = new List<string>(node.Icons);
             IconBadgeColor = node.IconBadgeColor ?? "#F59E0B";
+            IsBold = node.IsBold;
+            IsItalic = node.IsItalic;
+            TextColor = node.TextColor;
+            Note = node.Note;
+            LinkedNoteId = node.LinkedNoteId;
 
             // Update UI for background color
             if (!string.IsNullOrWhiteSpace(BackgroundColor))
@@ -100,6 +109,24 @@ namespace Scriblucent.Views
                     iconBadgeButton2.Background = Brushes.Transparent;
             }
 
+            // Update UI for bold/italic
+            if (FindName("BoldToggleButton") is ToggleButton boldToggle)
+                boldToggle.IsChecked = IsBold;
+            if (FindName("ItalicToggleButton") is ToggleButton italicToggle)
+                italicToggle.IsChecked = IsItalic;
+
+            // Update UI for text color
+            if (!string.IsNullOrWhiteSpace(TextColor))
+            {
+                if (FindName("TextColorButton") is Button textColorButton)
+                    textColorButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(TextColor));
+            }
+            else
+            {
+                if (FindName("TextColorButton") is Button textColorButton2)
+                    textColorButton2.Background = Brushes.Transparent;
+            }
+
             // Update UI for border thickness
             if (FindName("BorderThicknessSlider") is Slider thicknessSlider)
             {
@@ -117,11 +144,48 @@ namespace Scriblucent.Views
                 shapeCombo.SelectedValue = NodeShape;
             }
 
-            // Highlight the current icon button if node has an icon
-            if (!string.IsNullOrWhiteSpace(Icon))
+            // Highlight every currently-selected icon - FreeMind allows stacking any number of
+            // icons on a node, so this is a multi-select grid, not single-select.
+            ClearIconButtonHighlighting();
+            foreach (var icon in Icons)
+                HighlightSelectedIconButton(icon);
+
+            if (FindName("NoteTextBox") is TextBox noteBox)
+                noteBox.Text = Note ?? string.Empty;
+
+            if (FindName("LinkedNoteComboBox") is ComboBox linkCombo)
+                linkCombo.SelectedValue = LinkedNoteId;
+        }
+
+        // Populated from MindMapPreviewWindow.NoteLinkOptions (the same collection the document-
+        // level linked-note picker already uses) - call before LoadFromNode so the combo's items
+        // exist by the time LoadFromNode tries to select one.
+        public void SetNoteLinkOptions(IEnumerable<MindMapPreviewWindow.MindMapNoteLinkOption> options)
+        {
+            if (FindName("LinkedNoteComboBox") is not ComboBox combo)
+                return;
+
+            combo.Items.Clear();
+            combo.Items.Add(new ComboBoxItem
             {
-                HighlightSelectedIconButton(Icon);
+                Content = LocalizationService.GetString("QuizLinkedNoteNone"),
+                Tag = null
+            });
+
+            foreach (var option in options)
+            {
+                combo.Items.Add(new ComboBoxItem
+                {
+                    Content = option.Title,
+                    Tag = option.Id
+                });
             }
+        }
+
+        private void LinkedNoteComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (FindName("LinkedNoteComboBox") is ComboBox combo)
+                LinkedNoteId = combo.SelectedValue as Guid?;
         }
 
         public void ApplyToNode(MindMapNode node)
@@ -130,8 +194,19 @@ namespace Scriblucent.Views
             node.BorderColor = BorderColor;
             node.BorderThickness = BorderThickness;
             node.NodeShape = NodeShape;
-            node.Icon = Icon;
+            node.Icons = Icons;
             node.IconBadgeColor = IconBadgeColor;
+            node.IsBold = IsBold;
+            node.IsItalic = IsItalic;
+            node.TextColor = TextColor;
+            node.Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim();
+            node.LinkedNoteId = LinkedNoteId;
+        }
+
+        private void NoteTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is TextBox textBox)
+                Note = textBox.Text;
         }
 
         private void BackgroundColorButton_Click(object sender, RoutedEventArgs e)
@@ -188,6 +263,36 @@ namespace Scriblucent.Views
                 button.Background = Brushes.Transparent;
         }
 
+        private void BoldToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleButton toggle)
+                IsBold = toggle.IsChecked == true;
+        }
+
+        private void ItalicToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is ToggleButton toggle)
+                IsItalic = toggle.IsChecked == true;
+        }
+
+        private void TextColorButton_Click(object sender, RoutedEventArgs e)
+        {
+            var color = ShowColorPicker();
+            if (color.HasValue)
+            {
+                TextColor = color.Value.ToString();
+                if (FindName("TextColorButton") is Button button)
+                    button.Background = new SolidColorBrush(color.Value);
+            }
+        }
+
+        private void ClearTextColorButton_Click(object sender, RoutedEventArgs e)
+        {
+            TextColor = null;
+            if (FindName("TextColorButton") is Button button)
+                button.Background = Brushes.Transparent;
+        }
+
         private void BorderThicknessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             BorderThickness = e.NewValue;
@@ -208,10 +313,18 @@ namespace Scriblucent.Views
             if (sender is not Button button || button.Content is not string icon)
                 return;
 
-            Icon = icon;
-            ClearIconButtonHighlighting();
-            HighlightButtonAsSelected(button);
-            _selectedIconButton = button;
+            // Toggle membership rather than replace - FreeMind allows stacking any number of
+            // icons on a node, so this grid is multi-select, not single-select.
+            if (Icons.Contains(icon))
+            {
+                Icons.Remove(icon);
+                ClearButtonHighlight(button);
+            }
+            else
+            {
+                Icons.Add(icon);
+                HighlightButtonAsSelected(button);
+            }
         }
 
         private void CustomIconButton_Click(object sender, RoutedEventArgs e)
@@ -219,24 +332,26 @@ namespace Scriblucent.Views
             var dialog = new SimpleInputDialog(
                 LocalizationService.GetString("SelectIcon"),
                 LocalizationService.GetString("EnterCustomIconEmoji"),
-                Icon ?? string.Empty)
+                string.Empty)
             {
                 Owner = this
             };
 
             if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
             {
-                Icon = dialog.InputText.Trim();
-                ClearIconButtonHighlighting();
-                _selectedIconButton = null;
+                var icon = dialog.InputText.Trim();
+                if (!Icons.Contains(icon))
+                {
+                    Icons.Add(icon);
+                    HighlightSelectedIconButton(icon);
+                }
             }
         }
 
         private void ClearIconButton_Click(object sender, RoutedEventArgs e)
         {
-            Icon = null;
+            Icons.Clear();
             ClearIconButtonHighlighting();
-            _selectedIconButton = null;
         }
 
         private void HighlightButtonAsSelected(Button button)
@@ -248,28 +363,31 @@ namespace Scriblucent.Views
             button.BorderThickness = new Thickness(2);
         }
 
-        private void ClearIconButtonHighlighting()
+        private void ClearButtonHighlight(Button button)
         {
-            if (FindName("IconGrid") is not WrapPanel iconGrid)
-                return;
+            var isCustomButton = button.ToolTip?.ToString() == LocalizationService.GetString("AddCustomIcon")
+                || button.Content?.ToString() == "➕";
 
             var defaultBackground = FindResource("CardBackground") as Brush ?? Brushes.Transparent;
             var defaultBorder = FindResource("BorderColor") as Brush ?? Brushes.Gray;
             var customBackground = FindResource("SelectionBackground") as Brush ?? defaultBackground;
 
+            button.Background = isCustomButton ? customBackground : defaultBackground;
+            button.BorderBrush = isCustomButton
+                ? FindResource("AccentPrimary") as Brush ?? defaultBorder
+                : defaultBorder;
+            button.BorderThickness = new Thickness(1);
+        }
+
+        private void ClearIconButtonHighlighting()
+        {
+            if (FindName("IconGrid") is not WrapPanel iconGrid)
+                return;
+
             foreach (var child in iconGrid.Children)
             {
-                if (child is not Button button)
-                    continue;
-
-                var isCustomButton = button.ToolTip?.ToString() == LocalizationService.GetString("AddCustomIcon")
-                    || button.Content?.ToString() == "➕";
-
-                button.Background = isCustomButton ? customBackground : defaultBackground;
-                button.BorderBrush = isCustomButton
-                    ? FindResource("AccentPrimary") as Brush ?? defaultBorder
-                    : defaultBorder;
-                button.BorderThickness = new Thickness(1);
+                if (child is Button button)
+                    ClearButtonHighlight(button);
             }
         }
 
@@ -282,7 +400,6 @@ namespace Scriblucent.Views
                     if (child is Button button && button.Content?.ToString() == icon)
                     {
                         HighlightButtonAsSelected(button);
-                        _selectedIconButton = button;
                         break;
                     }
                 }

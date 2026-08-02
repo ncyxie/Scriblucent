@@ -1681,6 +1681,68 @@ public class MainViewModel : ViewModelBase
 
         return mapVm;
     }
+
+    /// <summary>
+    /// Adds a batch of freshly-imported mind maps as new library entries in one pass. Unlike
+    /// looping AddOrUpdateMindMap per document, this saves once for the whole batch - AddOrUpdateMindMap
+    /// calls SaveMindMaps() synchronously and unconditionally on every call, and SaveMindMaps()
+    /// re-serializes and atomically rewrites the entire MindMaps collection each time (no debounce
+    /// like Notes' QueueSaveNotes), so looping it for a multi-file import would pay one full
+    /// O(library size) save per file. Mirrors DuplicateSelectedMindMaps/CompleteMindMapBatchAdd's
+    /// single-save batch pattern (line ~5613), plus the hadMindMaps empty-library branch
+    /// AddOrUpdateMindMap already has above - duplicate can never start from an empty library
+    /// (you need an existing item to duplicate), but import can be the very first thing added on a
+    /// fresh install, so BeginBatchMutation/CompleteBatchAdd (which assume an existing realized
+    /// scope to animate/reflow against) aren't safe to route through unconditionally here.
+    /// </summary>
+    public void AddImportedMindMaps(IReadOnlyList<MindMapDocument> documents)
+    {
+        if (documents.Count == 0)
+            return;
+
+        foreach (var document in documents)
+            NormalizeMindMapDocument(document);
+
+        var addedIds = documents.Select(document => document.Id).ToList();
+        var hadMindMaps = MindMaps.Count > 0;
+
+        if (!hadMindMaps)
+        {
+            foreach (var document in documents)
+                MindMaps.Add(new MindMapViewModel(document));
+
+            OnPropertyChanged(nameof(HasMindMaps));
+            SaveMindMaps();
+            MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.MindMaps);
+            RebuildMindMapGroups();
+            ReorderMindMaps();
+            NormalizeMindMapGroups();
+            RefreshAvailableMindMapTags();
+            ApplyMindMapFilters(rebuildGroups: false);
+            NotifyMindMapsChanged();
+            RefreshRecentMindMaps();
+            return;
+        }
+
+        _mindMapBatchAddInProgress = true;
+        try
+        {
+            MotionHost?.BeginBatchMutation(DashboardMotionScope.MindMaps);
+            foreach (var document in documents)
+            {
+                MotionHost?.RegisterBatchItemAdd(DashboardMotionScope.MindMaps, document.Id);
+                MindMaps.Add(new MindMapViewModel(document));
+            }
+
+            SaveMindMaps();
+            CompleteMindMapBatchAdd(addedIds);
+        }
+        finally
+        {
+            _mindMapBatchAddInProgress = false;
+        }
+    }
+
     public MindMapGroupViewModel CreateMindMapGroup(string name)
     {
         var groupId = Guid.NewGuid();
@@ -2032,6 +2094,19 @@ public class MainViewModel : ViewModelBase
 
     private static MindMapNode CloneMindMapNode(MindMapNode source)
     {
+        // Two passes: clone the tree (every node gets a fresh Id), then rewrite cross-link
+        // targets using the old-Id -> new-Id map built along the way. Cross-links only ever
+        // point at other nodes within the same map, so without this remap every cross-link would
+        // dangle - pointing at the ORIGINAL map's node Ids instead of this duplicate's - the
+        // instant you duplicate a map that has any.
+        var idMap = new Dictionary<Guid, Guid>();
+        var clone = CloneMindMapNodeCore(source, idMap);
+        RemapCrossLinkTargets(clone, idMap);
+        return clone;
+    }
+
+    private static MindMapNode CloneMindMapNodeCore(MindMapNode source, Dictionary<Guid, Guid> idMap)
+    {
         var newNode = new MindMapNode
         {
             Text = source.Text,
@@ -2040,20 +2115,43 @@ public class MainViewModel : ViewModelBase
             BorderColor = source.BorderColor,
             BorderThickness = source.BorderThickness,
             NodeShape = source.NodeShape,
-            Icon = source.Icon,
+            Icons = new List<string>(source.Icons),
             IconBadgeColor = source.IconBadgeColor,
+            IsBold = source.IsBold,
+            IsItalic = source.IsItalic,
+            TextColor = source.TextColor,
+            FontFamily = source.FontFamily,
+            FontSize = source.FontSize,
+            Note = source.Note,
+            LinkedNoteId = source.LinkedNoteId,
+            CrossLinkTargetIds = new List<Guid>(source.CrossLinkTargetIds),
             ManualX = source.ManualX,
             ManualY = source.ManualY,
             Children = new List<MindMapNode>()
         };
 
+        idMap[source.Id] = newNode.Id;
+
         // Recursively clone children
         foreach (var child in source.Children)
         {
-            newNode.Children.Add(CloneMindMapNode(child));
+            newNode.Children.Add(CloneMindMapNodeCore(child, idMap));
         }
 
         return newNode;
+    }
+
+    private static void RemapCrossLinkTargets(MindMapNode node, Dictionary<Guid, Guid> idMap)
+    {
+        if (node.CrossLinkTargetIds.Count > 0)
+        {
+            node.CrossLinkTargetIds = node.CrossLinkTargetIds
+                .Select(oldId => idMap.TryGetValue(oldId, out var newId) ? newId : oldId)
+                .ToList();
+        }
+
+        foreach (var child in node.Children)
+            RemapCrossLinkTargets(child, idMap);
     }
 
     private void NotifyMindMapsChanged()

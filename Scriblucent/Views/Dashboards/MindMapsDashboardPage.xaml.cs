@@ -198,6 +198,8 @@ public partial class MindMapsDashboardPage : UserControl
         => Host?.DisbandDashboardGroupMenuItem_Click(sender, e);
     private void DuplicateMindMapMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.DuplicateMindMapMenuItem_Click(sender, e);
+    private void ImportButton_Click(object sender, RoutedEventArgs e)
+        => Host?.ImportMindMapButton_Click(sender, e);
     private void ListingContextMenuButton_Click(object sender, RoutedEventArgs e)
         => Host?.ListingContextMenuButton_Click(sender, e);
     private void MindMapInfoMenuItem_Click(object sender, RoutedEventArgs e)

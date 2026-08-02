@@ -1,3 +1,4 @@
+using Scriblucent;
 using Scriblucent.Animations;
 using Scriblucent.Models;
 using Scriblucent.ViewModels;
@@ -281,6 +282,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         }
 
         var document = BuildCombinedDocument(selectedSets);
+        var mainWindow = Application.Current.MainWindow as MainWindow;
         var editor = new FlashcardsPreviewWindow(
             document.Cards,
             _mainViewModel.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
@@ -288,7 +290,10 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
             document.Title,
             document.Tags,
             document.SetNames,
-            document.StudySession)
+            document.StudySession,
+            openNoteAction: mainWindow is not null
+                ? noteId => mainWindow.OpenNoteById(_mainViewModel, noteId)
+                : null)
         {
             Owner = this
         };

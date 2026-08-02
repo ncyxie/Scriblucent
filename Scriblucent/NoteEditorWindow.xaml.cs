@@ -980,22 +980,28 @@ namespace Scriblucent
                 }
 
                 var modelDisplayName = BundledModelHostService.Instance.GetSelectedModelDisplayName();
+                var flashcardsMainWindow = Application.Current.MainWindow as MainWindow;
+                var flashcardsMainViewModel = flashcardsMainWindow?.DataContext as MainViewModel;
+
                 var preview = new FlashcardsPreviewWindow(
                     flashcards,
+                    noteOptions: flashcardsMainViewModel?.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
                     modelDisplayName: modelDisplayName,
                     title: documentTitle,
                     tags: ParseTags(TagsTextBox.Text),
-                    sourceNoteId: _currentDocument?.Id)
+                    sourceNoteId: _currentDocument?.Id,
+                    openNoteAction: flashcardsMainWindow is not null && flashcardsMainViewModel is not null
+                        ? noteId => flashcardsMainWindow.OpenNoteById(flashcardsMainViewModel, noteId)
+                        : null)
                 {
                     Owner = GetDialogOwnerWindow()
                 };
 
-                if (preview.ShowDialog() == true
-                    && Application.Current.MainWindow?.DataContext is MainViewModel mainViewModel)
+                if (preview.ShowDialog() == true && flashcardsMainViewModel is not null)
                 {
                     var document = preview.ToDocument();
                     document.SourceNoteId = _currentDocument?.Id;
-                    mainViewModel.AddOrUpdateFlashcardSet(document);
+                    flashcardsMainViewModel.AddOrUpdateFlashcardSet(document);
                 }
 
                 ShowStatusIndicator(LocalizationService.GetString("ConvertToFlashcardsSuccess"));
@@ -1112,18 +1118,29 @@ namespace Scriblucent
                 }
 
                 var modelDisplayName = BundledModelHostService.Instance.GetSelectedModelDisplayName();
+
+                // Resolved once and reused both for construction (note-link picker options/open
+                // action) and after ShowDialog (saving) - the AI-review window otherwise had no
+                // way to populate or act on either linked-note picker (document-level or
+                // per-node), unlike every other place a MindMapPreviewWindow gets opened.
+                var mainWindow = Application.Current.MainWindow as MainWindow;
+                var mainViewModel = mainWindow?.DataContext as MainViewModel;
+
                 var preview = new MindMapPreviewWindow(
                     mindMap,
-                    noteOptions: null,
+                    noteOptions: mainViewModel?.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
                     modelDisplayName: modelDisplayName,
                     title: documentTitle,
-                    tags: ParseTags(TagsTextBox.Text))
+                    tags: ParseTags(TagsTextBox.Text),
+                    sourceNoteId: _currentDocument?.Id,
+                    openNoteAction: mainWindow is not null && mainViewModel is not null
+                        ? noteId => mainWindow.OpenNoteById(mainViewModel, noteId)
+                        : null)
                 {
                     Owner = GetDialogOwnerWindow()
                 };
 
-                if (preview.ShowDialog() == true
-                    && Application.Current.MainWindow?.DataContext is MainViewModel mainViewModel)
+                if (preview.ShowDialog() == true && mainViewModel is not null)
                 {
                     var document = preview.ToDocument();
                     document.SourceNoteId = _currentDocument?.Id;
@@ -1249,15 +1266,24 @@ namespace Scriblucent
                 quiz.SourceNoteId = _currentDocument?.Id;
                 quiz.Tags = ParseTags(TagsTextBox.Text).ToList();
 
-                var preview = new QuizPreviewWindow(quiz, null, modelDisplayName, documentTitle)
+                var quizMainWindow = Application.Current.MainWindow as MainWindow;
+                var quizMainViewModel = quizMainWindow?.DataContext as MainViewModel;
+
+                var preview = new QuizPreviewWindow(
+                    quiz,
+                    noteOptions: quizMainViewModel?.Notes.Select(note => new QuizPreviewWindow.QuizNoteLinkOption(note.Document.Id, note.Document.Title)),
+                    modelDisplayName: modelDisplayName,
+                    title: documentTitle,
+                    openNoteAction: quizMainWindow is not null && quizMainViewModel is not null
+                        ? noteId => quizMainWindow.OpenNoteById(quizMainViewModel, noteId)
+                        : null)
                 {
                     Owner = GetDialogOwnerWindow()
                 };
 
-                if (preview.ShowDialog() == true
-                    && Application.Current.MainWindow?.DataContext is MainViewModel mainViewModel)
+                if (preview.ShowDialog() == true && quizMainViewModel is not null)
                 {
-                    mainViewModel.AddOrUpdateQuiz(preview.ToDocument());
+                    quizMainViewModel.AddOrUpdateQuiz(preview.ToDocument());
                 }
 
                 ShowStatusIndicator(LocalizationService.GetString("ConvertToTestSuccess"));

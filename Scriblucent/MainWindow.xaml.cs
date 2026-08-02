@@ -2259,11 +2259,13 @@ namespace Scriblucent
 
             var editor = new MindMapPreviewWindow(
                 rootNode,
+                noteOptions: vm.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
                 modelDisplayName: null,
                 title: null,
                 tags: null,
                 layoutMode: null,
-                useManualPositions: false)
+                useManualPositions: false,
+                openNoteAction: noteId => OpenNoteById(vm, noteId))
             {
                 Owner = this
             };
@@ -2431,7 +2433,7 @@ namespace Scriblucent
             window.ShowDialog();
         }
 
-        private void OpenNoteById(MainViewModel vm, Guid noteId)
+        internal void OpenNoteById(MainViewModel vm, Guid noteId)
         {
             var note = vm.FindNoteById(noteId);
             if (note is null)
@@ -4808,6 +4810,54 @@ namespace Scriblucent
                     MessageBoxImage.Error);
             }
         }
+        internal void ImportMindMapButton_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Multiselect = true,
+                Filter = LocalizationService.GetString("MindMapImportDialogFilter"),
+                Title = LocalizationService.GetString("MindMapImportDialogTitle")
+            };
+
+            if (openFileDialog.ShowDialog() != true)
+                return;
+
+            if (DataContext is not MainViewModel vm)
+                return;
+
+            var imported = new List<MindMapDocument>();
+            foreach (var filePath in openFileDialog.FileNames)
+            {
+                try
+                {
+                    var document = MindMapFileService.LoadAnyDocument(filePath, Path.GetFileNameWithoutExtension(filePath));
+                    imported.Add(document);
+                }
+                catch (Exception ex)
+                {
+                    ModernMessageBox.Show(
+                        $"{LocalizationService.GetString("ImportError")}\n{Path.GetFileName(filePath)}\n\n{ex.Message}",
+                        LocalizationService.GetString("Error"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+
+            if (imported.Count == 0)
+                return;
+
+            // Single batch add so a multi-file import pays one save, not one per file - see
+            // MainViewModel.AddImportedMindMaps for why looping AddOrUpdateMindMap here would not
+            // get the same protection Notes' import gets from QueueSaveNotes' debounce.
+            vm.AddImportedMindMaps(imported);
+
+            ModernMessageBox.Show(
+                string.Format(LocalizationService.GetString("MindMapImportSuccessCount"), imported.Count),
+                LocalizationService.GetString("MindMapImport"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
         private MindMapViewModel? GetMindMapFromMenuSender(object sender)
         {
             if (sender is not MenuItem menuItem) return null;

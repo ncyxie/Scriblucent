@@ -84,6 +84,40 @@
             <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
         </Style>
+
+        <Style x:Key="StyleNodeTextStyleToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="ToggleBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Control}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <controls:OverlayDialogShell
@@ -169,6 +203,54 @@
                                        FontSize="{StaticResource Type.Caption}"
                                        Foreground="{DynamicResource TextColorSecondary}"
                                        MinWidth="20"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding [NodeTextStyle], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   FontSize="{StaticResource Type.Meta}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <ToggleButton x:Name="BoldToggleButton"
+                                          Style="{StaticResource StyleNodeTextStyleToggleButtonStyle}"
+                                          Content="B"
+                                          FontWeight="Bold"
+                                          Click="BoldToggleButton_Click"
+                                          ToolTip="{Binding [Bold], Source={StaticResource Loc}}"/>
+                            <ToggleButton x:Name="ItalicToggleButton"
+                                          Style="{StaticResource StyleNodeTextStyleToggleButtonStyle}"
+                                          Content="I"
+                                          FontStyle="Italic"
+                                          Click="ItalicToggleButton_Click"
+                                          ToolTip="{Binding [Italic], Source={StaticResource Loc}}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding [NodeTextColor], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   FontSize="{StaticResource Type.Meta}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="TextColorButton"
+                                    Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
+                                    Click="TextColorButton_Click"
+                                    ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
+                            <Button Content="{icons:Icon Kind=Close, Size=12}"
+                                    Style="{StaticResource StyleNodeClearButtonStyle}"
+                                    Click="ClearTextColorButton_Click"
+                                    ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
                         </StackPanel>
                     </Grid>
 
@@ -273,6 +355,31 @@
                             </WrapPanel>
                         </ScrollViewer>
                     </Border>
+
+                    <TextBlock Text="{Binding [NodeNote], Source={StaticResource Loc}}"
+                               FontSize="{StaticResource Type.Meta}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextColor}"
+                               Margin="0,0,0,6"/>
+                    <TextBox x:Name="NoteTextBox"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             MinHeight="70"
+                             MaxHeight="140"
+                             Padding="8"
+                             VerticalScrollBarVisibility="Auto"
+                             VerticalContentAlignment="Top"
+                             TextChanged="NoteTextBox_TextChanged"/>
+
+                    <TextBlock Text="{Binding [MindMapNodeLink], Source={StaticResource Loc}}"
+                               FontSize="{StaticResource Type.Meta}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextColor}"
+                               Margin="0,16,0,6"/>
+                    <ComboBox x:Name="LinkedNoteComboBox"
+                              HorizontalAlignment="Stretch"
+                              SelectedValuePath="Tag"
+                              SelectionChanged="LinkedNoteComboBox_SelectionChanged"/>
                 </StackPanel>
             </ScrollViewer>
         </controls:OverlayDialogShell.Body>

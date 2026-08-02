@@ -308,6 +308,73 @@ PREVIOUS OUTPUT:
         return true;
     }
 
+    /// <summary>
+    /// Parses freeform pasted/typed text into an outline tree for the mind-map editor's smart
+    /// paste. Reuses TryParseTreeLine (same bullet/markdown-heading line parser AI mind-map
+    /// generation already relies on), plus a fallback for lines with no bullet marker at all -
+    /// pure indentation, which the AI-output parser never has to handle since the AI is always
+    /// prompted to produce bullets, but is common in text copied from elsewhere (a plain
+    /// tab-indented outline, another outliner's export, etc). Returns the parsed top-level nodes;
+    /// each carries its own children built from deeper indentation.
+    /// </summary>
+    public static List<MindMapNode> ParseOutlineText(string text)
+    {
+        var topLevel = new List<MindMapNode>();
+        if (string.IsNullOrWhiteSpace(text))
+            return topLevel;
+
+        var lines = text
+            .Replace("\r", "", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.TrimEnd())
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToList();
+
+        var stack = new List<(int Level, MindMapNode Node)>();
+
+        foreach (var line in lines)
+        {
+            if (!TryParseOutlineLine(line, out var level, out var rawText))
+                continue;
+
+            var nodeText = NormalizeNodeText(rawText);
+            if (string.IsNullOrWhiteSpace(nodeText))
+                continue;
+
+            while (stack.Count > 0 && stack[^1].Level >= level)
+                stack.RemoveAt(stack.Count - 1);
+
+            var node = new MindMapNode { Text = nodeText };
+            if (stack.Count == 0)
+                topLevel.Add(node);
+            else
+                stack[^1].Node.Children.Add(node);
+
+            stack.Add((level, node));
+        }
+
+        return topLevel;
+    }
+
+    private static bool TryParseOutlineLine(string line, out int level, out string text)
+    {
+        if (TryParseTreeLine(line, out level, out text))
+            return true;
+
+        var trimmed = line.TrimStart(' ', '\t');
+        if (trimmed.Length == 0)
+        {
+            level = 0;
+            text = string.Empty;
+            return false;
+        }
+
+        var indentText = line[..^trimmed.Length].Replace("\t", "    ", StringComparison.Ordinal);
+        level = Math.Max(0, indentText.Length / 2);
+        text = trimmed;
+        return true;
+    }
+
     private static MindMapNode? BuildFallbackMindMap(string noteTitle, string noteText)
     {
         var lines = noteText
@@ -400,8 +467,19 @@ PREVIOUS OUTPUT:
             BorderColor = source.BorderColor,
             BorderThickness = source.BorderThickness,
             NodeShape = source.NodeShape,
-            Icon = source.Icon,
-            IconBadgeColor = source.IconBadgeColor
+            Icons = new List<string>(source.Icons),
+            IconBadgeColor = source.IconBadgeColor,
+            IsBold = source.IsBold,
+            IsItalic = source.IsItalic,
+            TextColor = source.TextColor,
+            FontFamily = source.FontFamily,
+            FontSize = source.FontSize,
+            Note = source.Note,
+            LinkedNoteId = source.LinkedNoteId
+            // CrossLinkTargetIds deliberately not copied here - this clone exists for AI-output
+            // merge/dedup, where source is always freshly-parsed AI text with no cross-links yet,
+            // and copying Ids verbatim without the remap MainViewModel.CloneMindMapNode does
+            // would risk stale references if that ever changed.
         };
 
         foreach (var child in source.Children)

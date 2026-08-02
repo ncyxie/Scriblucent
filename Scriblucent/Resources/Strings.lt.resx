@@ -51,6 +51,9 @@
   <data name="ContinueAnyway" xml:space="preserve"><value>Tęsti vis tiek</value></data>
   <data name="FlashcardsGeneratedWithModel" xml:space="preserve"><value>Sugeneruota su modeliu: {0}</value></data>
   <data name="QuizLinkedNoteNone" xml:space="preserve"><value>Nėra susieto užrašo</value></data>
+  <data name="MindMapNodeLink" xml:space="preserve"><value>Susietas užrašas</value></data>
+  <data name="MindMapOpenLinkedNote" xml:space="preserve"><value>Atverti susietą užrašą</value></data>
+  <data name="MindMapRemoveCrossLinks" xml:space="preserve"><value>Pašalinti kryžmines nuorodas</value></data>
   <data name="QuizLinkedNoteNoneTooltip" xml:space="preserve"><value>Šis elementas nėra susietas su užrašu.</value></data>
   <data name="QuizLinkedNoteOpenTooltip" xml:space="preserve"><value>Atidaryti susietą užrašą: {0}</value></data>
   <data name="QuizLinkedNoteSelectorTooltip" xml:space="preserve"><value>Pasirinkite šio elemento šaltinio užrašą.</value></data>
@@ -617,6 +620,9 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapCollapseAll" xml:space="preserve"><value>Sutraukti viską</value></data>
   <data name="MindMapExpandNode" xml:space="preserve"><value>Išskleisti šaką</value></data>
   <data name="MindMapCollapseNode" xml:space="preserve"><value>Sutraukti šaką</value></data>
+  <data name="MindMapExpandThisNode" xml:space="preserve"><value>Išskleisti šį mazgą</value></data>
+  <data name="MindMapCollapseThisNode" xml:space="preserve"><value>Sutraukti šį mazgą</value></data>
+  <data name="MindMapHiddenNodesCountFormat" xml:space="preserve"><value>Paslėpta: {0} mazgai(-ų)</value></data>
   <data name="DeleteMindMap" xml:space="preserve"><value>Ištrinti minčių žemėlapį</value></data>
   <data name="DeleteMindMapConfirmationFormat" xml:space="preserve"><value>Ar tikrai norite ištrinti „{0}“? Šio veiksmo negalima atšaukti.</value></data>
   <data name="MindMapDeleteNodeTitle" xml:space="preserve"><value>Ištrinti šakos mazgą</value></data>
@@ -624,6 +630,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapNodeDefaultName" xml:space="preserve"><value>Mazgas be pavadinimo</value></data>
   <data name="MindMapAddChild" xml:space="preserve"><value>Pridėti vaikinę šaką</value></data>
   <data name="MindMapAddSibling" xml:space="preserve"><value>Pridėti gretimą šaką</value></data>
+  <data name="MindMapAddNode" xml:space="preserve"><value>Pridėti mazgą</value></data>
   <data name="MindMapAddChildPrompt" xml:space="preserve"><value>Įveskite vaikinės šakos tekstą:</value></data>
   <data name="MindMapAddSiblingPrompt" xml:space="preserve"><value>Įveskite gretimos šakos tekstą:</value></data>
   <data name="MindMapEditNodePrompt" xml:space="preserve"><value>Įveskite šakos pavadinimą:</value></data>
@@ -637,9 +644,12 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapManualPositioningOnHint" xml:space="preserve"><value>Rankinis pozicionavimas įjungtas. Tempkite mazgus norėdami juos perkelti.</value></data>
   <data name="MindMapManualPositioningOffHint" xml:space="preserve"><value>Rankinis pozicionavimas išjungtas. Įjunkite, kad galėtumėte tempti mazgus.</value></data>
   <data name="MindMapToolbarNodes" xml:space="preserve"><value>Mazgai</value></data>
-  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Išdėstymas</value></data>
+  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Parinktys</value></data>
   <data name="MindMapToolbarView" xml:space="preserve"><value>Vaizdas</value></data>
   <data name="MindMapToolbarSearch" xml:space="preserve"><value>Paieška</value></data>
+  <data name="MindMapToolbarFont" xml:space="preserve"><value>Šriftas</value></data>
+  <data name="MindMapFontDefault" xml:space="preserve"><value>Numatytasis</value></data>
+  <data name="MindMapFontNoSelectionHint" xml:space="preserve"><value>Pasirinkite vieną mazgą, kad redaguotumėte jo šriftą.</value></data>
   <data name="MindMapLayoutMode" xml:space="preserve"><value>Išdėstymas:</value></data>
   <data name="MindMapLayoutBalancedTree" xml:space="preserve"><value>Subalansuotas medis</value></data>
   <data name="MindMapLayoutRightTree" xml:space="preserve"><value>Medis į dešinę</value></data>
@@ -650,6 +660,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapStyleOrganizeTitle" xml:space="preserve"><value>Minčių žemėlapio stilius</value></data>
   <data name="NodeBackgroundColor" xml:space="preserve"><value>Fono spalva</value></data>
   <data name="NodeBorderColor" xml:space="preserve"><value>Rėmelio spalva</value></data>
+  <data name="NodeTextStyle" xml:space="preserve"><value>Teksto stilius</value></data>
+  <data name="NodeTextColor" xml:space="preserve"><value>Teksto spalva</value></data>
   <data name="NodeBorderThickness" xml:space="preserve"><value>Rėmelio storis</value></data>
   <data name="NodeShape" xml:space="preserve"><value>Forma</value></data>
   <data name="ShapeRectangle" xml:space="preserve"><value>Stačiakampis</value></data>
@@ -658,6 +670,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ShapeEllipse" xml:space="preserve"><value>Elipsė</value></data>
   <data name="NodeIcon" xml:space="preserve"><value>Ikona</value></data>
   <data name="NodeIconBadgeColor" xml:space="preserve"><value>Ikonos ženkliuko spalva</value></data>
+  <data name="NodeNote" xml:space="preserve"><value>Pastaba</value></data>
+  <data name="MindMapClickToViewNote" xml:space="preserve"><value>Spustelėkite, kad pamatytumėte pastabą</value></data>
   <data name="SelectIcon" xml:space="preserve"><value>Savo ikona</value></data>
   <data name="EnterCustomIconEmoji" xml:space="preserve"><value>Įveskite šio mazgo emoji ar simbolį.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Pridėti savo ikoną</value></data>
@@ -671,20 +685,26 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapSearchNext" xml:space="preserve"><value>▶</value></data>
   <data name="MindMapSearchNoResults" xml:space="preserve"><value>Paieškos rezultatų nėra</value></data>
   <data name="MindMapSearchResultsFormat" xml:space="preserve"><value>{0} / {1}</value></data>
+  <data name="MindMapCopyStyle" xml:space="preserve"><value>Kopijuoti stilių</value></data>
+  <data name="MindMapPasteStyle" xml:space="preserve"><value>Įklijuoti stilių</value></data>
+  <data name="MindMapCannotCutRoot" xml:space="preserve"><value>Šakninio mazgo iškirpti negalima.</value></data>
+  <data name="MindMapPasteAsOutline" xml:space="preserve"><value>Įklijuoti kaip struktūrą</value></data>
   <data name="MindMapImport" xml:space="preserve"><value>Importuoti minčių žemėlapį</value></data>
   <data name="MindMapImportDialogTitle" xml:space="preserve"><value>Importuoti minčių žemėlapį</value></data>
-  <data name="MindMapImportDialogFilter" xml:space="preserve"><value>Minčių žemėlapių failai (*.mm;*.mmap)|*.mm;*.mmap|Visi failai (*.*)|*.*</value></data>
+  <data name="MindMapImportDialogFilter" xml:space="preserve"><value>Minčių žemėlapių failai (*.scribmap;*.mm;*.mmap)|*.scribmap;*.mm;*.mmap|Scriblucent minčių žemėlapis (*.scribmap)|*.scribmap|FreeMind failas (*.mm;*.mmap)|*.mm;*.mmap|Visi failai (*.*)|*.*</value></data>
   <data name="MindMapImportSuccess" xml:space="preserve"><value>Minčių žemėlapis sėkmingai importuotas.</value></data>
+  <data name="MindMapImportSuccessCount" xml:space="preserve"><value>Sėkmingai importuota {0} minčių žemėlapis(-iai)</value></data>
   <data name="MindMapImportFailed" xml:space="preserve"><value>Pasirinktame faile nėra tinkamo minčių žemėlapio.</value></data>
   <data name="MindMapImportFileNotFound" xml:space="preserve"><value>Failas nerastas.</value></data>
   <data name="MindMapImportUnsupportedFormat" xml:space="preserve"><value>Nepalaikomas minčių žemėlapio failo formatas.</value></data>
+  <data name="MindMapImportUnsupportedVersion" xml:space="preserve"><value>Šis minčių žemėlapio failas sukurtas naujesnės Scriblucent versijos ir čia negali būti atidarytas.</value></data>
   <data name="MindMapImportReadFailed" xml:space="preserve"><value>Nepavyko perskaityti minčių žemėlapio XML failo.</value></data>
   <data name="MindMapImportInvalidRoot" xml:space="preserve"><value>Failas nėra tinkamas minčių žemėlapis. Trūksta šakninio map elemento.</value></data>
   <data name="MindMapExportAll" xml:space="preserve"><value>Eksportuoti viską</value></data>
   <data name="MindMapExportSelectedBranch" xml:space="preserve"><value>Eksportuoti pasirinktą šaką</value></data>
   <data name="MindMapExportSelectBranchFirst" xml:space="preserve"><value>Pirma pasirinkite šakos mazgą.</value></data>
   <data name="MindMapExportDialogTitle" xml:space="preserve"><value>Eksportuoti minčių žemėlapį</value></data>
-  <data name="MindMapExportDialogFilter" xml:space="preserve"><value>PNG paveikslėlis (*.png)|*.png|FreeMind failas (*.mm)|*.mm|Scriblucent minčių žemėlapis (*.mmap)|*.mmap</value></data>
+  <data name="MindMapExportDialogFilter" xml:space="preserve"><value>PNG paveikslėlis (*.png)|*.png|JPEG paveikslėlis (*.jpg)|*.jpg|Scriblucent minčių žemėlapis (*.scribmap)|*.scribmap</value></data>
   <data name="MindMapExportUnsupportedFormat" xml:space="preserve"><value>Nepalaikomas eksporto formatas.</value></data>
   <data name="MindMapExportSuccess" xml:space="preserve"><value>Minčių žemėlapis sėkmingai eksportuotas.</value></data>
   <data name="MindMapExportFailedFormat" xml:space="preserve"><value>Nepavyko eksportuoti minčių žemėlapio: {0}</value></data>

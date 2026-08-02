@@ -1,4 +1,5 @@
 using Scriblucent.Animations;
+using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent;
@@ -8,15 +9,18 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Xml.Linq;
+using System.Runtime.InteropServices;
 using System.IO;
 using System.Windows.Media.Imaging;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using ShapePath = System.Windows.Shapes.Path;
+using ShapeLine = System.Windows.Shapes.Line;
 
 namespace Scriblucent.Views;
 
@@ -29,12 +33,32 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         SaveAndClose
     }
 
-    private const double NodeWidth = 190;
+    private const double BaseNodeWidth = 190;
+    private const double MaxNodeWidth = 340;
+    // Every layout algorithm (balanced/left/right tree, top-down, radial) treats this as a single
+    // shared column width, not a per-node one - reworking all four to place variable-width boxes
+    // without overlapping neighbors is a much bigger change than this needs. Instead the whole
+    // map uses one width, recomputed once per RebuildMapCore pass (see ComputeEffectiveNodeWidth)
+    // to fit whatever node currently needs the most room at its own font size - static, not const,
+    // and static (not instance) because the layout-measurement helpers below are static and this
+    // window is always modal/single-instance (see the clipboard fields for the same reasoning).
+    private static double NodeWidth = BaseNodeWidth;
     private const double HorizontalGap = 150;
     private const double VerticalGap = 18;
     private const double VerticalLayoutLevelGap = 118;
     private const double VerticalLayoutNodeGap = 34;
     private const double CanvasPadding = 52;
+    // Must mirror DrawNodes' node Border: Padding(12,8,12,8) and the icon badge's 28px right
+    // margin on the text - MeasureNodeHeight needs the same constraints DrawNodes actually
+    // renders with, or a node with a large font/long text will measure short and get clipped.
+    private const double NodeTextHorizontalPadding = 24;
+    private const double NodeTextVerticalPadding = 16;
+    private const double NodeIconTextMargin = 28;
+    private const double MinNodeHeight = 52;
+    private const double MaxNodeHeight = 400;
+    private static readonly FontFamily DefaultNodeFontFamily =
+        Application.Current?.TryFindResource("FontFamily.UI") as FontFamily ?? new FontFamily("Segoe UI");
+    private static readonly double DefaultNodeFontSize = TypeScale.Px(TypeScale.Body, 14);
     private readonly MindMapNode _root;
     private readonly Dictionary<MindMapNode, NodeLayout> _layouts = new();
     private readonly ObservableCollection<MindMapNoteLinkOption> _noteLinkOptions = new();
@@ -59,10 +83,12 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private bool _isDraggingNode;
     private bool _isManualDragPending;
+    private bool _isLinkDragGesture;
     private bool _connectionRedrawQueued;
     private bool _mapViewportRefreshQueued;
     private MindMapNode? _draggedNode;
     private MindMapNode? _pendingDragNode;
+    private MindMapNode? _dropTargetHoverNode;
     private Point _dragStartMousePos;
     private Point _dragStartNodePos;
     private Border? _draggedBorder;
@@ -74,6 +100,49 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private bool _isInitializing = true;
     private bool _allowCloseWithoutPrompt;
     private MindMapNoteLinkOption? _selectedLinkedNote;
+
+    // Collapsible chrome panels (Arrange & View / Search) - session-only, not persisted, mutually
+    // exclusive (opening one closes the other) so they never stack. Mirrors NoteEditorWindow's
+    // FontPanel show/hide animation.
+    private bool _isArrangePanelOpen;
+    private bool _isSearchPanelOpen;
+    private bool _isFontPanelOpen;
+    private int _arrangePanelAnimationVersion;
+    private int _searchPanelAnimationVersion;
+    private int _fontPanelAnimationVersion;
+    private bool _suppressFontPanelChangeHandlers;
+
+    // Snapshot-based undo/redo, scoped to content edits only (add/delete/reparent/edit text/
+    // restyle/reposition/import-merge) - expand/collapse and zoom are view state, not tracked.
+    // Whole-tree clone per step rather than paired command objects: DeleteNodeWithConfirmation's
+    // children-promotion-to-grandparent behavior makes a clean inverse non-trivial to hand-write,
+    // and mind maps are small enough (tens to low hundreds of nodes) that cloning the whole root
+    // per edit is cheap. _root is readonly, so restoring a snapshot copies fields into the
+    // existing _root instance (RestoreRootFrom) rather than reassigning the reference.
+    private readonly List<MindMapNode> _undoStack = new();
+    private readonly List<MindMapNode> _redoStack = new();
+    private const int MaxUndoDepth = 50;
+
+    // Clipboard for cut/copy/paste and copy/paste style. Static (not per-window) because
+    // MindMapPreviewWindow is always opened via ShowDialog (confirmed - only one instance can
+    // ever be open at a time), so there's no cross-window conflict risk - and a static field means
+    // the clipboard survives closing one map and opening another, matching how copy/paste behaves
+    // in every other app instead of resetting on close.
+    private static MindMapNode? _clipboardNode;
+    private static CopiedNodeStyle? _copiedStyle;
+
+    private sealed record CopiedNodeStyle(
+        string? BackgroundColor,
+        string? BorderColor,
+        double BorderThickness,
+        string? NodeShape,
+        List<string> Icons,
+        string? IconBadgeColor,
+        bool IsBold,
+        bool IsItalic,
+        string? TextColor,
+        string? FontFamily,
+        double? FontSize);
 
     public sealed class MindMapNoteLinkOption
     {
@@ -136,6 +205,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _isManualPositioningMode = useManualPositions || _manualPositions.Count > 0;
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
+        PopulateFontFamilyBox();
 
         TitleTextBox.Text = string.IsNullOrWhiteSpace(title)
             ? (string.IsNullOrWhiteSpace(root.Text) ? LocalizationService.GetString("MindMapUntitled") : root.Text.Trim())
@@ -153,6 +223,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         ManualPositioningToggle.IsChecked = _isManualPositioningMode;
         _suppressManualPositioningToggleChanged = false;
         UpdateManualPositioningVisualState();
+        UpdateUndoRedoButtonStates();
         OnPropertyChanged(nameof(NoteLinkOptions));
         OnPropertyChanged(nameof(LinkedNoteButtonText));
         OnPropertyChanged(nameof(LinkedNoteButtonToolTip));
@@ -218,6 +289,12 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _openNoteAction?.Invoke(_selectedLinkedNote.Id);
     }
 
+    private void OpenNodeLink(MindMapNode node)
+    {
+        if (node.LinkedNoteId is { } noteId)
+            _openNoteAction?.Invoke(noteId);
+    }
+
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
@@ -272,7 +349,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             node.BorderColor ?? string.Empty,
             node.BorderThickness.ToString(CultureInfo.InvariantCulture),
             node.NodeShape ?? string.Empty,
-            node.Icon ?? string.Empty,
+            string.Join('', node.Icons),
             node.IconBadgeColor ?? string.Empty,
             FormatNullableDouble(node.ManualX),
             FormatNullableDouble(node.ManualY),
@@ -525,6 +602,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _layouts.Clear();
         MapCanvas.Children.Clear();
+        NodeWidth = ComputeEffectiveNodeWidth(_root);
 
         switch (_selectedLayoutMode)
         {
@@ -545,6 +623,20 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 break;
         }
 
+        // Nodes imported from a real FreeMind/Freeplane file may carry a pending HGAP/VSHIFT
+        // offset - resolve it against OUR OWN just-computed auto-layout position (the only layout
+        // we can know), then let it flow into the same manual-position capture below like any
+        // other manually-placed node. See MindMapNode.PendingFreeMindOffsetX/Y and
+        // ApplyPendingFreeMindOffsets for why this can only happen here, not at import time.
+        if (ApplyPendingFreeMindOffsets(_root) && !_isManualPositioningMode)
+        {
+            _isManualPositioningMode = true;
+            _suppressManualPositioningToggleChanged = true;
+            ManualPositioningToggle.IsChecked = true;
+            _suppressManualPositioningToggleChanged = false;
+            UpdateManualPositioningVisualState();
+        }
+
         if (_isManualPositioningMode)
             ApplyManualPositionsToLayouts();
 
@@ -557,12 +649,48 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         DrawConnections(_root);
         DrawNodes(_root);
+        DrawCrossLinks();
 
         if (CurrentSearchMatch is not null)
             CenterViewOnCurrentSearchMatch();
 
         QueueInitialCenterOnRoot();
         UpdateEditedIndicator();
+        RefreshFontPanelFromSelection();
+    }
+
+    /// <summary>
+    /// Resolves any pending FreeMind HGAP/VSHIFT offsets (set by MindMapFileService on import)
+    /// against the auto-layout position _layouts just computed for that same node in this pass -
+    /// the only layout we can ever know, since we don't run Freeplane's own layout engine. Returns
+    /// true if any offset was resolved, so the caller can force manual-positioning mode on for
+    /// this pass (the resolved position then gets captured into a real ManualX/ManualY below, the
+    /// same way any other manually-placed node's position does).
+    /// </summary>
+    private bool ApplyPendingFreeMindOffsets(MindMapNode node)
+    {
+        var resolved = false;
+
+        if ((node.PendingFreeMindOffsetX is not null || node.PendingFreeMindOffsetY is not null)
+            && _layouts.TryGetValue(node, out var layout))
+        {
+            _layouts[node] = layout with
+            {
+                X = layout.X + (node.PendingFreeMindOffsetX ?? 0),
+                Y = layout.Y + (node.PendingFreeMindOffsetY ?? 0)
+            };
+            node.PendingFreeMindOffsetX = null;
+            node.PendingFreeMindOffsetY = null;
+            resolved = true;
+        }
+
+        foreach (var child in node.Children)
+        {
+            if (ApplyPendingFreeMindOffsets(child))
+                resolved = true;
+        }
+
+        return resolved;
     }
 
     private void BuildBalancedTreeLayout()
@@ -752,6 +880,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _currentSearchMatchIndex = (_currentSearchMatchIndex - 1 + _searchMatches.Count) % _searchMatches.Count;
         UpdateSearchResultsText();
+        if (CurrentSearchMatch is { } match)
+            ExpandAncestorsOf(match);
         CenterViewOnCurrentSearchMatch();
         RebuildMap();
     }
@@ -763,6 +893,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _currentSearchMatchIndex = (_currentSearchMatchIndex + 1) % _searchMatches.Count;
         UpdateSearchResultsText();
+        if (CurrentSearchMatch is { } match)
+            ExpandAncestorsOf(match);
         CenterViewOnCurrentSearchMatch();
         RebuildMap();
     }
@@ -775,7 +907,9 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         var tokens = GetSearchTokens(_searchQuery);
         if (tokens.Count > 0)
         {
-            foreach (var node in EnumerateVisibleNodes(_root))
+            // Every node, not just currently-visible ones - a match hidden inside a collapsed
+            // branch is exactly the case find needs to help with, not one it should skip.
+            foreach (var node in EnumerateAllNodes(_root))
             {
                 if (IsSearchMatch(node, tokens))
                     _searchMatches.Add(node);
@@ -785,30 +919,46 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (_searchMatches.Count == 0)
         {
             _currentSearchMatchIndex = -1;
-            UpdateSearchResultsText();
-            return;
         }
-
-        if (resetIndex)
+        else if (resetIndex)
         {
             _currentSearchMatchIndex = 0;
-            UpdateSearchResultsText();
-            return;
+        }
+        else if (previousCurrent is not null && _searchMatches.IndexOf(previousCurrent) is var existingIndex && existingIndex >= 0)
+        {
+            _currentSearchMatchIndex = existingIndex;
+        }
+        else
+        {
+            _currentSearchMatchIndex = Math.Clamp(_currentSearchMatchIndex, 0, _searchMatches.Count - 1);
         }
 
-        if (previousCurrent is not null)
+        UpdateSearchResultsText();
+
+        if (CurrentSearchMatch is { } match)
+            ExpandAncestorsOf(match);
+    }
+
+    // Reveals a node found by search that's inside a collapsed branch by expanding every
+    // ancestor on the path down to it (not the node itself - only what's hiding it).
+    private void ExpandAncestorsOf(MindMapNode node)
+        => ExpandPathTo(_root, node);
+
+    private static bool ExpandPathTo(MindMapNode current, MindMapNode target)
+    {
+        if (ReferenceEquals(current, target))
+            return true;
+
+        foreach (var child in current.Children)
         {
-            var existingIndex = _searchMatches.IndexOf(previousCurrent);
-            if (existingIndex >= 0)
+            if (ExpandPathTo(child, target))
             {
-                _currentSearchMatchIndex = existingIndex;
-                UpdateSearchResultsText();
-                return;
+                current.IsExpanded = true;
+                return true;
             }
         }
 
-        _currentSearchMatchIndex = Math.Clamp(_currentSearchMatchIndex, 0, _searchMatches.Count - 1);
-        UpdateSearchResultsText();
+        return false;
     }
 
     private static List<string> GetSearchTokens(string? query)
@@ -828,7 +978,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             return false;
 
         var text = node.Text ?? string.Empty;
-        return tokens.All(token => text.Contains(token, StringComparison.CurrentCultureIgnoreCase));
+        var note = node.Note ?? string.Empty;
+        return tokens.All(token =>
+            text.Contains(token, StringComparison.CurrentCultureIgnoreCase) ||
+            note.Contains(token, StringComparison.CurrentCultureIgnoreCase));
     }
 
     private static IEnumerable<MindMapNode> EnumerateVisibleNodes(MindMapNode root)
@@ -994,10 +1147,73 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return Math.Max(NodeWidth, childrenWidth);
     }
 
+    private static Typeface CreateNodeTypeface(MindMapNode node, out double fontSize)
+    {
+        fontSize = node.FontSize ?? DefaultNodeFontSize;
+        var fontFamily = !string.IsNullOrWhiteSpace(node.FontFamily)
+            ? new FontFamily(node.FontFamily)
+            : DefaultNodeFontFamily;
+
+        return new Typeface(
+            fontFamily,
+            node.IsItalic ? FontStyles.Italic : FontStyles.Normal,
+            node.IsBold ? FontWeights.Bold : FontWeights.Normal,
+            FontStretches.Normal);
+    }
+
+    // Recomputes the whole map's shared node width (see NodeWidth's declaration comment) from
+    // whatever's currently visible, so a node with a large font/long-ish title gets enough room
+    // without needing to badly wrap a short phrase into a tall, narrow column. Only currently-
+    // visible nodes count - a big font on a collapsed-away node shouldn't widen nodes the user
+    // can actually see, and every expand/collapse already triggers a fresh RebuildMap anyway, so
+    // revealing it later naturally re-measures.
+    private static double ComputeEffectiveNodeWidth(MindMapNode root)
+    {
+        var maxWidth = BaseNodeWidth;
+
+        foreach (var node in EnumerateVisibleNodes(root))
+        {
+            var typeface = CreateNodeTypeface(node, out var fontSize);
+            var formatted = new FormattedText(
+                string.IsNullOrEmpty(node.Text) ? " " : node.Text,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSize,
+                Brushes.Black,
+                1.0);
+
+            var iconMargin = node.Icons.Count > 0 ? NodeIconTextMargin : 0;
+            var neededWidth = formatted.WidthIncludingTrailingWhitespace + NodeTextHorizontalPadding + iconMargin;
+            maxWidth = Math.Max(maxWidth, Math.Min(neededWidth, MaxNodeWidth));
+        }
+
+        return maxWidth;
+    }
+
+    // Measures against the node's real font (size/family/bold/italic), not a fixed default - a
+    // character-count heuristic tuned for the default ~14px font badly underestimates height
+    // once a node has a larger custom font size, clipping wrapped text inside a too-short card.
     private static double MeasureNodeHeight(MindMapNode node)
     {
-        var lineCount = Math.Max(1, (int)Math.Ceiling(node.Text.Length / 24.0));
-        return Math.Clamp(42 + (lineCount - 1) * 17, 52, 118);
+        var typeface = CreateNodeTypeface(node, out var fontSize);
+        var iconMargin = node.Icons.Count > 0 ? NodeIconTextMargin : 0;
+        var availableWidth = Math.Max(20, NodeWidth - NodeTextHorizontalPadding - iconMargin);
+
+        var formatted = new FormattedText(
+            string.IsNullOrEmpty(node.Text) ? " " : node.Text,
+            CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            fontSize,
+            Brushes.Black,
+            1.0)
+        {
+            MaxTextWidth = availableWidth,
+            TextAlignment = TextAlignment.Center
+        };
+
+        return Math.Clamp(formatted.Height + NodeTextVerticalPadding, MinNodeHeight, MaxNodeHeight);
     }
 
     private static int GetMaxVisibleDepth(MindMapNode node)
@@ -1103,8 +1319,49 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     {
         foreach (var path in MapCanvas.Children.OfType<ShapePath>().ToList())
             MapCanvas.Children.Remove(path);
+        foreach (var line in MapCanvas.Children.OfType<ShapeLine>().ToList())
+            MapCanvas.Children.Remove(line);
 
         DrawConnections(_root);
+        DrawCrossLinks();
+    }
+
+    // Second connector pass, alongside DrawConnections' tree edges - draws a visually distinct
+    // (dashed) straight line center-to-center between a node and each of its cross-link targets.
+    // Iterates _layouts directly rather than walking the tree, since that's already exactly the
+    // set of currently-visible nodes; a target hidden inside a collapsed branch (or deleted, in
+    // which case FindNodeById returns null) is silently skipped rather than drawn as a dangling
+    // stub - it reappears automatically once that branch is expanded again.
+    private void DrawCrossLinks()
+    {
+        foreach (var (node, sourceLayout) in _layouts)
+        {
+            if (node.CrossLinkTargetIds.Count == 0)
+                continue;
+
+            foreach (var targetId in node.CrossLinkTargetIds)
+            {
+                var target = FindNodeById(_root, targetId);
+                if (target is null || !_layouts.TryGetValue(target, out var targetLayout))
+                    continue;
+
+                var line = new ShapeLine
+                {
+                    X1 = sourceLayout.X + sourceLayout.Width / 2,
+                    Y1 = sourceLayout.Y + sourceLayout.Height / 2,
+                    X2 = targetLayout.X + targetLayout.Width / 2,
+                    Y2 = targetLayout.Y + targetLayout.Height / 2,
+                    Stroke = GetThemeBrush("MindMapCrossLinkBrush", Color.FromRgb(168, 85, 247)),
+                    StrokeThickness = 2,
+                    StrokeDashArray = new DoubleCollection { 4, 3 },
+                    Opacity = 0.85,
+                    IsHitTestVisible = false
+                };
+
+                Panel.SetZIndex(line, ConnectionZIndex);
+                MapCanvas.Children.Add(line);
+            }
+        }
     }
 
     private void QueueConnectionRedraw()
@@ -1124,6 +1381,23 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void BeginManualNodeDrag(MindMapNode node, Border border)
     {
+        // Ctrl held at drag-start means "link, don't move" - checked here (not at mouse-down)
+        // so it reflects whatever's held right when the drag actually begins.
+        _isLinkDragGesture = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+        if (_isManualPositioningMode && !_isLinkDragGesture)
+        {
+            // Manual mode live-updates ManualX/Y on every mouse-move for the rest of the gesture
+            // (see UpdateManualNodeDragPosition), so the pre-drag position has to be captured now,
+            // before anything moves - by FinalizeManualNodeDrag it would already be gone.
+            // Auto-layout-mode drags (and any Ctrl+drag link gesture, regardless of mode) don't
+            // persist a position at all - the only mutation they can produce is a reparent (or
+            // cross-link) at drop time, so that snapshot is pushed lazily inside ReparentNode/
+            // AddCrossLink instead, right before it happens. That keeps a plain "drag then drop
+            // on empty space" from leaving a no-op entry on the undo stack.
+            PushUndoSnapshot();
+        }
+
         _isManualDragPending = false;
         _pendingDragNode = null;
         _pendingDragBorder = null;
@@ -1151,11 +1425,21 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         var newX = Math.Max(CanvasPadding, _dragStartNodePos.X + dx);
         var newY = Math.Max(CanvasPadding, _dragStartNodePos.Y + dy);
 
-        SetManualPosition(_draggedNode, new Point(newX, newY));
+        // Only a plain manual-mode drag persists the position as it moves. Auto-layout mode (and
+        // any Ctrl+drag link gesture, regardless of mode) still needs the node to visually follow
+        // the cursor for drag feedback, but that offset is transient - RebuildMap (always called
+        // at drop, whether reparented/linked or snapped back) recomputes real layouts from
+        // scratch and discards it.
+        if (_isManualPositioningMode && !_isLinkDragGesture)
+            SetManualPosition(_draggedNode, new Point(newX, newY));
+
         _layouts[_draggedNode] = layout with { X = newX, Y = newY };
         Canvas.SetLeft(_draggedBorder, newX);
         Canvas.SetTop(_draggedBorder, newY);
         QueueConnectionRedraw();
+
+        if (!ReferenceEquals(_draggedNode, _root))
+            UpdateDropTargetHover(FindDropTargetNode(_draggedNode, currentCanvasPos));
     }
 
     private static void ApplyNodeDragChrome(Border border, bool isDragging)
@@ -1172,7 +1456,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void MapCanvas_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (!_isManualPositioningMode || _isDraggingNode)
+        if (_isDraggingNode)
             return;
 
         if (!_isManualDragPending || _pendingDragNode is null || _pendingDragBorder is null)
@@ -1202,7 +1486,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     {
         if (_isDraggingNode && _draggedNode is not null && _draggedBorder is not null)
         {
-            FinalizeManualNodeDrag(_draggedNode, _draggedBorder);
+            FinalizeManualNodeDrag(_draggedNode, _draggedBorder, e.GetPosition(MapCanvas));
             CancelManualDragPending();
             e.Handled = true;
             return;
@@ -1219,7 +1503,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        FinalizeManualNodeDrag(_draggedNode, _draggedBorder);
+        FinalizeManualNodeDrag(_draggedNode, _draggedBorder, e.GetPosition(MapCanvas));
         CancelManualDragPending();
     }
 
@@ -1262,16 +1546,52 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             if (border.Tag is MindMapNode node)
                 ApplyNodeBorderChrome(border, node);
         }
+
+        RefreshFontPanelFromSelection();
     }
 
-    private void FinalizeManualNodeDrag(MindMapNode node, Border border)
+    private void FinalizeManualNodeDrag(MindMapNode node, Border border, Point dropPosition)
     {
         _isDraggingNode = false;
         _draggedNode = null;
         _draggedBorder = null;
+        UpdateDropTargetHover(null);
+        var isLinkGesture = _isLinkDragGesture;
+        _isLinkDragGesture = false;
 
         if (MapCanvas.IsMouseCaptured)
             MapCanvas.ReleaseMouseCapture();
+
+        var dropTarget = ReferenceEquals(node, _root) ? null : FindDropTargetNode(node, dropPosition);
+
+        if (isLinkGesture)
+        {
+            if (dropTarget is not null)
+                AddCrossLink(node, dropTarget);
+
+            // A link gesture never repositions anything in any mode - always rebuild from the
+            // real tree so the node snaps back to wherever it actually belongs.
+            RebuildMap();
+            return;
+        }
+
+        var reparented = dropTarget is not null && ReparentNode(node, dropTarget);
+
+        if (reparented)
+        {
+            SelectSingleNode(node);
+            RebuildMap();
+            return;
+        }
+
+        if (!_isManualPositioningMode)
+        {
+            // Nothing structural happened and auto layout never persisted the transient drag
+            // offset - rebuild from the real tree so the node lands back on its computed
+            // position instead of staying stranded wherever the cursor let go.
+            RebuildMap();
+            return;
+        }
 
         Panel.SetZIndex(border, NodeZIndex);
         ApplyNodeDragChrome(border, isDragging: false);
@@ -1280,6 +1600,187 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         RedrawConnections();
         UpdateMapCanvasSize();
         UpdateEditedIndicator();
+    }
+
+    // Finds the smallest-area node whose current layout bounds contain the given canvas point,
+    // excluding the node being dragged and anything inside its own subtree (dropping a node onto
+    // its own descendant would create a cycle). Smallest-area wins so that a drop over a nested
+    // node's bounds targets that node rather than an ancestor whose bounds happen to overlap too.
+    private MindMapNode? FindDropTargetNode(MindMapNode draggedNode, Point canvasPos)
+    {
+        MindMapNode? best = null;
+        var bestArea = double.MaxValue;
+
+        foreach (var (candidate, layout) in _layouts)
+        {
+            if (ReferenceEquals(candidate, draggedNode) || IsAncestorNode(draggedNode, candidate))
+                continue;
+
+            if (canvasPos.X < layout.X || canvasPos.X > layout.X + layout.Width ||
+                canvasPos.Y < layout.Y || canvasPos.Y > layout.Y + layout.Height)
+                continue;
+
+            var area = layout.Width * layout.Height;
+            if (area < bestArea)
+            {
+                best = candidate;
+                bestArea = area;
+            }
+        }
+
+        return best;
+    }
+
+    // Moves node under newParent. Returns false (no-op, no undo entry) if newParent is already
+    // node's current parent - matching FreeMind, where dropping a node back onto the branch it
+    // already belongs to doesn't do anything.
+    private bool ReparentNode(MindMapNode node, MindMapNode newParent)
+    {
+        var oldParent = FindParentNode(_root, node);
+        if (oldParent is null || ReferenceEquals(oldParent, newParent))
+            return false;
+
+        // Manual-mode drags already pushed their snapshot in BeginManualNodeDrag; auto-mode drags
+        // never did (see the comment there), so this is where that deferred push happens.
+        if (!_isManualPositioningMode)
+            PushUndoSnapshot();
+
+        oldParent.Children.Remove(node);
+        newParent.Children.Add(node);
+        newParent.IsExpanded = true;
+        return true;
+    }
+
+    // Adds a graphical cross-link from source to target (Ctrl+drag one node onto another).
+    // Stored one-directional on source only; checks both directions for an existing link so
+    // dragging A onto B when B->A already exists doesn't create a visually-redundant second line.
+    private bool AddCrossLink(MindMapNode source, MindMapNode target)
+    {
+        if (ReferenceEquals(source, target))
+            return false;
+
+        if (source.CrossLinkTargetIds.Contains(target.Id) || target.CrossLinkTargetIds.Contains(source.Id))
+            return false;
+
+        PushUndoSnapshot();
+        source.CrossLinkTargetIds.Add(target.Id);
+        SelectSingleNode(source);
+        return true;
+    }
+
+    // Clears all of this node's outgoing cross-links at once, rather than offering removal of one
+    // specific link at a time - simpler, and covers the common case (a node usually has at most
+    // one or two cross-links) without a submenu picker for something this narrow.
+    private void RemoveCrossLinks(MindMapNode node)
+    {
+        if (node.CrossLinkTargetIds.Count == 0)
+            return;
+
+        PushUndoSnapshot();
+        node.CrossLinkTargetIds.Clear();
+        RebuildMap();
+    }
+
+    private static MindMapNode? FindNodeById(MindMapNode root, Guid id)
+    {
+        if (root.Id == id)
+            return root;
+
+        foreach (var child in root.Children)
+        {
+            var found = FindNodeById(child, id);
+            if (found is not null)
+                return found;
+        }
+
+        return null;
+    }
+
+    private void UpdateDropTargetHover(MindMapNode? candidate)
+    {
+        if (ReferenceEquals(_dropTargetHoverNode, candidate))
+            return;
+
+        if (_dropTargetHoverNode is not null)
+        {
+            var previousBorder = FindNodeBorder(_dropTargetHoverNode);
+            if (previousBorder is not null)
+                ApplyNodeBorderChrome(previousBorder, _dropTargetHoverNode);
+        }
+
+        _dropTargetHoverNode = candidate;
+
+        if (candidate is not null)
+        {
+            var border = FindNodeBorder(candidate);
+            if (border is not null)
+            {
+                border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(245, 114, 11));
+                border.BorderThickness = new Thickness(3);
+            }
+        }
+    }
+
+    private Border? FindNodeBorder(MindMapNode node)
+    {
+        foreach (var border in MapCanvas.Children.OfType<Border>())
+        {
+            if (ReferenceEquals(border.Tag, node))
+                return border;
+        }
+
+        return null;
+    }
+
+    // Two-Border shadow-plate pattern matching the app's other floating chrome (e.g. context
+    // menus in Themes/Controls/Chrome.xaml) - the DropShadowEffect goes on a separate
+    // non-hit-testable sibling instead of directly on the text-bearing border, since a shadow
+    // effect on the same element that renders text rasterizes (and blurs) the text too.
+    private Popup BuildNotePopup(Border placementTarget, string noteText)
+    {
+        var shadowBorder = new Border
+        {
+            Background = GetThemeBrush("CardBackground", Color.FromRgb(255, 255, 255)),
+            BorderBrush = GetThemeBrush("PopupBorder", Color.FromRgb(208, 208, 220)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Effect = TryFindResource("Elevation.Popup") as Effect,
+            IsHitTestVisible = false
+        };
+
+        var contentBorder = new Border
+        {
+            Background = GetThemeBrush("CardBackground", Color.FromRgb(255, 255, 255)),
+            BorderBrush = GetThemeBrush("PopupBorder", Color.FromRgb(208, 208, 220)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12),
+            MaxWidth = 260,
+            Child = new TextBlock
+            {
+                Text = noteText,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = GetThemeBrush("TextColor", Color.FromRgb(31, 41, 55)),
+                FontSize = TypeScale.Px(TypeScale.Caption, 12)
+            }
+        };
+
+        // Padding-only outer border, matching Chrome.xaml's own popups - gives the shadow's blur
+        // and offset room to render instead of getting clipped at the popup's own edge.
+        var shell = new Grid { Margin = new Thickness(10) };
+        shell.Children.Add(shadowBorder);
+        shell.Children.Add(contentBorder);
+
+        return new Popup
+        {
+            PlacementTarget = placementTarget,
+            Placement = PlacementMode.Bottom,
+            VerticalOffset = 6,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            PopupAnimation = PopupAnimation.Fade,
+            Child = shell
+        };
     }
 
     private void DrawConnections(MindMapNode node)
@@ -1394,18 +1895,30 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         // Node text
         var text = new TextBlock
         {
-            Text = node.HasChildren ? $"{node.Text} {(node.IsExpanded ? "−" : "+")}" : node.Text,
+            Text = node.Text,
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-            FontWeight = isRoot ? FontWeights.SemiBold : FontWeights.Normal,
-            Foreground = GetNodeForeground(nodeBackground, isRoot, node),
-            Margin = !string.IsNullOrWhiteSpace(node.Icon) ? new Thickness(0, 0, 28, 0) : new Thickness(0)
+            FontWeight = node.IsBold ? FontWeights.Bold : isRoot ? FontWeights.SemiBold : FontWeights.Normal,
+            FontStyle = node.IsItalic ? FontStyles.Italic : FontStyles.Normal,
+            Foreground = !string.IsNullOrWhiteSpace(node.TextColor)
+                ? FrozenBrush((Color)ColorConverter.ConvertFromString(node.TextColor))
+                : GetNodeForeground(nodeBackground, isRoot, node),
+            Margin = node.Icons.Count > 0 ? new Thickness(0, 0, 28, 0) : new Thickness(0)
         };
+
+        // Left unset (rather than assigned a hardcoded fallback) when the node has no override,
+        // so untouched nodes keep inheriting the ambient default exactly as before this field
+        // existed - only nodes with an explicit choice deviate from it.
+        if (!string.IsNullOrWhiteSpace(node.FontFamily))
+            text.FontFamily = new FontFamily(node.FontFamily);
+        if (node.FontSize is double fontSize)
+            text.FontSize = fontSize;
+
         mainPanel.Children.Add(text);
 
-        if (!string.IsNullOrWhiteSpace(node.Icon))
+        if (node.Icons.Count > 0)
         {
             var iconBadgeColor = !string.IsNullOrWhiteSpace(node.IconBadgeColor)
             ? (Color)ColorConverter.ConvertFromString(node.IconBadgeColor)
@@ -1421,9 +1934,12 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 Margin = new Thickness(0, -8, -8, 0) // Position outside the node
             };
 
+            // FreeMind allows stacking any number of icons on a node - shown together in this one
+            // badge (space-separated) rather than a separate badge per icon, so the layout doesn't
+            // need to reason about positioning an unbounded number of corner badges.
             var iconText = new TextBlock
             {
-                Text = node.Icon,
+                Text = string.Join(" ", node.Icons),
                 FontSize = TypeScale.Px(TypeScale.Body, 14),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -1431,6 +1947,155 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
             iconBadge.Child = iconText;
             mainPanel.Children.Add(iconBadge);
+        }
+
+        if (!string.IsNullOrWhiteSpace(node.Note))
+        {
+            // Opposite corner from the icon badge (top-right) - a fixed indicator, not a
+            // user-choosable one like Icon, so it always reads as "this node has a note" rather
+            // than needing its own color/glyph picker. Click opens the full text in a popup
+            // (a tooltip was awkward for anything longer than a line or two); StyleNodeDialog is
+            // where it's actually written/edited.
+            var noteBadge = new Border
+            {
+                Background = FrozenBrush(Color.FromRgb(96, 165, 250)),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(5, 3, 5, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(-8, 0, 0, -8),
+                Cursor = Cursors.Hand,
+                ToolTip = LocalizationService.GetString("MindMapClickToViewNote")
+            };
+
+            var noteGlyph = new TextBlock
+            {
+                Text = "\U0001F5D2️",
+                FontSize = TypeScale.Px(TypeScale.Body, 12),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            noteBadge.Child = noteGlyph;
+
+            var notePopup = BuildNotePopup(noteBadge, node.Note!);
+            noteBadge.MouseLeftButtonDown += (_, e) =>
+            {
+                notePopup.IsOpen = !notePopup.IsOpen;
+                e.Handled = true;
+            };
+
+            mainPanel.Children.Add(notePopup);
+            mainPanel.Children.Add(noteBadge);
+        }
+
+        if (node.HasChildren)
+        {
+            // A real click target replacing the old decorative "-"/"+" baked into the node text.
+            // Top-left corner is the one badge slot the icon (top-right) and note (bottom-left)
+            // badges leave free.
+            var foldToggle = new Border
+            {
+                Width = 20,
+                Height = 20,
+                CornerRadius = new CornerRadius(10),
+                Background = GetThemeBrush("IconButtonBackground", Color.FromRgb(245, 247, 251)),
+                BorderBrush = GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220)),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(-10, -10, 0, 0),
+                Cursor = Cursors.Hand,
+                ToolTip = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseThisNode" : "MindMapExpandThisNode")
+            };
+
+            var foldIcon = new AppIcon
+            {
+                Kind = node.IsExpanded ? AppIconKind.Minus : AppIconKind.Plus,
+                Width = 12,
+                Height = 12,
+                StrokeThickness = 2,
+                Foreground = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92))
+            };
+
+            foldToggle.Child = foldIcon;
+            foldToggle.MouseLeftButtonDown += (_, e) =>
+            {
+                ToggleNodeExpansion(node);
+                e.Handled = true;
+            };
+
+            mainPanel.Children.Add(foldToggle);
+
+            if (!node.IsExpanded && !node.LinkedNoteId.HasValue)
+            {
+                // Bottom-right is the one badge slot left free - purely informational (not a
+                // click target itself, the fold toggle above already covers that) so the user
+                // can tell a collapsed branch is hiding content without expanding it first.
+                // Yields the slot to the link badge below when both would want it - a link is
+                // something the user deliberately set, not just passive information.
+                var hiddenCount = EnumerateAllNodes(node).Count() - 1;
+                var foldHintBadge = new Border
+                {
+                    Background = GetThemeBrush("IconButtonBackground", Color.FromRgb(245, 247, 251)),
+                    BorderBrush = GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(6, 2, 6, 2),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, -8, -8),
+                    IsHitTestVisible = false,
+                    ToolTip = string.Format(LocalizationService.GetString("MindMapHiddenNodesCountFormat"), hiddenCount)
+                };
+
+                var foldHintText = new TextBlock
+                {
+                    Text = hiddenCount.ToString(CultureInfo.InvariantCulture),
+                    FontSize = TypeScale.Px(TypeScale.Body, 11),
+                    Foreground = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                foldHintBadge.Child = foldHintText;
+                mainPanel.Children.Add(foldHintBadge);
+            }
+        }
+
+        if (node.LinkedNoteId.HasValue)
+        {
+            // Bottom-right corner, same slot the collapsed hidden-count hint uses (see above) -
+            // a link wins that slot when both apply. Click reuses the exact same "given a note
+            // Guid, open it" plumbing the document-level linked-note button already has.
+            var linkBadge = new Border
+            {
+                Background = FrozenBrush(Color.FromRgb(52, 211, 153)),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(5, 3, 5, 3),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, -8, -8),
+                Cursor = Cursors.Hand,
+                ToolTip = LocalizationService.GetString("MindMapOpenLinkedNote")
+            };
+
+            var linkGlyph = new TextBlock
+            {
+                Text = "\U0001F517",
+                FontSize = TypeScale.Px(TypeScale.Body, 11),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            linkBadge.Child = linkGlyph;
+            linkBadge.MouseLeftButtonDown += (_, e) =>
+            {
+                OpenNodeLink(node);
+                e.Handled = true;
+            };
+
+            mainPanel.Children.Add(linkBadge);
         }
 
         border.Child = mainPanel;
@@ -1444,7 +2109,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                     return;
                 }
 
-                if (_isManualPositioningMode)
+                // Manual mode: any node (including root) can be dragged to reposition it, as
+                // before. Auto-layout mode: dragging is new here and exists only to reparent by
+                // dropping onto another node - root is excluded since it has no parent to move
+                // out from under.
+                if (_isManualPositioningMode || !ReferenceEquals(node, _root))
                 {
                     _isManualDragPending = true;
                     _pendingDragNode = node;
@@ -1486,11 +2155,20 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         {
             var toggleExpansionMenuItem = new MenuItem
             {
-                Header = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseNode" : "MindMapExpandNode"),
+                Header = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseThisNode" : "MindMapExpandThisNode"),
                 Tag = node
             };
             toggleExpansionMenuItem.Click += (s, e) => ToggleNodeExpansion(node);
             border.ContextMenu.Items.Add(toggleExpansionMenuItem);
+
+            var toggleBranchMenuItem = new MenuItem
+            {
+                Header = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseNode" : "MindMapExpandNode"),
+                Tag = node
+            };
+            toggleBranchMenuItem.Click += (s, e) => ToggleNodeBranchExpansion(node);
+            border.ContextMenu.Items.Add(toggleBranchMenuItem);
+
             border.ContextMenu.Items.Add(new Separator());
         }
 
@@ -1529,6 +2207,92 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         border.ContextMenu.Items.Add(new Separator());
 
+        var cutMenuItem = new MenuItem
+        {
+            Header = LocalizationService.GetString("Cut"),
+            Tag = node,
+            IsEnabled = !ReferenceEquals(node, _root)
+        };
+        cutMenuItem.Click += (s, e) => CutNode(node);
+        border.ContextMenu.Items.Add(cutMenuItem);
+
+        var copyMenuItem = new MenuItem
+        {
+            Header = LocalizationService.GetString("Copy"),
+            Tag = node
+        };
+        copyMenuItem.Click += (s, e) => CopyNode(node);
+        border.ContextMenu.Items.Add(copyMenuItem);
+
+        var pasteMenuItem = new MenuItem
+        {
+            Header = LocalizationService.GetString("Paste"),
+            Tag = node
+        };
+        pasteMenuItem.Click += (s, e) => PasteNodeAsChild(node);
+        border.ContextMenu.Items.Add(pasteMenuItem);
+
+        var pasteAsOutlineMenuItem = new MenuItem
+        {
+            Header = LocalizationService.GetString("MindMapPasteAsOutline"),
+            Tag = node
+        };
+        pasteAsOutlineMenuItem.Click += (s, e) => PasteAsOutline(node);
+        border.ContextMenu.Items.Add(pasteAsOutlineMenuItem);
+
+        var copyStyleMenuItem = new MenuItem
+        {
+            Header = LocalizationService.GetString("MindMapCopyStyle"),
+            Tag = node
+        };
+        copyStyleMenuItem.Click += (s, e) => CopyNodeStyle(node);
+        border.ContextMenu.Items.Add(copyStyleMenuItem);
+
+        var pasteStyleMenuItem = new MenuItem
+        {
+            Header = LocalizationService.GetString("MindMapPasteStyle"),
+            Tag = node
+        };
+        pasteStyleMenuItem.Click += (s, e) => PasteNodeStyle(node);
+        border.ContextMenu.Items.Add(pasteStyleMenuItem);
+
+        // _clipboardNode/_copiedStyle are static and can change between when this menu was built
+        // (during the last RebuildMap) and when it's actually opened - refresh enabled state right
+        // before showing rather than relying on stale values captured at construction time. The OS
+        // clipboard can change from outside the app entirely, so it needs the same live check.
+        border.ContextMenu.Opened += (_, _) =>
+        {
+            pasteMenuItem.IsEnabled = _clipboardNode is not null;
+            pasteStyleMenuItem.IsEnabled = _copiedStyle is not null;
+            pasteAsOutlineMenuItem.IsEnabled = TryGetClipboardText(out _);
+        };
+
+        if (node.LinkedNoteId.HasValue)
+        {
+            border.ContextMenu.Items.Add(new Separator());
+
+            var openLinkMenuItem = new MenuItem
+            {
+                Header = LocalizationService.GetString("MindMapOpenLinkedNote"),
+                Tag = node
+            };
+            openLinkMenuItem.Click += (s, e) => OpenNodeLink(node);
+            border.ContextMenu.Items.Add(openLinkMenuItem);
+        }
+
+        if (node.CrossLinkTargetIds.Count > 0)
+        {
+            var removeCrossLinksMenuItem = new MenuItem
+            {
+                Header = LocalizationService.GetString("MindMapRemoveCrossLinks"),
+                Tag = node
+            };
+            removeCrossLinksMenuItem.Click += (s, e) => RemoveCrossLinks(node);
+            border.ContextMenu.Items.Add(removeCrossLinksMenuItem);
+        }
+
+        border.ContextMenu.Items.Add(new Separator());
+
         var deleteMenuItem = new MenuItem
         {
             Header = LocalizationService.GetString("Delete"),
@@ -1560,11 +2324,187 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         RebuildMap();
     }
 
+    // Unlike ToggleNodeExpansion (folds/unfolds only this one level, leaving descendants'
+    // own fold state untouched underneath), this forces this node and every descendant to the
+    // same state - "collapse the whole branch" vs. "collapse just this node".
+    private void ToggleNodeBranchExpansion(MindMapNode node)
+    {
+        if (!node.HasChildren)
+            return;
+
+        SetExpanded(node, !node.IsExpanded);
+        SelectSingleNode(node);
+        RebuildMap();
+    }
+
     private void SelectSingleNode(MindMapNode node)
     {
         _selectedNodes.Clear();
         _selectedNodes.Add(node);
         _selectedNode = node;
+
+        // Keyboard shortcuts (OnKeyDown) only fire while focus is on the canvas itself - selecting
+        // a node (Border isn't focusable, so a plain click wouldn't otherwise move focus here) is
+        // the one point where "the user is now interacting with a node" is unambiguous, so this is
+        // where focus should follow. Harmless/idempotent when already-focused (e.g. from the arrow-
+        // key navigation methods, which can only run once focus is already here).
+        MapScrollViewer.Focus();
+    }
+
+    /// <summary>
+    /// Keyboard shortcuts for the canvas: undo/redo, delete, rename, add child/sibling, and
+    /// arrow-key navigation between nodes. Deliberately an allow-list, not a deny-list: Tab/Enter/
+    /// arrows are heavily-overloaded keys (Tab cycles focus between toolbar controls, Enter/arrows
+    /// drive ComboBox/Slider), so this only fires while focus is on the canvas itself (or nowhere
+    /// in particular) rather than trying to enumerate every control type that should be left alone
+    /// - a plain TextBox-only guard would still swallow Tab/arrow keys meant for the toolbar
+    /// whenever a node happens to be selected. SelectSingleNode moves focus to MapScrollViewer on
+    /// every selection, so clicking a node is what opts back into these shortcuts. Node text itself
+    /// is edited through a modal dialog (EditNodeText), which already owns keyboard input while
+    /// open, so no separate guard is needed for that case.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Handled)
+            return;
+
+        var focused = Keyboard.FocusedElement;
+        var isCanvasFocused = focused is null
+            || ReferenceEquals(focused, this)
+            || ReferenceEquals(focused, MapScrollViewer)
+            || ReferenceEquals(focused, MapCanvas);
+
+        if (!isCanvasFocused)
+            return;
+
+        var isCtrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        var isShift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+
+        if (isCtrl && e.Key == Key.Z)
+        {
+            if (isShift)
+                Redo();
+            else
+                Undo();
+            e.Handled = true;
+            return;
+        }
+
+        if (isCtrl && e.Key == Key.Y)
+        {
+            Redo();
+            e.Handled = true;
+            return;
+        }
+
+        if (isCtrl && e.Key == Key.X && _selectedNode is not null)
+        {
+            CutNode(_selectedNode);
+            e.Handled = true;
+            return;
+        }
+
+        if (isCtrl && e.Key == Key.C && _selectedNode is not null)
+        {
+            CopyNode(_selectedNode);
+            e.Handled = true;
+            return;
+        }
+
+        if (isCtrl && isShift && e.Key == Key.V && _selectedNode is not null)
+        {
+            PasteAsOutline(_selectedNode);
+            e.Handled = true;
+            return;
+        }
+
+        if (isCtrl && e.Key == Key.V && _selectedNode is not null)
+        {
+            PasteNodeAsChild(_selectedNode);
+            e.Handled = true;
+            return;
+        }
+
+        if (_selectedNode is null)
+            return;
+
+        switch (e.Key)
+        {
+            case Key.Delete:
+                DeleteNodeWithConfirmation(_selectedNode);
+                e.Handled = true;
+                break;
+            case Key.F2:
+                EditNodeText(_selectedNode);
+                e.Handled = true;
+                break;
+            case Key.Tab:
+                AddChildNode(_selectedNode);
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                AddSiblingNode(_selectedNode);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                SelectSibling(-1);
+                e.Handled = true;
+                break;
+            case Key.Down:
+                SelectSibling(1);
+                e.Handled = true;
+                break;
+            case Key.Left:
+                SelectParentOfCurrent();
+                e.Handled = true;
+                break;
+            case Key.Right:
+                SelectFirstChildOfCurrent();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void SelectSibling(int direction)
+    {
+        if (_selectedNode is null || ReferenceEquals(_selectedNode, _root))
+            return;
+
+        var parent = FindParentNode(_root, _selectedNode);
+        if (parent is null)
+            return;
+
+        var index = parent.Children.IndexOf(_selectedNode);
+        var newIndex = index + direction;
+        if (index < 0 || newIndex < 0 || newIndex >= parent.Children.Count)
+            return;
+
+        SelectSingleNode(parent.Children[newIndex]);
+        ApplyNodeSelectionVisuals();
+    }
+
+    private void SelectParentOfCurrent()
+    {
+        if (_selectedNode is null)
+            return;
+
+        var parent = FindParentNode(_root, _selectedNode);
+        if (parent is null)
+            return;
+
+        SelectSingleNode(parent);
+        ApplyNodeSelectionVisuals();
+    }
+
+    private void SelectFirstChildOfCurrent()
+    {
+        if (_selectedNode is null || !_selectedNode.HasChildren || !_selectedNode.IsExpanded)
+            return;
+
+        SelectSingleNode(_selectedNode.Children[0]);
+        ApplyNodeSelectionVisuals();
     }
 
     private void ToggleNodeSelection(MindMapNode node)
@@ -1672,10 +2612,12 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void StyleNode(MindMapNode node)
     {
         var dialog = new StyleNodeDialog { Owner = this };
+        dialog.SetNoteLinkOptions(NoteLinkOptions);
         dialog.LoadFromNode(node);
 
         if (dialog.ShowDialog() == true)
         {
+            PushUndoSnapshot();
             dialog.ApplyToNode(node);
             RebuildMap();
         }
@@ -1693,6 +2635,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
         {
+            PushUndoSnapshot();
             var newNode = new MindMapNode
             {
                 Text = NormalizeNodeText(dialog.InputText)
@@ -1731,6 +2674,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
         {
+            PushUndoSnapshot();
             var newNode = new MindMapNode
             {
                 Text = NormalizeNodeText(dialog.InputText)
@@ -1756,6 +2700,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
         {
+            PushUndoSnapshot();
             node.Text = NormalizeNodeText(dialog.InputText);
             RebuildMap();
         }
@@ -1794,6 +2739,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (parent is null)
             return;
 
+        PushUndoSnapshot();
+
         // Move all children of the deleted node to the parent
         foreach (var child in node.Children.ToList())
             parent.Children.Add(child);
@@ -1806,19 +2753,136 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         RebuildMap();
     }
 
-    private void AddNodeButton_Click(object sender, RoutedEventArgs e)
+    private void CutNode(MindMapNode node)
     {
-        if (_selectedNode is null)
+        if (ReferenceEquals(node, _root))
         {
             ModernMessageBox.Show(
-                LocalizationService.GetString("MindMapSelectNodeToAddChild"),
-                LocalizationService.GetString("MindMapAddChild"),
+                LocalizationService.GetString("MindMapCannotCutRoot"),
+                LocalizationService.GetString("Cut"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
 
-        AddChildNode(_selectedNode);
+        var parent = FindParentNode(_root, node);
+        if (parent is null)
+            return;
+
+        // No confirmation, unlike delete - cut is recoverable via paste or undo.
+        _clipboardNode = CloneNode(node);
+
+        PushUndoSnapshot();
+        parent.Children.Remove(node);
+        RemoveSelectedNode(node);
+        RebuildMap();
+    }
+
+    private void CopyNode(MindMapNode node)
+        => _clipboardNode = CloneNode(node);
+
+    private void PasteNodeAsChild(MindMapNode targetNode)
+    {
+        if (_clipboardNode is null)
+            return;
+
+        PushUndoSnapshot();
+
+        // Clone again rather than reusing _clipboardNode directly, so repeated pastes each get
+        // their own independent node objects instead of sharing references.
+        var pasted = CloneNode(_clipboardNode);
+        targetNode.Children.Add(pasted);
+        targetNode.IsExpanded = true;
+        SelectSingleNode(pasted);
+        RebuildMap();
+    }
+
+    // Reads plain text from the OS clipboard (not the app's own node clipboard _clipboardNode
+    // above - a deliberately separate action/shortcut so the two don't get confused) and parses
+    // it as an indented outline, adding the resulting nodes as children of targetNode. Lets you
+    // paste a bulleted list or a plain tab-indented outline copied from anywhere and get a real
+    // branch out of it instead of one node containing the whole blob of text.
+    private void PasteAsOutline(MindMapNode targetNode)
+    {
+        if (!TryGetClipboardText(out var clipboardText))
+            return;
+
+        var parsedNodes = MindMapConversionService.ParseOutlineText(clipboardText);
+        if (parsedNodes.Count == 0)
+            return;
+
+        PushUndoSnapshot();
+        foreach (var node in parsedNodes)
+            targetNode.Children.Add(node);
+
+        targetNode.IsExpanded = true;
+        SelectSingleNode(targetNode);
+        RebuildMap();
+    }
+
+    private static bool TryGetClipboardText(out string text)
+    {
+        try
+        {
+            if (Clipboard.ContainsText())
+            {
+                text = Clipboard.GetText();
+                return !string.IsNullOrWhiteSpace(text);
+            }
+        }
+        catch (COMException)
+        {
+            // Clipboard can be transiently locked by another process - nothing to recover here.
+        }
+
+        text = string.Empty;
+        return false;
+    }
+
+    private void CopyNodeStyle(MindMapNode node)
+        => _copiedStyle = new CopiedNodeStyle(
+            node.BackgroundColor,
+            node.BorderColor,
+            node.BorderThickness,
+            node.NodeShape,
+            new List<string>(node.Icons),
+            node.IconBadgeColor,
+            node.IsBold,
+            node.IsItalic,
+            node.TextColor,
+            node.FontFamily,
+            node.FontSize);
+
+    private void PasteNodeStyle(MindMapNode node)
+    {
+        if (_copiedStyle is null)
+            return;
+
+        PushUndoSnapshot();
+        node.BackgroundColor = _copiedStyle.BackgroundColor;
+        node.BorderColor = _copiedStyle.BorderColor;
+        node.BorderThickness = _copiedStyle.BorderThickness;
+        node.NodeShape = _copiedStyle.NodeShape;
+        node.Icons = new List<string>(_copiedStyle.Icons);
+        node.IconBadgeColor = _copiedStyle.IconBadgeColor;
+        node.IsBold = _copiedStyle.IsBold;
+        node.IsItalic = _copiedStyle.IsItalic;
+        node.TextColor = _copiedStyle.TextColor;
+        node.FontFamily = _copiedStyle.FontFamily;
+        node.FontSize = _copiedStyle.FontSize;
+        RebuildMap();
+    }
+
+    private void AddNodeMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        // One combined "+" button popping out Add Child / Add Sibling instead of two separate
+        // always-visible Plus buttons - opened on left-click rather than the default right-click,
+        // matching how the button reads as a primary action, not a context menu.
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
     }
 
     private void AddChildButton_Click(object sender, RoutedEventArgs e)
@@ -1979,6 +3043,227 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         RebuildMap(animate: false);
     }
 
+    private void ArrangePanelToggleButton_Click(object sender, RoutedEventArgs e)
+        => SetArrangePanelOpen(!_isArrangePanelOpen);
+
+    private void SearchPanelToggleButton_Click(object sender, RoutedEventArgs e)
+        => SetSearchPanelOpen(!_isSearchPanelOpen);
+
+    private void FontPanelToggleButton_Click(object sender, RoutedEventArgs e)
+        => SetFontPanelOpen(!_isFontPanelOpen);
+
+    private void SetArrangePanelOpen(bool isOpen)
+    {
+        _isArrangePanelOpen = isOpen;
+        if (isOpen)
+        {
+            if (_isSearchPanelOpen) SetSearchPanelOpen(false);
+            if (_isFontPanelOpen) SetFontPanelOpen(false);
+        }
+
+        _arrangePanelAnimationVersion++;
+        AnimateChromePanel(ArrangePanel, isOpen, _arrangePanelAnimationVersion, () => _isArrangePanelOpen);
+    }
+
+    private void SetSearchPanelOpen(bool isOpen)
+    {
+        _isSearchPanelOpen = isOpen;
+        if (isOpen)
+        {
+            if (_isArrangePanelOpen) SetArrangePanelOpen(false);
+            if (_isFontPanelOpen) SetFontPanelOpen(false);
+        }
+
+        _searchPanelAnimationVersion++;
+        AnimateChromePanel(SearchPanel, isOpen, _searchPanelAnimationVersion, () => _isSearchPanelOpen);
+        if (isOpen)
+            SearchTextBox.Focus();
+    }
+
+    private void SetFontPanelOpen(bool isOpen)
+    {
+        _isFontPanelOpen = isOpen;
+        if (isOpen)
+        {
+            if (_isArrangePanelOpen) SetArrangePanelOpen(false);
+            if (_isSearchPanelOpen) SetSearchPanelOpen(false);
+        }
+
+        _fontPanelAnimationVersion++;
+        AnimateChromePanel(FontPanel, isOpen, _fontPanelAnimationVersion, () => _isFontPanelOpen);
+        if (isOpen)
+            RefreshFontPanelFromSelection();
+    }
+
+    /// <summary>
+    /// Fade + slide reveal/hide for a collapsible chrome panel - same mechanism as
+    /// NoteEditorWindow's FontPanel (AnimateFontPanel), generalized for reuse by both
+    /// ArrangePanel and SearchPanel. <paramref name="isStillOpen"/> re-checks the panel's current
+    /// desired state when the hide animation finishes, so a rapid open-then-close-then-open
+    /// doesn't leave the panel wrongly collapsed.
+    /// </summary>
+    private void AnimateChromePanel(Border panel, bool show, int animationVersion, Func<bool> isStillOpen)
+    {
+        if (UiMotion.PrefersReducedMotion)
+        {
+            UiMotion.Stop(panel);
+            panel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            panel.Opacity = show ? 1 : 0;
+            EnsureChromePanelTransform(panel).Y = show ? 0 : -6;
+            return;
+        }
+
+        var transform = EnsureChromePanelTransform(panel);
+        var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
+        var opacityFrom = panel.Opacity;
+        var yFrom = transform.Y;
+
+        if (show)
+            panel.Visibility = Visibility.Visible;
+
+        UiMotion.Stop(panel);
+        UiMotion.RunComposited(
+            panel,
+            new[]
+            {
+                UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => panel.Opacity = value),
+                UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
+            },
+            () =>
+            {
+                if (!show && animationVersion == GetLatestAnimationVersion(panel) && !isStillOpen())
+                    panel.Visibility = Visibility.Collapsed;
+            });
+    }
+
+    private int GetLatestAnimationVersion(Border panel)
+        => ReferenceEquals(panel, ArrangePanel) ? _arrangePanelAnimationVersion
+            : ReferenceEquals(panel, SearchPanel) ? _searchPanelAnimationVersion
+            : _fontPanelAnimationVersion;
+
+    // FreeMind's own font toolbar lists every font the OS has installed, not a curated handful -
+    // matches that instead of a fixed list so anything actually available on this machine shows
+    // up. Populated once at construction (installed fonts don't change mid-session) rather than
+    // on every RebuildMap.
+    private void PopulateFontFamilyBox()
+    {
+        var defaultItem = new ComboBoxItem
+        {
+            Content = LocalizationService.GetString("MindMapFontDefault"),
+            Tag = string.Empty
+        };
+        FontFamilyBox.Items.Add(defaultItem);
+
+        var familyNames = Fonts.SystemFontFamilies
+            .Select(family => family.Source)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in familyNames)
+            FontFamilyBox.Items.Add(new ComboBoxItem { Content = name, Tag = name });
+    }
+
+    /// <summary>
+    /// Syncs the font panel's controls to whatever's currently selected. Called whenever the
+    /// panel opens and from the two chokepoints that already run after every selection change
+    /// (ApplyNodeSelectionVisuals, for clicks/arrow-key nav/drag-finalize) or content edit
+    /// (RebuildMapCore, for add/delete/undo/redo/import/reparent) - cheaper and far less
+    /// error-prone than hooking every individual SelectSingleNode/ToggleNodeSelection call site
+    /// by hand. Font editing only makes sense for exactly one selected node at a time (unlike
+    /// e.g. delete), so anything else disables the panel rather than guessing.
+    /// </summary>
+    private void RefreshFontPanelFromSelection()
+    {
+        if (!_isFontPanelOpen)
+            return;
+
+        var node = _selectedNodes.Count == 1 ? _selectedNode : null;
+
+        FontFamilyBox.IsEnabled = node is not null;
+        FontSizeBox.IsEnabled = node is not null;
+        FontBoldToggleButton.IsEnabled = node is not null;
+        FontItalicToggleButton.IsEnabled = node is not null;
+        FontColorButton.IsEnabled = node is not null;
+        FontPanelHintText.Visibility = node is null ? Visibility.Visible : Visibility.Collapsed;
+
+        _suppressFontPanelChangeHandlers = true;
+        try
+        {
+            FontFamilyBox.SelectedValue = node?.FontFamily ?? string.Empty;
+            FontSizeBox.SelectedValue = node?.FontSize is double size
+                ? ((int)size).ToString(CultureInfo.InvariantCulture)
+                : string.Empty;
+            FontBoldToggleButton.IsChecked = node?.IsBold ?? false;
+            FontItalicToggleButton.IsChecked = node?.IsItalic ?? false;
+            FontColorButton.Background = !string.IsNullOrWhiteSpace(node?.TextColor)
+                ? FrozenBrush((Color)ColorConverter.ConvertFromString(node!.TextColor))
+                : Brushes.Transparent;
+        }
+        finally
+        {
+            _suppressFontPanelChangeHandlers = false;
+        }
+    }
+
+    private void ApplyFontPanelChange(Action<MindMapNode> mutate)
+    {
+        if (_suppressFontPanelChangeHandlers || _selectedNode is null || _selectedNodes.Count != 1)
+            return;
+
+        PushUndoSnapshot();
+        mutate(_selectedNode);
+        RebuildMap(animate: false);
+    }
+
+    private void FontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var value = FontFamilyBox.SelectedValue as string;
+        ApplyFontPanelChange(node => node.FontFamily = string.IsNullOrEmpty(value) ? null : value);
+    }
+
+    private void FontSizeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var value = FontSizeBox.SelectedValue as string;
+        ApplyFontPanelChange(node => node.FontSize = string.IsNullOrEmpty(value)
+            ? null
+            : double.Parse(value, CultureInfo.InvariantCulture));
+    }
+
+    private void FontBoldToggleButton_Click(object sender, RoutedEventArgs e)
+        => ApplyFontPanelChange(node => node.IsBold = FontBoldToggleButton.IsChecked == true);
+
+    private void FontItalicToggleButton_Click(object sender, RoutedEventArgs e)
+        => ApplyFontPanelChange(node => node.IsItalic = FontItalicToggleButton.IsChecked == true);
+
+    private void FontColorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedNode is null || _selectedNodes.Count != 1)
+            return;
+
+        var dialog = new ColorPickerDialog { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.SelectedColor is not { } color)
+            return;
+
+        // No need to set FontColorButton.Background directly here - ApplyFontPanelChange's
+        // RebuildMap(animate: false) runs RefreshFontPanelFromSelection synchronously, which
+        // re-reads the swatch color from the node it just mutated.
+        ApplyFontPanelChange(node => node.TextColor = color.ToString());
+    }
+
+    private void FontColorClearButton_Click(object sender, RoutedEventArgs e)
+        => ApplyFontPanelChange(node => node.TextColor = null);
+
+    private static TranslateTransform EnsureChromePanelTransform(Border panel)
+    {
+        if (panel.RenderTransform is TranslateTransform existing)
+            return existing;
+
+        var transform = new TranslateTransform(0, -6);
+        panel.RenderTransform = transform;
+        return transform;
+    }
+
     private static void SetExpanded(MindMapNode node, bool isExpanded)
     {
         node.IsExpanded = isExpanded;
@@ -2118,13 +3403,15 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             switch (extension)
             {
                 case ".png":
-                    ExportToPng(saveDialog.FileName, exportRoot, exportSelectedBranchOnly, selectedRoots);
+                case ".jpg":
+                case ".jpeg":
+                    ExportToImage(saveDialog.FileName, extension, exportRoot, exportSelectedBranchOnly, selectedRoots);
                     break;
-                case ".mm":
-                    ExportToMindMapFile(saveDialog.FileName, exportRoot, exportSelectedBranchOnly);
-                    break;
-                case ".mmap":
-                    ExportToMindMapFile(saveDialog.FileName, exportRoot, exportSelectedBranchOnly);
+                case ".scribmap":
+                    var document = ToDocument();
+                    if (exportSelectedBranchOnly)
+                        document.Root = exportRoot;
+                    MindMapFileService.SaveScribmapFile(saveDialog.FileName, document);
                     break;
                 default:
                     throw new InvalidOperationException(LocalizationService.GetString("MindMapExportUnsupportedFormat"));
@@ -2162,169 +3449,139 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return $"{baseName}-{suffix}";
     }
 
-    private void ExportToMindMapFile(string path, MindMapNode exportRoot, bool isBranch)
-    {
-        var sourceDocument = ToDocument();
-        var document = new XDocument(
-            new XDeclaration("1.0", "UTF-8", null),
-            new XElement("map",
-                new XAttribute("version", "1.0.1"),
-                CreateFreeMindNode(exportRoot, isRoot: true, sourceDocument.Title, isBranch)));
-
-        document.Save(path);
-    }
-
-    private void ImportButton_Click(object sender, RoutedEventArgs e)
-    {
-        var openDialog = new OpenFileDialog
-        {
-            Title = LocalizationService.GetString("MindMapImportDialogTitle"),
-            Filter = LocalizationService.GetString("MindMapImportDialogFilter")
-        };
-
-        if (openDialog.ShowDialog(this) != true)
-            return;
-
-        try
-        {
-            var imported = ImportMindMapFile(openDialog.FileName);
-            if (imported is null)
-                throw new InvalidOperationException(LocalizationService.GetString("MindMapImportFailed"));
-
-            _root.Text = imported.Text ?? string.Empty;
-            _root.Children.Clear();
-            foreach (var child in imported.Children)
-                _root.Children.Add(CloneNode(child));
-
-            ClearSelectedNodes();
-            RebuildMap();
-
-            ShowExportDialog(
-                LocalizationService.GetString("Success"),
-                LocalizationService.GetString("MindMapImportSuccess"));
-        }
-        catch (Exception ex)
-        {
-            ShowExportDialog(
-                LocalizationService.GetString("ImportError"),
-                ex.Message);
-        }
-    }
-
-    private MindMapNode? ImportMindMapFile(string path)
-    {
-        if (!System.IO.File.Exists(path))
-            throw new FileNotFoundException(LocalizationService.GetString("MindMapImportFileNotFound"), path);
-
-        var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-        if (ext != ".mm" && ext != ".mmap")
-            throw new InvalidOperationException(LocalizationService.GetString("MindMapImportUnsupportedFormat"));
-
-        XDocument doc;
-        try
-        {
-            doc = XDocument.Load(path);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(LocalizationService.GetString("MindMapImportReadFailed"), ex);
-        }
-
-        var map = doc.Root;
-        if (map == null || !string.Equals(map.Name.LocalName, "map", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(LocalizationService.GetString("MindMapImportInvalidRoot"));
-
-        var firstNode = map.Elements("node").FirstOrDefault();
-        if (firstNode == null)
-            return null;
-
-        return ParseFreeMindNode(firstNode);
-    }
-
-    private MindMapNode ParseFreeMindNode(XElement element)
-    {
-        var node = new MindMapNode();
-        var textAttr = element.Attribute("TEXT")?.Value;
-        node.Text = string.IsNullOrWhiteSpace(textAttr) ? string.Empty : textAttr.Trim();
-        var bg = element.Attribute("BACKGROUND_COLOR")?.Value;
-        if (!string.IsNullOrWhiteSpace(bg)) node.BackgroundColor = bg;
-        var color = element.Attribute("COLOR")?.Value;
-        if (!string.IsNullOrWhiteSpace(color)) node.BorderColor = color;
-
-        var rich = element.Elements("richcontent").FirstOrDefault(rc => string.Equals(rc.Attribute("TYPE")?.Value, "NOTE", StringComparison.OrdinalIgnoreCase));
-        if (rich != null)
-        {
-            var body = rich.Descendants("body").FirstOrDefault();
-            if (body != null)
-            {
-                var content = body.Value;
-                if (!string.IsNullOrWhiteSpace(content))
-                    node.Icon = content.Trim();
-            }
-        }
-
-        foreach (var childEl in element.Elements("node"))
-        {
-            var childNode = ParseFreeMindNode(childEl);
-            node.Children.Add(childNode);
-        }
-
-        return node;
-    }
-
-    private static XElement CreateFreeMindNode(MindMapNode node, bool isRoot, string documentTitle, bool isBranch)
-    {
-        var text = node.Text?.Trim();
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            text = isRoot
-                ? (isBranch ? $"{documentTitle} (branch)" : documentTitle)
-                : "Node";
-        }
-
-        var element = new XElement("node", new XAttribute("TEXT", text));
-
-        if (!string.IsNullOrWhiteSpace(node.BackgroundColor))
-            element.SetAttributeValue("BACKGROUND_COLOR", node.BackgroundColor);
-
-        if (!string.IsNullOrWhiteSpace(node.BorderColor))
-            element.SetAttributeValue("COLOR", node.BorderColor);
-
-        if (!string.IsNullOrWhiteSpace(node.Icon))
-            element.Add(new XElement("richcontent",
-                new XAttribute("TYPE", "NOTE"),
-                new XElement("html",
-                    new XElement("body", node.Icon))));
-
-        foreach (var child in node.Children)
-            element.Add(CreateFreeMindNode(child, isRoot: false, documentTitle, isBranch));
-
-        return element;
-    }
-
-    private MindMapNode CloneNode(MindMapNode source)
+    // preserveId matters once a node's Id can be the target of a link (LinkedNoteId lives on the
+    // node itself so it always survives cloning regardless; CrossLinkTargetIds is what depends on
+    // Id staying stable). Undo/redo/restore need preserveId: true - it's the SAME logical node,
+    // just being restored to an earlier tree shape, and any cross-link pointing at it must still
+    // resolve after an undo. Cut/copy/paste, import-merge, and export-root synthesis need
+    // preserveId: false (the default) - those create genuinely new/independent nodes, and two
+    // nodes sharing an Id would make cross-link/hyperlink targeting ambiguous.
+    private MindMapNode CloneNode(MindMapNode source, bool preserveId = false)
     {
         var copy = new MindMapNode
         {
+            Id = preserveId ? source.Id : Guid.NewGuid(),
             Text = source.Text,
             IsExpanded = source.IsExpanded,
             BackgroundColor = source.BackgroundColor,
             BorderColor = source.BorderColor,
             BorderThickness = source.BorderThickness,
             NodeShape = source.NodeShape,
-            Icon = source.Icon,
+            Icons = new List<string>(source.Icons),
             IconBadgeColor = source.IconBadgeColor,
+            IsBold = source.IsBold,
+            IsItalic = source.IsItalic,
+            TextColor = source.TextColor,
+            FontFamily = source.FontFamily,
+            FontSize = source.FontSize,
+            Note = source.Note,
+            LinkedNoteId = source.LinkedNoteId,
+            CrossLinkTargetIds = new List<Guid>(source.CrossLinkTargetIds),
             ManualX = source.ManualX,
             ManualY = source.ManualY
         };
 
         foreach (var child in source.Children)
-            copy.Children.Add(CloneNode(child));
+            copy.Children.Add(CloneNode(child, preserveId));
 
         return copy;
     }
 
-    private void ExportToPng(string path, MindMapNode exportRoot, bool isBranch, IReadOnlyList<MindMapNode> selectedRoots)
+    /// <summary>
+    /// Call before a content-mutating edit (add/delete/edit text/restyle/reposition/import-merge)
+    /// so it can be undone. Not for view-state changes (expand/collapse, zoom, selection) - those
+    /// are deliberately excluded from the undo stack.
+    /// </summary>
+    private void PushUndoSnapshot()
+    {
+        _undoStack.Add(CloneNode(_root, preserveId: true));
+        if (_undoStack.Count > MaxUndoDepth)
+            _undoStack.RemoveAt(0);
+
+        _redoStack.Clear();
+        UpdateUndoRedoButtonStates();
+    }
+
+    private bool CanUndo => _undoStack.Count > 0;
+    private bool CanRedo => _redoStack.Count > 0;
+
+    private void UndoButton_Click(object sender, RoutedEventArgs e) => Undo();
+    private void RedoButton_Click(object sender, RoutedEventArgs e) => Redo();
+
+    private void UpdateUndoRedoButtonStates()
+    {
+        if (FindName("UndoButton") is Button undoButton)
+            undoButton.IsEnabled = CanUndo;
+        if (FindName("RedoButton") is Button redoButton)
+            redoButton.IsEnabled = CanRedo;
+    }
+
+    private void Undo()
+    {
+        if (!CanUndo)
+            return;
+
+        var previous = _undoStack[^1];
+        _undoStack.RemoveAt(_undoStack.Count - 1);
+        _redoStack.Add(CloneNode(_root, preserveId: true));
+
+        RestoreRootFrom(previous);
+        ClearSelectedNodes();
+        RebuildMap();
+        UpdateUndoRedoButtonStates();
+    }
+
+    private void Redo()
+    {
+        if (!CanRedo)
+            return;
+
+        var next = _redoStack[^1];
+        _redoStack.RemoveAt(_redoStack.Count - 1);
+        _undoStack.Add(CloneNode(_root, preserveId: true));
+
+        RestoreRootFrom(next);
+        ClearSelectedNodes();
+        RebuildMap();
+        UpdateUndoRedoButtonStates();
+    }
+
+    /// <summary>
+    /// _root is readonly (see field declaration), so restoring a snapshot copies its fields into
+    /// the existing _root instance rather than reassigning the reference - mirrors how
+    /// ImportButton_Click already replaces the tree in place.
+    /// </summary>
+    private void RestoreRootFrom(MindMapNode snapshot)
+    {
+        CopyNodeStyleFields(_root, snapshot);
+        _root.Children.Clear();
+        foreach (var child in snapshot.Children)
+            _root.Children.Add(CloneNode(child, preserveId: true));
+    }
+
+    private static void CopyNodeStyleFields(MindMapNode target, MindMapNode source)
+    {
+        target.Text = source.Text;
+        target.IsExpanded = source.IsExpanded;
+        target.BackgroundColor = source.BackgroundColor;
+        target.BorderColor = source.BorderColor;
+        target.BorderThickness = source.BorderThickness;
+        target.NodeShape = source.NodeShape;
+        target.Icons = new List<string>(source.Icons);
+        target.IconBadgeColor = source.IconBadgeColor;
+        target.IsBold = source.IsBold;
+        target.IsItalic = source.IsItalic;
+        target.TextColor = source.TextColor;
+        target.FontFamily = source.FontFamily;
+        target.FontSize = source.FontSize;
+        target.Note = source.Note;
+        target.LinkedNoteId = source.LinkedNoteId;
+        target.CrossLinkTargetIds = new List<Guid>(source.CrossLinkTargetIds);
+        target.ManualX = source.ManualX;
+        target.ManualY = source.ManualY;
+    }
+
+    private void ExportToImage(string path, string extension, MindMapNode exportRoot, bool isBranch, IReadOnlyList<MindMapNode> selectedRoots)
     {
         if (MapCanvas.ActualWidth <= 0 || MapCanvas.ActualHeight <= 0)
             RebuildMap();
@@ -2394,8 +3651,28 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             var renderTarget = new RenderTargetBitmap(pixelWidth, pixelHeight, dpi, dpi, PixelFormats.Pbgra32);
             renderTarget.Render(visual);
 
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(renderTarget));
+            BitmapEncoder encoder;
+            if (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase))
+            {
+                // JPEG has no alpha channel - drop it before encoding rather than let the
+                // encoder do something undefined with it (the canvas already painted an opaque
+                // background into renderTarget, so nothing is actually lost by dropping it here).
+                BitmapSource opaqueSource = renderTarget.Format == PixelFormats.Bgr24
+                    ? renderTarget
+                    : new FormatConvertedBitmap(renderTarget, PixelFormats.Bgr24, null, 0);
+                if (opaqueSource.CanFreeze)
+                    opaqueSource.Freeze();
+
+                encoder = new JpegBitmapEncoder { QualityLevel = 86 };
+                encoder.Frames.Add(BitmapFrame.Create(opaqueSource));
+            }
+            else
+            {
+                encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(renderTarget));
+            }
+
             using var stream = System.IO.File.Create(path);
             encoder.Save(stream);
         }
