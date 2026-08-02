@@ -2309,7 +2309,12 @@ public class MainViewModel : ViewModelBase
         quizVm.Document.IsPinned = document.IsPinned;
         quizVm.Document.TimeLimitSeconds = document.TimeLimitSeconds;
         quizVm.Document.PassingScorePercent = document.PassingScorePercent;
+        quizVm.Document.ShuffleQuestions = document.ShuffleQuestions;
+        quizVm.Document.ShuffleOptions = document.ShuffleOptions;
+        quizVm.Document.PartialCreditMultipleChoice = document.PartialCreditMultipleChoice;
+        quizVm.Document.ExamMode = document.ExamMode;
         quizVm.Document.Attempts = document.Attempts;
+        quizVm.Document.ProgressSession = document.ProgressSession;
         quizVm.NotifyChanged();
 
         ReorderQuizzes();
@@ -5823,6 +5828,63 @@ public class MainViewModel : ViewModelBase
             AfterMotion();
         else
             MotionHost.CompleteBatchAdd(DashboardMotionScope.Quizzes, addedIds, AfterMotion);
+    }
+
+    /// <summary>
+    /// Adds a batch of freshly-imported quizzes as new library entries in one pass - mirrors
+    /// AddImportedMindMaps' single-save batch pattern (see its doc comment for the full reasoning:
+    /// looping AddOrUpdateQuiz per document would pay one full O(library size) SaveQuizzes() per
+    /// file). Reuses DuplicateSelectedQuizzes/CompleteQuizBatchAdd's batch-mutation path for an
+    /// existing library, plus the empty-library branch for the case import is the very first thing
+    /// added on a fresh install (BeginBatchMutation/CompleteBatchAdd assume an existing realized
+    /// scope to animate against, so aren't safe to route through unconditionally here).
+    /// </summary>
+    public void AddImportedQuizzes(IReadOnlyList<QuizDocument> documents)
+    {
+        if (documents.Count == 0)
+            return;
+
+        foreach (var document in documents)
+            NormalizeQuizDocument(document);
+
+        var addedIds = documents.Select(document => document.Id).ToList();
+        var hadQuizzes = Quizzes.Count > 0;
+
+        if (!hadQuizzes)
+        {
+            foreach (var document in documents)
+                Quizzes.Add(new QuizViewModel(document));
+
+            OnPropertyChanged(nameof(HasQuizzes));
+            SaveQuizzes();
+            MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.Quizzes);
+            RebuildQuizGroups();
+            ReorderQuizzes();
+            NormalizeQuizGroups();
+            RefreshAvailableQuizTags();
+            ApplyQuizFilters(rebuildGroups: false);
+            NotifyQuizzesChanged();
+            RefreshRecentQuizzes();
+            return;
+        }
+
+        _quizBatchAddInProgress = true;
+        try
+        {
+            MotionHost?.BeginBatchMutation(DashboardMotionScope.Quizzes);
+            foreach (var document in documents)
+            {
+                MotionHost?.RegisterBatchItemAdd(DashboardMotionScope.Quizzes, document.Id);
+                Quizzes.Add(new QuizViewModel(document));
+            }
+
+            SaveQuizzes();
+            CompleteQuizBatchAdd(addedIds);
+        }
+        finally
+        {
+            _quizBatchAddInProgress = false;
+        }
     }
 
     private bool CanUngroupSelectedNotes()

@@ -298,6 +298,12 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
                 combinedQuestions.Add(new QuizQuestion
                 {
+                    // Preserved, not regenerated - each combined entry maps 1:1 to exactly one
+                    // source question (skipDuplicateQuestions already prevents two different
+                    // source questions collapsing into one), so keeping its Id lets
+                    // LastAttemptCorrect / "Practice Missed Questions" carry over into the
+                    // combined quiz instead of resetting.
+                    Id = question.Id,
                     Type = question.Type,
                     Question = question.Question,
                     Explanation = question.Explanation,
@@ -306,6 +312,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
                     PlainTextCharLimit = question.PlainTextCharLimit,
                     PlainTextMatchCase = question.PlainTextMatchCase,
                     PlainTextIgnorePunctuation = question.PlainTextIgnorePunctuation,
+                    LastAttemptCorrect = question.LastAttemptCorrect,
                     Options = question.Options.Select(option => new QuizOption
                     {
                         Text = option.Text,
@@ -351,7 +358,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         return string.Join(" ", (value ?? string.Empty).Trim().Split(Array.Empty<char>(), StringSplitOptions.RemoveEmptyEntries));
     }
 
-    private static void Shuffle<T>(IList<T> items)
+    internal static void Shuffle<T>(IList<T> items)
     {
         for (var i = items.Count - 1; i > 0; i--)
         {

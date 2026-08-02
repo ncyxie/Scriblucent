@@ -1,5 +1,4 @@
 using Scriblucent.Animations;
-using Scriblucent.Localization;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,8 +18,21 @@ namespace Scriblucent.Views
 
         public int TimeLimitSeconds { get; private set; }
         public int PassingScorePercent { get; private set; }
+        public bool ShuffleQuestions { get; private set; }
+        public bool ShuffleOptions { get; private set; }
+        public bool PartialCreditMultipleChoice { get; private set; }
+        public bool ExamMode { get; private set; }
 
-        public QuizStartOptionsDialog(int? initialTimeLimitSeconds, int initialPassingScorePercent)
+        // Only ever opened from QuizPreviewWindow's standalone Options button now - Start Quiz and
+        // Practice Missed both launch straight in using whatever's already saved here, instead of
+        // re-asking every time - so header/button wording is always the "configure" framing.
+        public QuizStartOptionsDialog(
+            int? initialTimeLimitSeconds,
+            int initialPassingScorePercent,
+            bool initialShuffleQuestions = false,
+            bool initialShuffleOptions = false,
+            bool initialPartialCredit = false,
+            bool initialExamMode = false)
         {
             InitializeComponent();
             _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
@@ -32,6 +44,11 @@ namespace Scriblucent.Views
             PassingScorePercent = Math.Clamp(initialPassingScorePercent, 0, 100);
             PassingScoreTextBox.Text = PassingScorePercent.ToString(CultureInfo.InvariantCulture);
             PassingScoreTextBox.SelectAll();
+
+            ShuffleQuestionsCheckBox.IsChecked = initialShuffleQuestions;
+            ShuffleOptionsCheckBox.IsChecked = initialShuffleOptions;
+            PartialCreditCheckBox.IsChecked = initialPartialCredit;
+            ExamModeCheckBox.IsChecked = initialExamMode;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -174,6 +191,10 @@ namespace Scriblucent.Views
 
             UiMotion.AnimateInlineReveal(ValidationText, false);
             PassingScorePercent = passingScore;
+            ShuffleQuestions = ShuffleQuestionsCheckBox.IsChecked == true;
+            ShuffleOptions = ShuffleOptionsCheckBox.IsChecked == true;
+            PartialCreditMultipleChoice = PartialCreditCheckBox.IsChecked == true;
+            ExamMode = ExamModeCheckBox.IsChecked == true;
 
             if (TimeLimitComboBox.SelectedItem is ComboBoxItem { Tag: string tag }
                 && string.Equals(tag, "custom", StringComparison.Ordinal))

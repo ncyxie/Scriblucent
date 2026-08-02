@@ -59,6 +59,13 @@
   <data name="QuizLinkedNoteSelectorTooltip" xml:space="preserve"><value>Select the source note linked to this item.</value></data>
   <data name="QuizModeTitle" xml:space="preserve"><value>Quiz Mode</value></data>
   <data name="QuizQuestionProgressFormat" xml:space="preserve"><value>Question {0} of {1}</value></data>
+  <data name="QuizNavigationTitle" xml:space="preserve"><value>Questions</value></data>
+  <data name="QuizJumpToQuestionTooltipFormat" xml:space="preserve"><value>Go to question {0}</value></data>
+  <data name="QuizExamNavLockedTooltip" xml:space="preserve"><value>Question jumping is locked in exam mode</value></data>
+  <data name="QuizFlagQuestion" xml:space="preserve"><value>Flag for review</value></data>
+  <data name="QuizUnflagQuestion" xml:space="preserve"><value>Remove flag</value></data>
+  <data name="QuizFlagQuestionTooltip" xml:space="preserve"><value>Mark this question so you can find it again from the question list</value></data>
+  <data name="QuizFlaggedNavTooltipFormat" xml:space="preserve"><value>Question {0} (flagged)</value></data>
   <data name="QuizMultipleChoiceInstruction" xml:space="preserve"><value>Multiple Choice - Select all that apply</value></data>
   <data name="QuizResultsTitleGreat" xml:space="preserve"><value>🎉 Great Job!</value></data>
   <data name="QuizResultsTitleGood" xml:space="preserve"><value>👍 Good Effort!</value></data>
@@ -79,12 +86,30 @@
   <data name="QuizNextButton" xml:space="preserve"><value>Next →</value></data>
   <data name="QuizReviewAnswers" xml:space="preserve"><value>Review Answers:</value></data>
   <data name="QuizStartButton" xml:space="preserve"><value>▶ START</value></data>
+  <data name="QuizResumeButton" xml:space="preserve"><value>▶ RESUME</value></data>
+  <data name="QuizResumePromptTitle" xml:space="preserve"><value>Resume quiz?</value></data>
+  <data name="QuizResumePromptMessage" xml:space="preserve"><value>You have an unfinished attempt at this quiz. Resume where you left off, or start over from the first question?</value></data>
+  <data name="QuizResumePromptResume" xml:space="preserve"><value>Resume</value></data>
+  <data name="QuizResumePromptStartOver" xml:space="preserve"><value>Start Over</value></data>
   <data name="QuizStartButtonTooltip" xml:space="preserve"><value>Start Quiz Mode</value></data>
+  <data name="QuizOptionsButton" xml:space="preserve"><value>Options</value></data>
+  <data name="QuizOptionsButtonTooltip" xml:space="preserve"><value>Set shuffle, scoring, and other quiz preferences</value></data>
+  <data name="QuizPracticeMissedButton" xml:space="preserve"><value>Practice Missed</value></data>
+  <data name="QuizPracticeMissedButtonTooltip" xml:space="preserve"><value>Practice only the questions you got wrong last time</value></data>
+  <data name="QuizNoMissedQuestions" xml:space="preserve"><value>No missed questions to practice — you got everything right last time.</value></data>
   <data name="QuizStartOptionsTitle" xml:space="preserve"><value>Start quiz</value></data>
   <data name="QuizStartOptionsMessage" xml:space="preserve"><value>Choose the rules for this attempt before the quiz begins.</value></data>
   <data name="QuizStartTimeLimitQuestion" xml:space="preserve"><value>How much time should this attempt have?</value></data>
   <data name="QuizStartPassingScoreQuestion" xml:space="preserve"><value>What passing score is required?</value></data>
   <data name="QuizStartConfirm" xml:space="preserve"><value>Start quiz</value></data>
+  <data name="QuizOptionsTitle" xml:space="preserve"><value>Quiz options</value></data>
+  <data name="QuizOptionsMessage" xml:space="preserve"><value>Set the default rules for this quiz.</value></data>
+  <data name="QuizPreferencesHeading" xml:space="preserve"><value>Preferences</value></data>
+  <data name="QuizShuffleQuestionsLabel" xml:space="preserve"><value>Shuffle question order each attempt</value></data>
+  <data name="QuizShuffleOptionsLabel" xml:space="preserve"><value>Shuffle answer order within each question</value></data>
+  <data name="QuizPartialCreditLabel" xml:space="preserve"><value>Give partial credit for multiple-choice</value></data>
+  <data name="QuizExamModeLabel" xml:space="preserve"><value>Exam mode (one attempt, no going back)</value></data>
+  <data name="QuizExamModeTooltip" xml:space="preserve"><value>No returning to a previous question, and closing mid-attempt forfeits it instead of letting you resume - just like a real exam</value></data>
   <data name="QuizPassingScoreValidation" xml:space="preserve"><value>Enter a number from 0 to 100.</value></data>
   <data name="QuizTimeLimitNone" xml:space="preserve"><value>No limit</value></data>
   <data name="QuizTimeLimitOneMinute" xml:space="preserve"><value>1 minute</value></data>
@@ -572,10 +597,30 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="QuizResetAnswers" xml:space="preserve"><value>Reset</value></data>
   <data name="QuizExport" xml:space="preserve"><value>Export</value></data>
   <data name="QuizExportDialogTitle" xml:space="preserve"><value>Export quiz</value></data>
-  <data name="QuizExportDialogFilter" xml:space="preserve"><value>Quiz Files (*.json)|*.json|CSV Files (*.csv)|*.csv|Printable File (*.xps)|*.xps|All files (*.*)|*.*</value></data>
+  <data name="QuizExportDialogFilter" xml:space="preserve"><value>Own Quiz File (*.scribquiz)|*.scribquiz|GIFT Format (*.gift)|*.gift|CSV Files (*.csv)|*.csv|Printable File (*.xps)|*.xps|All files (*.*)|*.*</value></data>
   <data name="QuizExportComplete" xml:space="preserve"><value>Quiz exported successfully.</value></data>
   <data name="QuizExportUnsupportedFormat" xml:space="preserve"><value>Unsupported export format.</value></data>
   <data name="QuizExportFailedFormat" xml:space="preserve"><value>Failed to export quiz: {0}</value></data>
+  <data name="QuizImport" xml:space="preserve"><value>Import quiz</value></data>
+  <data name="QuizImportDialogTitle" xml:space="preserve"><value>Import quiz</value></data>
+  <data name="QuizImportDialogFilter" xml:space="preserve"><value>All Quiz Files (*.scribquiz;*.json;*.gift;*.csv)|*.scribquiz;*.json;*.gift;*.csv|Own Quiz File (*.scribquiz)|*.scribquiz|GIFT Format (*.gift)|*.gift|CSV Files (*.csv)|*.csv|All files (*.*)|*.*</value></data>
+  <data name="QuizImportSuccessCount" xml:space="preserve"><value>Imported {0} quiz(zes).</value></data>
+  <data name="QuizImportFailed" xml:space="preserve"><value>Could not read this quiz file.</value></data>
+  <data name="QuizImportFileNotFound" xml:space="preserve"><value>Quiz file not found.</value></data>
+  <data name="QuizImportReadFailed" xml:space="preserve"><value>Could not read the quiz file.</value></data>
+  <data name="QuizImportParseError" xml:space="preserve"><value>This file isn't valid quiz data.</value></data>
+  <data name="QuizImportUnsupportedFormat" xml:space="preserve"><value>Unsupported import format.</value></data>
+  <data name="QuizImportUnsupportedVersion" xml:space="preserve"><value>This quiz file was created by a newer version of Scriblucent and can't be opened here.</value></data>
+  <data name="QuizImportKeepProgressTitle" xml:space="preserve"><value>Keep progress data?</value></data>
+  <data name="QuizImportKeepProgressPrompt" xml:space="preserve"><value>One or more of these files include attempt history or an in-progress attempt. Keep that data, or start fresh with no history?</value></data>
+  <data name="QuizImportKeepProgressKeep" xml:space="preserve"><value>Keep progress</value></data>
+  <data name="QuizImportKeepProgressDiscard" xml:space="preserve"><value>Start fresh</value></data>
+  <data name="QuizImportQuestions" xml:space="preserve"><value>Import questions</value></data>
+  <data name="QuizImportQuestionsDialogTitle" xml:space="preserve"><value>Import questions</value></data>
+  <data name="QuizImportQuestionsDialogFilter" xml:space="preserve"><value>GIFT Format (*.gift)|*.gift|CSV Files (*.csv)|*.csv|All files (*.*)|*.*</value></data>
+  <data name="QuizImportQuestionsAddedFormat" xml:space="preserve"><value>Added {0} question(s).</value></data>
+  <data name="QuizImportNoQuestionsFound" xml:space="preserve"><value>No questions were found in this file.</value></data>
+  <data name="QuizImportFailedFormat" xml:space="preserve"><value>Failed to import questions: {0}</value></data>
   <data name="QuizzesDashboard" xml:space="preserve"><value>Quizzes</value></data>
   <data name="QuizzesDashboardTitle" xml:space="preserve"><value>Quizzes</value></data>
   <data name="QuizzesEmptyDashboardPrompt" xml:space="preserve"><value>Create a quiz or convert a note into a quiz to see it here.</value></data>
@@ -587,6 +632,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="DeleteQuizConfirmationFormat" xml:space="preserve"><value>Are you sure you want to delete "{0}"? This action cannot be undone.</value></data>
   <data name="EditQuiz" xml:space="preserve"><value>Edit quiz</value></data>
   <data name="ViewQuiz" xml:space="preserve"><value>View quiz</value></data>
+  <data name="QuizShuffleTooltip" xml:space="preserve"><value>Shuffle questions randomly</value></data>
+  <data name="QuizTagsTooltip" xml:space="preserve"><value>Edit quiz tags</value></data>
   <data name="AddQuestion" xml:space="preserve"><value>Add question</value></data>
   <data name="AddOption" xml:space="preserve"><value>Add option</value></data>
   <data name="DeleteQuestion" xml:space="preserve"><value>Delete question</value></data>
@@ -608,6 +655,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="QuizPlainTextIgnorePunctuation" xml:space="preserve"><value>Ignore punctuation</value></data>
   <data name="QuizPlainTextIgnorePunctuationHint" xml:space="preserve"><value>Treat punctuation and symbols as spacing when grading.</value></data>
   <data name="QuizCharactersFormat" xml:space="preserve"><value>{0} characters</value></data>
+  <data name="QuizCharactersWithLimitFormat" xml:space="preserve"><value>{0} / {1} characters</value></data>
   <data name="NewQuizQuestion" xml:space="preserve"><value>New question</value></data>
   <data name="NewQuizCorrectAnswer" xml:space="preserve"><value>Correct answer</value></data>
   <data name="NewQuizWrongAnswer" xml:space="preserve"><value>Wrong answer</value></data>

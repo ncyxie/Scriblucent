@@ -42,36 +42,82 @@
             </Grid>
         </Border>
 
-        <!-- Question Area -->
-        <Border Grid.Row="1"
-                x:Name="QuestionView"
-                Style="{StaticResource ChromePanelBorderStyle}"
-                Margin="20,16"
-                Padding="20">
-            <StackPanel>
-				<!-- Question Type Indicator -->
-                <StackPanel x:Name="QuestionTypeIndicator"
-                            Orientation="Horizontal"
-                            Margin="0,0,0,12"
-                            Visibility="Collapsed">
-                    <Border Background="{DynamicResource SelectionBackground}"
-                            BorderThickness="0"
-                            CornerRadius="6"
-                            Padding="8,4">
+        <!-- Question + navigator -->
+        <Grid Grid.Row="1" Margin="20,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Question Area -->
+            <Border Grid.Column="0"
+                    x:Name="QuestionView"
+                    Style="{StaticResource ChromePanelBorderStyle}"
+                    Margin="0,0,12,0"
+                    Padding="0"
+                    ClipToBounds="True"
+                    SnapsToDevicePixels="True">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Background="Transparent"
+                              Padding="20">
+                <StackPanel>
+                <!-- Type hint + flag for review (Moodle-style) -->
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel x:Name="QuestionTypeIndicator"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <Border Background="{DynamicResource SelectionBackground}"
+                                BorderThickness="0"
+                                CornerRadius="6"
+                                Padding="8,4">
+                            <StackPanel Orientation="Horizontal">
+                                <icons:AppIcon Kind="Checkmark" Width="16" Height="16"
+                                            Foreground="{DynamicResource TextColor}"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,6,0"/>
+                                <TextBlock x:Name="QuestionTypeText"
+                                Text="{Binding [QuizMultipleChoiceInstruction], Source={StaticResource Loc}}"
+                                            FontSize="{StaticResource Type.Caption}"
+                                            FontWeight="SemiBold"
+                                            Foreground="{DynamicResource TextColor}"
+                                            VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <Button x:Name="FlagQuestionButton"
+                            Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Padding="10,6"
+                            Cursor="Hand"
+                            Click="FlagQuestionButton_Click"
+                            ToolTip="{Binding [QuizFlagQuestionTooltip], Source={StaticResource Loc}}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
+                                <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+                                <Setter Property="MinHeight" Value="30"/>
+                            </Style>
+                        </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <icons:AppIcon Kind="Checkmark" Width="16" Height="16"
-                                        Foreground="{DynamicResource TextColor}"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,6,0"/>
-                            <TextBlock x:Name="QuestionTypeText"
-                            Text="{Binding [QuizMultipleChoiceInstruction], Source={StaticResource Loc}}"
-                                        FontSize="{StaticResource Type.Caption}"
-                                        FontWeight="SemiBold"
-                                        Foreground="{DynamicResource TextColor}"
-                                        VerticalAlignment="Center"/>
+                            <icons:AppIcon x:Name="FlagQuestionIcon"
+                                           Kind="Flag"
+                                           Width="14"
+                                           Height="14"
+                                           Margin="0,0,6,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock x:Name="FlagQuestionLabel"
+                                       Text="{Binding [QuizFlagQuestion], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Border>
-                </StackPanel>
+                    </Button>
+                </Grid>
                 <!-- Question Text -->
                 <TextBlock x:Name="QuestionTextBlock"
                            FontSize="{StaticResource Type.PageTitle}"
@@ -124,55 +170,94 @@
                     </Border>
                 </StackPanel>
             </StackPanel>
-        </Border>
-
-        <!-- Results View (hidden during quiz) -->
-        <Border Grid.Row="1"
-                x:Name="ResultsView"
-                Background="{DynamicResource CardBackground}"
-                Margin="20,16"
-                Padding="20"
-                CornerRadius="{StaticResource Radius.Card}"
-                Visibility="Collapsed">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <!-- Score Summary -->
-                    <Border Background="{DynamicResource CardBackground}"
-                            BorderThickness="0"
-                            CornerRadius="{StaticResource Radius.Card}"
-                            Padding="20"
-                            Margin="0,0,0,20">
-                        <StackPanel HorizontalAlignment="Center">
-                            <TextBlock x:Name="ResultsTitleText"
-                            Text="{Binding [QuizResultsTitleGreat], Source={StaticResource Loc}}"
-                                       FontSize="{StaticResource Type.Display}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColor}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,0,0,8"/>
-                            <TextBlock x:Name="ResultsScoreText"
-                                       FontSize="{StaticResource Type.DialogTitle}"
-                                       Foreground="{DynamicResource TextColor}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,0,0,8"/>
-                            <TextBlock x:Name="ResultsTimeText"
-                                       FontSize="{StaticResource Type.Body}"
-                                       Foreground="{DynamicResource TextColorSecondary}"
-                                       HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Questions Review -->
-                    <TextBlock Text="{Binding [QuizReviewAnswers], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.BlockTitle}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"
-                               Margin="0,0,0,16"/>
-
-                    <StackPanel x:Name="ResultsQuestionsPanel"/>
-                </StackPanel>
             </ScrollViewer>
-        </Border>
+            </Border>
+
+            <!-- Results View (hidden during quiz) -->
+            <Border Grid.Column="0"
+                    x:Name="ResultsView"
+                    Style="{StaticResource ChromePanelBorderStyle}"
+                    Margin="0,0,12,0"
+                    Padding="0"
+                    ClipToBounds="True"
+                    SnapsToDevicePixels="True"
+                    Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Background="Transparent"
+                              Padding="20">
+                    <StackPanel>
+                        <!-- Score Summary -->
+                        <Border Background="{DynamicResource WindowBackground}"
+                                BorderThickness="0"
+                                CornerRadius="{StaticResource Radius.Card}"
+                                Padding="20"
+                                Margin="0,0,0,20">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="ResultsTitleText"
+                                Text="{Binding [QuizResultsTitleGreat], Source={StaticResource Loc}}"
+                                           FontSize="{StaticResource Type.Display}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextColor}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,8"/>
+                                <TextBlock x:Name="ResultsScoreText"
+                                           FontSize="{StaticResource Type.DialogTitle}"
+                                           Foreground="{DynamicResource TextColor}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,0,0,8"/>
+                                <TextBlock x:Name="ResultsTimeText"
+                                           FontSize="{StaticResource Type.Body}"
+                                           Foreground="{DynamicResource TextColorSecondary}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Questions Review -->
+                        <TextBlock Text="{Binding [QuizReviewAnswers], Source={StaticResource Loc}}"
+                                   FontSize="{StaticResource Type.BlockTitle}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"
+                                   Margin="0,0,0,16"/>
+
+                        <StackPanel x:Name="ResultsQuestionsPanel"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Moodle-style question number navigator -->
+            <Border Grid.Column="1"
+                    x:Name="QuestionNavPanel"
+                    Width="148"
+                    MinWidth="148"
+                    Style="{StaticResource ChromePanelBorderStyle}"
+                    Padding="10,10,4,10"
+                    VerticalAlignment="Stretch"
+                    ClipToBounds="True"
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="{Binding [QuizNavigationTitle], Source={StaticResource Loc}}"
+                               FontSize="{StaticResource Type.Caption}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               Margin="0,0,6,10"/>
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Background="Transparent"
+                                  CanContentScroll="False"
+                                  VerticalAlignment="Stretch"
+                                  behaviors:SmoothScrollBehavior.IsEnabled="True"
+                                  behaviors:ScrollBarAutoHideBehavior.Enable="True">
+                        <WrapPanel x:Name="QuestionNavButtonsPanel"/>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
 
         <!-- Navigation -->
         <Border Grid.Row="2"

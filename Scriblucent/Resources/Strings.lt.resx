@@ -59,6 +59,13 @@
   <data name="QuizLinkedNoteSelectorTooltip" xml:space="preserve"><value>Pasirinkite šio elemento šaltinio užrašą.</value></data>
   <data name="QuizModeTitle" xml:space="preserve"><value>Viktorinos režimas</value></data>
   <data name="QuizQuestionProgressFormat" xml:space="preserve"><value>Klausimas {0} iš {1}</value></data>
+  <data name="QuizNavigationTitle" xml:space="preserve"><value>Klausimai</value></data>
+  <data name="QuizJumpToQuestionTooltipFormat" xml:space="preserve"><value>Eiti į klausimą {0}</value></data>
+  <data name="QuizExamNavLockedTooltip" xml:space="preserve"><value>Klausimų šokinėjimas užrakintas egzamino režime</value></data>
+  <data name="QuizFlagQuestion" xml:space="preserve"><value>Pažymėti peržiūrai</value></data>
+  <data name="QuizUnflagQuestion" xml:space="preserve"><value>Pašalinti žymę</value></data>
+  <data name="QuizFlagQuestionTooltip" xml:space="preserve"><value>Pažymėkite klausimą, kad galėtumėte jį greitai rasti klausimų sąraše</value></data>
+  <data name="QuizFlaggedNavTooltipFormat" xml:space="preserve"><value>Klausimas {0} (pažymėtas)</value></data>
   <data name="QuizMultipleChoiceInstruction" xml:space="preserve"><value>Daugkartinis pasirinkimas – pažymėkite visus tinkamus variantus</value></data>
   <data name="QuizResultsTitleGreat" xml:space="preserve"><value>🎉 Puikiai padirbėta!</value></data>
   <data name="QuizResultsTitleGood" xml:space="preserve"><value>👍 Gerai padirbėta!</value></data>
@@ -79,12 +86,30 @@
   <data name="QuizNextButton" xml:space="preserve"><value>Kitas →</value></data>
   <data name="QuizReviewAnswers" xml:space="preserve"><value>Peržiūrėti atsakymus:</value></data>
   <data name="QuizStartButton" xml:space="preserve"><value>▶ PRADĖTI</value></data>
+  <data name="QuizResumeButton" xml:space="preserve"><value>▶ TĘSTI</value></data>
+  <data name="QuizResumePromptTitle" xml:space="preserve"><value>Tęsti testą?</value></data>
+  <data name="QuizResumePromptMessage" xml:space="preserve"><value>Turite nebaigtą šio testo bandymą. Tęsti nuo ten, kur sustojote, ar pradėti iš naujo nuo pirmo klausimo?</value></data>
+  <data name="QuizResumePromptResume" xml:space="preserve"><value>Tęsti</value></data>
+  <data name="QuizResumePromptStartOver" xml:space="preserve"><value>Pradėti iš naujo</value></data>
   <data name="QuizStartButtonTooltip" xml:space="preserve"><value>Pradėti viktorinos režimą</value></data>
+  <data name="QuizOptionsButton" xml:space="preserve"><value>Parinktys</value></data>
+  <data name="QuizOptionsButtonTooltip" xml:space="preserve"><value>Nustatykite maišymo, vertinimo ir kitas viktorinos parinktis</value></data>
+  <data name="QuizPracticeMissedButton" xml:space="preserve"><value>Kartoti praleistus</value></data>
+  <data name="QuizPracticeMissedButtonTooltip" xml:space="preserve"><value>Kartokite tik tuos klausimus, kuriuos praeitą kartą atsakėte neteisingai</value></data>
+  <data name="QuizNoMissedQuestions" xml:space="preserve"><value>Nėra klausimų, kuriuos reikėtų kartoti — praeitą kartą atsakėte teisingai į viską.</value></data>
   <data name="QuizStartOptionsTitle" xml:space="preserve"><value>Pradėti viktoriną</value></data>
   <data name="QuizStartOptionsMessage" xml:space="preserve"><value>Prieš pradedant pasirinkite šio bandymo taisykles.</value></data>
   <data name="QuizStartTimeLimitQuestion" xml:space="preserve"><value>Kiek laiko skirti šiam bandymui?</value></data>
   <data name="QuizStartPassingScoreQuestion" xml:space="preserve"><value>Kokio išlaikymo balo reikia?</value></data>
   <data name="QuizStartConfirm" xml:space="preserve"><value>Pradėti viktoriną</value></data>
+  <data name="QuizOptionsTitle" xml:space="preserve"><value>Viktorinos parinktys</value></data>
+  <data name="QuizOptionsMessage" xml:space="preserve"><value>Nustatykite numatytąsias šios viktorinos taisykles.</value></data>
+  <data name="QuizPreferencesHeading" xml:space="preserve"><value>Nuostatos</value></data>
+  <data name="QuizShuffleQuestionsLabel" xml:space="preserve"><value>Maišyti klausimų tvarką kiekvieną bandymą</value></data>
+  <data name="QuizShuffleOptionsLabel" xml:space="preserve"><value>Maišyti atsakymų tvarką kiekviename klausime</value></data>
+  <data name="QuizPartialCreditLabel" xml:space="preserve"><value>Skirti dalinius balus už kelių atsakymų klausimus</value></data>
+  <data name="QuizExamModeLabel" xml:space="preserve"><value>Egzamino režimas (vienas bandymas, negalima grįžti atgal)</value></data>
+  <data name="QuizExamModeTooltip" xml:space="preserve"><value>Negalėsite grįžti prie ankstesnio klausimo, o testo uždarymas jo neužbaigus reikš bandymo praradimą (nebus galima tęsti) - kaip per tikrą egzaminą</value></data>
   <data name="QuizPassingScoreValidation" xml:space="preserve"><value>Įveskite skaičių nuo 0 iki 100.</value></data>
   <data name="QuizTimeLimitNone" xml:space="preserve"><value>Be limito</value></data>
   <data name="QuizTimeLimitOneMinute" xml:space="preserve"><value>1 minutė</value></data>
@@ -520,10 +545,30 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="QuizResetAnswers" xml:space="preserve"><value>Iš naujo</value></data>
   <data name="QuizExport" xml:space="preserve"><value>Eksportuoti</value></data>
   <data name="QuizExportDialogTitle" xml:space="preserve"><value>Eksportuoti viktoriną</value></data>
-  <data name="QuizExportDialogFilter" xml:space="preserve"><value>Viktorinos failai (*.json)|*.json|CSV failai (*.csv)|*.csv|Spausdinamas failas (*.xps)|*.xps|Visi failai (*.*)|*.*</value></data>
+  <data name="QuizExportDialogFilter" xml:space="preserve"><value>Nuosavas viktorinos failas (*.scribquiz)|*.scribquiz|GIFT formatas (*.gift)|*.gift|CSV failai (*.csv)|*.csv|Spausdinamas failas (*.xps)|*.xps|Visi failai (*.*)|*.*</value></data>
   <data name="QuizExportComplete" xml:space="preserve"><value>Viktorina sėkmingai eksportuota.</value></data>
   <data name="QuizExportUnsupportedFormat" xml:space="preserve"><value>Nepalaikomas eksporto formatas.</value></data>
   <data name="QuizExportFailedFormat" xml:space="preserve"><value>Nepavyko eksportuoti viktorinos: {0}</value></data>
+  <data name="QuizImport" xml:space="preserve"><value>Importuoti viktoriną</value></data>
+  <data name="QuizImportDialogTitle" xml:space="preserve"><value>Importuoti viktoriną</value></data>
+  <data name="QuizImportDialogFilter" xml:space="preserve"><value>Visi viktorinos failai (*.scribquiz;*.json;*.gift;*.csv)|*.scribquiz;*.json;*.gift;*.csv|Nuosavas viktorinos failas (*.scribquiz)|*.scribquiz|GIFT formatas (*.gift)|*.gift|CSV failai (*.csv)|*.csv|Visi failai (*.*)|*.*</value></data>
+  <data name="QuizImportSuccessCount" xml:space="preserve"><value>Importuota {0} viktorina(-ų).</value></data>
+  <data name="QuizImportFailed" xml:space="preserve"><value>Nepavyko nuskaityti šio viktorinos failo.</value></data>
+  <data name="QuizImportFileNotFound" xml:space="preserve"><value>Viktorinos failas nerastas.</value></data>
+  <data name="QuizImportReadFailed" xml:space="preserve"><value>Nepavyko nuskaityti viktorinos failo.</value></data>
+  <data name="QuizImportParseError" xml:space="preserve"><value>Šis failas nėra tinkami viktorinos duomenys.</value></data>
+  <data name="QuizImportUnsupportedFormat" xml:space="preserve"><value>Nepalaikomas importo formatas.</value></data>
+  <data name="QuizImportUnsupportedVersion" xml:space="preserve"><value>Šis viktorinos failas sukurtas naujesnės Scriblucent versijos ir čia negali būti atidarytas.</value></data>
+  <data name="QuizImportKeepProgressTitle" xml:space="preserve"><value>Išsaugoti progreso duomenis?</value></data>
+  <data name="QuizImportKeepProgressPrompt" xml:space="preserve"><value>Viename ar keliuose šių failų yra bandymų istorija arba nebaigtas bandymas. Išsaugoti šiuos duomenis, ar pradėti be istorijos?</value></data>
+  <data name="QuizImportKeepProgressKeep" xml:space="preserve"><value>Išsaugoti progresą</value></data>
+  <data name="QuizImportKeepProgressDiscard" xml:space="preserve"><value>Pradėti iš naujo</value></data>
+  <data name="QuizImportQuestions" xml:space="preserve"><value>Importuoti klausimus</value></data>
+  <data name="QuizImportQuestionsDialogTitle" xml:space="preserve"><value>Importuoti klausimus</value></data>
+  <data name="QuizImportQuestionsDialogFilter" xml:space="preserve"><value>GIFT formatas (*.gift)|*.gift|CSV failai (*.csv)|*.csv|Visi failai (*.*)|*.*</value></data>
+  <data name="QuizImportQuestionsAddedFormat" xml:space="preserve"><value>Pridėta {0} klausimas(-ų).</value></data>
+  <data name="QuizImportNoQuestionsFound" xml:space="preserve"><value>Šiame faile klausimų nerasta.</value></data>
+  <data name="QuizImportFailedFormat" xml:space="preserve"><value>Nepavyko importuoti klausimų: {0}</value></data>
   <data name="QuizzesDashboard" xml:space="preserve"><value>Viktorinos</value></data>
   <data name="QuizzesDashboardTitle" xml:space="preserve"><value>Viktorinos</value></data>
   <data name="QuizzesEmptyDashboardPrompt" xml:space="preserve"><value>Sukurkite viktoriną arba paverskite užrašą į viktoriną ir ji atsiras čia.</value></data>
@@ -535,6 +580,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="DeleteQuizConfirmationFormat" xml:space="preserve"><value>Ar tikrai norite ištrinti „{0}“? Šio veiksmo negalima atšaukti.</value></data>
   <data name="EditQuiz" xml:space="preserve"><value>Redaguoti viktoriną</value></data>
   <data name="ViewQuiz" xml:space="preserve"><value>Žiūrėti viktoriną</value></data>
+  <data name="QuizShuffleTooltip" xml:space="preserve"><value>Atsitiktinai sumaišyti klausimus</value></data>
+  <data name="QuizTagsTooltip" xml:space="preserve"><value>Redaguoti viktorinos žymes</value></data>
   <data name="AddQuestion" xml:space="preserve"><value>Pridėti klausimą</value></data>
   <data name="AddOption" xml:space="preserve"><value>Pridėti variantą</value></data>
   <data name="DeleteQuestion" xml:space="preserve"><value>Ištrinti klausimą</value></data>
@@ -556,6 +603,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="QuizPlainTextIgnorePunctuation" xml:space="preserve"><value>Nepaisyti skyrybos</value></data>
   <data name="QuizPlainTextIgnorePunctuationHint" xml:space="preserve"><value>Vertinant skyrybos ženklus ir simbolius laikyti tarpais.</value></data>
   <data name="QuizCharactersFormat" xml:space="preserve"><value>{0} simbol.</value></data>
+  <data name="QuizCharactersWithLimitFormat" xml:space="preserve"><value>{0} / {1} simbol.</value></data>
   <data name="NewQuizQuestion" xml:space="preserve"><value>Naujas klausimas</value></data>
   <data name="NewQuizCorrectAnswer" xml:space="preserve"><value>Teisingas atsakymas</value></data>
   <data name="NewQuizWrongAnswer" xml:space="preserve"><value>Klaidingas atsakymas</value></data>

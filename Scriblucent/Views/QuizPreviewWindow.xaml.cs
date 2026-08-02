@@ -61,6 +61,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private readonly QuizDocument _sourceDocument;
     private readonly ObservableCollection<QuizNoteLinkOption> _noteLinkOptions = new();
     private Action<Guid>? _openNoteAction;
+    private readonly Action? _requestImmediateSave;
     private string _modelDisplayName = string.Empty;
     private bool _isSubmitted;
     private QuizNoteLinkOption? _selectedLinkedNote;
@@ -76,8 +77,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         IEnumerable<QuizNoteLinkOption>? noteOptions = null,
         string? modelDisplayName = null,
         string? title = null,
-        Action<Guid>? openNoteAction = null)
-        : this(document, noteOptions, modelDisplayName, title, openNoteAction, initializeOnly: false)
+        Action<Guid>? openNoteAction = null,
+        Action? requestImmediateSave = null)
+        : this(document, noteOptions, modelDisplayName, title, openNoteAction, requestImmediateSave, initializeOnly: false)
     {
     }
 
@@ -85,7 +87,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         QuizDocument document,
         string? modelDisplayName = null,
         string? title = null)
-        : this(document, null, modelDisplayName, title, null, initializeOnly: false)
+        : this(document, null, modelDisplayName, title, null, null, initializeOnly: false)
     {
     }
 
@@ -95,9 +97,11 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         string? modelDisplayName,
         string? title,
         Action<Guid>? openNoteAction,
+        Action? requestImmediateSave,
         bool initializeOnly)
     {
         _sourceDocument = document;
+        _requestImmediateSave = requestImmediateSave;
         _questions = new ObservableCollection<QuizPreviewQuestion>(
             (document.Questions ?? [])
             .Select((question, index) => new QuizPreviewQuestion(index + 1, question)));
@@ -123,6 +127,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         TitleTextBox.Text = string.IsNullOrWhiteSpace(displayTitle)
             ? LocalizationService.GetString("QuizUntitled")
             : displayTitle.Trim();
+        TagsTextBox.Text = document.Tags is null
+            ? string.Empty
+            : string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
         QuestionsItemsControl.ItemsSource = _questions;
         ConfigureAiGeneratedIndicator(modelDisplayName ?? document.AiModelDisplayName);
         UpdateModeChrome();
@@ -145,6 +152,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         WindowContentEnterHelper.AnimateOnLoaded(this);
     }
     public string EditorTitle => TitleTextBox.Text.Trim();
+
+    public IReadOnlyList<string> Tags => ParseTags(TagsTextBox.Text);
 
     public string AiModelDisplayName => _modelDisplayName;
 
@@ -368,7 +377,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             '\u001F',
             TitleTextBox.Text,
             GetSourceNoteIdForSnapshot(),
-            string.Join('\u001E', _sourceDocument.Tags ?? []),
+            string.Join('\u001E', Tags),
             (_sourceDocument.GroupId?.ToString() ?? string.Empty),
             _questionsChangeVersion.ToString(CultureInfo.InvariantCulture),
             attemptsSnapshot);
@@ -457,7 +466,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             Title = string.IsNullOrWhiteSpace(EditorTitle)
                 ? LocalizationService.GetString("QuizUntitled")
                 : EditorTitle,
-            Tags = existingDocument?.Tags?.ToList() ?? _sourceDocument.Tags?.ToList() ?? new List<string>(),
+            Tags = Tags.ToList(),
             Questions = _questions.Select(question => question.ToModel()).ToList(),
             CreatedAt = existingDocument?.CreatedAt ?? _sourceDocument.CreatedAt,
             LastModified = DateTime.Now,
@@ -470,7 +479,12 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             IsPinned = existingDocument?.IsPinned ?? _sourceDocument.IsPinned,
             TimeLimitSeconds = existingDocument?.TimeLimitSeconds ?? _sourceDocument.TimeLimitSeconds,
             PassingScorePercent = _sourceDocument.PassingScorePercent,
-            Attempts = _sourceDocument.Attempts?.ToList() ?? existingDocument?.Attempts?.ToList() ?? new List<QuizAttempt>()
+            ShuffleQuestions = _sourceDocument.ShuffleQuestions,
+            ShuffleOptions = _sourceDocument.ShuffleOptions,
+            PartialCreditMultipleChoice = _sourceDocument.PartialCreditMultipleChoice,
+            ExamMode = _sourceDocument.ExamMode,
+            Attempts = _sourceDocument.Attempts?.ToList() ?? existingDocument?.Attempts?.ToList() ?? new List<QuizAttempt>(),
+            ProgressSession = _sourceDocument.ProgressSession
         };
     }
 
@@ -575,33 +589,73 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        // A saved ProgressSession means a previous attempt was closed mid-way - ask before
+        // dropping back in, rather than silently resuming or silently discarding it. Exam mode
+        // never offers a resume (closing mid-attempt forfeits it), so skip straight past this -
+        // any leftover session is just stale state from before exam mode was turned on.
+        var resumeFrom = _sourceDocument.ProgressSession;
+        if (resumeFrom is not null && _sourceDocument.ExamMode)
+        {
+            resumeFrom = null;
+            _sourceDocument.ProgressSession = null;
+        }
+        else if (resumeFrom is not null)
+        {
+            var choice = ModernDialog.Show(
+                this,
+                LocalizationService.GetString("QuizResumePromptTitle"),
+                LocalizationService.GetString("QuizResumePromptMessage"),
+                ModernDialogTone.Question,
+                LocalizationService.GetString("QuizResumePromptResume"),
+                LocalizationService.GetString("Cancel"),
+                LocalizationService.GetString("QuizResumePromptStartOver"),
+                primaryStyle: ModernDialogButtonStyle.Primary,
+                secondaryStyle: ModernDialogButtonStyle.Secondary,
+                defaultChoice: ModernDialogResult.Primary);
+
+            switch (choice)
+            {
+                case ModernDialogResult.Primary:
+                    break;
+                case ModernDialogResult.Secondary:
+                    resumeFrom = null;
+                    _sourceDocument.ProgressSession = null;
+                    UpdateStartQuizButtonLabel();
+                    _requestImmediateSave?.Invoke();
+                    break;
+                default:
+                    return;
+            }
+        }
+
         try
         {
-            var optionsDialog = new QuizStartOptionsDialog(quizDocument.TimeLimitSeconds, quizDocument.PassingScorePercent)
+            // Preferences (time limit, passing score, shuffle, partial credit, exam mode) are
+            // configured ahead of time via the standalone Options button - starting a quiz
+            // launches straight in with whatever is already saved on the document, instead of
+            // re-asking every time.
+            var quizModeWindow = new QuizModeWindow(
+                quizDocument,
+                quizDocument.TimeLimitSeconds ?? 0,
+                resumeFrom)
             {
                 Owner = this
             };
-
-            if (optionsDialog.ShowDialog() != true)
-                return;
-
-            var timeLimitSeconds = optionsDialog.TimeLimitSeconds;
-            quizDocument.TimeLimitSeconds = timeLimitSeconds == 0 ? null : timeLimitSeconds;
-            quizDocument.PassingScorePercent = optionsDialog.PassingScorePercent;
-            _sourceDocument.TimeLimitSeconds = quizDocument.TimeLimitSeconds;
-            _sourceDocument.PassingScorePercent = quizDocument.PassingScorePercent;
-
-            var quizModeWindow = new QuizModeWindow(quizDocument, timeLimitSeconds)
-            {
-                Owner = this
-            };
+            // The actual status of the quiz - not which button closed the window - decides
+            // whether an attempt gets recorded. This fires the instant a score is computed
+            // (Submit confirmed, or the timer running out), so it's recorded immediately and
+            // survives no matter how the window is closed afterward (Done, system X, ...).
+            quizModeWindow.AttemptSubmitted += attempt => RecordCompletedAttempt(quizDocument, attempt);
             quizModeWindow.ShowDialog();
-            if (quizModeWindow.LastAttempt != null)
+
+            if (quizModeWindow.LastAttempt == null && !_sourceDocument.ExamMode)
             {
-                _sourceDocument.Attempts ??= new List<QuizAttempt>();
-                _sourceDocument.Attempts.Add(quizModeWindow.LastAttempt);
+                // Not submitted - capture wherever the attempt was left off so Start Quiz resumes
+                // there next time, instead of silently discarding an in-progress attempt.
+                _sourceDocument.ProgressSession = quizModeWindow.CaptureProgress();
                 SaveQuizProgress();
                 RefreshProgressPanel();
+                _requestImmediateSave?.Invoke();
             }
         }
         catch (Exception ex)
@@ -613,6 +667,131 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 MessageBoxImage.Error);
         }
     }
+
+    // QuizModeWindow.LastAttempt/AttemptSubmitted track correctness on attemptedDocument.Questions,
+    // which ToDocument() always builds as brand-new QuizQuestion objects (see ToModel()) - not the
+    // same references as _sourceDocument.Questions. Match by the now-stable Id to fold
+    // LastAttemptCorrect back into the real saved questions so "Practice Missed Questions" can
+    // find them later.
+    private void RecordCompletedAttempt(QuizDocument attemptedDocument, QuizAttempt attempt)
+    {
+        var attemptedById = attemptedDocument.Questions.ToDictionary(q => q.Id);
+        foreach (var sourceQuestion in _sourceDocument.Questions ?? new List<QuizQuestion>())
+        {
+            if (attemptedById.TryGetValue(sourceQuestion.Id, out var attempted))
+                sourceQuestion.LastAttemptCorrect = attempted.LastAttemptCorrect;
+        }
+
+        _sourceDocument.ProgressSession = null;
+        _sourceDocument.Attempts ??= new List<QuizAttempt>();
+        _sourceDocument.Attempts.Add(attempt);
+        SaveQuizProgress();
+        RefreshProgressPanel();
+        // A finished attempt (new attempt-history entry, updated LastAttemptCorrect) is exactly
+        // the kind of change that shouldn't wait on the ~30s autosave timer - save it immediately,
+        // same as Flashcards effectively does since study progress rides along on every edit.
+        _requestImmediateSave?.Invoke();
+    }
+
+    // The only place quiz preferences (time limit, passing score, shuffle, partial credit, exam
+    // mode) get configured - Start Quiz and Practice Missed both launch straight in with whatever's
+    // saved here instead of asking again.
+    private void QuizOptionsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var quizDocument = ToDocument(_sourceDocument);
+        var optionsDialog = new QuizStartOptionsDialog(
+            quizDocument.TimeLimitSeconds,
+            quizDocument.PassingScorePercent,
+            quizDocument.ShuffleQuestions,
+            quizDocument.ShuffleOptions,
+            quizDocument.PartialCreditMultipleChoice,
+            quizDocument.ExamMode)
+        {
+            Owner = this
+        };
+
+        if (optionsDialog.ShowDialog() != true)
+            return;
+
+        var timeLimitSeconds = optionsDialog.TimeLimitSeconds;
+        _sourceDocument.TimeLimitSeconds = timeLimitSeconds == 0 ? null : timeLimitSeconds;
+        _sourceDocument.PassingScorePercent = optionsDialog.PassingScorePercent;
+        _sourceDocument.ShuffleQuestions = optionsDialog.ShuffleQuestions;
+        _sourceDocument.ShuffleOptions = optionsDialog.ShuffleOptions;
+        _sourceDocument.PartialCreditMultipleChoice = optionsDialog.PartialCreditMultipleChoice;
+        _sourceDocument.ExamMode = optionsDialog.ExamMode;
+        if (optionsDialog.ExamMode && _sourceDocument.ProgressSession is not null)
+        {
+            _sourceDocument.ProgressSession = null;
+            UpdateStartQuizButtonLabel();
+        }
+
+        UpdateEditedIndicator();
+        _requestImmediateSave?.Invoke();
+    }
+
+    // Launches an ephemeral, filtered QuizModeWindow containing only the questions the last
+    // attempt got wrong (per-question LastAttemptCorrect, not the in-session-only wrong list
+    // QuizModeWindow's own "Retry Wrong Only" uses) - the persisted equivalent of that button,
+    // reachable after reopening the quiz in a new session. Never offers/captures resume - a
+    // filtered missed-only set would hijack the main Start Quiz button into resuming the wrong
+    // question set.
+    private void PracticeMissedButton_Click(object sender, RoutedEventArgs e)
+    {
+        var quizDocument = ToDocument(_sourceDocument);
+        var missedQuestions = quizDocument.Questions.Where(q => q.LastAttemptCorrect == false).ToList();
+        if (missedQuestions.Count == 0)
+        {
+            ModernMessageBox.Show(
+                LocalizationService.GetString("QuizNoMissedQuestions"),
+                LocalizationService.GetString("QuizMode"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            UpdatePracticeMissedVisibility();
+            return;
+        }
+
+        var practiceDocument = new QuizDocument
+        {
+            Id = quizDocument.Id,
+            // Matches QuizModeWindow.RetryWrongButton_Click's own "(Wrong Only)" convention, so a
+            // partial-question attempt is never confused with a full-quiz one in history.
+            Title = quizDocument.Title + " (Missed Only)",
+            Tags = quizDocument.Tags,
+            Questions = missedQuestions,
+            CreatedAt = quizDocument.CreatedAt,
+            AiModelDisplayName = quizDocument.AiModelDisplayName,
+            SourceNoteId = quizDocument.SourceNoteId,
+            GroupId = quizDocument.GroupId,
+            PassingScorePercent = quizDocument.PassingScorePercent,
+            ShuffleQuestions = quizDocument.ShuffleQuestions,
+            ShuffleOptions = quizDocument.ShuffleOptions,
+            PartialCreditMultipleChoice = quizDocument.PartialCreditMultipleChoice,
+            ExamMode = quizDocument.ExamMode
+        };
+
+        try
+        {
+            // No time limit for missed-question practice by default (the main quiz's limit was
+            // calibrated for the full question set) - same "launch straight in" rule as Start
+            // Quiz applies here too, using whatever's already configured via the Options button.
+            var quizModeWindow = new QuizModeWindow(practiceDocument, practiceDocument.TimeLimitSeconds ?? 0)
+            {
+                Owner = this
+            };
+            quizModeWindow.AttemptSubmitted += attempt => RecordCompletedAttempt(practiceDocument, attempt);
+            quizModeWindow.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            ModernMessageBox.Show(
+                $"Error starting quiz: {ex.Message}",
+                "Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void SaveQuizProgress()
     {
         // Keep the quiz editor open after a test run. Attempts are part of the editor
@@ -620,8 +799,28 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         UpdateEditedIndicator();
     }
 
+    private void UpdatePracticeMissedVisibility()
+    {
+        if (FindName("PracticeMissedButton") is not System.Windows.Controls.Button button)
+            return;
+
+        var hasMissed = _sourceDocument.Questions?.Any(q => q.LastAttemptCorrect == false) == true;
+        button.Visibility = hasMissed ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateStartQuizButtonLabel()
+    {
+        if (FindName("StartQuizButton") is not System.Windows.Controls.Button button)
+            return;
+
+        button.Content = LocalizationService.GetString(
+            _sourceDocument.ProgressSession is not null ? "QuizResumeButton" : "QuizStartButton");
+    }
+
     private void RefreshProgressPanel()
     {
+        UpdatePracticeMissedVisibility();
+        UpdateStartQuizButtonLabel();
         if (_sourceDocument.Attempts.Count == 0) return;
 
         var avg = _sourceDocument.Attempts.Average(a => a.Percentage);
@@ -705,6 +904,88 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
     }
 
+    // GIFT/CSV only - both are just question lists, unlike .scribquiz/.json which carry a whole
+    // document's metadata. To bring in a .scribquiz as a whole, use the dashboard's Import button
+    // (creates a new quiz) and "Combine quizzes" to fold it into this one afterward.
+    private void ImportQuestionsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var openFileDialog = new OpenFileDialog
+        {
+            Filter = LocalizationService.GetString("QuizImportQuestionsDialogFilter"),
+            Title = LocalizationService.GetString("QuizImportQuestionsDialogTitle")
+        };
+
+        if (openFileDialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            List<QuizQuestion> imported;
+            IReadOnlyList<string> warnings;
+
+            var extension = Path.GetExtension(openFileDialog.FileName).ToLowerInvariant();
+            var text = File.ReadAllText(openFileDialog.FileName, Encoding.UTF8);
+
+            switch (extension)
+            {
+                case ".gift":
+                {
+                    var result = GiftQuizFormat.Parse(text, GetExportFileName());
+                    imported = result.Document.Questions;
+                    warnings = result.Warnings;
+                    break;
+                }
+                case ".csv":
+                {
+                    var result = QuizCsvFormat.ParseWithWarnings(text, GetExportFileName());
+                    imported = result.Document.Questions;
+                    warnings = result.Warnings;
+                    break;
+                }
+                default:
+                    throw new InvalidOperationException(LocalizationService.GetString("QuizImportUnsupportedFormat"));
+            }
+
+            if (imported.Count == 0)
+            {
+                ModernMessageBox.Show(
+                    LocalizationService.GetString("QuizImportNoQuestionsFound"),
+                    LocalizationService.GetString("QuizImportQuestions"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            if (!IsEditMode)
+                IsEditMode = true;
+
+            foreach (var question in imported)
+                _questions.Add(new QuizPreviewQuestion(_questions.Count + 1, question));
+
+            RenumberQuestions();
+            UpdateSummary();
+            UpdateEditedIndicator();
+
+            var summary = string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("QuizImportQuestionsAddedFormat"), imported.Count);
+            if (warnings.Count > 0)
+                summary += "\n\n" + string.Join("\n", warnings);
+
+            ModernMessageBox.Show(
+                summary,
+                LocalizationService.GetString("QuizImportQuestions"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ModernMessageBox.Show(
+                string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("QuizImportFailedFormat"), ex.Message),
+                LocalizationService.GetString("ImportError"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void ExportButton_Click(object sender, RoutedEventArgs e)
     {
         if (_questions.Count == 0)
@@ -724,25 +1005,35 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         try
         {
             var extension = Path.GetExtension(saveDialog.FileName).ToLowerInvariant();
+            IReadOnlyList<string> warnings = Array.Empty<string>();
             switch (extension)
             {
-                case ".json":
-                    ExportToJson(saveDialog.FileName);
+                case ".scribquiz":
+                    QuizFileService.SaveScribQuizFile(saveDialog.FileName, ToDocument());
+                    break;
+                case ".gift":
+                    GiftQuizFormat.SaveGiftFile(saveDialog.FileName, ToDocument());
                     break;
                 case ".csv":
-                    ExportToCsv(saveDialog.FileName);
+                    warnings = QuizCsvFormat.SaveCsvFile(saveDialog.FileName, ToDocument());
                     break;
                 case ".xps":
-                case ".pdf":
+                    // No real PDF conversion exists here (.NET has no built-in XPS->PDF writer) -
+                    // .xps is the only printable/answer-key export, deliberately not offered as
+                    // .pdf (a prior version of this code did, mislabeling XPS content as PDF).
                     ExportPrintableDocument(saveDialog.FileName);
                     break;
                 default:
                     throw new InvalidOperationException(LocalizationService.GetString("QuizExportUnsupportedFormat"));
             }
 
+            var message = LocalizationService.GetString("QuizExportComplete");
+            if (warnings.Count > 0)
+                message += "\n\n" + string.Join("\n", warnings);
+
             ShowExportDialog(
                 LocalizationService.GetString("Success"),
-                LocalizationService.GetString("QuizExportComplete"));
+                message);
         }
         catch (Exception ex)
         {
@@ -1045,17 +1336,25 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         ToggleFullscreen();
     }
 
-    private void CategoriesAndSetsButton_Click(object sender, RoutedEventArgs e)
-    {
-        EditQuizTags();
-    }
-
     private void LinkedNoteButton_Click(object sender, RoutedEventArgs e)
     {
         if (SelectedLinkedNote is null)
             return;
 
         _openNoteAction?.Invoke(SelectedLinkedNote.Id);
+    }
+
+    private static IReadOnlyList<string> ParseTags(string? rawTags)
+    {
+        if (string.IsNullOrWhiteSpace(rawTags))
+            return Array.Empty<string>();
+
+        return rawTags
+            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(tag => tag.Trim())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private void ToggleFullscreen()
@@ -1114,7 +1413,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             return;
 
         TitleTextBox.IsReadOnly = !IsEditMode;
-        ModeToggleButton.Content = LocalizationService.GetString(IsEditMode ? "ViewQuiz" : "EditQuiz");
+        ModeToggleButton.ToolTip = LocalizationService.GetString(IsEditMode ? "ViewQuiz" : "EditQuiz");
         CheckAnswersButton.Visibility = IsEditMode ? Visibility.Collapsed : Visibility.Visible;
         ResetAnswersButton.Visibility = IsEditMode ? Visibility.Collapsed : Visibility.Visible;
         AddQuestionButton.Visibility = IsEditMode ? Visibility.Visible : Visibility.Collapsed;
@@ -1122,29 +1421,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         OnPropertyChanged(nameof(LinkedNoteEditorVisibility));
         OnPropertyChanged(nameof(LinkedNoteButtonText));
         OnPropertyChanged(nameof(LinkedNoteButtonToolTip));
-    }
-
-    private void EditQuizTags()
-    {
-        var currentTags = string.Join(", ", _sourceDocument.Tags ?? []);
-        var tagsDialog = new SimpleInputDialog(
-            "Quiz categories",
-            "Enter quiz categories/tags separated by commas, semicolons, or pipes:",
-            currentTags)
-        {
-            Owner = this
-        };
-
-        if (tagsDialog.ShowDialog() != true)
-            return;
-
-        _sourceDocument.Tags = tagsDialog.InputText
-            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(tag => !string.IsNullOrWhiteSpace(tag))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        UpdateEditedIndicator();
     }
 
     private bool HasLinkedNote()
@@ -1162,35 +1438,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             baseName = baseName.Replace(invalid, '_');
 
         return baseName;
-    }
-
-    private void ExportToJson(string path)
-    {
-        var exportDocument = ToDocument();
-        var json = JsonSerializer.Serialize(exportDocument, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(path, json, Encoding.UTF8);
-    }
-
-    private void ExportToCsv(string path)
-    {
-        var exportDocument = ToDocument();
-        var sb = new StringBuilder();
-        sb.AppendLine("QuestionNumber,Type,Question,CorrectAnswers,Explanation");
-
-        foreach (var question in exportDocument.Questions)
-        {
-            var correctAnswers = question.Type == QuizQuestionType.PlainText
-                ? question.PlainTextAnswer
-                : string.Join(" | ", question.Options.Where(option => option.IsCorrect).Select(option => option.Text));
-            sb.AppendLine(string.Join(",",
-                EscapeCsv(question.SetIndex.ToString(CultureInfo.InvariantCulture)),
-                EscapeCsv(question.Type.ToString()),
-                EscapeCsv(question.Question),
-                EscapeCsv(correctAnswers),
-                EscapeCsv(question.Explanation)));
-        }
-
-        File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
     }
 
     private void ExportPrintableDocument(string path)
@@ -1268,12 +1515,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
 
         return document;
-    }
-
-    private static string EscapeCsv(string value)
-    {
-        var escaped = value.Replace("\"", "\"\"", StringComparison.Ordinal);
-        return $"\"{escaped}\"";
     }
 
     private static QuizQuestion CreateDefaultQuestion()
@@ -1872,6 +2113,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             {
                 return new QuizQuestion
                 {
+                    // Carried through untouched from the source - the editor UI has no field for
+                    // either, they're just identity/progress data that must survive a save.
+                    Id = _source.Id,
+                    LastAttemptCorrect = _source.LastAttemptCorrect,
                     Type = QuizQuestionType.PlainText,
                     Question = Question.Trim(),
                     Explanation = Explanation.Trim(),
@@ -1899,6 +2144,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
             return new QuizQuestion
             {
+                Id = _source.Id,
+                LastAttemptCorrect = _source.LastAttemptCorrect,
                 Type = Type,
                 Question = Question.Trim(),
                 Explanation = Explanation.Trim(),
@@ -2106,22 +2353,13 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         public bool IsIncorrectSelectedAfterSubmit => Parent.IsSubmitted && IsSelected && !IsCorrect;
 
-        public string MarkerText
-        {
-            get
-            {
-                if (Parent.IsSubmitted && IsCorrect)
-                    return "✓";
+        public string MarkerLetter => QuizOptionMarker.LetterFromIndex(Parent.Options.IndexOf(this));
 
-                if (Parent.IsSubmitted && IsSelected && !IsCorrect)
-                    return "×";
+        public bool ShowSubmitCorrectIcon => Parent.IsSubmitted && IsCorrect;
 
-                if (Parent.Type == QuizQuestionType.MultipleChoice)
-                    return IsSelected ? "☑" : "☐";
+        public bool ShowSubmitIncorrectIcon => Parent.IsSubmitted && IsSelected && !IsCorrect;
 
-                return IsSelected ? "●" : "○";
-            }
-        }
+        public bool ShowMarkerLetter => !ShowSubmitCorrectIcon && !ShowSubmitIncorrectIcon;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -2131,7 +2369,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             OnPropertyChanged(nameof(IsCorrect));
             OnPropertyChanged(nameof(IsCorrectAfterSubmit));
             OnPropertyChanged(nameof(IsIncorrectSelectedAfterSubmit));
-            OnPropertyChanged(nameof(MarkerText));
+            OnPropertyChanged(nameof(MarkerLetter));
+            OnPropertyChanged(nameof(ShowSubmitCorrectIcon));
+            OnPropertyChanged(nameof(ShowSubmitIncorrectIcon));
+            OnPropertyChanged(nameof(ShowMarkerLetter));
         }
 
         public void SetCorrectSilently(bool value)

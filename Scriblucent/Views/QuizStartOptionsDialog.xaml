@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
-        Title="{Binding [QuizStartOptionsTitle], Source={StaticResource Loc}}"
+        Title="{Binding [QuizOptionsTitle], Source={StaticResource Loc}}"
         Height="420"
         Width="600"
         WindowStartupLocation="CenterOwner"
@@ -45,13 +45,15 @@
                 </Border>
 
                 <StackPanel Grid.Column="1" Margin="16,1,0,0">
-                    <TextBlock Text="{Binding [QuizStartOptionsTitle], Source={StaticResource Loc}}"
+                    <TextBlock x:Name="HeaderTitleText"
+                               Text="{Binding [QuizOptionsTitle], Source={StaticResource Loc}}"
                                FontSize="{StaticResource Type.DialogTitle}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"
                                TextWrapping="Wrap"
                                LineHeight="26"/>
-                    <TextBlock Text="{Binding [QuizStartOptionsMessage], Source={StaticResource Loc}}"
+                    <TextBlock x:Name="HeaderMessageText"
+                               Text="{Binding [QuizOptionsMessage], Source={StaticResource Loc}}"
                                FontSize="{StaticResource Type.Meta}"
                                Foreground="{DynamicResource TextColorSecondary}"
                                TextWrapping="Wrap"
@@ -67,7 +69,7 @@
                         BorderThickness="0"
                         CornerRadius="10"
                         Padding="14,12"
-                        Margin="64,0,0,12">
+                        Margin="64,0,0,16">
                     <StackPanel>
                         <TextBlock Text="{Binding [QuizStartTimeLimitQuestion], Source={StaticResource Loc}}"
                                    FontSize="{StaticResource Type.Caption}"
@@ -122,7 +124,7 @@
                         BorderThickness="0"
                         CornerRadius="10"
                         Padding="14,12"
-                        Margin="64,0,0,20">
+                        Margin="64,0,0,16">
                     <StackPanel>
                         <TextBlock Text="{Binding [QuizStartPassingScoreQuestion], Source={StaticResource Loc}}"
                                    FontSize="{StaticResource Type.Caption}"
@@ -161,6 +163,32 @@
                         </Grid>
                     </StackPanel>
                 </Border>
+
+                <Border Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="10"
+                        Padding="14,12"
+                        Margin="64,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [QuizPreferencesHeading], Source={StaticResource Loc}}"
+                                   FontSize="{StaticResource Type.Caption}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextColor}"
+                                   Margin="0,0,0,7"/>
+                        <CheckBox x:Name="ShuffleQuestionsCheckBox"
+                                  Content="{Binding [QuizShuffleQuestionsLabel], Source={StaticResource Loc}}"
+                                  Margin="0,0,0,8"/>
+                        <CheckBox x:Name="ShuffleOptionsCheckBox"
+                                  Content="{Binding [QuizShuffleOptionsLabel], Source={StaticResource Loc}}"
+                                  Margin="0,0,0,8"/>
+                        <CheckBox x:Name="PartialCreditCheckBox"
+                                  Content="{Binding [QuizPartialCreditLabel], Source={StaticResource Loc}}"
+                                  Margin="0,0,0,8"/>
+                        <CheckBox x:Name="ExamModeCheckBox"
+                                  Content="{Binding [QuizExamModeLabel], Source={StaticResource Loc}}"
+                                  ToolTip="{Binding [QuizExamModeTooltip], Source={StaticResource Loc}}"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </controls:OverlayDialogShell.Body>
 
@@ -173,7 +201,8 @@
                         MinWidth="110"
                         Click="CancelButton_Click"/>
 
-                <Button Content="{Binding [QuizStartConfirm], Source={StaticResource Loc}}"
+                <Button x:Name="ConfirmButton"
+                        Content="{Binding [Save], Source={StaticResource Loc}}"
                         Style="{StaticResource DialogPrimaryButtonStyle}"
                         Padding="20,10"
                         MinWidth="120"

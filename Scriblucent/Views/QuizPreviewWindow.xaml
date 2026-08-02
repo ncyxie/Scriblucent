@@ -104,76 +104,14 @@
             </Setter>
         </Style>
 
-        <!-- Inset field fill (WindowBackground) so question/explanation inputs read on white CardBackground in light mode.
-             Keep theme field rest/focus thickness from the base TextBox (do not force border 0). -->
-        <Style x:Key="QuizEditorTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
-            <Setter Property="Padding" Value="9,0"/>
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Style.Triggers>
-                <Trigger Property="AcceptsReturn" Value="True">
-                    <Setter Property="VerticalContentAlignment" Value="Top"/>
-                    <Setter Property="Padding" Value="9,7"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
         <Style x:Key="QuizEditorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
             <Setter Property="Height" Value="32"/>
-        </Style>
-
-        <Style x:Key="QuizOptionButtonStyle" TargetType="Button">
-            <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-            <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="OptionBorder"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="10,9"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="OptionBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                    <Setter Property="BorderThickness" Value="2"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsCorrectAfterSubmit}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
-                    <Setter Property="BorderBrush" Value="Transparent"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsIncorrectSelectedAfterSubmit}" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
-                    <Setter Property="BorderBrush" Value="Transparent"/>
-                    <Setter Property="BorderThickness" Value="0"/>
-                    <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
-                </DataTrigger>
-            </Style.Triggers>
         </Style>
     </Window.Resources>
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Body><Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -220,61 +158,135 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                    <!-- Overlap edit ComboBox / view Button in one cell so vertical center matches the title field. -->
-                    <Grid Margin="0,0,8,0"
-                          MinWidth="140"
-                          MaxWidth="170"
-                          VerticalAlignment="Center">
-                        <ComboBox ItemsSource="{Binding ElementName=QuizWindow, Path=NoteLinkOptions}"
-                                  SelectedItem="{Binding ElementName=QuizWindow, Path=SelectedLinkedNote, Mode=TwoWay}"
-                                  DisplayMemberPath="Title"
-                                  MinWidth="140"
-                                  MaxWidth="170"
-                                  VerticalAlignment="Center"
-                                  Style="{StaticResource LinkedNoteComboBoxStyle}"
-                                  Visibility="{Binding ElementName=QuizWindow, Path=IsEditMode, Converter={StaticResource BoolToVis}}"
-                                  SelectedValuePath="Id"
-                                  ToolTip="{Binding [QuizLinkedNoteSelectorTooltip], Source={StaticResource Loc}}"/>
-                        <Button x:Name="LinkedNoteButton"
-                                Content="{Binding ElementName=QuizWindow, Path=LinkedNoteButtonText}"
-                                Style="{StaticResource LinkedNoteButtonStyle}"
-                                MinWidth="140"
-                                MaxWidth="170"
-                                VerticalAlignment="Center"
-                                Click="LinkedNoteButton_Click"
-                                Visibility="{Binding ElementName=QuizWindow, Path=IsEditMode, Converter={StaticResource InverseBoolToVis}}"
-                                ToolTip="{Binding ElementName=QuizWindow, Path=LinkedNoteButtonToolTip}"
-                                TextOptions.TextFormattingMode="Ideal"/>
-                    </Grid>
+                <Border Grid.Column="1"
+                        Background="{DynamicResource InputSurface}"
+                        CornerRadius="{StaticResource Radius.Control}"
+                        VerticalAlignment="Center"
+                        Padding="8,6"
+                        Effect="{StaticResource Elevation.Field}"
+                        behaviors:RoundedClipBehavior.IsEnabled="True"
+                        SnapsToDevicePixels="True">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <Button x:Name="ModeToggleButton"
+                                Content="{icons:Icon Edit}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [EditQuiz], Source={StaticResource Loc}}"
+                                Click="ModeToggleButton_Click"/>
+                        <Button Content="{icons:Icon Refresh}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [QuizShuffleTooltip], Source={StaticResource Loc}}"
+                                Click="ShuffleQuestionsButton_Click"/>
+                        <Button Content="{icons:Icon History}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [QuizHistory], Source={StaticResource Loc}}"
+                                Click="QuizHistoryButton_Click"/>
+                        <Button x:Name="ImportQuestionsButton"
+                                Content="{icons:Icon Import}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [QuizImportQuestions], Source={StaticResource Loc}}"
+                                Click="ImportQuestionsButton_Click"/>
+                        <Button x:Name="ExportButton"
+                                Content="{icons:Icon Download}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [Export], Source={StaticResource Loc}}"
+                                Click="ExportButton_Click"/>
+                        <Button x:Name="FullscreenButton"
+                                Content="{icons:Icon Monitor}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [StudyModeFullscreenTooltip], Source={StaticResource Loc}}"
+                                Click="FullscreenButton_Click"/>
 
-                    <Border x:Name="AiGeneratedInfoBadge"
-                            Width="30"
-                            Height="30"
-                            CornerRadius="15"
-                            Background="{DynamicResource IconButtonBackground}"
-                            BorderThickness="0"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            ToolTipService.InitialShowDelay="180"
-                            Visibility="Collapsed">
-                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
-                    </Border>
-                </StackPanel>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="2,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Grid MinWidth="140"
+                              MaxWidth="200"
+                              VerticalAlignment="Center"
+                              Margin="0,0,4,0">
+                            <ComboBox ItemsSource="{Binding ElementName=QuizWindow, Path=NoteLinkOptions}"
+                                      SelectedItem="{Binding ElementName=QuizWindow, Path=SelectedLinkedNote, Mode=TwoWay}"
+                                      DisplayMemberPath="Title"
+                                      MinWidth="140"
+                                      MaxWidth="200"
+                                      VerticalAlignment="Center"
+                                      Style="{StaticResource LinkedNoteComboBoxStyle}"
+                                      Visibility="{Binding ElementName=QuizWindow, Path=IsEditMode, Converter={StaticResource BoolToVis}}"
+                                      SelectedValuePath="Id"
+                                      ToolTip="{Binding [QuizLinkedNoteSelectorTooltip], Source={StaticResource Loc}}"/>
+                            <Button x:Name="LinkedNoteButton"
+                                    Content="{Binding ElementName=QuizWindow, Path=LinkedNoteButtonText}"
+                                    Style="{StaticResource LinkedNoteButtonStyle}"
+                                    MinWidth="140"
+                                    MaxWidth="200"
+                                    VerticalAlignment="Center"
+                                    Click="LinkedNoteButton_Click"
+                                    Visibility="{Binding ElementName=QuizWindow, Path=IsEditMode, Converter={StaticResource InverseBoolToVis}}"
+                                    ToolTip="{Binding ElementName=QuizWindow, Path=LinkedNoteButtonToolTip}"
+                                    TextOptions.TextFormattingMode="Ideal"/>
+                        </Grid>
+                        <Border x:Name="AiGeneratedInfoBadge"
+                                Width="30"
+                                Height="30"
+                                Margin="4,0,0,0"
+                                CornerRadius="15"
+                                Background="{DynamicResource IconButtonBackground}"
+                                BorderThickness="0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                ToolTipService.InitialShowDelay="180"
+                                Visibility="Collapsed">
+                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <Border Width="1"
+                                Height="22"
+                                Margin="8,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button Content="{icons:Icon Save}"
+                                Style="{StaticResource EditorPrimarySaveButtonStyle}"
+                                ToolTip="{Binding [Save], Source={StaticResource Loc}}"
+                                Click="SaveButton_Click"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
         <Border Grid.Row="1"
-                Margin="20,4,20,10"
-                Style="{StaticResource ChromePanelBorderStyle}"
-                Padding="12,9">
+                Margin="20,4,20,0"
+                Padding="10,0"
+                Style="{StaticResource ChromeFieldBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding [Tags], Source={StaticResource Loc}}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,10,0"
+                           Foreground="{DynamicResource TextColor}"
+                           FontWeight="SemiBold"/>
+                <TextBox x:Name="TagsTextBox"
+                         Grid.Column="1"
+                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                         Foreground="{DynamicResource TextColor}"
+                         CaretBrush="{DynamicResource TextColor}"
+                         TextChanged="EditorField_TextChanged"
+                         ToolTip="{Binding [TagsHint], Source={StaticResource Loc}}"/>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2"
+                Margin="20,4,20,0"
+                Padding="10,0"
+                Style="{StaticResource ChromeFieldBorderStyle}">
+            <Grid MinHeight="32">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
@@ -296,53 +308,27 @@
                         CornerRadius="{StaticResource Radius.Control}"
                         Background="{DynamicResource SelectionBackground}"
                         Margin="12,0,0,0"
+                        VerticalAlignment="Center"
                         Visibility="Collapsed">
                     <TextBlock x:Name="ScoreTextBlock"
                                FontSize="{StaticResource Type.Meta}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"/>
                 </Border>
-
-                <WrapPanel Grid.Column="2"
-                           Orientation="Horizontal"
-                           VerticalAlignment="Center"
-                           Margin="12,0,0,0">
-                    <Button x:Name="ModeToggleButton"
-                            Content="{Binding [EditQuiz], Source={StaticResource Loc}}"
-                            Style="{StaticResource QuizCompactToolButtonStyle}"
-                            Click="ModeToggleButton_Click"/>
-                    <Button Content="Shuffle"
-                            Style="{StaticResource QuizCompactToolButtonStyle}"
-                            Click="ShuffleQuestionsButton_Click"
-                            ToolTip="Shuffle questions randomly"/>
-                    <Button x:Name="CategoriesButton"
-                            Content="Categories"
-                            Style="{StaticResource QuizCompactToolButtonStyle}"
-                            Click="CategoriesAndSetsButton_Click"
-                            ToolTip="Edit quiz tags"/>
-                    <Button Content="History"
-                            Style="{StaticResource QuizCompactToolButtonStyle}"
-                            Click="QuizHistoryButton_Click"
-                            ToolTip="Show this quiz's attempt history"/>
-                    <Button x:Name="ExportButton"
-                            Content="{Binding [Export], Source={StaticResource Loc}}"
-                            Style="{StaticResource QuizCompactToolButtonStyle}"
-                            Click="ExportButton_Click"
-                            ToolTip="{Binding [Export], Source={StaticResource Loc}}"/>
-                    <Button x:Name="FullscreenButton"
-                            Content="Fullscreen"
-                            Style="{StaticResource QuizCompactToolButtonStyle}"
-                            Click="FullscreenButton_Click"
-                            ToolTip="Toggle Fullscreen (F11)"/>
-                </WrapPanel>
             </Grid>
         </Border>
 
         <ScrollViewer x:Name="QuestionsScrollViewer"
-                      Grid.Row="2"
-                      Margin="20,0,20,10"
+                      Grid.Row="3"
+                      Margin="20,10,20,10"
                       VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Disabled"
+                      Background="Transparent"
+                      Padding="0"
+                      ClipToBounds="True"
+                      behaviors:RoundedClipBehavior.IsEnabled="True"
+                      behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
+                      behaviors:SmoothScrollBehavior.IsEnabled="True">
             <ItemsControl x:Name="QuestionsItemsControl"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
@@ -413,24 +399,20 @@
                                                           Content="{Binding [QuizTypePlainText], Source={StaticResource Loc}}"/>
                                         </ComboBox>
                                         <Button Content="{icons:Icon Kind=ArrowUp, Size=12}"
-                                                Style="{StaticResource QuizToolbarButtonStyle}"
-                                                MinWidth="34"
-                                                Padding="0,4"
+                                                Style="{StaticResource EditorToolIconButtonStyle}"
                                                 ToolTip="{Binding [MoveQuestionUp], Source={StaticResource Loc}}"
                                                 Click="MoveQuestionUpButton_Click"
                                                 Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
                                         <Button Content="{icons:Icon Kind=ArrowDown, Size=12}"
-                                                Style="{StaticResource QuizToolbarButtonStyle}"
-                                                MinWidth="34"
-                                                Padding="0,4"
+                                                Style="{StaticResource EditorToolIconButtonStyle}"
                                                 ToolTip="{Binding [MoveQuestionDown], Source={StaticResource Loc}}"
                                                 Click="MoveQuestionDownButton_Click"
                                                 Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
-                                        <Button Content="{icons:Icon Kind=Close, Size=12}"
-                                                Style="{StaticResource QuizOptionRemoveButtonStyle}"
-                                                Width="34"
-                                                Height="34"
-                                                MinWidth="34"
+                                        <Button Content="{icons:Icon Delete}"
+                                                Width="32"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Style="{StaticResource EditorDangerToolButtonStyle}"
                                                 ToolTip="{Binding [DeleteQuestion], Source={StaticResource Loc}}"
                                                 Click="DeleteQuestionButton_Click"
                                                 Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
@@ -455,16 +437,20 @@
                                            Margin="0,0,0,12"
                                            Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVis}}"/>
 
-                                <TextBox Grid.Row="1"
-                                         Text="{Binding Question, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         TextWrapping="Wrap"
-                                         AcceptsReturn="True"
-                                         MinHeight="42"
-                                         FontSize="{StaticResource Type.BlockTitle}"
-                                         FontWeight="SemiBold"
-                                         Style="{StaticResource QuizEditorTextBoxStyle}"
-                                         Margin="0,0,0,12"
-                                         Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
+                                <Border Grid.Row="1"
+                                        Style="{StaticResource ChromeFieldBorderStyle}"
+                                        Background="{DynamicResource WindowBackground}"
+                                        Padding="9,7"
+                                        MinHeight="42"
+                                        Margin="0,0,0,12"
+                                        Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                    <TextBox Text="{Binding Question, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             TextWrapping="Wrap"
+                                             AcceptsReturn="True"
+                                             FontSize="{StaticResource Type.BlockTitle}"
+                                             FontWeight="SemiBold"
+                                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
+                                </Border>
 
                                 <Grid Grid.Row="2">
 
@@ -477,40 +463,68 @@
                         Click="OptionButton_Click">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="28"/>
+                                                            <ColumnDefinition Width="Auto"/>
                                                             <ColumnDefinition Width="Auto"/>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
 
-                                                        <TextBlock Text="{Binding MarkerText}"
-                                   FontSize="{StaticResource Type.Body}"
-                                   FontWeight="Bold"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                        <Border Style="{StaticResource QuizOptionLetterChipStyle}"
+                                                                Margin="0,0,8,0"
+                                                                VerticalAlignment="Center">
+                                                            <Grid HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding MarkerLetter}"
+                                                                           FontSize="{StaticResource Type.Caption}"
+                                                                           FontWeight="SemiBold"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                           Visibility="{Binding ShowMarkerLetter, Converter={StaticResource BoolToVis}}"/>
+                                                                <icons:AppIcon Kind="Checkmark"
+                                                                               Width="14"
+                                                                               Height="14"
+                                                                               HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center"
+                                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                               Visibility="{Binding ShowSubmitCorrectIcon, Converter={StaticResource BoolToVis}}"/>
+                                                                <icons:AppIcon Kind="Close"
+                                                                               Width="12"
+                                                                               Height="12"
+                                                                               HorizontalAlignment="Center"
+                                                                               VerticalAlignment="Center"
+                                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                               Visibility="{Binding ShowSubmitIncorrectIcon, Converter={StaticResource BoolToVis}}"/>
+                                                            </Grid>
+                                                        </Border>
                                                         <CheckBox Grid.Column="1"
-                                  IsChecked="{Binding IsCorrect, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  Margin="0,0,8,0"
-                                  VerticalAlignment="Center"
-                                  ToolTip="{Binding [CorrectAnswer], Source={StaticResource Loc}}"
-                                  Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
+                                                                  IsChecked="{Binding IsCorrect, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                  Margin="0,0,8,0"
+                                                                  VerticalAlignment="Center"
+                                                                  ToolTip="{Binding [CorrectAnswer], Source={StaticResource Loc}}"
+                                                                  Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
                                                         <TextBlock Grid.Column="2"
-                                   Text="{Binding Text}"
-                                   TextWrapping="Wrap"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                   Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVis}}"/>
-                                                        <TextBox Grid.Column="2"
-                                 Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 TextWrapping="Wrap"
-                                 FontSize="{StaticResource Type.Meta}"
-                                 Style="{StaticResource QuizEditorTextBoxStyle}"
-                                 MinHeight="30"
-                                 Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
+                                                                   Text="{Binding Text}"
+                                                                   TextWrapping="Wrap"
+                                                                   FontSize="{StaticResource Type.Meta}"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                   Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVis}}"/>
+                                                        <Border Grid.Column="2"
+                                                                Style="{StaticResource ChromeFieldBorderStyle}"
+                                                                Background="{DynamicResource InputSurface}"
+                                                                Padding="8,4"
+                                                                MinHeight="30"
+                                                                VerticalAlignment="Center"
+                                                                Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                                            <TextBox Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                     TextWrapping="Wrap"
+                                                                     FontSize="{StaticResource Type.Meta}"
+                                                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
+                                                        </Border>
                                                         <StackPanel Grid.Column="3"
-                                    Orientation="Horizontal"
-                                    Margin="6,0,0,0">
+                                                                    Orientation="Horizontal"
+                                                                    Margin="6,0,0,0">
                                                             <StackPanel.Style>
                                                                 <Style TargetType="StackPanel">
                                                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -526,18 +540,18 @@
                                                                 </Style>
                                                             </StackPanel.Style>
                                                             <Button Content="{icons:Icon Kind=ArrowUp, Size=12}"
-                                    Style="{StaticResource QuizOptionMoveButtonStyle}"
-                                    ToolTip="{Binding [MoveOptionUp], Source={StaticResource Loc}}"
-                                    Click="MoveOptionUpButton_Click"/>
+                                                                    Style="{StaticResource QuizOptionMoveButtonStyle}"
+                                                                    ToolTip="{Binding [MoveOptionUp], Source={StaticResource Loc}}"
+                                                                    Click="MoveOptionUpButton_Click"/>
                                                             <Button Content="{icons:Icon Kind=ArrowDown, Size=12}"
-                                    Style="{StaticResource QuizOptionMoveButtonStyle}"
-                                    ToolTip="{Binding [MoveOptionDown], Source={StaticResource Loc}}"
-                                    Click="MoveOptionDownButton_Click"/>
+                                                                    Style="{StaticResource QuizOptionMoveButtonStyle}"
+                                                                    ToolTip="{Binding [MoveOptionDown], Source={StaticResource Loc}}"
+                                                                    Click="MoveOptionDownButton_Click"/>
                                                             <Button Content="{icons:Icon Kind=Close, Size=12}"
-                                    Style="{StaticResource QuizOptionRemoveButtonStyle}"
-                                    ToolTip="{Binding [RemoveOption], Source={StaticResource Loc}}"
-                                    Click="RemoveOptionButton_Click"
-                                    Visibility="{Binding Parent.CanRemoveOption, Converter={StaticResource BoolToVis}}"/>
+                                                                    Style="{StaticResource QuizOptionRemoveButtonStyle}"
+                                                                    ToolTip="{Binding [RemoveOption], Source={StaticResource Loc}}"
+                                                                    Click="RemoveOptionButton_Click"
+                                                                    Visibility="{Binding Parent.CanRemoveOption, Converter={StaticResource BoolToVis}}"/>
                                                         </StackPanel>
                                                     </Grid>
                                                 </Button>
@@ -564,32 +578,40 @@
                                                            Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVis}}"/>
                                             </Grid>
 
-                                            <TextBox Text="{Binding PlainTextAnswer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                     AcceptsReturn="True"
-                                                     TextWrapping="Wrap"
-                                                     MinHeight="76"
-                                                     MaxHeight="150"
-                                                     VerticalScrollBarVisibility="Auto"
-                                                     Style="{StaticResource QuizEditorTextBoxStyle}"
-                                                     Margin="0,8,0,0"
-                                                     ToolTip="{Binding [QuizPlainTextAnswerHint], Source={StaticResource Loc}}"
-                                                     Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}"/>
+                                            <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                                    Background="{DynamicResource WindowBackground}"
+                                                    Padding="9,7"
+                                                    MinHeight="76"
+                                                    MaxHeight="150"
+                                                    Margin="0,8,0,0"
+                                                    Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVis}}">
+                                                <TextBox Text="{Binding PlainTextAnswer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         AcceptsReturn="True"
+                                                         TextWrapping="Wrap"
+                                                         VerticalScrollBarVisibility="Auto"
+                                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                                         ToolTip="{Binding [QuizPlainTextAnswerHint], Source={StaticResource Loc}}"/>
+                                            </Border>
 
                                             <Grid Margin="0,8,0,0"
                                                   Visibility="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVis}}">
-                                                <TextBox x:Name="PlainTextPracticeTextBox"
-                                                         Text="{Binding PlainTextUserAnswer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                         IsReadOnly="{Binding IsSubmitted}"
-                                                         AcceptsReturn="True"
-                                                         TextWrapping="Wrap"
-                                                         MinHeight="86"
-                                                         MaxHeight="170"
-                                                         VerticalScrollBarVisibility="Auto"
-                                                         Style="{StaticResource QuizEditorTextBoxStyle}"
-                                                         ToolTip="{Binding [QuizPlainTextPracticeHint], Source={StaticResource Loc}}"/>
+                                                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                                        Background="{DynamicResource WindowBackground}"
+                                                        Padding="9,7"
+                                                        MinHeight="86"
+                                                        MaxHeight="170">
+                                                    <TextBox x:Name="PlainTextPracticeTextBox"
+                                                             Text="{Binding PlainTextUserAnswer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                             IsReadOnly="{Binding IsSubmitted}"
+                                                             AcceptsReturn="True"
+                                                             TextWrapping="Wrap"
+                                                             VerticalScrollBarVisibility="Auto"
+                                                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                                             ToolTip="{Binding [QuizPlainTextPracticeHint], Source={StaticResource Loc}}"/>
+                                                </Border>
                                                 <TextBlock Text="{Binding [QuizPlainTextPracticePlaceholder], Source={StaticResource Loc}}"
                                                            IsHitTestVisible="False"
-                                                           Margin="10,8,10,0"
+                                                           Margin="15,15,15,0"
                                                            FontSize="{StaticResource Type.Meta}"
                                                            Foreground="{DynamicResource TextColorSecondary}"
                                                            Opacity="0.72"
@@ -688,15 +710,19 @@
                                                FontSize="{StaticResource Type.Caption}"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource TextColorSecondary}"/>
-                                    <TextBox Text="{Binding Explanation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                             MinHeight="76"
-                                             MaxHeight="150"
-                                             TextWrapping="Wrap"
-                                             AcceptsReturn="True"
-                                             Margin="0,8,0,0"
-                                             VerticalScrollBarVisibility="Auto"
-                                             ToolTip="{Binding [QuizExplanationHint], Source={StaticResource Loc}}"
-                                             Style="{StaticResource QuizEditorTextBoxStyle}"/>
+                                    <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                            Background="{DynamicResource WindowBackground}"
+                                            Padding="9,7"
+                                            MinHeight="76"
+                                            MaxHeight="150"
+                                            Margin="0,8,0,0">
+                                        <TextBox Text="{Binding Explanation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap"
+                                                 AcceptsReturn="True"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 ToolTip="{Binding [QuizExplanationHint], Source={StaticResource Loc}}"
+                                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
+                                    </Border>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -706,7 +732,7 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Margin="20,0,20,12"
                 Style="{StaticResource ChromePanelBorderStyle}"
                 Padding="12,10">
@@ -728,6 +754,17 @@
                             Foreground="{DynamicResource AccentSuccessForeground}"
                             Click="StartQuizButton_Click"
                             ToolTip="{Binding [QuizStartButtonTooltip], Source={StaticResource Loc}}"/>
+                    <Button x:Name="QuizOptionsButton"
+                            Content="{Binding [QuizOptionsButton], Source={StaticResource Loc}}"
+                            Style="{StaticResource QuizFooterButtonStyle}"
+                            Click="QuizOptionsButton_Click"
+                            ToolTip="{Binding [QuizOptionsButtonTooltip], Source={StaticResource Loc}}"/>
+                    <Button x:Name="PracticeMissedButton"
+                            Content="{Binding [QuizPracticeMissedButton], Source={StaticResource Loc}}"
+                            Style="{StaticResource QuizFooterButtonStyle}"
+                            Click="PracticeMissedButton_Click"
+                            ToolTip="{Binding [QuizPracticeMissedButtonTooltip], Source={StaticResource Loc}}"
+                            Visibility="Collapsed"/>
                     <Button x:Name="CheckAnswersButton"
                             Content="{Binding [QuizCheckAnswers], Source={StaticResource Loc}}"
                             Style="{StaticResource QuizFooterPrimaryButtonStyle}"
@@ -747,9 +784,6 @@
                            VerticalAlignment="Center"
                            HorizontalAlignment="Right"
                            Margin="10,0,0,0">
-                    <Button Content="{Binding [Save], Source={StaticResource Loc}}"
-                            Style="{StaticResource QuizFooterPrimaryButtonStyle}"
-                            Click="SaveButton_Click"/>
                     <Button Content="{Binding [Close], Source={StaticResource Loc}}"
                             Style="{StaticResource QuizFooterButtonStyle}"
                             Margin="0,4,0,4"

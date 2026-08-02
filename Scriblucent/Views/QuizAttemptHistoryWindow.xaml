@@ -1,6 +1,7 @@
 <Window x:Class="Scriblucent.Views.QuizAttemptHistoryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         Title="Quiz History"
         Height="600"
@@ -92,6 +93,12 @@
             <Grid Margin="20,16,20,8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
+                              Background="Transparent"
+                              Padding="0"
+                              ClipToBounds="True"
+                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
+                              behaviors:SmoothScrollBehavior.IsEnabled="True"
                               Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding Attempts}"
                                   VirtualizingPanel.IsVirtualizing="True"

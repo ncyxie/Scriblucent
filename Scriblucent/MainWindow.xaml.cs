@@ -2361,25 +2361,31 @@ namespace Scriblucent
                 }
             };
 
+            QuizDocument? savedDocument = quiz?.Document;
+            Action saveNow = null!;
+
             var editor = new QuizPreviewWindow(
                 document,
                 vm.Notes.Select(note => new QuizPreviewWindow.QuizNoteLinkOption(note.Document.Id, note.Document.Title)),
                 document.AiModelDisplayName,
                 document.Title,
-                noteId => OpenNoteById(vm, noteId))
+                noteId => OpenNoteById(vm, noteId),
+                requestImmediateSave: () => saveNow())
             {
                 Owner = this
             };
 
-            QuizDocument? savedDocument = quiz?.Document;
-            var autoSaveTimer = StartEditorAutoSave(
-                editor.HasPendingAutoSaveChanges,
-                () =>
-                {
-                    var updatedDocument = editor.ToDocument(savedDocument);
-                    savedDocument = vm.AddOrUpdateQuiz(updatedDocument).Document;
-                    editor.MarkCurrentStateAutoSaved();
-                });
+            // Finishing (or abandoning mid-way) a quiz attempt calls this directly instead of
+            // waiting on the autosave timer below, so attempt history, per-question memory, and
+            // in-progress resume state are never lost to a short editor session.
+            saveNow = () =>
+            {
+                var updatedDocument = editor.ToDocument(savedDocument);
+                savedDocument = vm.AddOrUpdateQuiz(updatedDocument).Document;
+                editor.MarkCurrentStateAutoSaved();
+            };
+
+            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
 
             try
             {
@@ -4854,6 +4860,112 @@ namespace Scriblucent
             ModernMessageBox.Show(
                 string.Format(LocalizationService.GetString("MindMapImportSuccessCount"), imported.Count),
                 LocalizationService.GetString("MindMapImport"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        internal void ImportQuizButton_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Multiselect = true,
+                Filter = LocalizationService.GetString("QuizImportDialogFilter"),
+                Title = LocalizationService.GetString("QuizImportDialogTitle")
+            };
+
+            if (openFileDialog.ShowDialog() != true)
+                return;
+
+            if (DataContext is not MainViewModel vm)
+                return;
+
+            // Ask once for the whole batch, and only if at least one selected file could actually
+            // carry progress data - GIFT/CSV can never represent it, so they never trigger this.
+            var keepProgress = false;
+            var progressCapableFiles = openFileDialog.FileNames
+                .Where(path => QuizFileService.IsScribQuizPath(path) || QuizFileService.IsLegacyJsonPath(path))
+                .ToList();
+
+            if (progressCapableFiles.Count > 0)
+            {
+                var anyHasProgress = progressCapableFiles.Any(path =>
+                {
+                    try
+                    {
+                        return QuizFileService.HasProgressData(QuizFileService.LoadScribQuizDocument(path));
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                });
+
+                if (anyHasProgress)
+                {
+                    var choice = ModernDialog.Show(
+                        this,
+                        LocalizationService.GetString("QuizImportKeepProgressTitle"),
+                        LocalizationService.GetString("QuizImportKeepProgressPrompt"),
+                        ModernDialogTone.Question,
+                        LocalizationService.GetString("QuizImportKeepProgressKeep"),
+                        LocalizationService.GetString("Cancel"),
+                        LocalizationService.GetString("QuizImportKeepProgressDiscard"),
+                        primaryStyle: ModernDialogButtonStyle.Secondary,
+                        secondaryStyle: ModernDialogButtonStyle.Primary,
+                        defaultChoice: ModernDialogResult.Secondary);
+
+                    switch (choice)
+                    {
+                        case ModernDialogResult.Primary:
+                            keepProgress = true;
+                            break;
+                        case ModernDialogResult.Secondary:
+                            keepProgress = false;
+                            break;
+                        default:
+                            return;
+                    }
+                }
+            }
+
+            var imported = new List<QuizDocument>();
+            var warnings = new List<string>();
+            foreach (var filePath in openFileDialog.FileNames)
+            {
+                try
+                {
+                    var document = QuizFileService.LoadAnyQuizDocument(
+                        filePath,
+                        Path.GetFileNameWithoutExtension(filePath),
+                        keepProgress,
+                        out var fileWarnings);
+                    imported.Add(document);
+                    warnings.AddRange(fileWarnings.Select(warning => $"{Path.GetFileName(filePath)}: {warning}"));
+                }
+                catch (Exception ex)
+                {
+                    ModernMessageBox.Show(
+                        $"{LocalizationService.GetString("ImportError")}\n{Path.GetFileName(filePath)}\n\n{ex.Message}",
+                        LocalizationService.GetString("Error"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+
+            if (imported.Count == 0)
+                return;
+
+            // Single batch add so a multi-file import pays one save, not one per file - see
+            // MainViewModel.AddImportedQuizzes for the same reasoning AddImportedMindMaps documents.
+            vm.AddImportedQuizzes(imported);
+
+            var summary = string.Format(LocalizationService.GetString("QuizImportSuccessCount"), imported.Count);
+            if (warnings.Count > 0)
+                summary += "\n\n" + string.Join("\n", warnings);
+
+            ModernMessageBox.Show(
+                summary,
+                LocalizationService.GetString("QuizImport"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }

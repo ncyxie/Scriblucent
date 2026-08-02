@@ -19,6 +19,8 @@ public partial class QuizzesDashboardPage : UserControl
         => Host?.CalendarScheduledItemCard_MouseLeftButtonUp(sender, e);
     private void CreateQuizButton_Click(object sender, RoutedEventArgs e)
         => Host?.CreateQuizButton_Click(sender, e);
+    private void ImportButton_Click(object sender, RoutedEventArgs e)
+        => Host?.ImportQuizButton_Click(sender, e);
     private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
         => Host?.DashboardCalendar_SelectedDatesChanged(sender, e);
     private void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)

@@ -94,6 +94,16 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
         OnPropertyChanged(nameof(PassRateText));
     }
 
+    // Shows the fractional earned points instead of the whole-question count only when partial
+    // credit actually produced a non-whole value - keeps old/ordinary attempts (whole CorrectCount)
+    // displaying exactly as before.
+    private static string FormatScoreDisplay(QuizAttempt attempt)
+    {
+        return attempt.EarnedPoints != Math.Floor(attempt.EarnedPoints)
+            ? string.Format(CultureInfo.CurrentCulture, "{0:0.##}/{1} ({2:F1}%)", attempt.EarnedPoints, attempt.TotalQuestions, attempt.Percentage)
+            : string.Format(CultureInfo.CurrentCulture, "{0}/{1} ({2:F1}%)", attempt.CorrectCount, attempt.TotalQuestions, attempt.Percentage);
+    }
+
     private List<AttemptDisplayItem> BuildAllQuizItems()
     {
         return _mainViewModel.Quizzes
@@ -104,7 +114,7 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
                 QuizTitle = string.IsNullOrWhiteSpace(attempt.QuizTitle)
                     ? quiz.Title
                     : attempt.QuizTitle.Trim(),
-                ScoreDisplay = string.Format(CultureInfo.CurrentCulture, "{0}/{1} ({2:F1}%)", attempt.CorrectCount, attempt.TotalQuestions, attempt.Percentage),
+                ScoreDisplay = FormatScoreDisplay(attempt),
                 DateDisplay = attempt.Date.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),
                 TimeDisplay = attempt.TimeTaken.ToString(@"hh\:mm\:ss", CultureInfo.CurrentCulture),
                 Passed = attempt.Percentage >= attempt.PassingScorePercent
@@ -122,7 +132,7 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
                 QuizTitle = string.IsNullOrWhiteSpace(attempt.QuizTitle)
                     ? string.IsNullOrWhiteSpace(quizDocument.Title) ? "Untitled Quiz" : quizDocument.Title.Trim()
                     : attempt.QuizTitle.Trim(),
-                ScoreDisplay = string.Format(CultureInfo.CurrentCulture, "{0}/{1} ({2:F1}%)", attempt.CorrectCount, attempt.TotalQuestions, attempt.Percentage),
+                ScoreDisplay = FormatScoreDisplay(attempt),
                 DateDisplay = attempt.Date.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),
                 TimeDisplay = attempt.TimeTaken.ToString(@"hh\:mm\:ss", CultureInfo.CurrentCulture),
                 Passed = attempt.Percentage >= attempt.PassingScorePercent

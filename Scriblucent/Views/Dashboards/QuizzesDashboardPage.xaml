@@ -870,6 +870,19 @@
                             </Grid>
                         </ScrollViewer>
 
+                        <Button x:Name="ImportButton"
+                                Grid.Row="1"
+                                Style="{DynamicResource FloatingSecondaryButtonStyle}"
+                                Width="32"
+                                Height="30"
+                                FontSize="{StaticResource Type.Meta}"
+                                IsEnabled="{Binding IsNotMassSelectMode}"
+                                VerticalAlignment="Bottom"
+                                HorizontalAlignment="Right"
+                                Content="{icons:Icon Import}"
+                                Margin="0,0,49,96"
+                                ToolTip="{Binding [QuizImport], Source={StaticResource Loc}}"
+                                Click="ImportButton_Click"/>
                         <Button Grid.Row="1"
                                 Style="{StaticResource FabStyle}"
                             IsEnabled="{Binding IsNotMassSelectMode}"
