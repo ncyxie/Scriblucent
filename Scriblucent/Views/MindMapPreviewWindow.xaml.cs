@@ -34,7 +34,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     }
 
     private const double BaseNodeWidth = 190;
-    private const double MaxNodeWidth = 340;
+    private const double MaxNodeWidth = 420;
+    // Shared column width targets ~PreferredTitleLines of wrap; titles beyond MaxTitleLines
+    // ellipsize with a tooltip (see FitTitleForDisplay).
+    private const int PreferredTitleLines = 2;
+    private const int MaxTitleLines = 4;
     // Every layout algorithm (balanced/left/right tree, top-down, radial) treats this as a single
     // shared column width, not a per-node one - reworking all four to place variable-width boxes
     // without overlapping neighbors is a much bigger change than this needs. Instead the whole
@@ -43,18 +47,28 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     // and static (not instance) because the layout-measurement helpers below are static and this
     // window is always modal/single-instance (see the clipboard fields for the same reasoning).
     private static double NodeWidth = BaseNodeWidth;
+    private static MindMapNode? LayoutRoot;
+    // TextBlock.Measure matches what DrawNodes paints; keep a little slack for layout rounding.
+    private const double NodeHeightSlack = 6;
     private const double HorizontalGap = 150;
-    private const double VerticalGap = 18;
+    private const double VerticalGap = 28;
     private const double VerticalLayoutLevelGap = 118;
     private const double VerticalLayoutNodeGap = 34;
     private const double CanvasPadding = 52;
-    // Must mirror DrawNodes' node Border: Padding(12,8,12,8) and the icon badge's 28px right
-    // margin on the text - MeasureNodeHeight needs the same constraints DrawNodes actually
-    // renders with, or a node with a large font/long text will measure short and get clipped.
-    private const double NodeTextHorizontalPadding = 24;
-    private const double NodeTextVerticalPadding = 16;
-    private const double NodeIconTextMargin = 28;
-    private const double MinNodeHeight = 52;
+    // Must mirror DrawNodes card padding / chevron / meta row for measure.
+    private const double CardPaddingX = 14;
+    private const double CardPaddingY = 12;
+    private const double NodeTextHorizontalPadding = CardPaddingX * 2;
+    private const double NodeTextVerticalPadding = CardPaddingY * 2;
+    private const double ChevronHitSize = 20;
+    private const double ChevronGlyphSize = 14;
+    private const double ChevronTitleGap = 8;
+    private const double MetaRowHeight = 18;
+    private const double TitleMetaGap = 8;
+    private const double MetaGlyphSize = 13;
+    private const double MetaItemGap = 8;
+    private const int MaxVisibleNodeIcons = 3;
+    private const double MinNodeHeight = 48;
     private const double MaxNodeHeight = 400;
     private static readonly FontFamily DefaultNodeFontFamily =
         Application.Current?.TryFindResource("FontFamily.UI") as FontFamily ?? new FontFamily("Segoe UI");
@@ -156,24 +170,6 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         public string Title { get; }
     }
 
-    private static readonly Brush[] LightNodeBackgrounds =
-    [
-        FrozenBrush(Color.FromRgb(63, 111, 232)),
-        FrozenBrush(Color.FromRgb(236, 253, 245)),
-        FrozenBrush(Color.FromRgb(239, 246, 255)),
-        FrozenBrush(Color.FromRgb(245, 243, 255)),
-        FrozenBrush(Color.FromRgb(255, 251, 235))
-    ];
-
-    private static readonly Brush[] DarkNodeBackgrounds =
-    [
-        FrozenBrush(Color.FromRgb(63, 111, 232)),
-        FrozenBrush(Color.FromRgb(34, 56, 49)),
-        FrozenBrush(Color.FromRgb(30, 48, 69)),
-        FrozenBrush(Color.FromRgb(49, 39, 72)),
-        FrozenBrush(Color.FromRgb(73, 56, 37))
-    ];
-
     private static SolidColorBrush FrozenBrush(Color color)
     {
         var brush = new SolidColorBrush(color);
@@ -193,6 +189,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         Action<Guid>? openNoteAction = null)
     {
         _root = root;
+        MindMapNodeIconCatalog.NormalizeTreeIcons(_root);
         _openNoteAction = openNoteAction;
         if (noteOptions != null)
         {
@@ -602,6 +599,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _layouts.Clear();
         MapCanvas.Children.Clear();
+        LayoutRoot = _root;
         NodeWidth = ComputeEffectiveNodeWidth(_root);
 
         switch (_selectedLayoutMode)
@@ -899,6 +897,142 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         RebuildMap();
     }
 
+    private void SearchReplaceButton_Click(object sender, RoutedEventArgs e)
+    {
+        var find = GetReplaceFindText();
+        if (string.IsNullOrEmpty(find) || CurrentSearchMatch is not { } node)
+            return;
+
+        var replacement = ReplaceTextBox?.Text ?? string.Empty;
+        PushUndoSnapshot();
+        var replaced = ReplaceInNode(node, find, replacement);
+        if (replaced == 0)
+        {
+            UpdateSearchReplaceButtonStates();
+            return;
+        }
+
+        SelectSingleNode(node);
+        RefreshSearchMatches(resetIndex: false);
+        if (CurrentSearchMatch is { } match)
+            ExpandAncestorsOf(match);
+        CenterViewOnCurrentSearchMatch();
+        RebuildMap();
+        ShowSearchReplaceStatus(replaced);
+    }
+
+    private void SearchReplaceAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        var find = GetReplaceFindText();
+        if (string.IsNullOrEmpty(find))
+            return;
+
+        var replacement = ReplaceTextBox?.Text ?? string.Empty;
+        var targets = EnumerateAllNodes(_root)
+            .Where(node => NodeContainsFindText(node, find))
+            .ToList();
+        if (targets.Count == 0)
+            return;
+
+        PushUndoSnapshot();
+        var total = 0;
+        foreach (var node in targets)
+            total += ReplaceInNode(node, find, replacement);
+
+        if (total == 0)
+        {
+            UpdateSearchReplaceButtonStates();
+            return;
+        }
+
+        RefreshSearchMatches(resetIndex: true);
+        if (CurrentSearchMatch is { } match)
+            ExpandAncestorsOf(match);
+        CenterViewOnCurrentSearchMatch();
+        RebuildMap();
+        ShowSearchReplaceStatus(total);
+    }
+
+    private string GetReplaceFindText()
+        => (SearchTextBox?.Text ?? string.Empty).Trim();
+
+    private static bool NodeContainsFindText(MindMapNode node, string find)
+        => (!string.IsNullOrEmpty(node.Text) && node.Text.Contains(find, StringComparison.CurrentCultureIgnoreCase))
+           || (!string.IsNullOrEmpty(node.Note) && node.Note.Contains(find, StringComparison.CurrentCultureIgnoreCase));
+
+    // Case-insensitive literal replace in title + note. Title is re-normalized so length/whitespace
+    // rules stay consistent with EditNodeText.
+    private static int ReplaceInNode(MindMapNode node, string find, string replacement)
+    {
+        var count = 0;
+
+        var text = node.Text ?? string.Empty;
+        var (newText, textCount) = ReplaceIgnoreCase(text, find, replacement);
+        if (textCount > 0)
+        {
+            node.Text = NormalizeNodeText(newText);
+            count += textCount;
+        }
+
+        var note = node.Note ?? string.Empty;
+        var (newNote, noteCount) = ReplaceIgnoreCase(note, find, replacement);
+        if (noteCount > 0)
+        {
+            node.Note = string.IsNullOrWhiteSpace(newNote) ? null : newNote;
+            count += noteCount;
+        }
+
+        return count;
+    }
+
+    private static (string Result, int Count) ReplaceIgnoreCase(string input, string find, string replacement)
+    {
+        if (string.IsNullOrEmpty(input) || string.IsNullOrEmpty(find))
+            return (input, 0);
+
+        var comparison = StringComparison.CurrentCultureIgnoreCase;
+        var count = 0;
+        var index = 0;
+        var builder = new System.Text.StringBuilder(input.Length);
+        while (index < input.Length)
+        {
+            var match = input.IndexOf(find, index, comparison);
+            if (match < 0)
+            {
+                builder.Append(input, index, input.Length - index);
+                break;
+            }
+
+            builder.Append(input, index, match - index);
+            builder.Append(replacement);
+            count++;
+            index = match + find.Length;
+        }
+
+        return (builder.ToString(), count);
+    }
+
+    private void ShowSearchReplaceStatus(int replacedCount)
+    {
+        if (SearchResultsTextBlock is null)
+            return;
+
+        SearchResultsTextBlock.Text = string.Format(
+            CultureInfo.CurrentCulture,
+            LocalizationService.GetString("FindReplaceReplacedCountFormat"),
+            replacedCount);
+        UpdateSearchReplaceButtonStates();
+    }
+
+    private void UpdateSearchReplaceButtonStates()
+    {
+        var canReplace = !string.IsNullOrEmpty(GetReplaceFindText()) && _searchMatches.Count > 0;
+        if (SearchReplaceButton is not null)
+            SearchReplaceButton.IsEnabled = canReplace && CurrentSearchMatch is not null;
+        if (SearchReplaceAllButton is not null)
+            SearchReplaceAllButton.IsEnabled = canReplace;
+    }
+
     private void RefreshSearchMatches(bool resetIndex)
     {
         var previousCurrent = CurrentSearchMatch;
@@ -934,6 +1068,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         UpdateSearchResultsText();
+        UpdateSearchReplaceButtonStates();
 
         if (CurrentSearchMatch is { } match)
             ExpandAncestorsOf(match);
@@ -1001,11 +1136,15 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void UpdateSearchResultsText()
     {
         if (SearchResultsTextBlock is null)
+        {
+            UpdateSearchReplaceButtonStates();
             return;
+        }
 
         if (string.IsNullOrWhiteSpace(_searchQuery))
         {
             SearchResultsTextBlock.Text = LocalizationService.GetString("MindMapSearchNoResults");
+            UpdateSearchReplaceButtonStates();
             return;
         }
 
@@ -1016,6 +1155,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 LocalizationService.GetString("MindMapSearchResultsFormat"),
                 0,
                 0);
+            UpdateSearchReplaceButtonStates();
             return;
         }
 
@@ -1024,6 +1164,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             LocalizationService.GetString("MindMapSearchResultsFormat"),
             _currentSearchMatchIndex + 1,
             _searchMatches.Count);
+        UpdateSearchReplaceButtonStates();
     }
 
     private void CenterViewOnCurrentSearchMatch()
@@ -1147,73 +1288,169 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return Math.Max(NodeWidth, childrenWidth);
     }
 
-    private static Typeface CreateNodeTypeface(MindMapNode node, out double fontSize)
+    private static Typeface ResolveNodeTypeface(MindMapNode node, out double fontSize)
     {
         fontSize = node.FontSize ?? DefaultNodeFontSize;
         var fontFamily = !string.IsNullOrWhiteSpace(node.FontFamily)
             ? new FontFamily(node.FontFamily)
             : DefaultNodeFontFamily;
 
+        // DrawNodes paints the root SemiBold when not explicitly bold — measure must match or the
+        // title wraps taller than reserved height and pushes the meta/icon row under the clip.
+        var weight = node.IsBold
+            ? FontWeights.Bold
+            : ReferenceEquals(node, LayoutRoot)
+                ? FontWeights.SemiBold
+                : FontWeights.Normal;
+
         return new Typeface(
             fontFamily,
             node.IsItalic ? FontStyles.Italic : FontStyles.Normal,
-            node.IsBold ? FontWeights.Bold : FontWeights.Normal,
+            weight,
             FontStretches.Normal);
     }
 
-    // Recomputes the whole map's shared node width (see NodeWidth's declaration comment) from
-    // whatever's currently visible, so a node with a large font/long-ish title gets enough room
-    // without needing to badly wrap a short phrase into a tall, narrow column. Only currently-
-    // visible nodes count - a big font on a collapsed-away node shouldn't widen nodes the user
-    // can actually see, and every expand/collapse already triggers a fresh RebuildMap anyway, so
-    // revealing it later naturally re-measures.
+    // Recomputes the whole map's shared node width from visible nodes. Prefers a width where each
+    // title wraps to about PreferredTitleLines (not single-line width), so large fonts / longer
+    // phrases widen the column modestly instead of stacking into a tall narrow tower. Collapsed
+    // nodes are ignored; expand/collapse rebuilds and re-measures.
     private static double ComputeEffectiveNodeWidth(MindMapNode root)
     {
         var maxWidth = BaseNodeWidth;
 
         foreach (var node in EnumerateVisibleNodes(root))
         {
-            var typeface = CreateNodeTypeface(node, out var fontSize);
-            var formatted = new FormattedText(
-                string.IsNullOrEmpty(node.Text) ? " " : node.Text,
-                CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                fontSize,
-                Brushes.Black,
-                1.0);
-
-            var iconMargin = node.Icons.Count > 0 ? NodeIconTextMargin : 0;
-            var neededWidth = formatted.WidthIncludingTrailingWhitespace + NodeTextHorizontalPadding + iconMargin;
+            var typeface = ResolveNodeTypeface(node, out var fontSize);
+            var contentWidth = MeasurePreferredContentWidth(node.Text, typeface, fontSize);
+            var neededWidth = contentWidth
+                + NodeTextHorizontalPadding
+                + EstimateChevronReserve(node)
+                + GetContentBorderThickness(node) * 2;
             maxWidth = Math.Max(maxWidth, Math.Min(neededWidth, MaxNodeWidth));
         }
 
         return maxWidth;
     }
 
-    // Measures against the node's real font (size/family/bold/italic), not a fixed default - a
-    // character-count heuristic tuned for the default ~14px font badly underestimates height
-    // once a node has a larger custom font size, clipping wrapped text inside a too-short card.
+    // TextBlock.Measure matches what DrawNodes actually paints; FormattedText often under-reports
+    // wrapped height (especially with custom fonts / DPI), leaving cards one line short.
+    private static Size MeasureWrappedText(string? text, Typeface typeface, double fontSize, double maxWidth)
+    {
+        var block = new TextBlock
+        {
+            Text = string.IsNullOrEmpty(text) ? " " : text,
+            FontFamily = typeface.FontFamily,
+            FontSize = fontSize,
+            FontWeight = typeface.Weight,
+            FontStyle = typeface.Style,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Left,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0)
+        };
+        block.Measure(new Size(Math.Max(20, maxWidth), double.PositiveInfinity));
+        return block.DesiredSize;
+    }
+
+    private static double MeasureLineHeight(Typeface typeface, double fontSize)
+        => Math.Max(1, MeasureWrappedText("X", typeface, fontSize, double.PositiveInfinity).Height);
+
+    // Smallest content width where the title fits in PreferredTitleLines (binary search). Short
+    // titles return near their single-line width so the shared column stays dense.
+    private static double MeasurePreferredContentWidth(string? text, Typeface typeface, double fontSize)
+    {
+        var source = string.IsNullOrEmpty(text) ? " " : text;
+        var oneLineWidth = Math.Max(20, MeasureWrappedText(source, typeface, fontSize, double.PositiveInfinity).Width);
+        var oneLineHeight = MeasureLineHeight(typeface, fontSize);
+        var targetHeight = oneLineHeight * PreferredTitleLines + 0.5;
+
+        var lo = Math.Max(20, oneLineWidth / (PreferredTitleLines * 2.0));
+        var hi = oneLineWidth;
+        for (var i = 0; i < 18; i++)
+        {
+            var mid = (lo + hi) * 0.5;
+            var probeHeight = MeasureWrappedText(source, typeface, fontSize, mid).Height;
+            if (probeHeight <= targetHeight)
+                hi = mid;
+            else
+                lo = mid;
+        }
+
+        return Math.Clamp(hi, 20, oneLineWidth);
+    }
+
+    private static double GetTitleContentWidth(MindMapNode node)
+        => Math.Max(
+            20,
+            NodeWidth
+            - NodeTextHorizontalPadding
+            - EstimateChevronReserve(node)
+            - GetContentBorderThickness(node) * 2);
+
+    // Truncates wrapped title to MaxTitleLines with an ellipsis; full text belongs in a tooltip.
+    private static string FitTitleForDisplay(
+        string? text,
+        Typeface typeface,
+        double fontSize,
+        double maxWidth,
+        out bool truncated)
+    {
+        truncated = false;
+        var source = text ?? string.Empty;
+        if (source.Length == 0)
+            return source;
+
+        // Slightly tighter than layout width so live wrap cannot spill past reserved height.
+        var fitWidth = Math.Max(20, maxWidth - 2);
+        var maxHeight = MeasureLineHeight(typeface, fontSize) * MaxTitleLines + 0.5;
+
+        if (MeasureWrappedText(source, typeface, fontSize, fitWidth).Height <= maxHeight)
+            return source;
+
+        truncated = true;
+        const string ellipsis = "…";
+        var lo = 0;
+        var hi = source.Length;
+        while (lo < hi)
+        {
+            var mid = (lo + hi + 1) / 2;
+            var candidate = source.AsSpan(0, mid).TrimEnd().ToString() + ellipsis;
+            if (MeasureWrappedText(candidate, typeface, fontSize, fitWidth).Height <= maxHeight)
+                lo = mid;
+            else
+                hi = mid - 1;
+        }
+
+        if (lo <= 0)
+            return ellipsis;
+
+        return source.AsSpan(0, lo).TrimEnd().ToString() + ellipsis;
+    }
+
+    // WPF BorderThickness is inset: it eats the fixed Width/Height. Measure must reserve it or
+    // title/meta sit under the stroke when the user picks a thick border (or selection bumps to 2).
+    private static double GetContentBorderThickness(MindMapNode node)
+    {
+        var painted = node.BorderThickness > 0 ? node.BorderThickness : 1.0;
+        return Math.Max(painted, 2.0);
+    }
+
+    // Height tracks the real wrapped TextBlock (same typeface/DPI/ellipsize as DrawNodes) so a
+    // second+ line grows the card instead of clipping inside a one-line shell.
     private static double MeasureNodeHeight(MindMapNode node)
     {
-        var typeface = CreateNodeTypeface(node, out var fontSize);
-        var iconMargin = node.Icons.Count > 0 ? NodeIconTextMargin : 0;
-        var availableWidth = Math.Max(20, NodeWidth - NodeTextHorizontalPadding - iconMargin);
+        var typeface = ResolveNodeTypeface(node, out var fontSize);
+        var borderReserve = GetContentBorderThickness(node) * 2;
+        var availableWidth = GetTitleContentWidth(node);
 
-        var formatted = new FormattedText(
-            string.IsNullOrEmpty(node.Text) ? " " : node.Text,
-            CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            typeface,
-            fontSize,
-            Brushes.Black,
-            1.0)
-        {
-            MaxTextWidth = availableWidth,
-            TextAlignment = TextAlignment.Center
-        };
+        var displayTitle = FitTitleForDisplay(node.Text, typeface, fontSize, availableWidth, out _);
+        var titleHeight = Math.Ceiling(MeasureWrappedText(displayTitle, typeface, fontSize, availableWidth).Height);
 
-        return Math.Clamp(formatted.Height + NodeTextVerticalPadding, MinNodeHeight, MaxNodeHeight);
+        var height = titleHeight + NodeTextVerticalPadding + borderReserve + NodeHeightSlack;
+        if (HasMetaRow(node))
+            height += TitleMetaGap + MetaRowHeight;
+
+        return Math.Clamp(height, MinNodeHeight + borderReserve, MaxNodeHeight);
     }
 
     private static int GetMaxVisibleDepth(MindMapNode node)
@@ -1510,7 +1747,9 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void ApplyNodeBorderChrome(Border border, MindMapNode node)
     {
         var isRoot = ReferenceEquals(node, _root);
-        var defaultThickness = node.BorderThickness > 0 ? node.BorderThickness : 1;
+        var defaultThickness = node.BorderThickness > 0
+            ? node.BorderThickness
+            : isRoot ? 1.5 : 1;
         border.BorderThickness = new Thickness(defaultThickness);
         border.BorderBrush = !string.IsNullOrWhiteSpace(node.BorderColor)
             ? FrozenBrush((Color)ColorConverter.ConvertFromString(node.BorderColor))
@@ -1521,21 +1760,20 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         if (_searchMatches.Contains(node))
         {
-            border.BorderBrush = GetThemeBrush("MindMapSearchMatchBorderBrush", Color.FromRgb(245, 158, 11));
-            border.BorderThickness = new Thickness(2);
+            border.BorderBrush = GetThemeBrush("MindMapSearchMatchBorderBrush", Color.FromRgb(234, 164, 58));
+            border.BorderThickness = new Thickness(Math.Max(defaultThickness, 2));
         }
 
         if (ReferenceEquals(node, CurrentSearchMatch))
         {
-            border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(245, 114, 11));
-            border.BorderThickness = new Thickness(3);
-            // Border highlight only — avoid a permanent live DropShadowEffect on canvas nodes.
+            border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(218, 106, 33));
+            border.BorderThickness = new Thickness(Math.Max(defaultThickness, 2));
         }
 
         if (_selectedNodes.Contains(node))
         {
-            border.BorderBrush = GetThemeBrush("MindMapSelectedBorderBrush", Color.FromRgb(63, 111, 232));
-            border.BorderThickness = new Thickness(3);
+            border.BorderBrush = GetThemeBrush("MindMapSelectedBorderBrush", Color.FromRgb(67, 92, 236));
+            border.BorderThickness = new Thickness(Math.Max(defaultThickness, 2));
         }
     }
 
@@ -1575,7 +1813,9 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var reparented = dropTarget is not null && ReparentNode(node, dropTarget);
+        var reparented = _isManualPositioningMode
+            && dropTarget is not null
+            && ReparentNode(node, dropTarget);
 
         if (reparented)
         {
@@ -1783,6 +2023,207 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         };
     }
 
+    private static double EstimateChevronReserve(MindMapNode node)
+        => node.HasChildren ? ChevronHitSize + ChevronTitleGap : 0;
+
+    private static bool HasMetaRow(MindMapNode node)
+        => node.Icons.Count > 0
+           || !string.IsNullOrWhiteSpace(node.Note)
+           || node.LinkedNoteId.HasValue
+           || (node.HasChildren && !node.IsExpanded);
+
+    private CornerRadius ResolveCornerRadiusToken(string resourceKey, double fallback)
+        => TryFindResource(resourceKey) is CornerRadius radius
+            ? radius
+            : new CornerRadius(fallback);
+
+    private Brush GetCardSurfaceBrush(bool isRoot)
+    {
+        if (isRoot)
+            return GetThemeBrush("MindMapNodeRootBackground", Color.FromRgb(245, 247, 251));
+
+        return GetThemeBrush("CardBackground", Color.FromRgb(255, 255, 255));
+    }
+
+    private Brush GetCardTitleBrush()
+        => GetThemeBrush("TextColor", Color.FromRgb(28, 28, 28));
+
+    private Brush GetCardMetaBrush()
+        => GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92));
+
+    private Border CreateFoldChevron(MindMapNode node)
+    {
+        var chevron = new Border
+        {
+            Width = ChevronHitSize,
+            Height = ChevronHitSize,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, ChevronTitleGap, 0),
+            ToolTip = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseThisNode" : "MindMapExpandThisNode"),
+            Child = new AppIcon
+            {
+                Kind = node.IsExpanded ? AppIconKind.ChevronDown : AppIconKind.ChevronRight,
+                Width = ChevronGlyphSize,
+                Height = ChevronGlyphSize,
+                StrokeThickness = 1.75,
+                Foreground = GetCardMetaBrush(),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+
+        chevron.MouseLeftButtonDown += (_, e) =>
+        {
+            ToggleNodeExpansion(node);
+            e.Handled = true;
+        };
+
+        return chevron;
+    }
+
+    private Border CreateMetaGlyphButton(AppIconKind kind, string toolTip, MouseButtonEventHandler? onClick = null)
+    {
+        var hit = new Border
+        {
+            Width = MetaRowHeight,
+            Height = MetaRowHeight,
+            Background = Brushes.Transparent,
+            Cursor = Cursors.Hand,
+            ToolTip = toolTip,
+            Child = new AppIcon
+            {
+                Kind = kind,
+                Width = MetaGlyphSize,
+                Height = MetaGlyphSize,
+                StrokeThickness = 1.6,
+                Foreground = GetCardMetaBrush(),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+
+        if (onClick is not null)
+            hit.MouseLeftButtonDown += onClick;
+
+        return hit;
+    }
+
+    private UIElement? BuildMetaRow(MindMapNode node)
+    {
+        if (!HasMetaRow(node))
+            return null;
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(EstimateChevronReserve(node), TitleMetaGap, 0, 0)
+        };
+
+        if (node.Icons.Count > 0)
+        {
+            var normalized = MindMapNodeIconCatalog.NormalizeStoredIcons(node.Icons);
+            var visible = normalized.Take(MaxVisibleNodeIcons).ToList();
+            var overflow = normalized.Count - visible.Count;
+            var iconBrush = !string.IsNullOrWhiteSpace(node.IconBadgeColor)
+                ? FrozenBrush((Color)ColorConverter.ConvertFromString(node.IconBadgeColor))
+                : GetCardMetaBrush();
+
+            var iconsHost = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, MetaItemGap, 0),
+                ToolTip = string.Join(", ", normalized)
+            };
+
+            foreach (var iconId in visible)
+            {
+                if (!MindMapNodeIconCatalog.TryParseKind(iconId, out var kind))
+                    continue;
+
+                iconsHost.Children.Add(new AppIcon
+                {
+                    Kind = kind,
+                    Width = MetaGlyphSize,
+                    Height = MetaGlyphSize,
+                    StrokeThickness = 1.6,
+                    Foreground = iconBrush,
+                    Margin = new Thickness(0, 0, 4, 0),
+                    IsHitTestVisible = false
+                });
+            }
+
+            if (overflow > 0)
+            {
+                iconsHost.Children.Add(new TextBlock
+                {
+                    Text = string.Format(CultureInfo.InvariantCulture, LocalizationService.GetString("MindMapIconOverflowFormat"), overflow),
+                    FontSize = TypeScale.Px(TypeScale.Chip, 11),
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = GetCardMetaBrush(),
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+            }
+
+            if (iconsHost.Children.Count > 0)
+                row.Children.Add(iconsHost);
+        }
+
+        if (node.HasChildren && !node.IsExpanded)
+        {
+            var hiddenCount = EnumerateAllNodes(node).Count() - 1;
+            row.Children.Add(new TextBlock
+            {
+                Text = hiddenCount.ToString(CultureInfo.InvariantCulture),
+                FontSize = TypeScale.Px(TypeScale.Chip, 11),
+                FontWeight = FontWeights.SemiBold,
+                Foreground = GetCardMetaBrush(),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, MetaItemGap, 0),
+                ToolTip = string.Format(LocalizationService.GetString("MindMapHiddenNodesCountFormat"), hiddenCount)
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(node.Note))
+        {
+            var noteHit = CreateMetaGlyphButton(AppIconKind.Notes, LocalizationService.GetString("MindMapClickToViewNote"));
+            var notePopup = BuildNotePopup(noteHit, node.Note!);
+            noteHit.MouseLeftButtonDown += (_, e) =>
+            {
+                notePopup.IsOpen = !notePopup.IsOpen;
+                e.Handled = true;
+            };
+
+            var noteHost = new Grid
+            {
+                Width = MetaRowHeight,
+                Height = MetaRowHeight,
+                Margin = new Thickness(0, 0, MetaItemGap, 0)
+            };
+            noteHost.Children.Add(notePopup);
+            noteHost.Children.Add(noteHit);
+            row.Children.Add(noteHost);
+        }
+
+        if (node.LinkedNoteId.HasValue)
+        {
+            row.Children.Add(CreateMetaGlyphButton(
+                AppIconKind.Link,
+                LocalizationService.GetString("MindMapOpenLinkedNote"),
+                (_, e) =>
+                {
+                    OpenNodeLink(node);
+                    e.Handled = true;
+                }));
+        }
+
+        return row;
+    }
+
     private void DrawConnections(MindMapNode node)
     {
         if (!node.IsExpanded || node.Children.Count == 0)
@@ -1884,221 +2325,73 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             Height = layout.Height,
             CornerRadius = GetCornerRadius(node.NodeShape, isRoot),
             Background = nodeBackground,
-            Padding = new Thickness(12, 8, 12, 8),
+            Padding = new Thickness(CardPaddingX, CardPaddingY, CardPaddingX, CardPaddingY),
             Cursor = Cursors.Hand
         };
 
         ApplyNodeBorderChrome(border, node);
 
-        var mainPanel = new Grid();
+        // Star title + Auto meta: if wrap still disagrees with measure, the icon row keeps its
+        // space at the bottom instead of being pushed under the card clip.
+        var content = new Grid();
+        content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        // Node text
-        var text = new TextBlock
-        {
-            Text = node.Text,
-            TextWrapping = TextWrapping.Wrap,
-            TextAlignment = TextAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            FontWeight = node.IsBold ? FontWeights.Bold : isRoot ? FontWeights.SemiBold : FontWeights.Normal,
-            FontStyle = node.IsItalic ? FontStyles.Italic : FontStyles.Normal,
-            Foreground = !string.IsNullOrWhiteSpace(node.TextColor)
-                ? FrozenBrush((Color)ColorConverter.ConvertFromString(node.TextColor))
-                : GetNodeForeground(nodeBackground, isRoot, node),
-            Margin = node.Icons.Count > 0 ? new Thickness(0, 0, 28, 0) : new Thickness(0)
-        };
-
-        // Left unset (rather than assigned a hardcoded fallback) when the node has no override,
-        // so untouched nodes keep inheriting the ambient default exactly as before this field
-        // existed - only nodes with an explicit choice deviate from it.
-        if (!string.IsNullOrWhiteSpace(node.FontFamily))
-            text.FontFamily = new FontFamily(node.FontFamily);
-        if (node.FontSize is double fontSize)
-            text.FontSize = fontSize;
-
-        mainPanel.Children.Add(text);
-
-        if (node.Icons.Count > 0)
-        {
-            var iconBadgeColor = !string.IsNullOrWhiteSpace(node.IconBadgeColor)
-            ? (Color)ColorConverter.ConvertFromString(node.IconBadgeColor)
-            : Color.FromRgb(245, 158, 11); // Default amber
-
-            var iconBadge = new Border
-            {
-                Background = FrozenBrush(iconBadgeColor),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(6, 4, 6, 4),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, -8, -8, 0) // Position outside the node
-            };
-
-            // FreeMind allows stacking any number of icons on a node - shown together in this one
-            // badge (space-separated) rather than a separate badge per icon, so the layout doesn't
-            // need to reason about positioning an unbounded number of corner badges.
-            var iconText = new TextBlock
-            {
-                Text = string.Join(" ", node.Icons),
-                FontSize = TypeScale.Px(TypeScale.Body, 14),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            iconBadge.Child = iconText;
-            mainPanel.Children.Add(iconBadge);
-        }
-
-        if (!string.IsNullOrWhiteSpace(node.Note))
-        {
-            // Opposite corner from the icon badge (top-right) - a fixed indicator, not a
-            // user-choosable one like Icon, so it always reads as "this node has a note" rather
-            // than needing its own color/glyph picker. Click opens the full text in a popup
-            // (a tooltip was awkward for anything longer than a line or two); StyleNodeDialog is
-            // where it's actually written/edited.
-            var noteBadge = new Border
-            {
-                Background = FrozenBrush(Color.FromRgb(96, 165, 250)),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(5, 3, 5, 3),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(-8, 0, 0, -8),
-                Cursor = Cursors.Hand,
-                ToolTip = LocalizationService.GetString("MindMapClickToViewNote")
-            };
-
-            var noteGlyph = new TextBlock
-            {
-                Text = "\U0001F5D2️",
-                FontSize = TypeScale.Px(TypeScale.Body, 12),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            noteBadge.Child = noteGlyph;
-
-            var notePopup = BuildNotePopup(noteBadge, node.Note!);
-            noteBadge.MouseLeftButtonDown += (_, e) =>
-            {
-                notePopup.IsOpen = !notePopup.IsOpen;
-                e.Handled = true;
-            };
-
-            mainPanel.Children.Add(notePopup);
-            mainPanel.Children.Add(noteBadge);
-        }
+        var titleRow = new DockPanel { LastChildFill = true, VerticalAlignment = VerticalAlignment.Center };
 
         if (node.HasChildren)
         {
-            // A real click target replacing the old decorative "-"/"+" baked into the node text.
-            // Top-left corner is the one badge slot the icon (top-right) and note (bottom-left)
-            // badges leave free.
-            var foldToggle = new Border
-            {
-                Width = 20,
-                Height = 20,
-                CornerRadius = new CornerRadius(10),
-                Background = GetThemeBrush("IconButtonBackground", Color.FromRgb(245, 247, 251)),
-                BorderBrush = GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220)),
-                BorderThickness = new Thickness(1),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(-10, -10, 0, 0),
-                Cursor = Cursors.Hand,
-                ToolTip = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseThisNode" : "MindMapExpandThisNode")
-            };
-
-            var foldIcon = new AppIcon
-            {
-                Kind = node.IsExpanded ? AppIconKind.Minus : AppIconKind.Plus,
-                Width = 12,
-                Height = 12,
-                StrokeThickness = 2,
-                Foreground = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92))
-            };
-
-            foldToggle.Child = foldIcon;
-            foldToggle.MouseLeftButtonDown += (_, e) =>
-            {
-                ToggleNodeExpansion(node);
-                e.Handled = true;
-            };
-
-            mainPanel.Children.Add(foldToggle);
-
-            if (!node.IsExpanded && !node.LinkedNoteId.HasValue)
-            {
-                // Bottom-right is the one badge slot left free - purely informational (not a
-                // click target itself, the fold toggle above already covers that) so the user
-                // can tell a collapsed branch is hiding content without expanding it first.
-                // Yields the slot to the link badge below when both would want it - a link is
-                // something the user deliberately set, not just passive information.
-                var hiddenCount = EnumerateAllNodes(node).Count() - 1;
-                var foldHintBadge = new Border
-                {
-                    Background = GetThemeBrush("IconButtonBackground", Color.FromRgb(245, 247, 251)),
-                    BorderBrush = GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220)),
-                    BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(8),
-                    Padding = new Thickness(6, 2, 6, 2),
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    VerticalAlignment = VerticalAlignment.Bottom,
-                    Margin = new Thickness(0, 0, -8, -8),
-                    IsHitTestVisible = false,
-                    ToolTip = string.Format(LocalizationService.GetString("MindMapHiddenNodesCountFormat"), hiddenCount)
-                };
-
-                var foldHintText = new TextBlock
-                {
-                    Text = hiddenCount.ToString(CultureInfo.InvariantCulture),
-                    FontSize = TypeScale.Px(TypeScale.Body, 11),
-                    Foreground = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92)),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-
-                foldHintBadge.Child = foldHintText;
-                mainPanel.Children.Add(foldHintBadge);
-            }
+            var fold = CreateFoldChevron(node);
+            DockPanel.SetDock(fold, Dock.Left);
+            titleRow.Children.Add(fold);
         }
 
-        if (node.LinkedNoteId.HasValue)
+        var titleTypeface = ResolveNodeTypeface(node, out var titleFontSize);
+        var titleContentWidth = GetTitleContentWidth(node);
+        var displayTitle = FitTitleForDisplay(
+            node.Text,
+            titleTypeface,
+            titleFontSize,
+            titleContentWidth,
+            out var titleTruncated);
+
+        var lineHeight = MeasureLineHeight(titleTypeface, titleFontSize);
+        var text = new TextBlock
         {
-            // Bottom-right corner, same slot the collapsed hidden-count hint uses (see above) -
-            // a link wins that slot when both apply. Click reuses the exact same "given a note
-            // Guid, open it" plumbing the document-level linked-note button already has.
-            var linkBadge = new Border
-            {
-                Background = FrozenBrush(Color.FromRgb(52, 211, 153)),
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(5, 3, 5, 3),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, -8, -8),
-                Cursor = Cursors.Hand,
-                ToolTip = LocalizationService.GetString("MindMapOpenLinkedNote")
-            };
+            Text = displayTitle,
+            FontSize = titleFontSize,
+            FontFamily = titleTypeface.FontFamily,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MaxHeight = lineHeight * MaxTitleLines + 1,
+            FontWeight = titleTypeface.Weight,
+            FontStyle = titleTypeface.Style,
+            Foreground = !string.IsNullOrWhiteSpace(node.TextColor)
+                ? FrozenBrush((Color)ColorConverter.ConvertFromString(node.TextColor))
+                : GetNodeForeground(nodeBackground, isRoot, node),
+            ToolTip = titleTruncated ? node.Text : null
+        };
 
-            var linkGlyph = new TextBlock
-            {
-                Text = "\U0001F517",
-                FontSize = TypeScale.Px(TypeScale.Body, 11),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
+        titleRow.Children.Add(text);
 
-            linkBadge.Child = linkGlyph;
-            linkBadge.MouseLeftButtonDown += (_, e) =>
-            {
-                OpenNodeLink(node);
-                e.Handled = true;
-            };
+        var titleHost = new Border
+        {
+            Child = titleRow,
+            ClipToBounds = true,
+            Background = Brushes.Transparent
+        };
+        Grid.SetRow(titleHost, 0);
+        content.Children.Add(titleHost);
 
-            mainPanel.Children.Add(linkBadge);
+        if (BuildMetaRow(node) is { } metaRow)
+        {
+            Grid.SetRow(metaRow, 1);
+            content.Children.Add(metaRow);
         }
 
-        border.Child = mainPanel;
+        border.Child = content;
 
             border.MouseLeftButtonDown += (_, e) =>
             {
@@ -2109,11 +2402,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                     return;
                 }
 
-                // Manual mode: any node (including root) can be dragged to reposition it, as
-                // before. Auto-layout mode: dragging is new here and exists only to reparent by
-                // dropping onto another node - root is excluded since it has no parent to move
-                // out from under.
-                if (_isManualPositioningMode || !ReferenceEquals(node, _root))
+                // Manual mode: drag to reposition (and drop-to-reparent). Auto layout: nodes stay
+                // put — structure changes use add/cut/paste, not free dragging. Ctrl+drag still
+                // starts a gesture so cross-links remain available without moving the card.
+                var wantsLinkGesture = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+                if (_isManualPositioningMode || wantsLinkGesture)
                 {
                     _isManualDragPending = true;
                     _pendingDragNode = node;
@@ -2578,35 +2871,25 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return exportRoot;
     }
 
-    private static CornerRadius GetCornerRadius(string? nodeShape, bool isRoot)
+    private CornerRadius GetCornerRadius(string? nodeShape, bool isRoot)
     {
+        var cardRadius = ResolveCornerRadiusToken("Radius.Card", 14);
         return nodeShape switch
         {
-            "Circle" => new CornerRadius(95), // Approximate circle for 190x52 node
+            "Circle" => new CornerRadius(95),
             "Ellipse" => new CornerRadius(26),
-            "Rounded" => new CornerRadius(isRoot ? 14 : 10),
-            _ => new CornerRadius(0) // Rectangle
+            "Rectangle" => new CornerRadius(0),
+            // Rounded + null/unknown: card language (serious default).
+            _ => cardRadius
         };
     }
 
     private Brush GetNodeBackground(MindMapNode node, int depth)
     {
         if (!string.IsNullOrWhiteSpace(node.BackgroundColor))
-        {
             return FrozenBrush((Color)ColorConverter.ConvertFromString(node.BackgroundColor));
-        }
 
-        return GetDefaultNodeBackground(depth);
-    }
-
-    private Brush GetDefaultNodeBackground(int depth)
-    {
-        var palette = IsDarkTheme() ? DarkNodeBackgrounds : LightNodeBackgrounds;
-
-        if (depth <= 0)
-            return palette[0];
-
-        return palette[((depth - 1) % (palette.Length - 1)) + 1];
+        return GetCardSurfaceBrush(ReferenceEquals(node, _root) || depth <= 0);
     }
 
     private void StyleNode(MindMapNode node)
@@ -2961,16 +3244,6 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             normalized = normalized[..maxNodeTextLength].TrimEnd() + "...";
 
         return normalized;
-    }
-
-    private Brush GetNodeBackground(int depth)
-    {
-        var palette = IsDarkTheme() ? DarkNodeBackgrounds : LightNodeBackgrounds;
-
-        if (depth <= 0)
-            return palette[0];
-
-        return palette[((depth - 1) % (palette.Length - 1)) + 1];
     }
 
     private void ExpandAllButton_Click(object sender, RoutedEventArgs e)
@@ -3887,13 +4160,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private Brush GetNodeForeground(Brush nodeBackground, bool isRoot, MindMapNode node)
     {
-        if (isRoot && string.IsNullOrWhiteSpace(node.BackgroundColor))
-            return Brushes.White;
+        // Custom fill: pick readable black/white from luminance. Default cards always use theme text.
+        if (!string.IsNullOrWhiteSpace(node.BackgroundColor) && nodeBackground is SolidColorBrush solid)
+            return IsLightColor(solid.Color)
+                ? GetCardTitleBrush()
+                : Brushes.White;
 
-        if (nodeBackground is SolidColorBrush solid)
-            return IsLightColor(solid.Color) ? Brushes.Black : Brushes.White;
-
-        return GetThemeBrush("TextColor", Color.FromRgb(31, 41, 55));
+        return GetCardTitleBrush();
     }
 
     private static bool IsLightColor(Color color)

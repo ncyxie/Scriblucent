@@ -1,6 +1,7 @@
 using Scriblucent;
 using Scriblucent.Animations;
 using Scriblucent.Behaviors;
+using Scriblucent.Icons;
 using Scriblucent.Models;
 using Scriblucent.Localization;
 using Scriblucent.Services;
@@ -1541,6 +1542,12 @@ public class MainViewModel : ViewModelBase
                 maps = new List<MindMapDocument>();
                 metadataAction = GroupMetadataSyncAction.ClearOnly;
             }
+        }
+
+        foreach (var map in maps)
+        {
+            if (map.Root is not null)
+                MindMapNodeIconCatalog.NormalizeTreeIcons(map.Root);
         }
 
         return new MindMapsLoadResult(true, maps, groups, metadataAction);

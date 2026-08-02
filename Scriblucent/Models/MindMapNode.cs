@@ -18,7 +18,7 @@ public sealed class MindMapNode
     public string? BackgroundColor { get; set; } // Hex color code
     public string? BorderColor { get; set; } // Hex color code
     public double BorderThickness { get; set; } = 1.0;
-    public string? NodeShape { get; set; } = "Rectangle"; // Rectangle, Rounded, Circle, Ellipse
+    public string? NodeShape { get; set; } = "Rounded"; // Rectangle, Rounded, Circle, Ellipse
 
     // Emoji/icon identifiers - a node can carry more than one (matching FreeMind, which allows
     // stacking as many icons on a node as you like), rendered together in one badge.

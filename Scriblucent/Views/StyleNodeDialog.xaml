@@ -4,7 +4,7 @@
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [MindMapStyleOrganizeTitle], Source={StaticResource Loc}}"
-        Height="520"
+        Height="560"
         Width="480"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
@@ -51,13 +51,12 @@
         </Style>
 
         <Style x:Key="StyleNodeIconButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="52"/>
-            <Setter Property="Height" Value="52"/>
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="44"/>
             <Setter Property="Margin" Value="3"/>
-            <Setter Property="FontSize" Value="{StaticResource Type.DialogTitle}"/>
             <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -80,44 +79,6 @@
             </Setter>
         </Style>
 
-        <Style x:Key="StyleNodeCustomIconButtonStyle" TargetType="Button" BasedOn="{StaticResource StyleNodeIconButtonStyle}">
-            <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-        </Style>
-
-        <Style x:Key="StyleNodeTextStyleToggleButtonStyle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="40"/>
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
-            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="ToggleBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
     </Window.Resources>
 
     <controls:OverlayDialogShell
@@ -132,256 +93,192 @@
         </controls:OverlayDialogShell.Header>
 
         <controls:OverlayDialogShell.Body>
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          MaxHeight="380">
-                <StackPanel>
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeBackgroundColor], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button x:Name="BackgroundColorButton"
-                                    Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
-                                    Click="BackgroundColorButton_Click"
-                                    ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
-                            <Button Content="{icons:Icon Kind=Close, Size=12}"
-                                    Style="{StaticResource StyleNodeClearButtonStyle}"
-                                    Click="ClearBackgroundColorButton_Click"
-                                    ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
-                        </StackPanel>
-                    </Grid>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MaxHeight="260"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeBorderColor], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button x:Name="BorderColorButton"
-                                    Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
-                                    Click="BorderColorButton_Click"
-                                    ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
-                            <Button Content="{icons:Icon Kind=Close, Size=12}"
-                                    Style="{StaticResource StyleNodeClearButtonStyle}"
-                                    Click="ClearBorderColorButton_Click"
-                                    ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
-                        </StackPanel>
-                    </Grid>
+                <ScrollViewer Grid.Row="0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [NodeBackgroundColor], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.Meta}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button x:Name="BackgroundColorButton"
+                                        Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
+                                        Click="BackgroundColorButton_Click"
+                                        ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
+                                <Button Content="{icons:Icon Kind=Close, Size=12}"
+                                        Style="{StaticResource StyleNodeClearButtonStyle}"
+                                        Click="ClearBackgroundColorButton_Click"
+                                        ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
+                            </StackPanel>
+                        </Grid>
 
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeBorderThickness], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Slider x:Name="BorderThicknessSlider"
-                                    Width="120"
-                                    Minimum="0" Maximum="5"
-                                    TickFrequency="0.5"
-                                    IsSnapToTickEnabled="True"
-                                    VerticalAlignment="Center"
-                                    Margin="0,0,8,0"/>
-                            <TextBlock x:Name="BorderThicknessText"
-                                       Text="1"
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [NodeBorderColor], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.Meta}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button x:Name="BorderColorButton"
+                                        Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
+                                        Click="BorderColorButton_Click"
+                                        ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
+                                <Button Content="{icons:Icon Kind=Close, Size=12}"
+                                        Style="{StaticResource StyleNodeClearButtonStyle}"
+                                        Click="ClearBorderColorButton_Click"
+                                        ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [NodeBorderThickness], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.Meta}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Slider x:Name="BorderThicknessSlider"
+                                        Width="120"
+                                        Minimum="0" Maximum="5"
+                                        TickFrequency="0.5"
+                                        IsSnapToTickEnabled="True"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,8,0"/>
+                                <TextBlock x:Name="BorderThicknessText"
+                                           Text="1"
+                                           VerticalAlignment="Center"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource TextColorSecondary}"
+                                           MinWidth="20"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [NodeShape], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.Meta}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"/>
+                            <ComboBox x:Name="ShapeComboBox"
+                                      Grid.Column="1"
+                                      Width="180"
+                                      SelectedValuePath="Tag"
+                                      SelectionChanged="ShapeComboBox_SelectionChanged">
+                                <ComboBoxItem Content="{Binding [ShapeRectangle], Source={StaticResource Loc}}" Tag="Rectangle"/>
+                                <ComboBoxItem Content="{Binding [ShapeRounded], Source={StaticResource Loc}}" Tag="Rounded"/>
+                                <ComboBoxItem Content="{Binding [ShapeCircle], Source={StaticResource Loc}}" Tag="Circle"/>
+                                <ComboBoxItem Content="{Binding [ShapeEllipse], Source={StaticResource Loc}}" Tag="Ellipse"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [NodeIcon], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.Meta}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"/>
+                            <Button Grid.Column="1"
+                                    Content="{icons:Icon Kind=Close, Size=12}"
+                                    Style="{StaticResource StyleNodeClearButtonStyle}"
+                                    Margin="0"
+                                    Click="ClearIconButton_Click"
+                                    ToolTip="{Binding [ClearIcon], Source={StaticResource Loc}}"/>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [NodeIconBadgeColor], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
                                        FontSize="{StaticResource Type.Caption}"
-                                       Foreground="{DynamicResource TextColorSecondary}"
-                                       MinWidth="20"/>
-                        </StackPanel>
-                    </Grid>
+                                       Foreground="{DynamicResource TextColorSecondary}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button x:Name="IconBadgeColorButton"
+                                        Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
+                                        Click="IconBadgeColorButton_Click"
+                                        ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
+                                <Button Content="{icons:Icon Kind=Close, Size=12}"
+                                        Style="{StaticResource StyleNodeClearButtonStyle}"
+                                        Click="ClearIconBadgeColorButton_Click"
+                                        ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
+                            </StackPanel>
+                        </Grid>
 
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeTextStyle], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <ToggleButton x:Name="BoldToggleButton"
-                                          Style="{StaticResource StyleNodeTextStyleToggleButtonStyle}"
-                                          Content="B"
-                                          FontWeight="Bold"
-                                          Click="BoldToggleButton_Click"
-                                          ToolTip="{Binding [Bold], Source={StaticResource Loc}}"/>
-                            <ToggleButton x:Name="ItalicToggleButton"
-                                          Style="{StaticResource StyleNodeTextStyleToggleButtonStyle}"
-                                          Content="I"
-                                          FontStyle="Italic"
-                                          Click="ItalicToggleButton_Click"
-                                          ToolTip="{Binding [Italic], Source={StaticResource Loc}}"/>
-                        </StackPanel>
-                    </Grid>
+                        <Border Margin="0,0,0,4"
+                                Padding="12"
+                                Background="{DynamicResource WindowBackground}"
+                                BorderThickness="0"
+                                CornerRadius="10"
+                                MaxHeight="200">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <WrapPanel x:Name="IconGrid" Orientation="Horizontal"/>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
 
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeTextColor], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button x:Name="TextColorButton"
-                                    Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
-                                    Click="TextColorButton_Click"
-                                    ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
-                            <Button Content="{icons:Icon Kind=Close, Size=12}"
-                                    Style="{StaticResource StyleNodeClearButtonStyle}"
-                                    Click="ClearTextColorButton_Click"
-                                    ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Grid Margin="0,0,0,16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeShape], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <ComboBox x:Name="ShapeComboBox"
-                                  Grid.Column="1"
-                                  Width="180"
-                                  SelectedValuePath="Tag"
-                                  SelectionChanged="ShapeComboBox_SelectionChanged">
-                            <ComboBoxItem Content="{Binding [ShapeRectangle], Source={StaticResource Loc}}" Tag="Rectangle"/>
-                            <ComboBoxItem Content="{Binding [ShapeRounded], Source={StaticResource Loc}}" Tag="Rounded"/>
-                            <ComboBoxItem Content="{Binding [ShapeCircle], Source={StaticResource Loc}}" Tag="Circle"/>
-                            <ComboBoxItem Content="{Binding [ShapeEllipse], Source={StaticResource Loc}}" Tag="Ellipse"/>
-                        </ComboBox>
-                    </Grid>
-
-                    <Grid Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeIcon], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <Button Grid.Column="1"
-                                Content="{icons:Icon Kind=Close, Size=12}"
-                                Style="{StaticResource StyleNodeClearButtonStyle}"
-                                Margin="0"
-                                Click="ClearIconButton_Click"
-                                ToolTip="{Binding [ClearIcon], Source={StaticResource Loc}}"/>
-                    </Grid>
-
-                    <Grid Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding [NodeIconBadgeColor], Source={StaticResource Loc}}"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.Caption}"
-                                   Foreground="{DynamicResource TextColorSecondary}"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button x:Name="IconBadgeColorButton"
-                                    Style="{StaticResource StyleNodeColorSwatchButtonStyle}"
-                                    Click="IconBadgeColorButton_Click"
-                                    ToolTip="{Binding [SelectColor], Source={StaticResource Loc}}"/>
-                            <Button Content="{icons:Icon Kind=Close, Size=12}"
-                                    Style="{StaticResource StyleNodeClearButtonStyle}"
-                                    Click="ClearIconBadgeColorButton_Click"
-                                    ToolTip="{Binding [ClearColor], Source={StaticResource Loc}}"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <Border Margin="0,0,0,8"
-                            Padding="12"
-                            Background="{DynamicResource WindowBackground}"
-                            BorderThickness="0"
-                            CornerRadius="10"
-                            MaxHeight="200">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <WrapPanel x:Name="IconGrid" Orientation="Horizontal">
-                                <Button Content="📌" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="⭐" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="💡" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🎯" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="📝" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🔔" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="❤️" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🔥" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="✨" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="📚" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🎓" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="💼" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🏆" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🎨" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🚀" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="💻" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="📊" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🔍" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="⚙️" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🔗" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="📁" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="📍" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="✔️" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="🎉" Style="{StaticResource StyleNodeIconButtonStyle}" Click="IconButton_Click"/>
-                                <Button Content="➕"
-                                        Style="{StaticResource StyleNodeCustomIconButtonStyle}"
-                                        Click="CustomIconButton_Click"
-                                        ToolTip="{Binding [AddCustomIcon], Source={StaticResource Loc}}"/>
-                            </WrapPanel>
-                        </ScrollViewer>
-                    </Border>
-
+                <!-- Outside the scroll viewport so Elevation.Field can fall into CardPadding
+                     (same pattern as EditFlashcardDialog — full width, no inset shrink). -->
+                <StackPanel Grid.Row="1" Margin="0,16,0,0">
                     <TextBlock Text="{Binding [NodeNote], Source={StaticResource Loc}}"
                                FontSize="{StaticResource Type.Meta}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"
-                               Margin="0,0,0,6"/>
+                               Margin="0,0,0,8"/>
                     <TextBox x:Name="NoteTextBox"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             MinHeight="70"
-                             MaxHeight="140"
-                             Padding="8"
-                             VerticalScrollBarVisibility="Auto"
+                             Height="80"
+                             MaxHeight="80"
+                             HorizontalAlignment="Stretch"
                              VerticalContentAlignment="Top"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Disabled"
                              TextChanged="NoteTextBox_TextChanged"/>
 
                     <TextBlock Text="{Binding [MindMapNodeLink], Source={StaticResource Loc}}"
                                FontSize="{StaticResource Type.Meta}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"
-                               Margin="0,16,0,6"/>
+                               Margin="0,16,0,8"/>
                     <ComboBox x:Name="LinkedNoteComboBox"
                               HorizontalAlignment="Stretch"
                               SelectedValuePath="Tag"
                               SelectionChanged="LinkedNoteComboBox_SelectionChanged"/>
                 </StackPanel>
-            </ScrollViewer>
+            </Grid>
         </controls:OverlayDialogShell.Body>
 
         <controls:OverlayDialogShell.Footer>

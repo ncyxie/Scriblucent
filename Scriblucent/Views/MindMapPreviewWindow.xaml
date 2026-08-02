@@ -201,21 +201,22 @@
                                 Margin="2,0,8,0"
                                 Background="{DynamicResource SidebarSeparator}"/>
 
-                        <Button x:Name="ArrangePanelToggleButton"
-                                Content="{icons:Icon Settings}"
-                                Style="{StaticResource EditorToolIconButtonStyle}"
-                                ToolTip="{Binding [MindMapToolbarArrange], Source={StaticResource Loc}}"
-                                Click="ArrangePanelToggleButton_Click"/>
-                        <Button x:Name="SearchPanelToggleButton"
-                                Content="{icons:Icon Search}"
-                                Style="{StaticResource EditorToolIconButtonStyle}"
-                                ToolTip="{Binding [MindMapToolbarSearch], Source={StaticResource Loc}}"
-                                Click="SearchPanelToggleButton_Click"/>
+                        <!-- Panels: style → find/replace → layout/view -->
                         <Button x:Name="FontPanelToggleButton"
                                 Content="{icons:Icon Font}"
                                 Style="{StaticResource EditorToolIconButtonStyle}"
                                 ToolTip="{Binding [MindMapToolbarFont], Source={StaticResource Loc}}"
                                 Click="FontPanelToggleButton_Click"/>
+                        <Button x:Name="SearchPanelToggleButton"
+                                Content="{icons:Icon Search}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapToolbarSearch], Source={StaticResource Loc}}"
+                                Click="SearchPanelToggleButton_Click"/>
+                        <Button x:Name="ArrangePanelToggleButton"
+                                Content="{icons:Icon MindMaps}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [MindMapToolbarArrange], Source={StaticResource Loc}}"
+                                Click="ArrangePanelToggleButton_Click"/>
                         <Border Width="1"
                                 Height="22"
                                 Margin="2,0,8,0"
@@ -406,13 +407,13 @@
             <Border.RenderTransform>
                 <TranslateTransform Y="-6"/>
             </Border.RenderTransform>
-            <StackPanel Orientation="Horizontal"
-                        VerticalAlignment="Center">
-                <Border Width="260"
+            <WrapPanel Orientation="Horizontal"
+                       VerticalAlignment="Center">
+                <Border Width="220"
                         Height="32"
                         MinHeight="32"
                         Padding="6,0"
-                        Margin="0,0,8,0"
+                        Margin="0,0,8,6"
                         Style="{StaticResource ChromeFieldBorderStyle}"
                         Background="{DynamicResource WindowBackground}">
                     <DockPanel LastChildFill="True">
@@ -430,21 +431,57 @@
                                  ToolTip="{Binding [MindMapSearchHint], Source={StaticResource Loc}}"/>
                     </DockPanel>
                 </Border>
+                <Border Width="180"
+                        Height="32"
+                        MinHeight="32"
+                        Padding="6,0"
+                        Margin="0,0,8,6"
+                        Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}">
+                    <DockPanel LastChildFill="True">
+                        <icons:AppIcon Kind="Swap"
+                                       Width="14"
+                                       Height="14"
+                                       Foreground="{DynamicResource TextColorSecondary}"
+                                       Margin="2,0,8,0"
+                                       VerticalAlignment="Center"/>
+                        <TextBox x:Name="ReplaceTextBox"
+                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="{StaticResource Type.Caption}"
+                                 ToolTip="{Binding [ReplaceLabel], Source={StaticResource Loc}}"/>
+                    </DockPanel>
+                </Border>
                 <Button Content="{Binding [MindMapSearchPrevious], Source={StaticResource Loc}}"
                         Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
-                        Margin="0,0,6,0"
+                        Margin="0,0,6,6"
                         Click="SearchPreviousButton_Click"/>
                 <Button Content="{Binding [MindMapSearchNext], Source={StaticResource Loc}}"
                         Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
-                        Margin="0,0,6,0"
+                        Margin="0,0,6,6"
                         Click="SearchNextButton_Click"/>
+                <Button x:Name="SearchReplaceButton"
+                        Content="{Binding [Replace], Source={StaticResource Loc}}"
+                        Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
+                        Margin="0,0,6,6"
+                        MinWidth="72"
+                        IsEnabled="False"
+                        Click="SearchReplaceButton_Click"/>
+                <Button x:Name="SearchReplaceAllButton"
+                        Content="{Binding [ReplaceAll], Source={StaticResource Loc}}"
+                        Style="{StaticResource MindMapToolbarNarrowButtonStyle}"
+                        Margin="0,0,8,6"
+                        MinWidth="96"
+                        IsEnabled="False"
+                        Click="SearchReplaceAllButton_Click"/>
                 <TextBlock x:Name="SearchResultsTextBlock"
                            VerticalAlignment="Center"
                            FontSize="{StaticResource Type.Caption}"
                            MinWidth="56"
+                           Margin="0,0,0,6"
                            Foreground="{DynamicResource TextColorSecondary}"
                            Text="{Binding [MindMapSearchNoResults], Source={StaticResource Loc}}"/>
-            </StackPanel>
+            </WrapPanel>
         </Border>
 
         <!-- Collapsible font panel - hidden by default, toggled via FontPanelToggleButton, same

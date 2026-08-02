@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 
@@ -27,27 +28,26 @@ internal static class MindMapFileService
     };
 
     // Verified against FreeMind's own freemind.properties "icons.list" - only unambiguous,
-    // high-confidence entries. Read-only now that FreeMind export has been removed; a node's
-    // Icon field only ever needs to flow FreeMind -> this app now, not the other way.
-    private static readonly Dictionary<string, string> FreeMindBuiltinToEmoji = new()
+    // high-confidence entries. Maps to AppIconKind storage ids (see MindMapNodeIconCatalog).
+    private static readonly Dictionary<string, string> FreeMindBuiltinToIcon = new()
     {
-        ["idea"] = "\U0001F4A1", // 💡
-        ["help"] = "❓",
-        ["yes"] = "✅",
-        ["button_cancel"] = "❌",
-        ["messagebox_warning"] = "⚠️",
-        ["stop-sign"] = "\U0001F6D1", // 🛑
-        ["info"] = "ℹ️",
-        ["flag"] = "\U0001F6A9", // 🚩
-        ["attach"] = "\U0001F4CE", // 📎
-        ["folder"] = "\U0001F4C1", // 📁
-        ["calendar"] = "\U0001F4C5", // 📅
-        ["clock"] = "⏰",
-        ["hourglass"] = "⏳",
-        ["pencil"] = "✏️",
-        ["password"] = "\U0001F512", // 🔒
-        ["bell"] = "\U0001F514", // 🔔
-        ["bookmark"] = "\U0001F516", // 🔖
+        ["idea"] = "Lightbulb",
+        ["help"] = "Question",
+        ["yes"] = "Checkmark",
+        ["button_cancel"] = "Close",
+        ["messagebox_warning"] = "Warning",
+        ["stop-sign"] = "Ban",
+        ["info"] = "Info",
+        ["flag"] = "Flag",
+        ["attach"] = "Paperclip",
+        ["folder"] = "FolderOpen",
+        ["calendar"] = "Schedule",
+        ["clock"] = "Schedule",
+        ["hourglass"] = "Hourglass",
+        ["pencil"] = "Edit",
+        ["password"] = "Lock",
+        ["bell"] = "Bell",
+        ["bookmark"] = "Bookmark",
     };
 
     public static bool IsScribmapPath(string path)
@@ -83,14 +83,14 @@ internal static class MindMapFileService
         return document;
     }
 
-    // Folds a pre-multi-icon-support file's single Icon field into the new Icons list, so opening
-    // an old .scribmap doesn't silently drop an icon a node already had. Every scribmap load path
-    // goes through LoadScribmapDocument, so this one call site covers all of them.
+    // Folds a pre-multi-icon-support file's single Icon field into Icons, then normalizes any
+    // legacy emoji entries to AppIconKind storage ids so the vector picker/canvas stay in sync.
     private static void MigrateLegacyIcon(MindMapNode node)
     {
         if (!string.IsNullOrWhiteSpace(node.Icon) && !node.Icons.Contains(node.Icon))
             node.Icons.Insert(0, node.Icon);
         node.Icon = null;
+        node.Icons = MindMapNodeIconCatalog.NormalizeStoredIcons(node.Icons);
 
         foreach (var child in node.Children)
             MigrateLegacyIcon(child);
@@ -218,11 +218,12 @@ internal static class MindMapFileService
         }
 
         // FreeMind lets a node carry any number of icons, stacked in the order they're listed -
-        // collect all of them (matching FreeMindBuiltinToEmoji), not just the first.
+        // collect all of them (matching FreeMindBuiltinToIcon), not just the first.
         node.Icons = element.Elements("icon")
             .Select(icon => icon.Attribute("BUILTIN")?.Value)
-            .Where(name => name is not null && FreeMindBuiltinToEmoji.ContainsKey(name))
-            .Select(name => FreeMindBuiltinToEmoji[name!])
+            .Where(name => name is not null && FreeMindBuiltinToIcon.ContainsKey(name))
+            .Select(name => FreeMindBuiltinToIcon[name!])
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         // Independent of the icon above - MindMapNode.Note is a real field now, so a node's

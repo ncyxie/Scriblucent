@@ -361,6 +361,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FindReplaceTitle" xml:space="preserve"><value>Rasti / Pakeisti</value></data>
   <data name="FindLabel" xml:space="preserve"><value>Rasti:</value></data>
   <data name="ReplaceLabel" xml:space="preserve"><value>Pakeisti:</value></data>
+  <data name="Replace" xml:space="preserve"><value>Pakeisti</value></data>
   <data name="FindPrevious" xml:space="preserve"><value>Rasti ankstesnį</value></data>
   <data name="FindNext" xml:space="preserve"><value>Rasti kitą</value></data>
   <data name="ReplaceNext" xml:space="preserve"><value>Pakeisti kitą</value></data>
@@ -644,7 +645,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapManualPositioningOnHint" xml:space="preserve"><value>Rankinis pozicionavimas įjungtas. Tempkite mazgus norėdami juos perkelti.</value></data>
   <data name="MindMapManualPositioningOffHint" xml:space="preserve"><value>Rankinis pozicionavimas išjungtas. Įjunkite, kad galėtumėte tempti mazgus.</value></data>
   <data name="MindMapToolbarNodes" xml:space="preserve"><value>Mazgai</value></data>
-  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Parinktys</value></data>
+  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Išdėstymas</value></data>
   <data name="MindMapToolbarView" xml:space="preserve"><value>Vaizdas</value></data>
   <data name="MindMapToolbarSearch" xml:space="preserve"><value>Paieška</value></data>
   <data name="MindMapToolbarFont" xml:space="preserve"><value>Šriftas</value></data>
@@ -672,6 +673,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="NodeIconBadgeColor" xml:space="preserve"><value>Ikonos ženkliuko spalva</value></data>
   <data name="NodeNote" xml:space="preserve"><value>Pastaba</value></data>
   <data name="MindMapClickToViewNote" xml:space="preserve"><value>Spustelėkite, kad pamatytumėte pastabą</value></data>
+  <data name="MindMapIconOverflowFormat" xml:space="preserve"><value>+{0}</value></data>
+  <data name="MindMapMaxIconsReachedFormat" xml:space="preserve"><value>Galite pasirinkti iki {0} piktogramų vienam mazgui.</value></data>
   <data name="SelectIcon" xml:space="preserve"><value>Savo ikona</value></data>
   <data name="EnterCustomIconEmoji" xml:space="preserve"><value>Įveskite šio mazgo emoji ar simbolį.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Pridėti savo ikoną</value></data>

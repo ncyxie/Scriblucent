@@ -413,6 +413,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FindReplaceTitle" xml:space="preserve"><value>Find / Replace</value></data>
   <data name="FindLabel" xml:space="preserve"><value>Find:</value></data>
   <data name="ReplaceLabel" xml:space="preserve"><value>Replace:</value></data>
+  <data name="Replace" xml:space="preserve"><value>Replace</value></data>
   <data name="FindPrevious" xml:space="preserve"><value>Find Previous</value></data>
   <data name="FindNext" xml:space="preserve"><value>Find Next</value></data>
   <data name="ReplaceNext" xml:space="preserve"><value>Replace Next</value></data>
@@ -696,7 +697,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapManualPositioningOnHint" xml:space="preserve"><value>Manual positioning is on. Drag nodes to arrange them.</value></data>
   <data name="MindMapManualPositioningOffHint" xml:space="preserve"><value>Manual positioning is off. Turn it on to drag nodes.</value></data>
   <data name="MindMapToolbarNodes" xml:space="preserve"><value>Nodes</value></data>
-  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Options</value></data>
+  <data name="MindMapToolbarArrange" xml:space="preserve"><value>Arrange</value></data>
   <data name="MindMapToolbarView" xml:space="preserve"><value>View</value></data>
   <data name="MindMapToolbarSearch" xml:space="preserve"><value>Search</value></data>
   <data name="MindMapToolbarFont" xml:space="preserve"><value>Font</value></data>
@@ -724,6 +725,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="NodeIconBadgeColor" xml:space="preserve"><value>Icon badge color</value></data>
   <data name="NodeNote" xml:space="preserve"><value>Note</value></data>
   <data name="MindMapClickToViewNote" xml:space="preserve"><value>Click to view note</value></data>
+  <data name="MindMapIconOverflowFormat" xml:space="preserve"><value>+{0}</value></data>
+  <data name="MindMapMaxIconsReachedFormat" xml:space="preserve"><value>You can select up to {0} icons per node.</value></data>
   <data name="SelectIcon" xml:space="preserve"><value>Custom icon</value></data>
   <data name="EnterCustomIconEmoji" xml:space="preserve"><value>Enter an emoji or symbol for this node.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Add custom icon</value></data>

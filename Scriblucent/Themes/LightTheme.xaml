@@ -162,10 +162,14 @@
     <SolidColorBrush x:Key="MindMapSearchMatchBorderBrush" Color="#EAA43A"/>
     <SolidColorBrush x:Key="MindMapSearchActiveBorderBrush" Color="#DA6A21"/>
     <SolidColorBrush x:Key="MindMapConnectionBrush" Color="#94A4C2"/>
+    <SolidColorBrush x:Key="MindMapCrossLinkBrush" Color="#7C6FB0"/>
     <SolidColorBrush x:Key="MindMapSelectedBorderBrush" Color="#435CEC"/>
-    <!-- Root outlines the root node's fill, which is brand-accent blue and invariant across themes. -->
-    <SolidColorBrush x:Key="MindMapNodeRootBorderBrush" Color="#2F5CD0"/>
-    <SolidColorBrush x:Key="MindMapNodeBorderBrush" Color="#C2CBDC"/>
+    <!-- Root: restrained accent outline + cool wash (not solid candy blue). -->
+    <SolidColorBrush x:Key="MindMapNodeRootBorderBrush" Color="#435CEC"/>
+    <SolidColorBrush x:Key="MindMapNodeRootBackground" Color="#F3F5FB"/>
+    <SolidColorBrush x:Key="MindMapNodeBorderBrush" Color="#D5DBE8"/>
+    <SolidColorBrush x:Key="MindMapBadgeBackground" Color="#F5F7FB"/>
+    <SolidColorBrush x:Key="MindMapBadgeForeground" Color="#4A5D80"/>
 
     <!-- RichTextBox Colors -->
     <SolidColorBrush x:Key="RichTextBoxBackground" Color="#FFFFFF"/>
