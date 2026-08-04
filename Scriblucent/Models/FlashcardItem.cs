@@ -12,6 +12,11 @@ public sealed class FlashcardItem
     public bool IsUnknown { get; set; }
     public Guid? LinkedNoteId { get; set; } = null;
 
+    /// <summary>User-authored personal marking (Quizlet's "star"), independent of Maturity/
+    /// IsKnown/IsUnknown - never touched by grading or scheduling, only by the user explicitly
+    /// toggling it.</summary>
+    public bool IsStarred { get; set; }
+
     /// <summary>SM-2 spaced-repetition state. Defaults mean "new/never reviewed" - due immediately.</summary>
     public double EaseFactor { get; set; } = 2.5;
     public int IntervalDays { get; set; }

@@ -66,6 +66,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private CardMaturity? _statusFilterMaturity;
     private string _categoryFilter = string.Empty;
     private string _searchText = string.Empty;
+    private bool _starredOnly;
     private string _modelDisplayName = string.Empty;
     private string _lastSavedSnapshot = string.Empty;
     private DispatcherTimer? _editedIndicatorDebounceTimer;
@@ -157,7 +158,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 i.QuestionImageFileName,
                 i.QuestionAudioFileName,
                 i.AnswerImageFileName,
-                i.AnswerAudioFileName))
+                i.AnswerAudioFileName,
+                i.IsStarred))
             .ToList();
         _items = new ObservableCollection<FlashcardPreviewItem>();
         _setOptions = new ObservableCollection<FlashcardSetOption>();
@@ -272,6 +274,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 SetIndex = Math.Max(DefaultSetIndex, item.SetIndex),
                 IsKnown = item.IsKnown,
                 IsUnknown = item.IsUnknown,
+                IsStarred = item.IsStarred,
                 EaseFactor = item.EaseFactor,
                 IntervalDays = item.IntervalDays,
                 Repetitions = item.Repetitions,
@@ -403,23 +406,15 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         var cardSnapshot = string.Join(
             '\u001E',
             _allItems.Select(item =>
-                $"{item.Id}\u001D{item.SetIndex}\u001D{item.Question}\u001D{item.Answer}\u001D{item.Category}\u001D{item.IsKnown}\u001D{item.IsUnknown}"));
+                $"{item.Id}\u001D{item.SetIndex}\u001D{item.Question}\u001D{item.Answer}\u001D{item.Category}\u001D{item.IsKnown}\u001D{item.IsUnknown}\u001D{item.IsStarred}"));
 
-        // Cram navigation is never persisted (BuildStudySession returns blank for it), so it
-        // must not count as an "unsaved change" either - otherwise merely browsing cram cards
-        // would falsely prompt to save on close.
-        var studyHistorySnapshot = string.Join('\u001E', _studyHistory.Select(item => item.Id));
-        var studySnapshot = _isCramMode
-            ? string.Empty
-            : string.Join(
-                '\u001E',
-                _isStudyMode.ToString(),
-                _currentSetIndex.ToString(),
-                _studyModeIndex.ToString(),
-                _studyHistoryPosition.ToString(),
-                (_studyHistory.Count > 0 ? studyHistorySnapshot : string.Empty),
-                GetCurrentStudyCardId()?.ToString() ?? string.Empty);
-
+        // Study-mode position (which set tab, which card, nav history) is deliberately
+        // excluded from the dirty check - browsing/navigating (Next/Previous, switching set
+        // tabs) is not an edit, so it must not flip the Edited indicator or trigger
+        // autosave/close-confirm on its own. Grading still counts as a real change because it
+        // updates the graded card's IsKnown/IsUnknown above. BuildStudySession() still
+        // captures position unconditionally, so it's included whenever a save happens for an
+        // actual reason.
         return string.Join(
             '\u001F',
             TitleTextBox.Text,
@@ -427,7 +422,6 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             string.Join('\u001E', Tags),
             setSnapshot,
             cardSnapshot,
-            studySnapshot,
             GetFlipAnimationDurationMs().ToString());
     }
 
@@ -759,6 +753,9 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             filteredItems = filteredItems.Where(item =>
                 string.Equals(item.Category, _categoryFilter, StringComparison.OrdinalIgnoreCase));
         }
+
+        if (_starredOnly)
+            filteredItems = filteredItems.Where(item => item.IsStarred);
 
         if (!string.IsNullOrWhiteSpace(normalizedQuery))
         {
@@ -1487,6 +1484,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         FlashcardSearchTextBox.Clear();
         _dueOnly = false;
         DueOnlyFilterCheckBox.IsChecked = false;
+        _starredOnly = false;
+        StarredOnlyFilterCheckBox.IsChecked = false;
         ApplyFilters();
         UpdateEditedIndicator();
         UiMotion.ClosePopup(FiltersPopup);
@@ -1495,6 +1494,23 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void DueOnlyFilterCheckBox_Click(object sender, RoutedEventArgs e)
     {
         SetDueOnlyFilter(DueOnlyFilterCheckBox.IsChecked == true);
+    }
+
+    private void StarredOnlyFilterCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _starredOnly = StarredOnlyFilterCheckBox.IsChecked == true;
+        ApplyFilters();
+    }
+
+    private void ToggleStarButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ResolveFlashcardFromElement(sender) is { } flashcard)
+        {
+            flashcard.IsStarred = !flashcard.IsStarred;
+            UpdateEditedIndicator();
+        }
+
+        e.Handled = true;
     }
 
     private void SetDueOnlyFilter(bool value)
@@ -2693,6 +2709,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         private bool _isFlipped;
         private bool _isKnown;
         private bool _isUnknown;
+        private bool _isStarred;
         private bool _isSelected;
         private string _question = string.Empty;
         private string _answer = string.Empty;
@@ -2728,7 +2745,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             string? questionImageFileName = null,
             string? questionAudioFileName = null,
             string? answerImageFileName = null,
-            string? answerAudioFileName = null)
+            string? answerAudioFileName = null,
+            bool isStarred = false)
         {
             Id = id == Guid.Empty ? Guid.NewGuid() : id;
             Question = question;
@@ -2738,6 +2756,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             Hint = hint ?? string.Empty;
             _isKnown = isKnown && !isUnknown;
             _isUnknown = isUnknown && !isKnown;
+            _isStarred = isStarred;
             EaseFactor = easeFactor;
             IntervalDays = intervalDays;
             Repetitions = repetitions;
@@ -3042,6 +3061,20 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 if (_isUnknown == value)
                     return;
                 _isUnknown = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>User-authored personal marking (Quizlet's "star") - purely manual, never
+        /// touched by grading/scheduling. Independent of Maturity and IsKnown/IsUnknown.</summary>
+        public bool IsStarred
+        {
+            get => _isStarred;
+            set
+            {
+                if (_isStarred == value)
+                    return;
+                _isStarred = value;
                 OnPropertyChanged();
             }
         }

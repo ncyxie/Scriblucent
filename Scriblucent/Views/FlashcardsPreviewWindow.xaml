@@ -186,6 +186,28 @@
             <Setter Property="Background" Value="{DynamicResource FlashcardNewChipBackground}"/>
         </Style>
 
+        <!-- Personal marking toggle (Quizlet's "star") - gold when set, muted otherwise. Reuses
+             AccentWarning, the app's existing amber accent, rather than a new theme resource. -->
+        <Style x:Key="FlashcardStarIconStyle" TargetType="icons:AppIcon" BasedOn="{StaticResource {x:Type icons:AppIcon}}">
+            <Setter Property="Width" Value="13"/>
+            <Setter Property="Height" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStarred}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource AccentWarning}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FlashcardStarButtonStyle" TargetType="Button" BasedOn="{StaticResource FlashcardEditorIconButtonStyle}">
+            <Setter Property="ToolTip" Value="{Binding [FlashcardStarCard], Source={StaticResource Loc}}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStarred}" Value="True">
+                    <Setter Property="ToolTip" Value="{Binding [FlashcardUnstarCard], Source={StaticResource Loc}}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <Style x:Key="FlashcardChipTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -317,6 +339,11 @@
                                     Style="{StaticResource FlashcardEditorIconButtonStyle}"
                                     ToolTip="{Binding [MoveToSet], Source={StaticResource Loc}}"
                                     Click="MoveFlashcardButton_Click"/>
+                            <Button Width="26" Height="24" Margin="6,0,0,0" Padding="0"
+                                    Style="{StaticResource FlashcardStarButtonStyle}"
+                                    Click="ToggleStarButton_Click">
+                                <icons:AppIcon Kind="Star" Style="{StaticResource FlashcardStarIconStyle}"/>
+                            </Button>
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="1" Margin="0,14,0,12" Padding="0,2">
@@ -423,6 +450,11 @@
                                     Style="{StaticResource FlashcardEditorIconButtonStyle}"
                                     ToolTip="{Binding [MoveToSet], Source={StaticResource Loc}}"
                                     Click="MoveFlashcardButton_Click"/>
+                            <Button Width="26" Height="24" Margin="6,0,0,0" Padding="0"
+                                    Style="{StaticResource FlashcardStarButtonStyle}"
+                                    Click="ToggleStarButton_Click">
+                                <icons:AppIcon Kind="Star" Style="{StaticResource FlashcardStarIconStyle}"/>
+                            </Button>
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="1" Margin="0,14,0,12" Padding="0,2">
@@ -547,6 +579,14 @@
                                     Style="{StaticResource FlashcardEditorIconButtonStyle}"
                                     ToolTip="{Binding [MoveToSet], Source={StaticResource Loc}}"
                                     Click="MoveStudyModeFlashcardButton_Click"/>
+                            <Button Width="26"
+                                    Height="24"
+                                    Margin="0,0,8,0"
+                                    Padding="0"
+                                    Style="{StaticResource FlashcardStarButtonStyle}"
+                                    Click="ToggleStarButton_Click">
+                                <icons:AppIcon Kind="Star" Style="{StaticResource FlashcardStarIconStyle}"/>
+                            </Button>
                             <ContentControl Content="{Binding}"
                                             ContentTemplate="{StaticResource FlashcardStatusChipsTemplate}"/>
                         </StackPanel>
@@ -699,6 +739,14 @@
                                     Style="{StaticResource FlashcardEditorIconButtonStyle}"
                                     ToolTip="{Binding [MoveToSet], Source={StaticResource Loc}}"
                                     Click="MoveStudyModeFlashcardButton_Click"/>
+                            <Button Width="26"
+                                    Height="24"
+                                    Margin="0,0,8,0"
+                                    Padding="0"
+                                    Style="{StaticResource FlashcardStarButtonStyle}"
+                                    Click="ToggleStarButton_Click">
+                                <icons:AppIcon Kind="Star" Style="{StaticResource FlashcardStarIconStyle}"/>
+                            </Button>
                             <ContentControl Content="{Binding}"
                                             ContentTemplate="{StaticResource FlashcardStatusChipsTemplate}"/>
                         </StackPanel>
@@ -879,6 +927,10 @@
                                                           Content="{Binding [FlashcardDueCardsOnly], Source={StaticResource Loc}}"
                                                           Margin="0,0,0,8"
                                                           Click="DueOnlyFilterCheckBox_Click"/>
+                                                <CheckBox x:Name="StarredOnlyFilterCheckBox"
+                                                          Content="{Binding [FlashcardStarredOnly], Source={StaticResource Loc}}"
+                                                          Margin="0,0,0,8"
+                                                          Click="StarredOnlyFilterCheckBox_Click"/>
                                                 <Border Height="32"
                                                         Padding="6,0"
                                                         Margin="0,0,0,8"

@@ -669,6 +669,9 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardFilters" xml:space="preserve"><value>Filtrai</value></data>
   <data name="FlashcardOptionsTooltip" xml:space="preserve"><value>Parinktys</value></data>
   <data name="FlashcardDueCardsOnly" xml:space="preserve"><value>Tik pakartotinos kortelės</value></data>
+  <data name="FlashcardStarredOnly" xml:space="preserve"><value>Tik pažymėtos žvaigždute</value></data>
+  <data name="FlashcardStarCard" xml:space="preserve"><value>Pažymėti žvaigždute</value></data>
+  <data name="FlashcardUnstarCard" xml:space="preserve"><value>Nuimti žvaigždutę</value></data>
   <data name="FlashcardShowHint" xml:space="preserve"><value>Rodyti užuominą</value></data>
   <data name="FlashcardCramStart" xml:space="preserve"><value>Kimšti</value></data>
   <data name="FlashcardCramTooltip" xml:space="preserve"><value>Kartokite visą rinkinį be apribojimų - tai neveikia jūsų kartojimo tvarkaraščio</value></data>

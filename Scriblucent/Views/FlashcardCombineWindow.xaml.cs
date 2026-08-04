@@ -325,6 +325,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
                     Category = card.Category,
                     Hint = card.Hint,
                     SetIndex = setIndex,
+                    IsStarred = card.IsStarred,
                     LinkedNoteId = card.LinkedNoteId,
                     QuestionImageFileName = card.QuestionImageFileName,
                     QuestionAudioFileName = card.QuestionAudioFileName,

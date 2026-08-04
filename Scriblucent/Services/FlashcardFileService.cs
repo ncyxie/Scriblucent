@@ -273,6 +273,7 @@ internal static class FlashcardFileService
             Category = card.Category,
             Hint = card.Hint,
             SetIndex = card.SetIndex,
+            IsStarred = card.IsStarred,
             QuestionImageFileName = card.QuestionImageFileName,
             QuestionAudioFileName = card.QuestionAudioFileName,
             AnswerImageFileName = card.AnswerImageFileName,

@@ -721,6 +721,9 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardFilters" xml:space="preserve"><value>Filters</value></data>
   <data name="FlashcardOptionsTooltip" xml:space="preserve"><value>Options</value></data>
   <data name="FlashcardDueCardsOnly" xml:space="preserve"><value>Due cards only</value></data>
+  <data name="FlashcardStarredOnly" xml:space="preserve"><value>Starred only</value></data>
+  <data name="FlashcardStarCard" xml:space="preserve"><value>Star card</value></data>
+  <data name="FlashcardUnstarCard" xml:space="preserve"><value>Unstar card</value></data>
   <data name="FlashcardShowHint" xml:space="preserve"><value>Show hint</value></data>
   <data name="FlashcardCramStart" xml:space="preserve"><value>Cram</value></data>
   <data name="FlashcardCramTooltip" xml:space="preserve"><value>Practice the whole set on repeat - doesn't affect your spaced-repetition schedule</value></data>
