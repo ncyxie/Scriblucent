@@ -323,8 +323,13 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
                     Question = card.Question,
                     Answer = card.Answer,
                     Category = card.Category,
+                    Hint = card.Hint,
                     SetIndex = setIndex,
-                    LinkedNoteId = card.LinkedNoteId
+                    LinkedNoteId = card.LinkedNoteId,
+                    QuestionImageFileName = card.QuestionImageFileName,
+                    QuestionAudioFileName = card.QuestionAudioFileName,
+                    AnswerImageFileName = card.AnswerImageFileName,
+                    AnswerAudioFileName = card.AnswerAudioFileName
                 });
             }
 

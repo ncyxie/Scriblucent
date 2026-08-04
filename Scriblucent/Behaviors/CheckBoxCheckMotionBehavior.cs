@@ -21,6 +21,7 @@ public static class CheckBoxCheckMotionBehavior
         public bool IsAttached;
         public bool IsReady;
         public RoutedEventHandler? LoadedHandler;
+        public RoutedEventHandler? UnloadedHandler;
         public RoutedEventHandler? CheckedHandler;
         public RoutedEventHandler? UncheckedHandler;
     }
@@ -71,39 +72,28 @@ public static class CheckBoxCheckMotionBehavior
             Detach(checkBox);
     }
 
+    // Loaded/Unloaded stay wired for the checkbox's whole lifetime (as long as IsEnabled=True);
+    // Checked/Unchecked are re-subscribed on every Loaded and torn down on every Unloaded. A
+    // checkbox living inside a Popup (e.g. a filters flyout) gets unloaded every time the popup
+    // closes and reloaded every time it reopens - subscribing Checked/Unchecked only once here
+    // (the original behavior) left them permanently unsubscribed after the first close, so the
+    // checkmark stopped animating for the rest of the app's lifetime even though clicks still
+    // worked fine.
     private static void Attach(CheckBox checkBox)
     {
         var state = GetOrCreateState(checkBox);
         if (state.IsAttached)
             return;
 
-        state.LoadedHandler = (_, _) =>
-        {
-            state.IsReady = true;
-            SyncGlyph(checkBox, animate: false);
-        };
-        state.CheckedHandler = (_, _) =>
-        {
-            if (state.IsReady)
-                AnimateGlyph(checkBox, isChecked: true);
-        };
-        state.UncheckedHandler = (_, _) =>
-        {
-            if (state.IsReady)
-                AnimateGlyph(checkBox, isChecked: false);
-        };
+        state.LoadedHandler = (_, _) => OnLoaded(checkBox, state);
+        state.UnloadedHandler = (_, _) => OnUnloaded(checkBox, state);
 
         checkBox.Loaded += state.LoadedHandler;
-        checkBox.Checked += state.CheckedHandler;
-        checkBox.Unchecked += state.UncheckedHandler;
-        checkBox.Unloaded += (_, _) => Detach(checkBox);
+        checkBox.Unloaded += state.UnloadedHandler;
         state.IsAttached = true;
 
         if (checkBox.IsLoaded)
-        {
-            state.IsReady = true;
-            SyncGlyph(checkBox, animate: false);
-        }
+            OnLoaded(checkBox, state);
     }
 
     private static void Detach(CheckBox checkBox)
@@ -113,16 +103,42 @@ public static class CheckBoxCheckMotionBehavior
 
         if (state.LoadedHandler != null)
             checkBox.Loaded -= state.LoadedHandler;
+        if (state.UnloadedHandler != null)
+            checkBox.Unloaded -= state.UnloadedHandler;
+
+        OnUnloaded(checkBox, state);
+        state.IsAttached = false;
+    }
+
+    private static void OnLoaded(CheckBox checkBox, State state)
+    {
+        if (!state.IsReady)
+        {
+            state.CheckedHandler = (_, _) => AnimateGlyph(checkBox, isChecked: true);
+            state.UncheckedHandler = (_, _) => AnimateGlyph(checkBox, isChecked: false);
+            checkBox.Checked += state.CheckedHandler;
+            checkBox.Unchecked += state.UncheckedHandler;
+            state.IsReady = true;
+        }
+
+        SyncGlyph(checkBox, animate: false);
+    }
+
+    private static void OnUnloaded(CheckBox checkBox, State state)
+    {
+        if (!state.IsReady)
+            return;
+
         if (state.CheckedHandler != null)
             checkBox.Checked -= state.CheckedHandler;
         if (state.UncheckedHandler != null)
             checkBox.Unchecked -= state.UncheckedHandler;
+        state.CheckedHandler = null;
+        state.UncheckedHandler = null;
+        state.IsReady = false;
 
         if (TryResolveGlyph(checkBox) is { } glyph)
             UiMotion.Stop(glyph);
-
-        state.IsAttached = false;
-        state.IsReady = false;
     }
 
     private static void SyncGlyph(CheckBox checkBox, bool animate)

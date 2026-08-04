@@ -2207,6 +2207,19 @@ namespace Scriblucent
                 OpenFlashcardSetEditor(vm, null);
         }
 
+        /// <summary>Quick-create entry point for the empty-dashboard inline title box - opens the
+        /// same full editor CreateFlashcardsButton_Click does, just pre-titled with what was
+        /// already typed instead of the usual blank/placeholder title, so the user isn't asked to
+        /// retype it.</summary>
+        internal void CreateFlashcardSetWithTitle(string title)
+        {
+            if (DataContext is MainViewModel { IsMassSelectMode: true })
+                return;
+
+            if (DataContext is MainViewModel vm)
+                OpenFlashcardSetEditor(vm, null, title);
+        }
+
         internal void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
@@ -2235,6 +2248,124 @@ namespace Scriblucent
                 Owner = this
             };
             window.ShowDialog();
+        }
+
+        internal void OpenFlashcardStatisticsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is not MainViewModel vm)
+                return;
+
+            var window = new Scriblucent.Views.FlashcardStatisticsWindow(vm)
+            {
+                Owner = this
+            };
+            window.ShowDialog();
+        }
+
+        internal void ImportFlashcardsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Multiselect = true,
+                Filter = LocalizationService.GetString("FlashcardImportDialogFilter"),
+                Title = LocalizationService.GetString("FlashcardImportDialogTitle")
+            };
+
+            if (openFileDialog.ShowDialog() != true)
+                return;
+
+            if (DataContext is not MainViewModel vm)
+                return;
+
+            // Ask once for the whole batch, and only if at least one selected file could actually
+            // carry progress data - CSV/TXT can never represent it, so they never trigger this.
+            var keepProgress = false;
+            var progressCapableFiles = openFileDialog.FileNames
+                .Where(FlashcardFileService.IsScribFlashPath)
+                .ToList();
+
+            if (progressCapableFiles.Count > 0)
+            {
+                var anyHasProgress = progressCapableFiles.Any(path =>
+                {
+                    try
+                    {
+                        return FlashcardFileService.HasProgressData(FlashcardFileService.LoadScribFlashDocument(path));
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                });
+
+                if (anyHasProgress)
+                {
+                    var choice = ModernDialog.Show(
+                        this,
+                        LocalizationService.GetString("FlashcardImportKeepProgressTitle"),
+                        LocalizationService.GetString("FlashcardImportKeepProgressPrompt"),
+                        ModernDialogTone.Question,
+                        LocalizationService.GetString("FlashcardImportKeepProgressKeep"),
+                        LocalizationService.GetString("Cancel"),
+                        LocalizationService.GetString("FlashcardImportKeepProgressDiscard"),
+                        primaryStyle: ModernDialogButtonStyle.Secondary,
+                        secondaryStyle: ModernDialogButtonStyle.Primary,
+                        defaultChoice: ModernDialogResult.Secondary);
+
+                    switch (choice)
+                    {
+                        case ModernDialogResult.Primary:
+                            keepProgress = true;
+                            break;
+                        case ModernDialogResult.Secondary:
+                            keepProgress = false;
+                            break;
+                        default:
+                            return;
+                    }
+                }
+            }
+
+            var imported = new List<FlashcardSetDocument>();
+            var warnings = new List<string>();
+            foreach (var filePath in openFileDialog.FileNames)
+            {
+                try
+                {
+                    var document = FlashcardFileService.LoadAnyFlashcardDocument(
+                        filePath,
+                        Path.GetFileNameWithoutExtension(filePath),
+                        keepProgress,
+                        out var fileWarnings);
+                    imported.Add(document);
+                    warnings.AddRange(fileWarnings.Select(warning => $"{Path.GetFileName(filePath)}: {warning}"));
+                }
+                catch (Exception ex)
+                {
+                    ModernMessageBox.Show(
+                        $"{LocalizationService.GetString("ImportError")}\n{Path.GetFileName(filePath)}\n\n{ex.Message}",
+                        LocalizationService.GetString("Error"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            }
+
+            if (imported.Count == 0)
+                return;
+
+            // Single batch add so a multi-file import pays one save, not one per file - see
+            // MainViewModel.AddImportedFlashcardSets for the same reasoning AddImportedQuizzes documents.
+            vm.AddImportedFlashcardSets(imported);
+
+            var summary = string.Format(LocalizationService.GetString("FlashcardImportSuccessCount"), imported.Count);
+            if (warnings.Count > 0)
+                summary += "\n\n" + string.Join("\n", warnings);
+
+            ModernMessageBox.Show(
+                summary,
+                LocalizationService.GetString("FlashcardImport"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         internal void CreateQuizButton_Click(object sender, RoutedEventArgs e)
@@ -2295,20 +2426,21 @@ namespace Scriblucent
             }
         }
 
-        private void OpenFlashcardSetEditor(MainViewModel vm, FlashcardSetViewModel? set)
+        private void OpenFlashcardSetEditor(MainViewModel vm, FlashcardSetViewModel? set, string? initialTitle = null)
         {
             var document = set?.Document;
             var editor = new FlashcardsPreviewWindow(
                 document?.Cards ?? Enumerable.Empty<FlashcardItem>(),
                 vm.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
                 document?.AiModelDisplayName,
-                document?.Title,
+                document?.Title ?? initialTitle,
                 document?.Tags,
                 document?.SetNames,
                 document?.StudySession,
                 document?.SourceNoteId,
                 noteId => OpenNoteById(vm, noteId),
-                document?.FlipDelayMilliseconds ?? 0)
+                document?.FlipDelayMilliseconds ?? 0,
+                document?.StudyDueCardsOnly ?? true)
             {
                 Owner = this
             };

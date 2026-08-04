@@ -18,6 +18,7 @@ public static class AppIconKindMap
         AppIconKind.About => PackIconLucideKind.Info,
         AppIconKind.Search => PackIconLucideKind.Search,
         AppIconKind.Sort => PackIconLucideKind.ArrowUpDown,
+        AppIconKind.Shuffle => PackIconLucideKind.Shuffle,
         AppIconKind.Tag => PackIconLucideKind.Tag,
         AppIconKind.Sections => PackIconLucideKind.LayoutGrid,
         AppIconKind.Import => PackIconLucideKind.FileInput,
@@ -62,6 +63,7 @@ public static class AppIconKindMap
         AppIconKind.ZoomReset => PackIconLucideKind.Ratio,
         AppIconKind.Bullet => PackIconLucideKind.List,
         AppIconKind.Play => PackIconLucideKind.Play,
+        AppIconKind.Pause => PackIconLucideKind.Pause,
         AppIconKind.Lightbulb => PackIconLucideKind.Lightbulb,
         AppIconKind.Refresh => PackIconLucideKind.RefreshCw,
         AppIconKind.Warning => PackIconLucideKind.TriangleAlert,
@@ -89,6 +91,7 @@ public static class AppIconKindMap
         AppIconKind.Lock => PackIconLucideKind.Lock,
         AppIconKind.Bookmark => PackIconLucideKind.Bookmark,
         AppIconKind.Ban => PackIconLucideKind.Ban,
+        AppIconKind.GripVertical => PackIconLucideKind.GripVertical,
         _ => PackIconLucideKind.CircleQuestionMark
     };
 }

@@ -1,5 +1,6 @@
 using Scriblucent.Localization;
 using Scriblucent.Models;
+using Scriblucent.Services;
 
 namespace Scriblucent.ViewModels;
 
@@ -61,6 +62,41 @@ public sealed class FlashcardSetViewModel : ViewModelBase
         ? string.Format(LocalizationService.GetString("FlashcardsGeneratedWithModel"), Document.AiModelDisplayName.Trim())
         : string.Empty;
 
+    /// <summary>How many cards are due right now - algorithm-agnostic, since IsDue only reads
+    /// DueDate, which SM-2 and FSRS populate identically. This is the dashboard's only standing
+    /// signal for "is there anything to study" - finishing a session used to leave no way to tell
+    /// when to come back short of opening the set or reading a one-time completion popup.</summary>
+    public int DueCount => Document.Cards?.Count(card => FlashcardReviewScheduler.IsDue(card.DueDate, DateTime.Now)) ?? 0;
+
+    public bool HasDueCards => DueCount > 0;
+
+    /// <summary>"{n} due" when something needs review now, otherwise "Next review: ..." from the
+    /// soonest upcoming DueDate among cards that have one - null only for a set with nothing ever
+    /// scheduled (e.g. no cards at all).</summary>
+    public string? DueStatusText
+    {
+        get
+        {
+            if (DueCount > 0)
+                return string.Format(LocalizationService.GetString("FlashcardDueCountFormat"), DueCount);
+
+            var upcomingDueDates = Document.Cards?
+                .Where(card => card.DueDate.HasValue)
+                .Select(card => card.DueDate!.Value)
+                .ToList();
+
+            if (upcomingDueDates is not { Count: > 0 })
+                return null;
+
+            var days = (upcomingDueDates.Min().Date - DateTime.Now.Date).Days;
+            return days <= 1
+                ? LocalizationService.GetString("FlashcardNextReviewTomorrow")
+                : string.Format(LocalizationService.GetString("FlashcardNextReviewInDaysFormat"), days);
+        }
+    }
+
+    public bool ShowNextReviewText => !HasDueCards && !string.IsNullOrEmpty(DueStatusText);
+
     public void NotifyChanged()
     {
         _cachedSetCount = null;
@@ -78,5 +114,9 @@ public sealed class FlashcardSetViewModel : ViewModelBase
         OnPropertyChanged(nameof(NextScheduleDisplay));
         OnPropertyChanged(nameof(IsAiGenerated));
         OnPropertyChanged(nameof(AiGeneratedTooltip));
+        OnPropertyChanged(nameof(DueCount));
+        OnPropertyChanged(nameof(HasDueCards));
+        OnPropertyChanged(nameof(DueStatusText));
+        OnPropertyChanged(nameof(ShowNextReviewText));
     }
 }

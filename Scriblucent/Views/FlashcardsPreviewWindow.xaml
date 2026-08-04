@@ -36,7 +36,10 @@
                         <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
-                                      ClipToBounds="False">
+                                      Background="Transparent"
+                                      ClipToBounds="True"
+                                      behaviors:RoundedClipBehavior.IsEnabled="True"
+                                      behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}">
                             <ItemsPresenter Margin="{TemplateBinding Padding}"/>
                         </ScrollViewer>
                     </ControlTemplate>
@@ -50,15 +53,34 @@
             <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
         </Style>
 
-        <Style x:Key="FlashcardToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}"/>
+        <Style x:Key="FlashcardToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
+            <Setter Property="MinWidth" Value="110"/>
+        </Style>
 
-        <Style x:Key="FlashcardToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarPrimaryButtonStyle}"/>
+        <Style x:Key="FlashcardToolbarPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarPrimaryButtonStyle}">
+            <Setter Property="MinWidth" Value="130"/>
+        </Style>
 
-        <Style x:Key="FlashcardLinkedNoteButtonStyle" TargetType="Button" BasedOn="{StaticResource LinkedNoteToolbarButtonStyle}"/>
+        <Style x:Key="FlashcardFooterButtonStyle" TargetType="Button" BasedOn="{StaticResource FlashcardToolbarButtonStyle}">
+            <Setter Property="Margin" Value="0,4,8,4"/>
+            <Setter Property="MinHeight" Value="34"/>
+        </Style>
+
+        <Style x:Key="FlashcardFooterPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource FlashcardToolbarPrimaryButtonStyle}">
+            <Setter Property="Margin" Value="0,4,8,4"/>
+            <Setter Property="MinHeight" Value="34"/>
+        </Style>
+
+        <Style x:Key="FlashcardLinkedNoteButtonStyle" TargetType="Button" BasedOn="{StaticResource LinkedNoteToolbarButtonStyle}">
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="MinWidth" Value="140"/>
+            <Setter Property="MaxWidth" Value="200"/>
+        </Style>
 
         <Style x:Key="FlashcardLinkedNoteComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource LinkedNoteComboBoxStyle}">
-            <Setter Property="Width" Value="160"/>
+            <Setter Property="Width" Value="180"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
         </Style>
 
         <Style x:Key="FlashcardEditorIconButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
@@ -197,25 +219,28 @@
                       Click="DeleteFlashcardMenuItem_Click"/>
         </ContextMenu>
 
+        <!-- Long-term maturity (New/Learning/Mature), not last-grade Known/Unknown - see
+             FlashcardPreviewItem.Maturity. Mature/Learning deliberately reuse the Known/Unknown
+             chip brushes, matching FlashcardStatisticsWindow's own maturity display. -->
         <DataTemplate x:Key="FlashcardStatusChipsTemplate">
             <Grid>
-                <Border Style="{StaticResource FlashcardKnownChipStyle}"
-                        Visibility="{Binding IsKnown, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding [Known], Source={StaticResource Loc}}"
-                               Style="{StaticResource FlashcardChipTextStyle}"
-                               Foreground="{DynamicResource FlashcardKnownChipForeground}"/>
-                </Border>
-                <Border Style="{StaticResource FlashcardUnknownChipStyle}"
-                        Visibility="{Binding IsUnknown, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding [Unknown], Source={StaticResource Loc}}"
-                               Style="{StaticResource FlashcardChipTextStyle}"
-                               Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
-                </Border>
                 <Border Style="{StaticResource FlashcardNewChipStyle}"
-                        Visibility="{Binding IsUnreviewed, Converter={StaticResource BoolToVis}}">
+                        Visibility="{Binding IsMaturityNew, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="{Binding [FlashcardStatusNew], Source={StaticResource Loc}}"
                                Style="{StaticResource FlashcardChipTextStyle}"
                                Foreground="{DynamicResource FlashcardNewChipForeground}"/>
+                </Border>
+                <Border Style="{StaticResource FlashcardUnknownChipStyle}"
+                        Visibility="{Binding IsMaturityLearning, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding [FlashcardStatusLearning], Source={StaticResource Loc}}"
+                               Style="{StaticResource FlashcardChipTextStyle}"
+                               Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
+                </Border>
+                <Border Style="{StaticResource FlashcardKnownChipStyle}"
+                        Visibility="{Binding IsMaturityMature, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding [FlashcardStatusMature], Source={StaticResource Loc}}"
+                               Style="{StaticResource FlashcardChipTextStyle}"
+                               Foreground="{DynamicResource FlashcardKnownChipForeground}"/>
                 </Border>
             </Grid>
         </DataTemplate>
@@ -262,8 +287,28 @@
                                        Foreground="{DynamicResource FlashcardSideChipForeground}"/>
                         </Border>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Grid Visibility="{Binding HasQuestionAudio, Converter={StaticResource BoolToVis}}">
+                                <Button Content="{icons:Icon Kind=Play, Size=13}"
+                                        Width="26" Height="24" Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPlayAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsQuestionAudioPlaying, Converter={StaticResource InverseBoolToVis}}"
+                                        Click="PlayQuestionAudioButton_Click"/>
+                                <Button Content="{icons:Icon Kind=Pause, Size=13}"
+                                        Width="26" Height="24" Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPauseAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsQuestionAudioPlaying, Converter={StaticResource BoolToVis}}"
+                                        Click="PlayQuestionAudioButton_Click"/>
+                            </Grid>
+                            <Button Content="{icons:Icon Kind=Refresh, Size=13}"
+                                    Width="26" Height="24" Margin="6,0,0,0" Padding="0"
+                                    Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                    ToolTip="{Binding [FlashcardRestartAudio], Source={StaticResource Loc}}"
+                                    Visibility="{Binding HasQuestionAudio, Converter={StaticResource BoolToVis}}"
+                                    Click="RestartQuestionAudioButton_Click"/>
                             <Button Content="{icons:Icon Kind=Edit, Size=13}"
-                                    Width="26" Height="24" Padding="0"
+                                    Width="26" Height="24" Margin="6,0,0,0" Padding="0"
                                     Style="{StaticResource FlashcardEditorIconButtonStyle}"
                                     ToolTip="{Binding [Edit], Source={StaticResource Loc}}"
                                     Click="EditFlashcardButton_Click"/>
@@ -275,23 +320,42 @@
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="1" Margin="0,14,0,12" Padding="0,2">
-                        <TextBlock Text="{Binding Question}"
-                                   TextWrapping="Wrap"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.BlockTitle}"
-                                   FontWeight="SemiBold"
-                                   LineHeight="23"
-                                   MaxHeight="116"
-                                   Foreground="{DynamicResource TextColor}">
-                            <TextBlock.ToolTip>
-                                <ToolTip MaxWidth="320"
-                                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                    <TextBlock Text="{Binding Question}"
-                                               TextWrapping="Wrap"/>
-                                </ToolTip>
-                            </TextBlock.ToolTip>
-                        </TextBlock>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0"
+                                    Height="76"
+                                    Margin="0,0,0,6"
+                                    Background="{DynamicResource SidebarBackground}"
+                                    CornerRadius="{StaticResource Radius.Control}"
+                                    Cursor="Hand"
+                                    ToolTip="{Binding [FlashcardViewImage], Source={StaticResource Loc}}"
+                                    MouseLeftButtonUp="QuestionImage_MouseLeftButtonUp"
+                                    behaviors:RoundedClipBehavior.IsEnabled="True"
+                                    behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
+                                    Visibility="{Binding HasQuestionImage, Converter={StaticResource BoolToVis}}">
+                                <Image Source="{Binding QuestionImageSource}" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding Question}"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.BlockTitle}"
+                                       FontWeight="SemiBold"
+                                       LineHeight="23"
+                                       Foreground="{DynamicResource TextColor}">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320"
+                                             DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <TextBlock Text="{Binding Question}"
+                                                   TextWrapping="Wrap"/>
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
+                        </Grid>
                     </Border>
                     <ContentControl Grid.Row="2"
                                     Content="{Binding}"
@@ -329,8 +393,28 @@
                                        Foreground="{DynamicResource FlashcardSideChipForeground}"/>
                         </Border>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Grid Visibility="{Binding HasAnswerAudio, Converter={StaticResource BoolToVis}}">
+                                <Button Content="{icons:Icon Kind=Play, Size=13}"
+                                        Width="26" Height="24" Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPlayAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsAnswerAudioPlaying, Converter={StaticResource InverseBoolToVis}}"
+                                        Click="PlayAnswerAudioButton_Click"/>
+                                <Button Content="{icons:Icon Kind=Pause, Size=13}"
+                                        Width="26" Height="24" Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPauseAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsAnswerAudioPlaying, Converter={StaticResource BoolToVis}}"
+                                        Click="PlayAnswerAudioButton_Click"/>
+                            </Grid>
+                            <Button Content="{icons:Icon Kind=Refresh, Size=13}"
+                                    Width="26" Height="24" Margin="6,0,0,0" Padding="0"
+                                    Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                    ToolTip="{Binding [FlashcardRestartAudio], Source={StaticResource Loc}}"
+                                    Visibility="{Binding HasAnswerAudio, Converter={StaticResource BoolToVis}}"
+                                    Click="RestartAnswerAudioButton_Click"/>
                             <Button Content="{icons:Icon Kind=Edit, Size=13}"
-                                    Width="26" Height="24" Padding="0"
+                                    Width="26" Height="24" Margin="6,0,0,0" Padding="0"
                                     Style="{StaticResource FlashcardEditorIconButtonStyle}"
                                     ToolTip="{Binding [Edit], Source={StaticResource Loc}}"
                                     Click="EditFlashcardButton_Click"/>
@@ -342,23 +426,42 @@
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="1" Margin="0,14,0,12" Padding="0,2">
-                        <TextBlock Text="{Binding Answer}"
-                                   TextWrapping="Wrap"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.BlockTitle}"
-                                   FontWeight="SemiBold"
-                                   LineHeight="23"
-                                   MaxHeight="116"
-                                   Foreground="{DynamicResource TextColor}">
-                            <TextBlock.ToolTip>
-                                <ToolTip MaxWidth="320"
-                                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                    <TextBlock Text="{Binding Answer}"
-                                               TextWrapping="Wrap"/>
-                                </ToolTip>
-                            </TextBlock.ToolTip>
-                        </TextBlock>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0"
+                                    Height="76"
+                                    Margin="0,0,0,6"
+                                    Background="{DynamicResource SidebarBackground}"
+                                    CornerRadius="{StaticResource Radius.Control}"
+                                    Cursor="Hand"
+                                    ToolTip="{Binding [FlashcardViewImage], Source={StaticResource Loc}}"
+                                    MouseLeftButtonUp="AnswerImage_MouseLeftButtonUp"
+                                    behaviors:RoundedClipBehavior.IsEnabled="True"
+                                    behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
+                                    Visibility="{Binding HasAnswerImage, Converter={StaticResource BoolToVis}}">
+                                <Image Source="{Binding AnswerImageSource}" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding Answer}"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.BlockTitle}"
+                                       FontWeight="SemiBold"
+                                       LineHeight="23"
+                                       Foreground="{DynamicResource TextColor}">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320"
+                                             DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <TextBlock Text="{Binding Answer}"
+                                                   TextWrapping="Wrap"/>
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
+                        </Grid>
                     </Border>
                     <ContentControl Grid.Row="2"
                                     Content="{Binding}"
@@ -409,6 +512,33 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Top">
+                            <Grid Margin="0,0,8,0" Visibility="{Binding HasQuestionAudio, Converter={StaticResource BoolToVis}}">
+                                <Button Content="{icons:Icon Kind=Play, Size=13}"
+                                        Width="26"
+                                        Height="24"
+                                        Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPlayAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsQuestionAudioPlaying, Converter={StaticResource InverseBoolToVis}}"
+                                        Click="PlayQuestionAudioButton_Click"/>
+                                <Button Content="{icons:Icon Kind=Pause, Size=13}"
+                                        Width="26"
+                                        Height="24"
+                                        Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPauseAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsQuestionAudioPlaying, Converter={StaticResource BoolToVis}}"
+                                        Click="PlayQuestionAudioButton_Click"/>
+                            </Grid>
+                            <Button Content="{icons:Icon Kind=Refresh, Size=13}"
+                                    Width="26"
+                                    Height="24"
+                                    Margin="0,0,8,0"
+                                    Padding="0"
+                                    Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                    ToolTip="{Binding [FlashcardRestartAudio], Source={StaticResource Loc}}"
+                                    Visibility="{Binding HasQuestionAudio, Converter={StaticResource BoolToVis}}"
+                                    Click="RestartQuestionAudioButton_Click"/>
                             <Button Content="{icons:Icon Kind=Swap, Size=13}"
                                     Width="26"
                                     Height="24"
@@ -422,29 +552,72 @@
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="1" Margin="0,14,0,12" Padding="0,2">
-                        <TextBlock Text="{Binding Question}"
-                                   TextWrapping="Wrap"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.BlockTitle}"
-                                   FontWeight="SemiBold"
-                                   LineHeight="23"
-                                   MaxHeight="116"
-                                   Foreground="{DynamicResource TextColor}">
-                            <TextBlock.ToolTip>
-                                <ToolTip MaxWidth="320"
-                                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                    <TextBlock Text="{Binding Question}"
-                                               TextWrapping="Wrap"/>
-                                </ToolTip>
-                            </TextBlock.ToolTip>
-                        </TextBlock>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0"
+                                    Height="76"
+                                    Margin="0,0,0,6"
+                                    Background="{DynamicResource SidebarBackground}"
+                                    CornerRadius="{StaticResource Radius.Control}"
+                                    Cursor="Hand"
+                                    ToolTip="{Binding [FlashcardViewImage], Source={StaticResource Loc}}"
+                                    MouseLeftButtonUp="QuestionImage_MouseLeftButtonUp"
+                                    behaviors:RoundedClipBehavior.IsEnabled="True"
+                                    behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
+                                    Visibility="{Binding HasQuestionImage, Converter={StaticResource BoolToVis}}">
+                                <Image Source="{Binding QuestionImageSource}" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding Question}"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.BlockTitle}"
+                                       FontWeight="SemiBold"
+                                       LineHeight="23"
+                                       Foreground="{DynamicResource TextColor}">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320"
+                                             DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <TextBlock Text="{Binding Question}"
+                                                   TextWrapping="Wrap"/>
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
+                        </Grid>
                     </Border>
-                    <TextBlock Grid.Row="2"
-                               Text="{Binding [FlashcardsTapHint], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.Chip}"
-                               Foreground="{DynamicResource TextColorSecondary}"
-                               HorizontalAlignment="Right"/>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="{Binding [FlashcardShowHint], Source={StaticResource Loc}}"
+                                       FontSize="{StaticResource Type.Chip}"
+                                       Foreground="{DynamicResource AccentPrimary}"
+                                       Cursor="Hand"
+                                       TextDecorations="Underline"
+                                       MouseLeftButtonUp="StudyHintPrompt_MouseLeftButtonUp"
+                                       Visibility="{Binding ShowHintPrompt, Converter={StaticResource BoolToVis}}"/>
+                            <TextBlock Text="{Binding Hint}"
+                                       FontSize="{StaticResource Type.Chip}"
+                                       FontStyle="Italic"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="220"
+                                       Foreground="{DynamicResource TextColorSecondary}"
+                                       Visibility="{Binding IsHintRevealed, Converter={StaticResource BoolToVis}}"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding [FlashcardsTapHint], Source={StaticResource Loc}}"
+                                   FontSize="{StaticResource Type.Chip}"
+                                   Foreground="{DynamicResource TextColorSecondary}"
+                                   HorizontalAlignment="Right"/>
+                    </Grid>
                 </Grid>
                 </Border>
             </Grid>
@@ -491,6 +664,33 @@
                                     Orientation="Horizontal"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Top">
+                            <Grid Margin="0,0,8,0" Visibility="{Binding HasAnswerAudio, Converter={StaticResource BoolToVis}}">
+                                <Button Content="{icons:Icon Kind=Play, Size=13}"
+                                        Width="26"
+                                        Height="24"
+                                        Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPlayAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsAnswerAudioPlaying, Converter={StaticResource InverseBoolToVis}}"
+                                        Click="PlayAnswerAudioButton_Click"/>
+                                <Button Content="{icons:Icon Kind=Pause, Size=13}"
+                                        Width="26"
+                                        Height="24"
+                                        Padding="0"
+                                        Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                        ToolTip="{Binding [FlashcardPauseAudio], Source={StaticResource Loc}}"
+                                        Visibility="{Binding IsAnswerAudioPlaying, Converter={StaticResource BoolToVis}}"
+                                        Click="PlayAnswerAudioButton_Click"/>
+                            </Grid>
+                            <Button Content="{icons:Icon Kind=Refresh, Size=13}"
+                                    Width="26"
+                                    Height="24"
+                                    Margin="0,0,8,0"
+                                    Padding="0"
+                                    Style="{StaticResource FlashcardEditorIconButtonStyle}"
+                                    ToolTip="{Binding [FlashcardRestartAudio], Source={StaticResource Loc}}"
+                                    Visibility="{Binding HasAnswerAudio, Converter={StaticResource BoolToVis}}"
+                                    Click="RestartAnswerAudioButton_Click"/>
                             <Button Content="{icons:Icon Kind=Swap, Size=13}"
                                     Width="26"
                                     Height="24"
@@ -504,23 +704,42 @@
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="1" Margin="0,14,0,12" Padding="0,2">
-                        <TextBlock Text="{Binding Answer}"
-                                   TextWrapping="Wrap"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center"
-                                   FontSize="{StaticResource Type.BlockTitle}"
-                                   FontWeight="SemiBold"
-                                   LineHeight="23"
-                                   MaxHeight="116"
-                                   Foreground="{DynamicResource TextColor}">
-                            <TextBlock.ToolTip>
-                                <ToolTip MaxWidth="320"
-                                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                    <TextBlock Text="{Binding Answer}"
-                                               TextWrapping="Wrap"/>
-                                </ToolTip>
-                            </TextBlock.ToolTip>
-                        </TextBlock>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0"
+                                    Height="76"
+                                    Margin="0,0,0,6"
+                                    Background="{DynamicResource SidebarBackground}"
+                                    CornerRadius="{StaticResource Radius.Control}"
+                                    Cursor="Hand"
+                                    ToolTip="{Binding [FlashcardViewImage], Source={StaticResource Loc}}"
+                                    MouseLeftButtonUp="AnswerImage_MouseLeftButtonUp"
+                                    behaviors:RoundedClipBehavior.IsEnabled="True"
+                                    behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
+                                    Visibility="{Binding HasAnswerImage, Converter={StaticResource BoolToVis}}">
+                                <Image Source="{Binding AnswerImageSource}" Stretch="Uniform"/>
+                            </Border>
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding Answer}"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       FontSize="{StaticResource Type.BlockTitle}"
+                                       FontWeight="SemiBold"
+                                       LineHeight="23"
+                                       Foreground="{DynamicResource TextColor}">
+                                <TextBlock.ToolTip>
+                                    <ToolTip MaxWidth="320"
+                                             DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <TextBlock Text="{Binding Answer}"
+                                                   TextWrapping="Wrap"/>
+                                    </ToolTip>
+                                </TextBlock.ToolTip>
+                            </TextBlock>
+                        </Grid>
                     </Border>
                     <TextBlock Grid.Row="2"
                                Text="{Binding [FlashcardsTapHint], Source={StaticResource Loc}}"
@@ -540,9 +759,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="12"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="14"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -587,35 +804,173 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                    <ComboBox ItemsSource="{Binding ElementName=FlashcardsWindow, Path=NoteLinkOptions}"
-                              SelectedItem="{Binding ElementName=FlashcardsWindow, Path=SelectedLinkedNote, Mode=TwoWay}"
-                              DisplayMemberPath="Title"
-                              Style="{StaticResource FlashcardLinkedNoteComboBoxStyle}"
-                              SelectedValuePath="Id"
-                              ToolTip="{Binding [QuizLinkedNoteSelectorTooltip], Source={StaticResource Loc}}"/>
-                    <Button x:Name="LinkedNoteButton"
-                            Content="{Binding ElementName=FlashcardsWindow, Path=LinkedNoteButtonText}"
-                            Style="{StaticResource FlashcardLinkedNoteButtonStyle}"
-                            Click="LinkedNoteButton_Click"
-                            ToolTip="{Binding ElementName=FlashcardsWindow, Path=LinkedNoteButtonToolTip}"
-                            TextOptions.TextFormattingMode="Ideal"/>
-                    <Border x:Name="AiGeneratedInfoBadge"
-                            Width="30"
-                            Height="30"
-                            CornerRadius="15"
-                            Background="{DynamicResource IconButtonBackground}"
-                            BorderThickness="0"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            ToolTipService.InitialShowDelay="180"
-                            Visibility="Collapsed">
-                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
-                    </Border>
-                </StackPanel>
+                <Border Grid.Column="1"
+                        Background="{DynamicResource InputSurface}"
+                        CornerRadius="{StaticResource Radius.Control}"
+                        VerticalAlignment="Center"
+                        Padding="8,6"
+                        Effect="{StaticResource Elevation.Field}"
+                        behaviors:RoundedClipBehavior.IsEnabled="True"
+                        SnapsToDevicePixels="True">
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <Button Content="{icons:Icon Plus}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [AddFlashcard], Source={StaticResource Loc}}"
+                                Click="AddFlashcardButton_Click"/>
+                        <Button x:Name="FiltersButton"
+                                Content="{icons:Icon Search}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [FlashcardFilters], Source={StaticResource Loc}}"
+                                Click="FiltersButton_Click"/>
+                        <Button x:Name="ShuffleModeButton"
+                                Content="{icons:Icon Shuffle, Size=14}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [ShuffleCards], Source={StaticResource Loc}}"
+                                Click="ShuffleModeButton_Click"/>
+                        <Popup x:Name="FiltersPopup"
+                               PlacementTarget="{Binding ElementName=FiltersButton}"
+                               Placement="Bottom"
+                               HorizontalOffset="-16"
+                               VerticalOffset="0"
+                               StaysOpen="False"
+                               AllowsTransparency="True"
+                               PopupAnimation="None">
+                            <Border Background="Transparent"
+                                    Padding="16,4,16,18"
+                                    ClipToBounds="False">
+                                <Grid MinWidth="280"
+                                      HorizontalAlignment="Left"
+                                      UseLayoutRounding="True"
+                                      SnapsToDevicePixels="True">
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource PopupBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Card}"
+                                            IsHitTestVisible="False"
+                                            Effect="{StaticResource Elevation.Popup}"/>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource PopupBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Card}"
+                                            SnapsToDevicePixels="True">
+                                        <Border Background="Transparent"
+                                                CornerRadius="{StaticResource Radius.Card}"
+                                                Padding="12"
+                                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                SnapsToDevicePixels="True">
+                                            <StackPanel Orientation="Vertical">
+                                                <ComboBox x:Name="StatusFilterComboBox"
+                                                          Width="260"
+                                                          Style="{StaticResource ChromeComboBoxStyle}"
+                                                          Background="{DynamicResource WindowBackground}"
+                                                          DisplayMemberPath="DisplayName"
+                                                          Margin="0,0,0,8"
+                                                          SelectionChanged="StatusFilterComboBox_SelectionChanged"/>
+                                                <ComboBox x:Name="CategoryFilterComboBox"
+                                                          Width="260"
+                                                          Style="{StaticResource ChromeComboBoxStyle}"
+                                                          Background="{DynamicResource WindowBackground}"
+                                                          DisplayMemberPath="DisplayName"
+                                                          Margin="0,0,0,8"
+                                                          SelectionChanged="CategoryFilterComboBox_SelectionChanged"/>
+                                                <CheckBox x:Name="DueOnlyFilterCheckBox"
+                                                          Content="{Binding [FlashcardDueCardsOnly], Source={StaticResource Loc}}"
+                                                          Margin="0,0,0,8"
+                                                          Click="DueOnlyFilterCheckBox_Click"/>
+                                                <Border Height="32"
+                                                        Padding="6,0"
+                                                        Margin="0,0,0,8"
+                                                        Style="{StaticResource ChromeFieldBorderStyle}"
+                                                        Background="{DynamicResource WindowBackground}"
+                                                        MinHeight="32">
+                                                    <DockPanel LastChildFill="True">
+                                                        <icons:AppIcon Kind="Search" Width="14" Height="14"
+                                                                   Foreground="{DynamicResource TextColorSecondary}"
+                                                                   Margin="2,0,8,0"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBox x:Name="FlashcardSearchTextBox"
+                                                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                                                 Background="Transparent"
+                                                                 Foreground="{DynamicResource TextColor}"
+                                                                 CaretBrush="{DynamicResource TextColor}"
+                                                                 VerticalContentAlignment="Center"
+                                                                 TextChanged="FlashcardSearchTextBox_TextChanged"
+                                                                 ToolTip="{Binding [FlashcardSearchHint], Source={StaticResource Loc}}"/>
+                                                    </DockPanel>
+                                                </Border>
+                                                <Button Content="{Binding [ClearFilters], Source={StaticResource Loc}}"
+                                                        Style="{StaticResource FlashcardToolbarButtonStyle}"
+                                                        HorizontalAlignment="Left"
+                                                        Margin="0"
+                                                        Click="ClearFiltersButton_Click"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Popup>
+                        <Button Content="{icons:Icon History}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [FlashcardHistory], Source={StaticResource Loc}}"
+                                Click="FlashcardHistoryButton_Click"/>
+                        <Button x:Name="ImportCardsButton"
+                                Content="{icons:Icon Import}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [FlashcardImportCards], Source={StaticResource Loc}}"
+                                Click="ImportCardsButton_Click"/>
+                        <Button x:Name="ExportButton"
+                                Content="{icons:Icon Download}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [Export], Source={StaticResource Loc}}"
+                                Click="ExportButton_Click"/>
+                        <Button x:Name="FullscreenButton"
+                                Content="{icons:Icon Monitor}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [StudyModeFullscreenTooltip], Source={StaticResource Loc}}"
+                                Click="FullscreenButton_Click"/>
+                        <Button x:Name="OptionsPanelToggleButton"
+                                Content="{icons:Icon Settings}"
+                                Style="{StaticResource EditorToolIconButtonStyle}"
+                                ToolTip="{Binding [FlashcardOptionsTooltip], Source={StaticResource Loc}}"
+                                Click="OptionsPanelToggleButton_Click"/>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="2,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button x:Name="LinkedNoteButton"
+                                Content="{Binding ElementName=FlashcardsWindow, Path=LinkedNoteButtonText}"
+                                Style="{StaticResource FlashcardLinkedNoteButtonStyle}"
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center"
+                                Click="LinkedNoteButton_Click"
+                                ToolTip="{Binding ElementName=FlashcardsWindow, Path=LinkedNoteButtonToolTip}"
+                                TextOptions.TextFormattingMode="Ideal"/>
+                        <Border x:Name="AiGeneratedInfoBadge"
+                                Width="30"
+                                Height="30"
+                                Margin="0,0,0,0"
+                                CornerRadius="15"
+                                Background="{DynamicResource IconButtonBackground}"
+                                BorderThickness="0"
+                                VerticalAlignment="Center"
+                                ToolTipService.InitialShowDelay="180"
+                                Visibility="Collapsed">
+                            <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border Width="1"
+                                Height="22"
+                                Margin="8,0,8,0"
+                                Background="{DynamicResource SidebarSeparator}"/>
+
+                        <Button Content="{icons:Icon Save}"
+                                Style="{StaticResource EditorPrimarySaveButtonStyle}"
+                                ToolTip="{Binding [Save], Source={StaticResource Loc}}"
+                                Click="SaveButton_Click"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
 
@@ -644,161 +999,115 @@
             </Grid>
         </Border>
 
-        <Border x:Name="FlashcardsFiltersBorder"
+        <!-- Collapsible options panel (sets, link, flip speed) — mind-map ArrangePanel pattern. -->
+        <Border x:Name="FlashcardsOptionsPanel"
                 Grid.Row="2"
-                Margin="20,10,20,0"
+                Margin="20,8,20,0"
                 Style="{StaticResource ChromePanelBorderStyle}"
-                Padding="10,8,10,2">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top">
-                    <Button x:Name="FiltersButton"
-                            Content="{Binding [FlashcardFilters], Source={StaticResource Loc}}"
-                            Style="{StaticResource FlashcardToolbarButtonStyle}"
-                            Margin="0,0,10,8"
-                            Click="FiltersButton_Click"/>
-                    <Popup x:Name="FiltersPopup"
-                           PlacementTarget="{Binding ElementName=FiltersButton}"
-                           Placement="Bottom"
-                           HorizontalOffset="-16"
-                           VerticalOffset="0"
-                           StaysOpen="False"
-                           AllowsTransparency="True"
-                           PopupAnimation="None">
-                        <Border Background="Transparent"
-                                Padding="16,4,16,18"
-                                ClipToBounds="False">
-                            <Grid MinWidth="280"
-                                  HorizontalAlignment="Left"
-                                  UseLayoutRounding="True"
-                                  SnapsToDevicePixels="True">
-                                <Border Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource PopupBorder}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource Radius.Card}"
-                                        IsHitTestVisible="False"
-                                        Effect="{StaticResource Elevation.Popup}"/>
-                                <Border Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{DynamicResource PopupBorder}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource Radius.Card}"
-                                        SnapsToDevicePixels="True">
-                            <Border Background="Transparent"
-                                    CornerRadius="{StaticResource Radius.Card}"
-                                    Padding="12"
-                                    behaviors:RoundedClipBehavior.IsEnabled="True"
-                                    SnapsToDevicePixels="True">
-                            <StackPanel Orientation="Vertical">
-                                <ComboBox x:Name="StatusFilterComboBox"
-                                          Width="260"
-                                          Style="{StaticResource SetSelectorComboBoxStyle}"
-                                          ItemContainerStyle="{StaticResource SetSelectorComboBoxItemStyle}"
-                                          DisplayMemberPath="DisplayName"
-                                          Margin="0,0,0,8"
-                                          SelectionChanged="StatusFilterComboBox_SelectionChanged"/>
-                                <ComboBox x:Name="CategoryFilterComboBox"
-                                          Width="260"
-                                          Style="{StaticResource SetSelectorComboBoxStyle}"
-                                          ItemContainerStyle="{StaticResource SetSelectorComboBoxItemStyle}"
-                                          DisplayMemberPath="DisplayName"
-                                          Margin="0,0,0,8"
-                                          SelectionChanged="CategoryFilterComboBox_SelectionChanged"/>
-                                <Border Height="32"
-                                        Padding="6,0"
-                                        Margin="0,0,0,8"
-                                        Style="{StaticResource ChromeFieldBorderStyle}"
-                                        MinHeight="32">
-                                    <DockPanel LastChildFill="True">
-                                        <icons:AppIcon Kind="Search" Width="14" Height="14"
-                                                   Foreground="{DynamicResource TextColorSecondary}"
-                                                   Margin="2,0,8,0"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBox x:Name="FlashcardSearchTextBox"
-                                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                                 Background="Transparent"
-                                                 Foreground="{DynamicResource TextColor}"
-                                                 CaretBrush="{DynamicResource TextColor}"
-                                                 VerticalContentAlignment="Center"
-                                                 TextChanged="FlashcardSearchTextBox_TextChanged"
-                                                 ToolTip="{Binding [FlashcardSearchHint], Source={StaticResource Loc}}"/>
-                                    </DockPanel>
-                                </Border>
-                                <Button Content="{Binding [ClearFilters], Source={StaticResource Loc}}"
-                                        Style="{StaticResource FlashcardToolbarButtonStyle}"
-                                        HorizontalAlignment="Left"
-                                        Margin="0"
-                                        Click="ClearFiltersButton_Click"/>
-                            </StackPanel>
-                            </Border>
-                        </Border>
+                Padding="12,10"
+                Opacity="0"
+                Visibility="Collapsed">
+            <Border.RenderTransform>
+                <TranslateTransform Y="-6"/>
+            </Border.RenderTransform>
+            <WrapPanel VerticalAlignment="Center">
+                <ComboBox x:Name="SetSelectorComboBox"
+                          Width="180"
+                          Height="32"
+                          Margin="0,0,6,10"
+                          VerticalAlignment="Center"
+                          Style="{StaticResource SetSelectorComboBoxStyle}"
+                          Background="{DynamicResource WindowBackground}"
+                          ItemContainerStyle="{StaticResource SetSelectorActionComboBoxItemStyle}"
+                          SelectionChanged="SetSelectorComboBox_SelectionChanged"
+                          ToolTip="{Binding [FlashcardSetLabel], Source={StaticResource Loc}}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding DisplayName}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <Button Grid.Column="1"
+                                        Content="{icons:Icon Kind=Edit, Size=13}"
+                                        Style="{StaticResource SetOptionActionButtonStyle}"
+                                        ToolTip="{Binding [RenameFlashcardSet], Source={StaticResource Loc}}"
+                                        Click="RenameSetInListButton_Click"/>
+                                <Button Grid.Column="2"
+                                        Content="{icons:Icon Kind=Close, Size=12}"
+                                        Style="{StaticResource SetOptionActionButtonStyle}"
+                                        ToolTip="{Binding [DeleteFlashcardSet], Source={StaticResource Loc}}"
+                                        Click="DeleteSetInListButton_Click"/>
                             </Grid>
-                        </Border>
-                    </Popup>
-                </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Content="{icons:Icon Group}"
+                        Style="{StaticResource EditorToolIconButtonStyle}"
+                        Margin="0,0,14,10"
+                        ToolTip="{Binding [CreateFlashcardSet], Source={StaticResource Loc}}"
+                        Click="CreateSetButton_Click"/>
 
-                <WrapPanel Grid.Column="2"
-                           Orientation="Horizontal"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Top">
-                    <ComboBox x:Name="SetSelectorComboBox"
-                              Width="128"
-                              Style="{StaticResource SetSelectorComboBoxStyle}"
-                              ItemContainerStyle="{StaticResource SetSelectorActionComboBoxItemStyle}"
-                              Margin="0,0,8,8"
-                              SelectionChanged="SetSelectorComboBox_SelectionChanged">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding DisplayName}"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <Button Grid.Column="1"
-                                            Content="{icons:Icon Kind=Edit, Size=13}"
-                                            Style="{StaticResource SetOptionActionButtonStyle}"
-                                            ToolTip="{Binding [RenameFlashcardSet], Source={StaticResource Loc}}"
-                                            Click="RenameSetInListButton_Click"/>
-                                    <Button Grid.Column="2"
-                                            Content="{icons:Icon Kind=Close, Size=12}"
-                                            Style="{StaticResource SetOptionActionButtonStyle}"
-                                            ToolTip="{Binding [DeleteFlashcardSet], Source={StaticResource Loc}}"
-                                            Click="DeleteSetInListButton_Click"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Content="{Binding [CreateFlashcardSet], Source={StaticResource Loc}}"
-                            Style="{StaticResource FlashcardToolbarButtonStyle}"
-                            Click="CreateSetButton_Click"/>
-                    <Button Content="History"
-                            Style="{StaticResource FlashcardToolbarButtonStyle}"
-                            Click="FlashcardHistoryButton_Click"/>
-                    <Button Content="{Binding [AddFlashcard], Source={StaticResource Loc}}"
-                            Style="{StaticResource FlashcardToolbarPrimaryButtonStyle}"
-                            Click="AddFlashcardButton_Click"/>
-                </WrapPanel>
-            </Grid>
+                <Border Width="1"
+                        Height="20"
+                        Margin="0,6,14,16"
+                        Background="{DynamicResource BorderColor}"/>
+
+                <ComboBox ItemsSource="{Binding ElementName=FlashcardsWindow, Path=NoteLinkOptions}"
+                          SelectedItem="{Binding ElementName=FlashcardsWindow, Path=SelectedLinkedNote, Mode=TwoWay}"
+                          DisplayMemberPath="Title"
+                          Style="{StaticResource FlashcardLinkedNoteComboBoxStyle}"
+                          SelectedValuePath="Id"
+                          Margin="0,0,14,10"
+                          VerticalAlignment="Center"
+                          ToolTip="{Binding [QuizLinkedNoteSelectorTooltip], Source={StaticResource Loc}}"/>
+
+                <Border Width="1"
+                        Height="20"
+                        Margin="0,6,14,16"
+                        Background="{DynamicResource BorderColor}"/>
+
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,10">
+                    <TextBlock Text="{Binding [FlashcardFlipSpeed], Source={StaticResource Loc}}"
+                               VerticalAlignment="Center"
+                               FontSize="{StaticResource Type.Meta}"
+                               Foreground="{DynamicResource TextColor}"
+                               Margin="0,0,8,0"/>
+                    <Slider x:Name="FlipSpeedSlider"
+                            Width="120"
+                            TickPlacement="None"
+                            TickFrequency="100"
+                            SmallChange="100"
+                            LargeChange="100"
+                            IsSnapToTickEnabled="True"
+                            Height="20"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0"/>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="{StaticResource Type.Caption}"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               MinWidth="45">
+                        <Run Text="{Binding ElementName=FlipSpeedSlider, Path=Value, StringFormat={}{0:0}}"/>
+                        <Run Text="ms"/>
+                    </TextBlock>
+                </StackPanel>
+            </WrapPanel>
         </Border>
 
         <Grid x:Name="FlashcardsContentHost"
-              Grid.Row="4"
-              Margin="20,0,20,0">
+              Grid.Row="3"
+              Margin="20,10,20,10">
             <Border x:Name="FlashcardsGridViewBorder"
                     Style="{StaticResource ChromePanelBorderStyle}"
                     Padding="0">
+                <Grid>
                     <controls:FlashcardGridItemsControl x:Name="FlashcardsItemsControl"
                                   Padding="14,24,14,14"
                                   Margin="16"
@@ -831,6 +1140,18 @@
                             </DataTemplate>
                         </controls:FlashcardGridItemsControl.ItemTemplate>
                     </controls:FlashcardGridItemsControl>
+                    <TextBlock x:Name="FlashcardsGridEmptyStateText"
+                               Visibility="Collapsed"
+                               FontSize="{StaticResource Type.EmptyState}"
+                               FontStyle="Italic"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="420"
+                               IsHitTestVisible="False"/>
+                </Grid>
             </Border>
 
             <Border x:Name="StudyModeViewBorder"
@@ -841,12 +1162,31 @@
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               CanContentScroll="False"
-                              Padding="4,12,4,0">
+                              Background="Transparent"
+                              Padding="4,12,4,0"
+                              ClipToBounds="True"
+                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}">
                     <StackPanel x:Name="StudyModeContentPanel"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 MaxWidth="520"
                                 Margin="0,10,0,8">
+                        <Border x:Name="CramModeBanner"
+                                Visibility="Collapsed"
+                                Background="{DynamicResource AccentWarningSubtle}"
+                                BorderBrush="{DynamicResource AccentWarningSubtleBorder}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                Padding="10,6"
+                                Margin="0,0,0,10"
+                                HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding [FlashcardCramBanner], Source={StaticResource Loc}}"
+                                       FontSize="{StaticResource Type.Caption}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentWarningSubtleForeground}"
+                                       HorizontalAlignment="Center"/>
+                        </Border>
                         <StackPanel HorizontalAlignment="Stretch"
                                     Margin="0,0,0,12">
                             <Border x:Name="StudyModeProgressTrack"
@@ -881,6 +1221,11 @@
                                            Foreground="{DynamicResource AccentSuccess}"
                                            HorizontalAlignment="Center"/>
                             </Grid>
+                            <TextBlock x:Name="StudyModeLiveStatsText"
+                                       FontSize="{StaticResource Type.Caption}"
+                                       Foreground="{DynamicResource TextColorSecondary}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,4"/>
 
                             <!-- DownOnly: keep design size when roomy, scale down on short viewports. -->
                             <Viewbox Stretch="Uniform"
@@ -935,97 +1280,150 @@
                                     MinWidth="100"
                                     Margin="4,0,4,8"
                                     Click="StudyModeNextButton_Click"/>
-                            <Button x:Name="StudyModeMarkKnownButton"
-                                    Content="{Binding [Known], Source={StaticResource Loc}}"
+                        </WrapPanel>
+
+                        <WrapPanel Orientation="Horizontal"
+                                   HorizontalAlignment="Center"
+                                   ItemWidth="Auto"
+                                   Margin="0,0,0,0">
+                            <Button x:Name="StudyModeAgainButton"
                                     Style="{StaticResource DialogSecondaryButtonStyle}"
-                                    MinWidth="110"
+                                    MinWidth="90"
                                     Margin="4,0,4,8"
-                                    Background="{DynamicResource AccentSuccess}"
+                                    Background="{DynamicResource AccentDanger}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
-                                    Foreground="{DynamicResource AccentSuccessForeground}"
-                                    Click="StudyModeMarkKnownButton_Click"/>
-                            <Button x:Name="StudyModeMarkUnknownButton"
-                                    Content="{Binding [Unknown], Source={StaticResource Loc}}"
+                                    Foreground="{DynamicResource AccentDangerForeground}"
+                                    Click="StudyModeAgainButton_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="StudyModeAgainIntervalText"
+                                               HorizontalAlignment="Center"
+                                               FontSize="{StaticResource Type.Caption}"
+                                               FontWeight="Normal"
+                                               Opacity="0.85"/>
+                                    <TextBlock Text="{Binding [StudyGradeAgain], Source={StaticResource Loc}}"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="StudyModeHardButton"
                                     Style="{StaticResource DialogSecondaryButtonStyle}"
-                                    MinWidth="120"
+                                    MinWidth="90"
                                     Margin="4,0,4,8"
                                     Background="{DynamicResource AccentWarning}"
                                     BorderBrush="Transparent"
                                     BorderThickness="0"
                                     Foreground="{DynamicResource AccentWarningForeground}"
-                                    Click="StudyModeMarkUnknownButton_Click"/>
+                                    Click="StudyModeHardButton_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="StudyModeHardIntervalText"
+                                               HorizontalAlignment="Center"
+                                               FontSize="{StaticResource Type.Caption}"
+                                               FontWeight="Normal"
+                                               Opacity="0.85"/>
+                                    <TextBlock Text="{Binding [StudyGradeHard], Source={StaticResource Loc}}"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="StudyModeGoodButton"
+                                    Style="{StaticResource DialogSecondaryButtonStyle}"
+                                    MinWidth="90"
+                                    Margin="4,0,4,8"
+                                    Background="{DynamicResource AccentSuccess}"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{DynamicResource AccentSuccessForeground}"
+                                    Click="StudyModeGoodButton_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="StudyModeGoodIntervalText"
+                                               HorizontalAlignment="Center"
+                                               FontSize="{StaticResource Type.Caption}"
+                                               FontWeight="Normal"
+                                               Opacity="0.85"/>
+                                    <TextBlock Text="{Binding [StudyGradeGood], Source={StaticResource Loc}}"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="StudyModeEasyButton"
+                                    Style="{StaticResource DialogSecondaryButtonStyle}"
+                                    MinWidth="90"
+                                    Margin="4,0,4,8"
+                                    Background="{DynamicResource AccentPrimary}"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{DynamicResource AccentPrimaryForeground}"
+                                    Click="StudyModeEasyButton_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="StudyModeEasyIntervalText"
+                                               HorizontalAlignment="Center"
+                                               FontSize="{StaticResource Type.Caption}"
+                                               FontWeight="Normal"
+                                               Opacity="0.85"/>
+                                    <TextBlock Text="{Binding [StudyGradeEasy], Source={StaticResource Loc}}"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </WrapPanel>
+                        <TextBlock x:Name="StudyModeFlipHintText"
+                                   Text="{Binding [StudyModeFlipToGrade], Source={StaticResource Loc}}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,4"
+                                   FontSize="{StaticResource Type.Caption}"
+                                   Foreground="{DynamicResource TextColorSecondary}"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
         </Grid>
 
         <Border x:Name="FlashcardsBottomToolbarBorder"
-                Grid.Row="6"
+                Grid.Row="4"
                 Margin="20,0,20,12"
                 Style="{StaticResource ChromePanelBorderStyle}"
-                Padding="10,10,10,2">
-            <WrapPanel Orientation="Horizontal"
-                       HorizontalAlignment="Left">
-                <StackPanel Orientation="Horizontal" 
-                            VerticalAlignment="Center"
-                            Margin="0,0,16,8">
-                    <TextBlock Text="{Binding [FlashcardFlipSpeed], Source={StaticResource Loc}}"
-                               VerticalAlignment="Center"
-                               FontSize="{StaticResource Type.Meta}"
-                               Foreground="{DynamicResource TextColor}"
-                               Margin="0,0,8,0"/>
-                    <Slider x:Name="FlipSpeedSlider"
-                            Width="120"
-                            TickPlacement="None"
-                            TickFrequency="100"
-                            SmallChange="100"
-                            LargeChange="100"
-                            IsSnapToTickEnabled="True"
-                            Height="20"
-                            VerticalAlignment="Center"
-                            Margin="0,0,8,0"/>
-                    <TextBlock VerticalAlignment="Center"
-                               FontSize="{StaticResource Type.Caption}"
-                               Foreground="{DynamicResource TextColorSecondary}"
-                               MinWidth="45">
-                        <Run Text="{Binding ElementName=FlipSpeedSlider, Path=Value, StringFormat={}{0:0}}"/>
-                        <Run Text="ms"/>
-                    </TextBlock>
-                </StackPanel>
-                <Button x:Name="QuestionAnswerToggleButton"
-                        Content="{Binding [FlashcardsShowAnswers], Source={StaticResource Loc}}"
-                        Style="{StaticResource FlashcardToolbarButtonStyle}"
-                        MinWidth="150"
-                        Click="QuestionAnswerToggleButton_Click"/>
-                <Button x:Name="ShuffleModeButton"
-                        Style="{StaticResource FlashcardToolbarButtonStyle}"
-                        MinWidth="110"
-                        Click="ShuffleModeButton_Click"/>
-                <Button x:Name="StartStudyModeButton"
-                        Content="{Binding [StudyModeStart], Source={StaticResource Loc}}"
-                        Style="{StaticResource FlashcardToolbarButtonStyle}"
-                        MinWidth="140"
-                        Click="StartStudyModeButton_Click"/>
-                <Button x:Name="StudyModeFullscreenButton"
-                        Content="{Binding [StudyModeFullscreen], Source={StaticResource Loc}}"
-                        Style="{StaticResource FlashcardToolbarButtonStyle}"
-                        MinWidth="150"
-                        ToolTip="{Binding [StudyModeFullscreenTooltip], Source={StaticResource Loc}}"
-                        Click="StudyModeFullscreenButton_Click"/>
-                <Button Content="{Binding [Save], Source={StaticResource Loc}}"
-                        Style="{StaticResource FlashcardToolbarPrimaryButtonStyle}"
-                        MinWidth="110"
-                        Click="SaveButton_Click"/>
-                <Button Content="{Binding [Close], Source={StaticResource Loc}}"
-                        Style="{StaticResource FlashcardToolbarButtonStyle}"
-                        MinWidth="110"
-                        Click="CloseButton_Click"/>
-            </WrapPanel>
+                Padding="12,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <WrapPanel Grid.Column="0"
+                           Orientation="Horizontal"
+                           VerticalAlignment="Center">
+                    <Button x:Name="QuestionAnswerToggleButton"
+                            Content="{Binding [FlashcardsShowAnswers], Source={StaticResource Loc}}"
+                            Style="{StaticResource FlashcardFooterPrimaryButtonStyle}"
+                            Click="QuestionAnswerToggleButton_Click"/>
+                    <Button x:Name="FlashcardStatisticsButton"
+                            Content="{Binding [FlashcardStatistics], Source={StaticResource Loc}}"
+                            Style="{StaticResource FlashcardFooterButtonStyle}"
+                            ToolTip="{Binding [FlashcardStatisticsTooltip], Source={StaticResource Loc}}"
+                            Click="FlashcardStatisticsButton_Click"/>
+                    <Button x:Name="CramModeButton"
+                            Content="{Binding [FlashcardCramStart], Source={StaticResource Loc}}"
+                            Style="{StaticResource FlashcardFooterButtonStyle}"
+                            ToolTip="{Binding [FlashcardCramTooltip], Source={StaticResource Loc}}"
+                            Click="CramModeButton_Click"/>
+                    <Button x:Name="StartStudyModeButton"
+                            Content="{Binding [StudyModeStart], Source={StaticResource Loc}}"
+                            Style="{StaticResource FlashcardFooterPrimaryButtonStyle}"
+                            Background="{DynamicResource AccentSuccess}"
+                            BorderBrush="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource AccentSuccessForeground}"
+                            Click="StartStudyModeButton_Click"/>
+                </WrapPanel>
+                <WrapPanel Grid.Column="1"
+                           Orientation="Horizontal"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           Margin="10,0,0,0">
+                    <Button Content="{Binding [Close], Source={StaticResource Loc}}"
+                            Style="{StaticResource FlashcardFooterButtonStyle}"
+                            Margin="0,4,0,4"
+                            Click="CloseButton_Click"/>
+                </WrapPanel>
+            </Grid>
         </Border>
         <Canvas x:Name="CelebrationOverlay"
-              Grid.RowSpan="7"
+              Grid.RowSpan="5"
               Panel.ZIndex="999"
               Visibility="Collapsed"
               IsHitTestVisible="False"

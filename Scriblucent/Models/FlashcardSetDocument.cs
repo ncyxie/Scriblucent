@@ -20,4 +20,7 @@ public sealed class FlashcardSetDocument
     /// Preferred flip animation duration for this set (ms). 0 = fall back to app settings.
     /// </summary>
     public int FlipDelayMilliseconds { get; set; }
+
+    /// <summary>Study mode defaults to only showing cards that are due per the active scheduler.</summary>
+    public bool StudyDueCardsOnly { get; set; } = true;
 }

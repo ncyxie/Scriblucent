@@ -14,6 +14,8 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
         public string Title { get; init; } = string.Empty;
         public string Details { get; init; } = string.Empty;
         public string StatusText { get; init; } = string.Empty;
+        /// <summary>Known | Unknown | Studied | Complete | InProgress — drives chip colors.</summary>
+        public string StatusKind { get; init; } = "Studied";
         public bool IsComplete { get; init; }
     }
 
@@ -95,12 +97,14 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
             if (cards.Count == 0 && studied == 0)
                 continue;
 
+            var isComplete = cards.Count > 0 && known == cards.Count;
             _items.Add(new StudyDisplayItem
             {
                 Title = string.IsNullOrWhiteSpace(document.Title) ? "Untitled flashcards" : document.Title.Trim(),
                 Details = string.Format(CultureInfo.CurrentCulture, "{0} studied - {1} known - {2} unknown - {3} cards", studied, known, unknown, cards.Count),
-                StatusText = cards.Count > 0 && known == cards.Count ? "Complete" : "In progress",
-                IsComplete = cards.Count > 0 && known == cards.Count
+                StatusText = isComplete ? "Complete" : "In progress",
+                StatusKind = isComplete ? "Complete" : "InProgress",
+                IsComplete = isComplete
             });
         }
     }
@@ -121,13 +125,15 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
             if (!wasStudied && !card.IsKnown && !card.IsUnknown)
                 continue;
 
+            var statusKind = card.IsKnown ? "Known" : card.IsUnknown ? "Unknown" : "Studied";
             _items.Add(new StudyDisplayItem
             {
                 Title = string.IsNullOrWhiteSpace(card.Question) ? "Untitled card" : card.Question.Trim(),
                 Details = string.IsNullOrWhiteSpace(card.Category)
                     ? string.Format(CultureInfo.CurrentCulture, "Set {0}", Math.Max(1, card.SetIndex))
                     : string.Format(CultureInfo.CurrentCulture, "Set {0} - {1}", Math.Max(1, card.SetIndex), card.Category.Trim()),
-                StatusText = card.IsKnown ? "Known" : card.IsUnknown ? "Unknown" : "Studied",
+                StatusText = statusKind,
+                StatusKind = statusKind,
                 IsComplete = card.IsKnown
             });
         }
@@ -179,6 +185,13 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
         {
             card.IsKnown = false;
             card.IsUnknown = false;
+            card.EaseFactor = 2.5;
+            card.IntervalDays = 0;
+            card.Repetitions = 0;
+            card.DueDate = null;
+            card.LastReviewedAt = null;
+            card.Stability = 0;
+            card.Difficulty = 0;
         }
 
         document.StudySession = new FlashcardStudySession();

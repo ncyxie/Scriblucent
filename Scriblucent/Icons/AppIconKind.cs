@@ -12,6 +12,7 @@ public enum AppIconKind
     About,
     Search,
     Sort,
+    Shuffle,
     Tag,
     Sections,
     Import,
@@ -56,6 +57,7 @@ public enum AppIconKind
     ZoomReset,
     Bullet,
     Play,
+    Pause,
     Lightbulb,
     Refresh,
     Warning,
@@ -83,5 +85,6 @@ public enum AppIconKind
     Hourglass,
     Lock,
     Bookmark,
-    Ban
+    Ban,
+    GripVertical
 }

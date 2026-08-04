@@ -128,6 +128,18 @@ public class AppSettings
 
     public int FlashcardFlipDelayMilliseconds { get; set; } = DefaultFlashcardFlipDelayMilliseconds;
 
+    public const int MinFlashcardAudioVolumePercent = 0;
+    public const int MaxFlashcardAudioVolumePercent = 100;
+    public const int DefaultFlashcardAudioVolumePercent = 100;
+
+    /// <summary>A single, remembered playback volume for flashcard audio - not per-clip, so it's
+    /// set once rather than fiddled with on every short clip you play.</summary>
+    public int FlashcardAudioVolumePercent { get; set; } = DefaultFlashcardAudioVolumePercent;
+
+    /// <summary>Which spaced-repetition engine schedules every flashcard set - a single collection-wide
+    /// choice, matching Anki's own FSRS toggle ("shared by all presets", not per-deck).</summary>
+    public SpacedRepetitionAlgorithm FlashcardSchedulingAlgorithm { get; set; } = SpacedRepetitionAlgorithm.Sm2;
+
     public static int NormalizeFlashcardFlipDelayMilliseconds(int milliseconds)
     {
         // 0 / missing JSON values must not clamp to Min — treat as default.

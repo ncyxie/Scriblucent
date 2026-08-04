@@ -66,6 +66,8 @@
   <data name="QuizUnflagQuestion" xml:space="preserve"><value>Remove flag</value></data>
   <data name="QuizFlagQuestionTooltip" xml:space="preserve"><value>Mark this question so you can find it again from the question list</value></data>
   <data name="QuizFlaggedNavTooltipFormat" xml:space="preserve"><value>Question {0} (flagged)</value></data>
+  <data name="QuizAnsweredNavTooltipFormat" xml:space="preserve"><value>Question {0} (answered)</value></data>
+  <data name="QuizAnsweredFlaggedNavTooltipFormat" xml:space="preserve"><value>Question {0} (answered, flagged)</value></data>
   <data name="QuizMultipleChoiceInstruction" xml:space="preserve"><value>Multiple Choice - Select all that apply</value></data>
   <data name="QuizResultsTitleGreat" xml:space="preserve"><value>🎉 Great Job!</value></data>
   <data name="QuizResultsTitleGood" xml:space="preserve"><value>👍 Good Effort!</value></data>
@@ -273,6 +275,7 @@
   <data name="Success" xml:space="preserve"><value>Success</value></data>
   <data name="NoContent" xml:space="preserve"><value>(No content)</value></data>
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Image files (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|All files (*.*)|*.*</value></data>
+  <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Audio files (*.mp3;*.wav)|*.mp3;*.wav|All files (*.*)|*.*</value></data>
   <data name="SelectImageToInsert" xml:space="preserve"><value>Select an image to insert</value></data>
   <data name="FailedToInsertImage" xml:space="preserve"><value>Failed to insert image:</value></data>
   <data name="ImageInsertError" xml:space="preserve"><value>Image Insert Error</value></data>
@@ -562,9 +565,13 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardsDashboard" xml:space="preserve"><value>Flashcards</value></data>
   <data name="FlashcardGroupsDashboardTitle" xml:space="preserve"><value>Flashcards</value></data>
   <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Start by creating flashcards</value></data>
+  <data name="FlashcardsQuickCreateHint" xml:space="preserve"><value>Or type a title and press Enter</value></data>
   <data name="CreateFlashcards" xml:space="preserve"><value>Create flashcards</value></data>
   <data name="FlashcardSetCountFormat" xml:space="preserve"><value>{0} sets</value></data>
   <data name="FlashcardCardsCountFormat" xml:space="preserve"><value>{0} cards</value></data>
+  <data name="FlashcardDueCountFormat" xml:space="preserve"><value>{0} due</value></data>
+  <data name="FlashcardNextReviewTomorrow" xml:space="preserve"><value>Next review: tomorrow</value></data>
+  <data name="FlashcardNextReviewInDaysFormat" xml:space="preserve"><value>Next review: in {0} days</value></data>
   <data name="FlashcardSetUntitled" xml:space="preserve"><value>Untitled flashcards</value></data>
   <data name="AddFlashcard" xml:space="preserve"><value>Add flashcard</value></data>
   <data name="EditFlashcard" xml:space="preserve"><value>Flashcard</value></data>
@@ -575,6 +582,16 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardQuestion" xml:space="preserve"><value>Question</value></data>
   <data name="FlashcardAnswer" xml:space="preserve"><value>Answer</value></data>
   <data name="FlashcardCategory" xml:space="preserve"><value>Category</value></data>
+  <data name="FlashcardHint" xml:space="preserve"><value>Hint (optional)</value></data>
+  <data name="FlashcardAddImage" xml:space="preserve"><value>Add image</value></data>
+  <data name="FlashcardAddAudio" xml:space="preserve"><value>Add audio</value></data>
+  <data name="FlashcardPlayAudio" xml:space="preserve"><value>Play audio</value></data>
+  <data name="FlashcardPauseAudio" xml:space="preserve"><value>Pause audio</value></data>
+  <data name="FlashcardRestartAudio" xml:space="preserve"><value>Restart audio</value></data>
+  <data name="FlashcardViewImage" xml:space="preserve"><value>View image</value></data>
+  <data name="FlashcardMediaAttachError" xml:space="preserve"><value>Couldn't attach that file - it may be corrupted or an unsupported format.</value></data>
+  <data name="FlashcardAudioPlaybackError" xml:space="preserve"><value>Couldn't play this audio: {0}</value></data>
+  <data name="Remove" xml:space="preserve"><value>Remove</value></data>
   <data name="ConvertToFlashcardsParseFailed" xml:space="preserve"><value>AI response did not contain valid Q/A flashcards.</value></data>
   <data name="QuizPreviewTitle" xml:space="preserve"><value>Quiz</value></data>
   <data name="QuizTitleHint" xml:space="preserve"><value>Quiz title</value></data>
@@ -582,6 +599,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="QuizGeneratedWithModel" xml:space="preserve"><value>Generated with model: {0}</value></data>
   <data name="QuizQuestionCountFormat" xml:space="preserve"><value>{0} questions</value></data>
   <data name="QuizAnsweredCountFormat" xml:space="preserve"><value>{0}/{1} answered</value></data>
+  <data name="QuizAnsweredLabel" xml:space="preserve"><value>Answered</value></data>
   <data name="QuizScoreFormat" xml:space="preserve"><value>Score: {0}/{1} ({2}%)</value></data>
   <data name="QuizQuestionHeaderFormat" xml:space="preserve"><value>Question {0} · {1}</value></data>
   <data name="QuizTypeSingleChoice" xml:space="preserve"><value>single choice</value></data>
@@ -692,18 +710,53 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="Known" xml:space="preserve"><value>Known</value></data>
   <data name="Unknown" xml:space="preserve"><value>Unknown</value></data>
   <data name="FlashcardStatusNew" xml:space="preserve"><value>Not studied</value></data>
+  <data name="FlashcardStatusLearning" xml:space="preserve"><value>Learning</value></data>
+  <data name="FlashcardStatusMature" xml:space="preserve"><value>Mature</value></data>
   <data name="FlashcardStatusAll" xml:space="preserve"><value>All</value></data>
+  <data name="FlashcardGridEmptyBeginCreating" xml:space="preserve"><value>No cards in this set yet - click + to add your first one.</value></data>
+  <data name="FlashcardGridEmptyNoMatches" xml:space="preserve"><value>No cards match your filters right now.</value></data>
+  <data name="FlashcardGridEmptyNextReviewTomorrow" xml:space="preserve"><value>You're all caught up! Next review: tomorrow.</value></data>
+  <data name="FlashcardGridEmptyNextReviewInDaysFormat" xml:space="preserve"><value>You're all caught up! Next review: in {0} days.</value></data>
   <data name="FlashcardCategoryAll" xml:space="preserve"><value>All categories</value></data>
   <data name="FlashcardFilters" xml:space="preserve"><value>Filters</value></data>
+  <data name="FlashcardOptionsTooltip" xml:space="preserve"><value>Options</value></data>
+  <data name="FlashcardDueCardsOnly" xml:space="preserve"><value>Due cards only</value></data>
+  <data name="FlashcardShowHint" xml:space="preserve"><value>Show hint</value></data>
+  <data name="FlashcardCramStart" xml:space="preserve"><value>Cram</value></data>
+  <data name="FlashcardCramTooltip" xml:space="preserve"><value>Practice the whole set on repeat - doesn't affect your spaced-repetition schedule</value></data>
+  <data name="FlashcardCramBanner" xml:space="preserve"><value>Cram mode - practice only, your schedule isn't affected</value></data>
+  <data name="FlashcardCramLiveStatsFormat" xml:space="preserve"><value>Lap {0}  ·  Reviewed {1}</value></data>
   <data name="StudyModeStudiedFormat" xml:space="preserve"><value>Studied cards: {0}</value></data>
   <data name="StudyModeComplete" xml:space="preserve"><value>Study session complete</value></data>
   <data name="StudyModeCompleteTitle" xml:space="preserve"><value>Study session complete</value></data>
   <data name="StudyModeCompleteMessage" xml:space="preserve"><value>You have marked all cards as known. Returning you to the flashcards list.</value></data>
+  <data name="StudyModeCompleteSummaryFormat" xml:space="preserve"><value>You reviewed {0} cards this session.</value></data>
+  <data name="StudyModeCompleteBreakdownFormat" xml:space="preserve"><value>Again: {0}  ·  Hard: {1}  ·  Good: {2}  ·  Easy: {3}</value></data>
+  <data name="StudyModeCompleteNextDueFormat" xml:space="preserve"><value>{0} cards due again within 3 days.</value></data>
+  <data name="StudyModeCompleteTimeFormat" xml:space="preserve"><value>Time spent: {0}</value></data>
+  <data name="StudyModeAllCaughtUpTitle" xml:space="preserve"><value>All caught up</value></data>
+  <data name="StudyModeAllCaughtUpMessage" xml:space="preserve"><value>No cards are due for review right now. You can study anyway if you'd like extra practice.</value></data>
+  <data name="StudyModeStudyAnyway" xml:space="preserve"><value>Study anyway</value></data>
+  <data name="StudyModeLiveStatsFormat" xml:space="preserve"><value>Studied {0}  ·  New {1}  ·  Learning {2}  ·  Mature {3}  ·  {4} due today</value></data>
+  <data name="StudyModeFlipToGrade" xml:space="preserve"><value>Flip the card to grade yourself</value></data>
+  <data name="StudyGradeAgain" xml:space="preserve"><value>Again</value></data>
+  <data name="StudyGradeHard" xml:space="preserve"><value>Hard</value></data>
+  <data name="StudyGradeGood" xml:space="preserve"><value>Good</value></data>
+  <data name="StudyGradeEasy" xml:space="preserve"><value>Easy</value></data>
   <data name="StudyModePrevious" xml:space="preserve"><value>Previous</value></data>
   <data name="StudyModeNext" xml:space="preserve"><value>Next</value></data>
   <data name="StudyModeProgress" xml:space="preserve"><value>Card {0} of {1}</value></data>
   <data name="FlashcardFlipSpeed" xml:space="preserve"><value>Flip speed:</value></data>
   <data name="FlashcardFlipSpeedDescription" xml:space="preserve"><value>Control how fast flashcards flip between question and answer</value></data>
+  <data name="FlashcardIntervalDays" xml:space="preserve"><value>{0}d</value></data>
+  <data name="FlashcardIntervalMonths" xml:space="preserve"><value>{0}mo</value></data>
+  <data name="FlashcardIntervalYears" xml:space="preserve"><value>{0}y</value></data>
+  <data name="FlashcardAudioVolume" xml:space="preserve"><value>Flashcard audio volume</value></data>
+  <data name="FlashcardAudioVolumeDescription" xml:space="preserve"><value>Applies to every flashcard's audio playback - set once, remembered from then on</value></data>
+  <data name="FlashcardSchedulingAlgorithm" xml:space="preserve"><value>Scheduling algorithm</value></data>
+  <data name="FlashcardSchedulingAlgorithmTooltip" xml:space="preserve"><value>Choose the spaced-repetition engine used to schedule every flashcard set. Applies to your whole collection, like Anki's FSRS toggle.</value></data>
+  <data name="FlashcardSchedulingAlgorithmSwitchTitle" xml:space="preserve"><value>Switch scheduling algorithm</value></data>
+  <data name="FlashcardSchedulingAlgorithmSwitchConfirmation" xml:space="preserve"><value>Switching the scheduling algorithm resets study progress for every flashcard set - due dates, known/unknown status, and everything the scheduler has learned about your cards. This can't be undone. Continue?</value></data>
   <data name="MindMapPreviewTitle" xml:space="preserve"><value>Mind map</value></data>
   <data name="MindMapsDashboard" xml:space="preserve"><value>Mind maps</value></data>
   <data name="MindMapsDashboardTitle" xml:space="preserve"><value>Mind maps</value></data>
@@ -816,7 +869,34 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapExportEmptyCanvas" xml:space="preserve"><value>Mind map has no renderable content to export.</value></data>
   <data name="CombineFlashcards" xml:space="preserve"><value>Combine flashcards</value></data>
   <data name="FlashcardHistory" xml:space="preserve"><value>Flashcard history</value></data>
+  <data name="FlashcardStatistics" xml:space="preserve"><value>Statistics</value></data>
+  <data name="FlashcardStatisticsTooltip" xml:space="preserve"><value>View study statistics for this set</value></data>
   <data name="FlashcardActions" xml:space="preserve"><value>Flashcard actions</value></data>
+  <data name="FlashcardExportDialogTitle" xml:space="preserve"><value>Export flashcard set</value></data>
+  <data name="FlashcardExportDialogFilter" xml:space="preserve"><value>Own Flashcard File (*.scribflash)|*.scribflash|CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All files (*.*)|*.*</value></data>
+  <data name="FlashcardExportComplete" xml:space="preserve"><value>Flashcard set exported successfully.</value></data>
+  <data name="FlashcardExportUnsupportedFormat" xml:space="preserve"><value>Unsupported export format.</value></data>
+  <data name="FlashcardExportFailedFormat" xml:space="preserve"><value>Failed to export flashcard set: {0}</value></data>
+  <data name="FlashcardImport" xml:space="preserve"><value>Import flashcard set</value></data>
+  <data name="FlashcardImportDialogTitle" xml:space="preserve"><value>Import flashcard set</value></data>
+  <data name="FlashcardImportDialogFilter" xml:space="preserve"><value>All Flashcard Files (*.scribflash;*.csv;*.txt)|*.scribflash;*.csv;*.txt|Own Flashcard File (*.scribflash)|*.scribflash|CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All files (*.*)|*.*</value></data>
+  <data name="FlashcardImportSuccessCount" xml:space="preserve"><value>Imported {0} flashcard set(s).</value></data>
+  <data name="FlashcardImportFailed" xml:space="preserve"><value>Could not read this flashcard file.</value></data>
+  <data name="FlashcardImportFileNotFound" xml:space="preserve"><value>Flashcard file not found.</value></data>
+  <data name="FlashcardImportReadFailed" xml:space="preserve"><value>Could not read the flashcard file.</value></data>
+  <data name="FlashcardImportParseError" xml:space="preserve"><value>This file isn't valid flashcard data.</value></data>
+  <data name="FlashcardImportUnsupportedFormat" xml:space="preserve"><value>Unsupported import format.</value></data>
+  <data name="FlashcardImportUnsupportedVersion" xml:space="preserve"><value>This flashcard file was created by a newer version of Scriblucent and can't be opened here.</value></data>
+  <data name="FlashcardImportKeepProgressTitle" xml:space="preserve"><value>Keep progress data?</value></data>
+  <data name="FlashcardImportKeepProgressPrompt" xml:space="preserve"><value>One or more of these files include study progress. Keep that data, or start fresh with no history?</value></data>
+  <data name="FlashcardImportKeepProgressKeep" xml:space="preserve"><value>Keep progress</value></data>
+  <data name="FlashcardImportKeepProgressDiscard" xml:space="preserve"><value>Start fresh</value></data>
+  <data name="FlashcardImportCards" xml:space="preserve"><value>Import cards</value></data>
+  <data name="FlashcardImportCardsDialogTitle" xml:space="preserve"><value>Import cards</value></data>
+  <data name="FlashcardImportCardsDialogFilter" xml:space="preserve"><value>CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All files (*.*)|*.*</value></data>
+  <data name="FlashcardImportCardsAddedFormat" xml:space="preserve"><value>Added {0} card(s).</value></data>
+  <data name="FlashcardImportNoCardsFound" xml:space="preserve"><value>No cards were found in this file.</value></data>
+  <data name="FlashcardImportCardsFailedFormat" xml:space="preserve"><value>Failed to import cards: {0}</value></data>
   <data name="CombineQuizzes" xml:space="preserve"><value>Combine quizzes</value></data>
   <data name="QuizHistory" xml:space="preserve"><value>Quiz history</value></data>
   <data name="QuizActions" xml:space="preserve"><value>Quiz actions</value></data>

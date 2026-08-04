@@ -35,23 +35,43 @@
                     <StackPanel Grid.Column="1"
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center"
+                                UseLayoutRounding="True"
+                                SnapsToDevicePixels="True"
                                 Visibility="{Binding HasItems, Converter={StaticResource BoolToVis}}">
-                        <Border Padding="10,6" Margin="10,0,0,0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource SelectionBackground}" BorderThickness="0">
+                        <Border Style="{StaticResource HistorySummaryChipStyle}"
+                                Margin="10,0,0,0"
+                                Background="{DynamicResource FlashcardKnownChipBackground}">
                             <StackPanel>
-                                <TextBlock Text="Known" FontSize="{StaticResource Type.Chip}" Foreground="{DynamicResource TextColorSecondary}"/>
-                                <TextBlock Text="{Binding KnownText}" FontSize="{StaticResource Type.Meta}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="{Binding [Known], Source={StaticResource Loc}}"
+                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
+                                           Foreground="{DynamicResource FlashcardKnownChipForeground}"/>
+                                <TextBlock Text="{Binding KnownText}"
+                                           Style="{StaticResource HistorySummaryChipValueStyle}"
+                                           Foreground="{DynamicResource FlashcardKnownChipForeground}"/>
                             </StackPanel>
                         </Border>
-                        <Border Padding="10,6" Margin="8,0,0,0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource SelectionBackground}" BorderThickness="0">
+                        <Border Style="{StaticResource HistorySummaryChipStyle}"
+                                Margin="8,0,0,0"
+                                Background="{DynamicResource FlashcardUnknownChipBackground}">
                             <StackPanel>
-                                <TextBlock Text="Unknown" FontSize="{StaticResource Type.Chip}" Foreground="{DynamicResource TextColorSecondary}"/>
-                                <TextBlock Text="{Binding UnknownText}" FontSize="{StaticResource Type.Meta}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="{Binding [Unknown], Source={StaticResource Loc}}"
+                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
+                                           Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
+                                <TextBlock Text="{Binding UnknownText}"
+                                           Style="{StaticResource HistorySummaryChipValueStyle}"
+                                           Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
                             </StackPanel>
                         </Border>
-                        <Border Padding="10,6" Margin="8,0,0,0" CornerRadius="{StaticResource Radius.Control}" Background="{DynamicResource SelectionBackground}" BorderThickness="0">
+                        <Border Style="{StaticResource HistorySummaryChipStyle}"
+                                Margin="8,0,0,0"
+                                Background="{DynamicResource FlashcardNewChipBackground}">
                             <StackPanel>
-                                <TextBlock Text="Studied" FontSize="{StaticResource Type.Chip}" Foreground="{DynamicResource TextColorSecondary}"/>
-                                <TextBlock Text="{Binding StudiedText}" FontSize="{StaticResource Type.Meta}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Studied"
+                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
+                                           Foreground="{DynamicResource FlashcardNewChipForeground}"/>
+                                <TextBlock Text="{Binding StudiedText}"
+                                           Style="{StaticResource HistorySummaryChipValueStyle}"
+                                           Foreground="{DynamicResource FlashcardNewChipForeground}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -63,71 +83,90 @@
             <Grid Margin="20,16,20,8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
+                              Background="Transparent"
+                              Padding="0"
+                              ClipToBounds="True"
+                              UseLayoutRounding="True"
+                              SnapsToDevicePixels="True"
                               Visibility="{Binding HasItems, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding Items}"
+                                  UseLayoutRounding="True"
+                                  SnapsToDevicePixels="True"
                                   VirtualizingPanel.IsVirtualizing="True"
                                   VirtualizingPanel.VirtualizationMode="Recycling"
                                   VirtualizingPanel.ScrollUnit="Pixel"
                                   ScrollViewer.CanContentScroll="True">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <VirtualizingStackPanel IsItemsHost="True"/>
+                                <VirtualizingStackPanel IsItemsHost="True"
+                                                        UseLayoutRounding="True"
+                                                        SnapsToDevicePixels="True"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,0,0,10"
-                                      UseLayoutRounding="True"
-                                      SnapsToDevicePixels="True"
-                                      ClipToBounds="False">
-                                    <controls:CardShadowLayer/>
-                                    <Border Padding="16,14"
-                                            Background="{DynamicResource CardBackground}"
-                                            BorderThickness="0"
-                                            CornerRadius="{StaticResource Radius.Control}"
-                                            SnapsToDevicePixels="True"
-                                            UseLayoutRounding="True">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Title}"
-                                                           FontSize="{StaticResource Type.SectionTitle}"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource TextColor}"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding Details}"
-                                                           Margin="0,6,0,0"
-                                                           FontSize="{StaticResource Type.Caption}"
-                                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                            </StackPanel>
-                                            <Border Grid.Column="1"
-                                                    Padding="12,6"
-                                                    CornerRadius="{StaticResource Radius.Control}"
-                                                    VerticalAlignment="Center"
-                                                    Margin="14,0,0,0"
-                                                    Background="{DynamicResource CardBackground}"
-                                                    BorderThickness="0">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                                <Border Margin="0,0,0,10"
+                                        Padding="16,14"
+                                        Background="{DynamicResource CardBackground}"
+                                        BorderThickness="0"
+                                        CornerRadius="{StaticResource Radius.Control}"
+                                        SnapsToDevicePixels="True"
+                                        UseLayoutRounding="True">
+                                    <Grid UseLayoutRounding="True"
+                                          SnapsToDevicePixels="True">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Details}"
+                                                       Margin="0,6,0,0"
+                                                       FontSize="{StaticResource Type.Caption}"
+                                                       Foreground="{DynamicResource TextColorSecondary}"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border" BasedOn="{StaticResource HistoryStatusChipStyle}">
+                                                    <Setter Property="Background" Value="{DynamicResource FlashcardNewChipBackground}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding StatusKind}" Value="Known">
+                                                            <Setter Property="Background" Value="{DynamicResource FlashcardKnownChipBackground}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding StatusKind}" Value="Complete">
+                                                            <Setter Property="Background" Value="{DynamicResource FlashcardKnownChipBackground}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding StatusKind}" Value="Unknown">
+                                                            <Setter Property="Background" Value="{DynamicResource FlashcardUnknownChipBackground}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding StatusText}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource HistoryStatusChipTextStyle}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource FlashcardNewChipForeground}"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsComplete}" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                                                            <DataTrigger Binding="{Binding StatusKind}" Value="Known">
+                                                                <Setter Property="Foreground" Value="{DynamicResource FlashcardKnownChipForeground}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusKind}" Value="Complete">
+                                                                <Setter Property="Foreground" Value="{DynamicResource FlashcardKnownChipForeground}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding StatusKind}" Value="Unknown">
+                                                                <Setter Property="Foreground" Value="{DynamicResource FlashcardUnknownChipForeground}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </Border.Style>
-                                                <TextBlock Text="{Binding StatusText}"
-                                                           FontSize="{StaticResource Type.Meta}"
-                                                           FontWeight="Bold"
-                                                           Foreground="{DynamicResource TextColor}"/>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-                                </Grid>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

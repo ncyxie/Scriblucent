@@ -13,6 +13,20 @@ public partial class FlashcardsDashboardPage : UserControl
 
     private MainWindow? Host => Window.GetWindow(this) as MainWindow;
 
+    private void QuickCreateTitleTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || sender is not TextBox textBox)
+            return;
+
+        var title = textBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+            return;
+
+        Host?.CreateFlashcardSetWithTitle(title);
+        textBox.Clear();
+        e.Handled = true;
+    }
+
     private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
         => Host?.CalendarScheduleGearButton_Click(sender, e);
     private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -69,6 +83,8 @@ public partial class FlashcardsDashboardPage : UserControl
         => Host?.FlashcardDashboardActionsButton_Click(sender, e);
     private void FlashcardSetInfoMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.FlashcardSetInfoMenuItem_Click(sender, e);
+    private void ImportButton_Click(object sender, RoutedEventArgs e)
+        => Host?.ImportFlashcardsButton_Click(sender, e);
     private void ListingContextMenuButton_Click(object sender, RoutedEventArgs e)
         => Host?.ListingContextMenuButton_Click(sender, e);
     private void MoveCalendarDownButton_Click(object sender, RoutedEventArgs e)
@@ -95,6 +111,8 @@ public partial class FlashcardsDashboardPage : UserControl
         => Host?.OpenFlashcardCombineMenuItem_Click(sender, e);
     private void OpenFlashcardHistoryMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.OpenFlashcardHistoryMenuItem_Click(sender, e);
+    private void OpenFlashcardStatisticsMenuItem_Click(object sender, RoutedEventArgs e)
+        => Host?.OpenFlashcardStatisticsMenuItem_Click(sender, e);
     private void OpenFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.OpenFlashcardSetMenuItem_Click(sender, e);
     private void RecentFlashcardSetButton_Click(object sender, RoutedEventArgs e)

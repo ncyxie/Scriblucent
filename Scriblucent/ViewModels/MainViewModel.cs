@@ -926,6 +926,7 @@ public class MainViewModel : ViewModelBase
             RefreshAvailableFlashcardTags();
             NotifyFlashcardSetsChanged();
             _flashcardsLoadCompleted = true;
+            SweepOrphanedFlashcardMedia();
             return;
         }
 
@@ -949,7 +950,24 @@ public class MainViewModel : ViewModelBase
         RefreshAvailableFlashcardTags();
         NotifyFlashcardSetsChanged();
         _flashcardsLoadCompleted = true;
+        SweepOrphanedFlashcardMedia();
     }
+
+    /// <summary>Deferred cleanup for flashcard image/audio attachments (see
+    /// FlashcardMediaStorageService) - gathers referenced filenames from the just-loaded sets on
+    /// the UI thread (cheap, in-memory), then runs the actual filesystem sweep off-thread.</summary>
+    private void SweepOrphanedFlashcardMedia()
+    {
+        var referencedFileNames = FlashcardSets
+            .SelectMany(set => set.Document.Cards ?? new List<FlashcardItem>())
+            .SelectMany(card => new[] { card.QuestionImageFileName, card.QuestionAudioFileName, card.AnswerImageFileName, card.AnswerAudioFileName })
+            .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
+            .Select(fileName => fileName!)
+            .ToList();
+
+        Task.Run(() => FlashcardMediaStorageService.DeleteOrphanedFiles(referencedFileNames));
+    }
+
     private void SaveFlashcards()
     {
         var path = GetFlashcardsFilePath();
@@ -1011,6 +1029,7 @@ public class MainViewModel : ViewModelBase
         setVm.Document.Schedules = document.Schedules;
         setVm.Document.IsPinned = document.IsPinned;
         setVm.Document.FlipDelayMilliseconds = document.FlipDelayMilliseconds;
+        setVm.Document.StudyDueCardsOnly = document.StudyDueCardsOnly;
         setVm.NotifyChanged();
 
         ReorderFlashcardSets();
@@ -1426,9 +1445,14 @@ public class MainViewModel : ViewModelBase
                 Question = card.Question,
                 Answer = card.Answer,
                 Category = card.Category,
+                Hint = card.Hint,
                 SetIndex = card.SetIndex,
                 IsKnown = card.IsKnown,
-                IsUnknown = card.IsUnknown
+                IsUnknown = card.IsUnknown,
+                QuestionImageFileName = card.QuestionImageFileName,
+                QuestionAudioFileName = card.QuestionAudioFileName,
+                AnswerImageFileName = card.AnswerImageFileName,
+                AnswerAudioFileName = card.AnswerAudioFileName
             }).ToList(),
             StudySession = new FlashcardStudySession(),
             CreatedAt = DateTime.UtcNow,
@@ -1436,7 +1460,8 @@ public class MainViewModel : ViewModelBase
             AiModelDisplayName = source.AiModelDisplayName,
             SourceNoteId = source.SourceNoteId,
             GroupId = source.GroupId,
-            FlipDelayMilliseconds = source.FlipDelayMilliseconds
+            FlipDelayMilliseconds = source.FlipDelayMilliseconds,
+            StudyDueCardsOnly = source.StudyDueCardsOnly
         };
 
     private static void NormalizeFlashcardSetDocument(FlashcardSetDocument document)
@@ -1463,17 +1488,29 @@ public class MainViewModel : ViewModelBase
         }
         document.Cards = document.Cards?
             .Where(card => card != null)
-            .Select(card => new FlashcardItem
+            .Select(card => MigrateFlashcardReviewState(new FlashcardItem
             {
                 Id = card.Id == Guid.Empty ? Guid.NewGuid() : card.Id,
                 Question = card.Question?.Trim() ?? string.Empty,
                 Answer = card.Answer?.Trim() ?? string.Empty,
                 Category = card.Category?.Trim() ?? string.Empty,
+                Hint = card.Hint?.Trim() ?? string.Empty,
                 SetIndex = Math.Max(1, card.SetIndex),
                 IsKnown = card.IsKnown && !card.IsUnknown,
                 IsUnknown = card.IsUnknown && !card.IsKnown,
-                LinkedNoteId = null
-            })
+                LinkedNoteId = null,
+                EaseFactor = card.EaseFactor,
+                IntervalDays = card.IntervalDays,
+                Repetitions = card.Repetitions,
+                DueDate = card.DueDate,
+                LastReviewedAt = card.LastReviewedAt,
+                Stability = card.Stability,
+                Difficulty = card.Difficulty,
+                QuestionImageFileName = card.QuestionImageFileName,
+                QuestionAudioFileName = card.QuestionAudioFileName,
+                AnswerImageFileName = card.AnswerImageFileName,
+                AnswerAudioFileName = card.AnswerAudioFileName
+            }))
             .ToList() ?? new List<FlashcardItem>();
         document.CreatedAt = document.CreatedAt == default ? DateTime.UtcNow : document.CreatedAt;
         document.LastModified = document.LastModified == default ? DateTime.Now : document.LastModified;
@@ -1494,6 +1531,34 @@ public class MainViewModel : ViewModelBase
 
         if (document.FlipDelayMilliseconds > 0)
             document.FlipDelayMilliseconds = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(document.FlipDelayMilliseconds);
+    }
+
+    /// <summary>
+    /// Backfills SM-2 scheduling state for cards saved before spaced repetition existed -
+    /// detected by never having been touched by the scheduler (no repetitions, no due date).
+    /// Previously-known cards are seeded as if graded Good once so existing progress doesn't
+    /// suddenly show as "all due right now"; previously-unknown cards are due immediately,
+    /// matching what an Again grade would produce. Never-studied cards are left at field
+    /// defaults, which FlashcardReviewScheduler.IsDue already treats as due/new. Idempotent -
+    /// once a card has real SM-2 data, Repetitions is no longer 0 and this is a no-op.
+    /// </summary>
+    private static FlashcardItem MigrateFlashcardReviewState(FlashcardItem card)
+    {
+        if (card.Repetitions != 0 || card.DueDate.HasValue)
+            return card;
+
+        if (card.IsKnown)
+        {
+            card.Repetitions = 1;
+            card.IntervalDays = 6;
+            card.DueDate = DateTime.Now.Date.AddDays(6);
+        }
+        else if (card.IsUnknown)
+        {
+            card.DueDate = DateTime.Now.Date;
+        }
+
+        return card;
     }
 
     private readonly record struct MindMapsLoadResult(
@@ -5718,6 +5783,61 @@ public class MainViewModel : ViewModelBase
             AfterMotion();
         else
             MotionHost.CompleteBatchAdd(DashboardMotionScope.Flashcards, addedIds, AfterMotion);
+    }
+
+    /// <summary>
+    /// Single batch add for dashboard-level flashcard set import (see FlashcardFileService) - pays
+    /// one SaveFlashcardSets() for the whole imported batch instead of one per file. Reuses
+    /// DuplicateSelectedFlashcardSets/CompleteFlashcardBatchAdd's existing batch-mutation path for
+    /// an existing library, plus an empty-library branch for the case import is the very first
+    /// thing added on a fresh install. Mirrors AddImportedQuizzes exactly.
+    /// </summary>
+    public void AddImportedFlashcardSets(IReadOnlyList<FlashcardSetDocument> documents)
+    {
+        if (documents.Count == 0)
+            return;
+
+        foreach (var document in documents)
+            NormalizeFlashcardSetDocument(document);
+
+        var addedIds = documents.Select(document => document.Id).ToList();
+        var hadFlashcardSets = FlashcardSets.Count > 0;
+
+        if (!hadFlashcardSets)
+        {
+            foreach (var document in documents)
+                FlashcardSets.Add(new FlashcardSetViewModel(document));
+
+            OnPropertyChanged(nameof(HasFlashcardSets));
+            SaveFlashcardSets();
+            MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.Flashcards);
+            RebuildFlashcardSetGroups();
+            ReorderFlashcardSets();
+            NormalizeFlashcardSetGroups();
+            RefreshAvailableFlashcardTags();
+            ApplyFlashcardFilters(rebuildGroups: false);
+            NotifyFlashcardSetsChanged();
+            RefreshRecentFlashcardSets();
+            return;
+        }
+
+        _flashcardBatchAddInProgress = true;
+        try
+        {
+            MotionHost?.BeginBatchMutation(DashboardMotionScope.Flashcards);
+            foreach (var document in documents)
+            {
+                MotionHost?.RegisterBatchItemAdd(DashboardMotionScope.Flashcards, document.Id);
+                FlashcardSets.Add(new FlashcardSetViewModel(document));
+            }
+
+            SaveFlashcardSets();
+            CompleteFlashcardBatchAdd(addedIds);
+        }
+        finally
+        {
+            _flashcardBatchAddInProgress = false;
+        }
     }
 
     private void DuplicateSelectedMindMaps()

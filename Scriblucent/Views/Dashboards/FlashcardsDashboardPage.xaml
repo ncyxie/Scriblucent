@@ -373,6 +373,8 @@
                                                                       Click="OpenFlashcardCombineMenuItem_Click"/>
                                                             <MenuItem Header="{Binding [FlashcardHistory], Source={StaticResource Loc}}"
                                                                       Click="OpenFlashcardHistoryMenuItem_Click"/>
+                                                            <MenuItem Header="{Binding [FlashcardStatistics], Source={StaticResource Loc}}"
+                                                                      Click="OpenFlashcardStatisticsMenuItem_Click"/>
                                                         </ContextMenu>
                                                     </Button.ContextMenu>
                                                 </Button>
@@ -623,11 +625,31 @@
                                                                                                 ToolTip="{Binding [Menu], Source={StaticResource Loc}}"
                                                                                                 Click="ListingContextMenuButton_Click"/>
                                                                                     </Grid>
-                                                                                    <TextBlock Grid.Row="1"
-                                                                                               Text="{Binding CardCountText}"
-                                                                                               FontSize="{StaticResource Type.Caption}"
-                                                                                               Foreground="{DynamicResource TextColorSecondary}"
-                                                                                               Margin="0,6,0,0"/>
+                                                                                    <StackPanel Grid.Row="1"
+                                                                                                Orientation="Horizontal"
+                                                                                                VerticalAlignment="Top"
+                                                                                                Margin="0,6,0,0">
+                                                                                        <TextBlock Text="{Binding CardCountText}"
+                                                                                                   FontSize="{StaticResource Type.Caption}"
+                                                                                                   Foreground="{DynamicResource TextColorSecondary}"
+                                                                                                   VerticalAlignment="Center"/>
+                                                                                        <Border Margin="6,0,0,0"
+                                                                                                Padding="6,1"
+                                                                                                VerticalAlignment="Center"
+                                                                                                CornerRadius="{StaticResource Radius.Chip}"
+                                                                                                Background="{DynamicResource FlashcardUnknownChipBackground}"
+                                                                                                Visibility="{Binding HasDueCards, Converter={StaticResource BoolToVis}}">
+                                                                                            <TextBlock Text="{Binding DueStatusText}"
+                                                                                                       FontSize="{StaticResource Type.Chip}"
+                                                                                                       Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
+                                                                                        </Border>
+                                                                                        <TextBlock Text="{Binding DueStatusText}"
+                                                                                                   FontSize="{StaticResource Type.Caption}"
+                                                                                                   Foreground="{DynamicResource TextColorSecondary}"
+                                                                                                   Margin="6,0,0,0"
+                                                                                                   VerticalAlignment="Center"
+                                                                                                   Visibility="{Binding ShowNextReviewText, Converter={StaticResource BoolToVis}}"/>
+                                                                                    </StackPanel>
                                                                                     <Border Grid.Row="2"
                                                                                             Style="{StaticResource DashboardTagChipStyle}">
                                                                                         <TextBlock Text="{Binding TagsDisplay}"
@@ -830,16 +852,36 @@
 
                                                                 <StackPanel Grid.Row="1"
                                                                             Orientation="Horizontal"
+                                                                            VerticalAlignment="Top"
                                                                             Margin="0,14,0,0">
                                                                     <TextBlock Text="{Binding CardCountText}"
                                                                                FontSize="{StaticResource Type.Meta}"
-                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                               Foreground="{DynamicResource TextColorSecondary}"
+                                                                               VerticalAlignment="Center"/>
                                                                     <TextBlock Text="  •  "
                                                                                FontSize="{StaticResource Type.Meta}"
-                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                               Foreground="{DynamicResource TextColorSecondary}"
+                                                                               VerticalAlignment="Center"/>
                                                                     <TextBlock Text="{Binding SetCountText}"
                                                                                FontSize="{StaticResource Type.Meta}"
-                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                                                                               Foreground="{DynamicResource TextColorSecondary}"
+                                                                               VerticalAlignment="Center"/>
+                                                                    <Border Margin="6,0,0,0"
+                                                                            Padding="6,1"
+                                                                            VerticalAlignment="Center"
+                                                                            CornerRadius="{StaticResource Radius.Chip}"
+                                                                            Background="{DynamicResource FlashcardUnknownChipBackground}"
+                                                                            Visibility="{Binding HasDueCards, Converter={StaticResource BoolToVis}}">
+                                                                        <TextBlock Text="{Binding DueStatusText}"
+                                                                                   FontSize="{StaticResource Type.Chip}"
+                                                                                   Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
+                                                                    </Border>
+                                                                    <TextBlock Text="{Binding DueStatusText}"
+                                                                               FontSize="{StaticResource Type.Meta}"
+                                                                               Foreground="{DynamicResource TextColorSecondary}"
+                                                                               Margin="6,0,0,0"
+                                                                               VerticalAlignment="Center"
+                                                                               Visibility="{Binding ShowNextReviewText, Converter={StaticResource BoolToVis}}"/>
                                                                 </StackPanel>
 
                                                                 <Border Grid.Row="2"
@@ -864,15 +906,49 @@
                                 </Border>
                                 </Grid>
 
-                                <dashboard:EmptyDashboardPanel x:Name="FlashcardsEmptyDashboardPanel"
-                                            Grid.Row="2"
+                                <StackPanel Grid.Row="2"
                                             Visibility="{Binding ShowFlashcardsEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            Prompt="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
-                                            ButtonContent="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
-                                            Click="CreateFlashcardsButton_Click"/>
+                                            HorizontalAlignment="Center">
+                                    <dashboard:EmptyDashboardPanel x:Name="FlashcardsEmptyDashboardPanel"
+                                                Prompt="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
+                                                ButtonContent="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
+                                                Click="CreateFlashcardsButton_Click"/>
+                                    <TextBlock Text="{Binding [FlashcardsQuickCreateHint], Source={StaticResource Loc}}"
+                                               FontSize="{StaticResource Type.Caption}"
+                                               Foreground="{DynamicResource TextColorSecondary}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,16,0,8"/>
+                                    <Border Width="280"
+                                            Height="36"
+                                            CornerRadius="{StaticResource Radius.Control}"
+                                            Background="{DynamicResource InputSurface}"
+                                            BorderBrush="{DynamicResource InputRestBorder}"
+                                            BorderThickness="{DynamicResource Field.RestBorderThickness}"
+                                            behaviors:RoundedClipBehavior.IsEnabled="True"
+                                            behaviors:FieldFocusRingBehavior.IsEnabled="True"
+                                            Padding="12,0">
+                                        <TextBox x:Name="QuickCreateTitleTextBox"
+                                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                                 VerticalContentAlignment="Center"
+                                                 KeyDown="QuickCreateTitleTextBox_KeyDown"/>
+                                    </Border>
+                                </StackPanel>
                             </Grid>
                         </ScrollViewer>
 
+                        <Button x:Name="ImportButton"
+                                Grid.Row="1"
+                                Style="{DynamicResource FloatingSecondaryButtonStyle}"
+                                Width="32"
+                                Height="30"
+                                FontSize="{StaticResource Type.Meta}"
+                                IsEnabled="{Binding IsNotMassSelectMode}"
+                                VerticalAlignment="Bottom"
+                                HorizontalAlignment="Right"
+                                Content="{icons:Icon Import}"
+                                Margin="0,0,49,96"
+                                ToolTip="{Binding [FlashcardImport], Source={StaticResource Loc}}"
+                                Click="ImportButton_Click"/>
                         <Button Grid.Row="1"
                                 Style="{StaticResource FabStyle}"
                             IsEnabled="{Binding IsNotMassSelectMode}"

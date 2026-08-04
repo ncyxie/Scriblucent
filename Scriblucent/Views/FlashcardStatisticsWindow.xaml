@@ -1,0 +1,277 @@
+<Window x:Class="Scriblucent.Views.FlashcardStatisticsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
+        Title="Flashcard statistics"
+        Height="720"
+        Width="820"
+        MinHeight="480"
+        MinWidth="640"
+        WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
+        Background="{DynamicResource FeatureFrameBackground}">
+    <Window.Resources>
+        <DataTemplate x:Key="StatBarRowTemplate">
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="36"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Label}"
+                           VerticalAlignment="Center"
+                           FontSize="{StaticResource Type.Caption}"
+                           Foreground="{DynamicResource TextColorSecondary}"
+                           TextTrimming="CharacterEllipsis"/>
+                <Border Grid.Column="1"
+                        x:Name="StatBarTrack"
+                        Height="10"
+                        MaxWidth="360"
+                        HorizontalAlignment="Stretch"
+                        Margin="8,0"
+                        Background="{DynamicResource ProgressTrackBackground}"
+                        CornerRadius="5"
+                        Loaded="StatBarTrack_Loaded">
+                    <Border x:Name="StatBarFill"
+                            Width="0"
+                            Height="10"
+                            HorizontalAlignment="Left"
+                            CornerRadius="5">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource AccentSuccess}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ChipKind}" Value="New">
+                                        <Setter Property="Background" Value="{DynamicResource FlashcardNewChipBackground}"/>
+                                    </DataTrigger>
+                                    <!-- Repurposing the "Unknown" chip brush for the Learning tier - amber/
+                                         in-progress reads reasonably for "not yet mature" without adding
+                                         new theme resources just for this window. -->
+                                    <DataTrigger Binding="{Binding ChipKind}" Value="Learning">
+                                        <Setter Property="Background" Value="{DynamicResource FlashcardUnknownChipBackground}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ChipKind}" Value="Mature">
+                                        <Setter Property="Background" Value="{DynamicResource FlashcardKnownChipBackground}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+                </Border>
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Count}"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           FontSize="{StaticResource Type.Caption}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextColor}"/>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+    <Grid x:Name="ContentRoot">
+    <controls:FeatureWindowShell>
+        <controls:FeatureWindowShell.Header>
+            <Border Style="{StaticResource ChromePanelBorderStyle}"
+                    CornerRadius="0"
+                    Padding="{StaticResource Shell.FeatureTitleRowPadding}">
+                <StackPanel>
+                    <TextBlock Text="Flashcard statistics"
+                               FontSize="{StaticResource Type.DialogTitle}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextColor}"/>
+                    <TextBlock Text="{Binding HeaderSubtitleText}"
+                               Margin="0,5,0,0"
+                               FontSize="{StaticResource Type.Caption}"
+                               Foreground="{DynamicResource TextColorSecondary}"/>
+                </StackPanel>
+            </Border>
+        </controls:FeatureWindowShell.Header>
+
+        <controls:FeatureWindowShell.Body>
+            <ScrollViewer Margin="20,16,20,8"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Background="Transparent"
+                          ClipToBounds="True"
+                          behaviors:RoundedClipBehavior.IsEnabled="True"
+                          behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}">
+                <StackPanel>
+                    <WrapPanel Margin="0,0,0,14">
+                        <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                Background="{DynamicResource CardBackground}"
+                                Padding="14,10"
+                                Margin="0,0,10,10"
+                                MinWidth="110">
+                            <StackPanel>
+                                <TextBlock Text="{Binding TotalCountText}"
+                                           FontSize="{StaticResource Type.BlockTitle}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Total"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                Background="{DynamicResource CardBackground}"
+                                Padding="14,10"
+                                Margin="0,0,10,10"
+                                MinWidth="110">
+                            <StackPanel>
+                                <TextBlock Text="{Binding DueTodayCountText}"
+                                           FontSize="{StaticResource Type.BlockTitle}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Due today"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                Background="{DynamicResource FlashcardNewChipBackground}"
+                                Padding="14,10"
+                                Margin="0,0,10,10"
+                                MinWidth="110">
+                            <StackPanel>
+                                <TextBlock Text="{Binding NewCountText}"
+                                           FontSize="{StaticResource Type.BlockTitle}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource FlashcardNewChipForeground}"/>
+                                <TextBlock Text="New"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource FlashcardNewChipForeground}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                Background="{DynamicResource FlashcardUnknownChipBackground}"
+                                Padding="14,10"
+                                Margin="0,0,10,10"
+                                MinWidth="110">
+                            <StackPanel>
+                                <TextBlock Text="{Binding LearningCountText}"
+                                           FontSize="{StaticResource Type.BlockTitle}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
+                                <TextBlock Text="Learning"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource FlashcardUnknownChipForeground}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                Background="{DynamicResource FlashcardKnownChipBackground}"
+                                Padding="14,10"
+                                Margin="0,0,10,10"
+                                MinWidth="110">
+                            <StackPanel>
+                                <TextBlock Text="{Binding MatureCountText}"
+                                           FontSize="{StaticResource Type.BlockTitle}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource FlashcardKnownChipForeground}"/>
+                                <TextBlock Text="Mature"
+                                           FontSize="{StaticResource Type.Caption}"
+                                           Foreground="{DynamicResource FlashcardKnownChipForeground}"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+
+                    <Border Background="{DynamicResource CardBackground}"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Card}"
+                            Padding="16,12"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Card breakdown"
+                                       Style="{StaticResource FormSectionTitleStyle}"
+                                       Margin="0,0,0,10"/>
+                            <ItemsControl ItemsSource="{Binding MaturityRows}"
+                                          ItemTemplate="{StaticResource StatBarRowTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{DynamicResource CardBackground}"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Card}"
+                            Padding="16,12"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Forecast (next 14 days)"
+                                       Style="{StaticResource FormSectionTitleStyle}"
+                                       Margin="0,0,0,10"/>
+                            <ItemsControl ItemsSource="{Binding ForecastRows}"
+                                          ItemTemplate="{StaticResource StatBarRowTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{DynamicResource CardBackground}"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Card}"
+                            Padding="16,12"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Interval lengths"
+                                       Style="{StaticResource FormSectionTitleStyle}"
+                                       Margin="0,0,0,10"/>
+                            <ItemsControl ItemsSource="{Binding IntervalRows}"
+                                          ItemTemplate="{StaticResource StatBarRowTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="{DynamicResource CardBackground}"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Card}"
+                            Padding="16,12"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DifficultySignalTitleText}"
+                                       Style="{StaticResource FormSectionTitleStyle}"
+                                       Margin="0,0,0,10"/>
+                            <ItemsControl ItemsSource="{Binding DifficultySignalRows}"
+                                          ItemTemplate="{StaticResource StatBarRowTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </controls:FeatureWindowShell.Body>
+
+        <controls:FeatureWindowShell.Footer>
+            <Border Style="{StaticResource ChromePanelBorderStyle}"
+                    CornerRadius="0"
+                    Padding="20,12">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Close"
+                            Padding="14,8"
+                            Style="{StaticResource DialogSecondaryButtonStyle}"
+                            Click="CloseButton_Click"/>
+                </StackPanel>
+            </Border>
+        </controls:FeatureWindowShell.Footer>
+    </controls:FeatureWindowShell>
+    </Grid>
+</Window>

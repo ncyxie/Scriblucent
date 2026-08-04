@@ -2,8 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         Title="{Binding [EditFlashcard], Source={StaticResource Loc}}"
-        Height="560"
+        Height="630"
         Width="520"
         WindowStartupLocation="CenterOwner"
         TextOptions.TextFormattingMode="Ideal"
@@ -35,72 +37,188 @@
         </controls:OverlayDialogShell.Header>
 
         <controls:OverlayDialogShell.Body>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Background="Transparent">
             <StackPanel>
-                <Grid Margin="0,0,0,16">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Text="{Binding [FlashcardSideQuestion], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.Meta}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <TextBox Grid.Row="2"
-                             x:Name="QuestionTextBox"
-                             Height="80"
-                             MaxHeight="80"
-                             HorizontalAlignment="Stretch"
-                             VerticalContentAlignment="Top"
+                <TextBlock Text="{Binding [FlashcardSideQuestion], Source={StaticResource Loc}}"
+                           FontSize="{StaticResource Type.Meta}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextColor}"
+                           Margin="0,0,0,8"/>
+                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}"
+                        Padding="9,7"
+                        MinHeight="80"
+                        MaxHeight="80"
+                        Margin="0,0,0,10">
+                    <TextBox x:Name="QuestionTextBox"
+                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
                              TextWrapping="Wrap"
                              AcceptsReturn="True"
                              VerticalScrollBarVisibility="Auto"
                              HorizontalScrollBarVisibility="Disabled"/>
-                </Grid>
+                </Border>
 
-                <Grid Margin="0,0,0,20">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Text="{Binding [FlashcardSideAnswer], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.Meta}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <TextBox Grid.Row="2"
-                             x:Name="AnswerTextBox"
-                             Height="120"
-                             MaxHeight="120"
-                             HorizontalAlignment="Stretch"
-                             VerticalContentAlignment="Top"
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                    <StackPanel x:Name="QuestionImageEmptyPanel" Orientation="Horizontal" Margin="0,0,16,0">
+                        <Button Content="{Binding [FlashcardAddImage], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="10,6"
+                                Click="QuestionAddImageButton_Click"/>
+                    </StackPanel>
+                    <StackPanel x:Name="QuestionImageAttachedPanel" Orientation="Horizontal" Margin="0,0,16,0" Visibility="Collapsed">
+                        <Border Width="72" Height="72"
+                                Background="{DynamicResource WindowBackground}"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
+                                Margin="0,0,10,0">
+                            <Image x:Name="QuestionImagePreview" Stretch="Uniform"/>
+                        </Border>
+                        <Button Content="{Binding [Remove], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="8,5"
+                                Click="QuestionRemoveImageButton_Click"/>
+                    </StackPanel>
+                    <StackPanel x:Name="QuestionAudioEmptyPanel" Orientation="Horizontal">
+                        <Button Content="{Binding [FlashcardAddAudio], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="10,6"
+                                Click="QuestionAddAudioButton_Click"/>
+                    </StackPanel>
+                    <StackPanel x:Name="QuestionAudioAttachedPanel" Orientation="Horizontal" Visibility="Collapsed">
+                        <Grid Margin="0,0,6,0">
+                            <Button x:Name="QuestionPlayButton"
+                                    Content="{icons:Icon Kind=Play, Size=13}"
+                                    Style="{StaticResource ToolbarIconButtonStyle}"
+                                    Width="26" Height="24" Padding="0"
+                                    ToolTip="{Binding [FlashcardPlayAudio], Source={StaticResource Loc}}"
+                                    Click="QuestionPlayAudioButton_Click"/>
+                            <Button x:Name="QuestionPauseButton"
+                                    Content="{icons:Icon Kind=Pause, Size=13}"
+                                    Style="{StaticResource ToolbarIconButtonStyle}"
+                                    Width="26" Height="24" Padding="0"
+                                    Visibility="Collapsed"
+                                    ToolTip="{Binding [FlashcardPauseAudio], Source={StaticResource Loc}}"
+                                    Click="QuestionPlayAudioButton_Click"/>
+                        </Grid>
+                        <Button Content="{icons:Icon Kind=Refresh, Size=13}"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Width="26" Height="24" Padding="0"
+                                Margin="0,0,6,0"
+                                ToolTip="{Binding [FlashcardRestartAudio], Source={StaticResource Loc}}"
+                                Click="QuestionRestartAudioButton_Click"/>
+                        <Button Content="{Binding [Remove], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="8,5"
+                                Click="QuestionRemoveAudioButton_Click"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Text="{Binding [FlashcardSideAnswer], Source={StaticResource Loc}}"
+                           FontSize="{StaticResource Type.Meta}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextColor}"
+                           Margin="0,0,0,8"/>
+                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}"
+                        Padding="9,7"
+                        MinHeight="120"
+                        MaxHeight="120"
+                        Margin="0,0,0,10">
+                    <TextBox x:Name="AnswerTextBox"
+                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
                              TextWrapping="Wrap"
                              AcceptsReturn="True"
                              VerticalScrollBarVisibility="Auto"
                              HorizontalScrollBarVisibility="Disabled"/>
-                </Grid>
+                </Border>
 
-                <Grid Margin="0,0,0,20">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Text="{Binding [FlashcardCategory], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.Meta}"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <ComboBox Grid.Row="2"
-                              x:Name="CategoryComboBox"
-                              ItemsSource="{Binding CategoryOptions}"
-                              Style="{StaticResource EditableComboBoxStyle}"
-                              Height="38"
-                              VerticalContentAlignment="Center"/>
-                </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                    <StackPanel x:Name="AnswerImageEmptyPanel" Orientation="Horizontal" Margin="0,0,16,0">
+                        <Button Content="{Binding [FlashcardAddImage], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="10,6"
+                                Click="AnswerAddImageButton_Click"/>
+                    </StackPanel>
+                    <StackPanel x:Name="AnswerImageAttachedPanel" Orientation="Horizontal" Margin="0,0,16,0" Visibility="Collapsed">
+                        <Border Width="72" Height="72"
+                                Background="{DynamicResource WindowBackground}"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
+                                Margin="0,0,10,0">
+                            <Image x:Name="AnswerImagePreview" Stretch="Uniform"/>
+                        </Border>
+                        <Button Content="{Binding [Remove], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="8,5"
+                                Click="AnswerRemoveImageButton_Click"/>
+                    </StackPanel>
+                    <StackPanel x:Name="AnswerAudioEmptyPanel" Orientation="Horizontal">
+                        <Button Content="{Binding [FlashcardAddAudio], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="10,6"
+                                Click="AnswerAddAudioButton_Click"/>
+                    </StackPanel>
+                    <StackPanel x:Name="AnswerAudioAttachedPanel" Orientation="Horizontal" Visibility="Collapsed">
+                        <Grid Margin="0,0,6,0">
+                            <Button x:Name="AnswerPlayButton"
+                                    Content="{icons:Icon Kind=Play, Size=13}"
+                                    Style="{StaticResource ToolbarIconButtonStyle}"
+                                    Width="26" Height="24" Padding="0"
+                                    ToolTip="{Binding [FlashcardPlayAudio], Source={StaticResource Loc}}"
+                                    Click="AnswerPlayAudioButton_Click"/>
+                            <Button x:Name="AnswerPauseButton"
+                                    Content="{icons:Icon Kind=Pause, Size=13}"
+                                    Style="{StaticResource ToolbarIconButtonStyle}"
+                                    Width="26" Height="24" Padding="0"
+                                    Visibility="Collapsed"
+                                    ToolTip="{Binding [FlashcardPauseAudio], Source={StaticResource Loc}}"
+                                    Click="AnswerPlayAudioButton_Click"/>
+                        </Grid>
+                        <Button Content="{icons:Icon Kind=Refresh, Size=13}"
+                                Style="{StaticResource ToolbarIconButtonStyle}"
+                                Width="26" Height="24" Padding="0"
+                                Margin="0,0,6,0"
+                                ToolTip="{Binding [FlashcardRestartAudio], Source={StaticResource Loc}}"
+                                Click="AnswerRestartAudioButton_Click"/>
+                        <Button Content="{Binding [Remove], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="8,5"
+                                Click="AnswerRemoveAudioButton_Click"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Text="{Binding [FlashcardCategory], Source={StaticResource Loc}}"
+                           FontSize="{StaticResource Type.Meta}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextColor}"
+                           Margin="0,0,0,8"/>
+                <ComboBox x:Name="CategoryComboBox"
+                          ItemsSource="{Binding CategoryOptions}"
+                          Style="{StaticResource EditableComboBoxStyle}"
+                          Background="{DynamicResource WindowBackground}"
+                          Height="38"
+                          Margin="0,0,0,20"
+                          VerticalContentAlignment="Center"/>
+
+                <TextBlock Text="{Binding [FlashcardHint], Source={StaticResource Loc}}"
+                           FontSize="{StaticResource Type.Meta}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextColor}"
+                           Margin="0,0,0,8"/>
+                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}"
+                        Padding="9,0"
+                        MinHeight="38"
+                        Margin="0,0,0,16">
+                    <TextBox x:Name="HintTextBox"
+                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
+                </Border>
             </StackPanel>
+            </ScrollViewer>
         </controls:OverlayDialogShell.Body>
 
         <controls:OverlayDialogShell.Footer>

@@ -66,6 +66,8 @@
   <data name="QuizUnflagQuestion" xml:space="preserve"><value>Pašalinti žymę</value></data>
   <data name="QuizFlagQuestionTooltip" xml:space="preserve"><value>Pažymėkite klausimą, kad galėtumėte jį greitai rasti klausimų sąraše</value></data>
   <data name="QuizFlaggedNavTooltipFormat" xml:space="preserve"><value>Klausimas {0} (pažymėtas)</value></data>
+  <data name="QuizAnsweredNavTooltipFormat" xml:space="preserve"><value>Klausimas {0} (atsakyta)</value></data>
+  <data name="QuizAnsweredFlaggedNavTooltipFormat" xml:space="preserve"><value>Klausimas {0} (atsakyta, pažymėtas)</value></data>
   <data name="QuizMultipleChoiceInstruction" xml:space="preserve"><value>Daugkartinis pasirinkimas – pažymėkite visus tinkamus variantus</value></data>
   <data name="QuizResultsTitleGreat" xml:space="preserve"><value>🎉 Puikiai padirbėta!</value></data>
   <data name="QuizResultsTitleGood" xml:space="preserve"><value>👍 Gerai padirbėta!</value></data>
@@ -273,6 +275,7 @@
   <data name="Success" xml:space="preserve"><value>Pavyko</value></data>
   <data name="NoContent" xml:space="preserve"><value>(Nėra turinio)</value></data>
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Paveikslėlių failai (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|Visi failai (*.*)|*.*</value></data>
+  <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Garso failai (*.mp3;*.wav)|*.mp3;*.wav|Visi failai (*.*)|*.*</value></data>
   <data name="SelectImageToInsert" xml:space="preserve"><value>Pasirinkite paveikslėlį įterpimui</value></data>
   <data name="FailedToInsertImage" xml:space="preserve"><value>Nepavyko įterpti paveikslėlio:</value></data>
   <data name="ImageInsertError" xml:space="preserve"><value>Paveikslėlio įterpimo klaida</value></data>
@@ -510,9 +513,13 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardsDashboard" xml:space="preserve"><value>Kortelės</value></data>
   <data name="FlashcardGroupsDashboardTitle" xml:space="preserve"><value>Mokymosi kortelės</value></data>
   <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Pradėkite sukurdami mokymosi korteles</value></data>
+  <data name="FlashcardsQuickCreateHint" xml:space="preserve"><value>Arba įveskite pavadinimą ir paspauskite Enter</value></data>
   <data name="CreateFlashcards" xml:space="preserve"><value>Sukurti flashcards</value></data>
   <data name="FlashcardSetCountFormat" xml:space="preserve"><value>{0} rinkiniai(-ių)</value></data>
   <data name="FlashcardCardsCountFormat" xml:space="preserve"><value>{0} kortelės(-ių)</value></data>
+  <data name="FlashcardDueCountFormat" xml:space="preserve"><value>{0} laukia</value></data>
+  <data name="FlashcardNextReviewTomorrow" xml:space="preserve"><value>Kita peržiūra: rytoj</value></data>
+  <data name="FlashcardNextReviewInDaysFormat" xml:space="preserve"><value>Kita peržiūra: po {0} d.</value></data>
   <data name="FlashcardSetUntitled" xml:space="preserve"><value>Be pavadinimo</value></data>
   <data name="AddFlashcard" xml:space="preserve"><value>Pridėti kortelę</value></data>
   <data name="EditFlashcard" xml:space="preserve"><value>Kortelė</value></data>
@@ -523,6 +530,16 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardQuestion" xml:space="preserve"><value>Klausimas</value></data>
   <data name="FlashcardAnswer" xml:space="preserve"><value>Atsakymas</value></data>
   <data name="FlashcardCategory" xml:space="preserve"><value>Kategorija</value></data>
+  <data name="FlashcardHint" xml:space="preserve"><value>Užuomina (neprivaloma)</value></data>
+  <data name="FlashcardAddImage" xml:space="preserve"><value>Pridėti paveikslėlį</value></data>
+  <data name="FlashcardAddAudio" xml:space="preserve"><value>Pridėti garso įrašą</value></data>
+  <data name="FlashcardPlayAudio" xml:space="preserve"><value>Groti garso įrašą</value></data>
+  <data name="FlashcardPauseAudio" xml:space="preserve"><value>Pristabdyti garso įrašą</value></data>
+  <data name="FlashcardRestartAudio" xml:space="preserve"><value>Groti iš pradžių</value></data>
+  <data name="FlashcardViewImage" xml:space="preserve"><value>Peržiūrėti paveikslėlį</value></data>
+  <data name="FlashcardMediaAttachError" xml:space="preserve"><value>Nepavyko pridėti failo - jis gali būti pažeistas arba nepalaikomo formato.</value></data>
+  <data name="FlashcardAudioPlaybackError" xml:space="preserve"><value>Nepavyko groti garso įrašo: {0}</value></data>
+  <data name="Remove" xml:space="preserve"><value>Pašalinti</value></data>
   <data name="ConvertToFlashcardsParseFailed" xml:space="preserve"><value>DI atsakyme nerasta tinkamų Q/A kortelių.</value></data>
   <data name="QuizPreviewTitle" xml:space="preserve"><value>Viktorina</value></data>
   <data name="QuizTitleHint" xml:space="preserve"><value>Viktorinos pavadinimas</value></data>
@@ -530,6 +547,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="QuizGeneratedWithModel" xml:space="preserve"><value>Sugeneruota su modeliu: {0}</value></data>
   <data name="QuizQuestionCountFormat" xml:space="preserve"><value>{0} klaus.</value></data>
   <data name="QuizAnsweredCountFormat" xml:space="preserve"><value>Atsakyta {0}/{1}</value></data>
+  <data name="QuizAnsweredLabel" xml:space="preserve"><value>Atsakyta</value></data>
   <data name="QuizScoreFormat" xml:space="preserve"><value>Rezultatas: {0}/{1} ({2}%)</value></data>
   <data name="QuizQuestionHeaderFormat" xml:space="preserve"><value>Klausimas {0} · {1}</value></data>
   <data name="QuizTypeSingleChoice" xml:space="preserve"><value>vienas atsakymas</value></data>
@@ -640,18 +658,53 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="Known" xml:space="preserve"><value>Moku</value></data>
   <data name="Unknown" xml:space="preserve"><value>Nemoku</value></data>
   <data name="FlashcardStatusNew" xml:space="preserve"><value>Nestudijuota</value></data>
+  <data name="FlashcardStatusLearning" xml:space="preserve"><value>Mokomasi</value></data>
+  <data name="FlashcardStatusMature" xml:space="preserve"><value>Įsitvirtinusi</value></data>
   <data name="FlashcardStatusAll" xml:space="preserve"><value>Visos</value></data>
+  <data name="FlashcardGridEmptyBeginCreating" xml:space="preserve"><value>Šiame rinkinyje dar nėra kortelių - spauskite +, kad pridėtumėte pirmą.</value></data>
+  <data name="FlashcardGridEmptyNoMatches" xml:space="preserve"><value>Pagal jūsų filtrus kortelių nerasta.</value></data>
+  <data name="FlashcardGridEmptyNextReviewTomorrow" xml:space="preserve"><value>Viskas peržiūrėta! Kita peržiūra: rytoj.</value></data>
+  <data name="FlashcardGridEmptyNextReviewInDaysFormat" xml:space="preserve"><value>Viskas peržiūrėta! Kita peržiūra: po {0} d.</value></data>
   <data name="FlashcardCategoryAll" xml:space="preserve"><value>Visos kategorijos</value></data>
   <data name="FlashcardFilters" xml:space="preserve"><value>Filtrai</value></data>
+  <data name="FlashcardOptionsTooltip" xml:space="preserve"><value>Parinktys</value></data>
+  <data name="FlashcardDueCardsOnly" xml:space="preserve"><value>Tik pakartotinos kortelės</value></data>
+  <data name="FlashcardShowHint" xml:space="preserve"><value>Rodyti užuominą</value></data>
+  <data name="FlashcardCramStart" xml:space="preserve"><value>Kimšti</value></data>
+  <data name="FlashcardCramTooltip" xml:space="preserve"><value>Kartokite visą rinkinį be apribojimų - tai neveikia jūsų kartojimo tvarkaraščio</value></data>
+  <data name="FlashcardCramBanner" xml:space="preserve"><value>Kimšimo režimas - tik praktika, jūsų tvarkaraštis nekeičiamas</value></data>
+  <data name="FlashcardCramLiveStatsFormat" xml:space="preserve"><value>Ratas {0}  ·  Peržiūrėta {1}</value></data>
   <data name="StudyModeStudiedFormat" xml:space="preserve"><value>Išmoktos kortelės: {0}</value></data>
   <data name="StudyModeComplete" xml:space="preserve"><value>Mokymosi sesija baigta</value></data>
   <data name="StudyModeCompleteTitle" xml:space="preserve"><value>Mokymosi sesija baigta</value></data>
   <data name="StudyModeCompleteMessage" xml:space="preserve"><value>Visos kortelės pažymėtos kaip žinomos. Grįžtate į kortelių sąrašą.</value></data>
+  <data name="StudyModeCompleteSummaryFormat" xml:space="preserve"><value>Šioje sesijoje peržiūrėjote {0} korteles.</value></data>
+  <data name="StudyModeCompleteBreakdownFormat" xml:space="preserve"><value>Vėl: {0}  ·  Sunku: {1}  ·  Gerai: {2}  ·  Lengva: {3}</value></data>
+  <data name="StudyModeCompleteNextDueFormat" xml:space="preserve"><value>{0} kortelių vėl bus reikia pakartoti per 3 dienas.</value></data>
+  <data name="StudyModeCompleteTimeFormat" xml:space="preserve"><value>Praleista laiko: {0}</value></data>
+  <data name="StudyModeAllCaughtUpTitle" xml:space="preserve"><value>Viskas pakartota</value></data>
+  <data name="StudyModeAllCaughtUpMessage" xml:space="preserve"><value>Šiuo metu nėra kortelių, kurias reikėtų pakartoti. Jei norite, galite mokytis vis tiek.</value></data>
+  <data name="StudyModeStudyAnyway" xml:space="preserve"><value>Mokytis vis tiek</value></data>
+  <data name="StudyModeLiveStatsFormat" xml:space="preserve"><value>Išmokta {0}  ·  Naujos {1}  ·  Mokomos {2}  ·  Įsisavintos {3}  ·  {4} reikia kartoti šiandien</value></data>
+  <data name="StudyModeFlipToGrade" xml:space="preserve"><value>Apverskite kortelę, kad įsivertintumėte</value></data>
+  <data name="StudyGradeAgain" xml:space="preserve"><value>Vėl</value></data>
+  <data name="StudyGradeHard" xml:space="preserve"><value>Sunku</value></data>
+  <data name="StudyGradeGood" xml:space="preserve"><value>Gerai</value></data>
+  <data name="StudyGradeEasy" xml:space="preserve"><value>Lengva</value></data>
   <data name="StudyModePrevious" xml:space="preserve"><value>Ankstesnė</value></data>
   <data name="StudyModeNext" xml:space="preserve"><value>Kita</value></data>
   <data name="StudyModeProgress" xml:space="preserve"><value>Kortelė {0} iš {1}</value></data>
   <data name="FlashcardFlipSpeed" xml:space="preserve"><value>Apvertimo greitis:</value></data>
   <data name="FlashcardFlipSpeedDescription" xml:space="preserve"><value>Valdykite, kaip greitai mokymosi kortelÄ—s suktÄ—s tarp klausimo ir atsakymo</value></data>
+  <data name="FlashcardIntervalDays" xml:space="preserve"><value>{0}d.</value></data>
+  <data name="FlashcardIntervalMonths" xml:space="preserve"><value>{0}mėn.</value></data>
+  <data name="FlashcardIntervalYears" xml:space="preserve"><value>{0}m.</value></data>
+  <data name="FlashcardAudioVolume" xml:space="preserve"><value>Kortelių garso lygis</value></data>
+  <data name="FlashcardAudioVolumeDescription" xml:space="preserve"><value>Taikoma visų mokymosi kortelių garso įrašams - nustatoma vieną kartą ir įsimenama</value></data>
+  <data name="FlashcardSchedulingAlgorithm" xml:space="preserve"><value>Kartojimo algoritmas</value></data>
+  <data name="FlashcardSchedulingAlgorithmTooltip" xml:space="preserve"><value>Pasirinkite kartojimo algoritmą, pagal kurį planuojami visi jūsų mokymosi kortelių rinkiniai. Taikoma visai kolekcijai, kaip Anki FSRS jungiklis.</value></data>
+  <data name="FlashcardSchedulingAlgorithmSwitchTitle" xml:space="preserve"><value>Keisti kartojimo algoritmą</value></data>
+  <data name="FlashcardSchedulingAlgorithmSwitchConfirmation" xml:space="preserve"><value>Pakeitus kartojimo algoritmą bus atstatyta visų mokymosi kortelių rinkinių mokymosi eiga – pakartojimo datos, žinomos ir nežinomos kortelių būsenos bei viskas, ką algoritmas išmoko apie jūsų korteles. Šio veiksmo anuliuoti negalima. Tęsti?</value></data>
   <data name="MindMapPreviewTitle" xml:space="preserve"><value>Minčių žemėlapis</value></data>
   <data name="MindMapsDashboard" xml:space="preserve"><value>Minčių žemėlapiai</value></data>
   <data name="MindMapsDashboardTitle" xml:space="preserve"><value>Minčių žemėlapiai</value></data>
@@ -764,7 +817,34 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapExportEmptyCanvas" xml:space="preserve"><value>Minčių žemėlapyje nėra eksportuojamo turinio.</value></data>
   <data name="CombineFlashcards" xml:space="preserve"><value>Sujungti flashcards</value></data>
   <data name="FlashcardHistory" xml:space="preserve"><value>Flashcards istorija</value></data>
+  <data name="FlashcardStatistics" xml:space="preserve"><value>Statistika</value></data>
+  <data name="FlashcardStatisticsTooltip" xml:space="preserve"><value>Peržiūrėkite šio rinkinio mokymosi statistiką</value></data>
   <data name="FlashcardActions" xml:space="preserve"><value>Flashcards veiksmai</value></data>
+  <data name="FlashcardExportDialogTitle" xml:space="preserve"><value>Eksportuoti korteles</value></data>
+  <data name="FlashcardExportDialogFilter" xml:space="preserve"><value>Nuosavas kortelių failas (*.scribflash)|*.scribflash|CSV failai (*.csv)|*.csv|Tekstiniai failai (*.txt)|*.txt|Visi failai (*.*)|*.*</value></data>
+  <data name="FlashcardExportComplete" xml:space="preserve"><value>Kortelės sėkmingai eksportuotos.</value></data>
+  <data name="FlashcardExportUnsupportedFormat" xml:space="preserve"><value>Nepalaikomas eksporto formatas.</value></data>
+  <data name="FlashcardExportFailedFormat" xml:space="preserve"><value>Nepavyko eksportuoti kortelių: {0}</value></data>
+  <data name="FlashcardImport" xml:space="preserve"><value>Importuoti kortelių rinkinį</value></data>
+  <data name="FlashcardImportDialogTitle" xml:space="preserve"><value>Importuoti kortelių rinkinį</value></data>
+  <data name="FlashcardImportDialogFilter" xml:space="preserve"><value>Visi kortelių failai (*.scribflash;*.csv;*.txt)|*.scribflash;*.csv;*.txt|Nuosavas kortelių failas (*.scribflash)|*.scribflash|CSV failai (*.csv)|*.csv|Tekstiniai failai (*.txt)|*.txt|Visi failai (*.*)|*.*</value></data>
+  <data name="FlashcardImportSuccessCount" xml:space="preserve"><value>Importuota {0} kortelių rinkinys(-ių).</value></data>
+  <data name="FlashcardImportFailed" xml:space="preserve"><value>Nepavyko nuskaityti šio kortelių failo.</value></data>
+  <data name="FlashcardImportFileNotFound" xml:space="preserve"><value>Kortelių failas nerastas.</value></data>
+  <data name="FlashcardImportReadFailed" xml:space="preserve"><value>Nepavyko nuskaityti kortelių failo.</value></data>
+  <data name="FlashcardImportParseError" xml:space="preserve"><value>Šis failas nėra tinkami kortelių duomenys.</value></data>
+  <data name="FlashcardImportUnsupportedFormat" xml:space="preserve"><value>Nepalaikomas importo formatas.</value></data>
+  <data name="FlashcardImportUnsupportedVersion" xml:space="preserve"><value>Šis kortelių failas sukurtas naujesnės Scriblucent versijos ir čia negali būti atidarytas.</value></data>
+  <data name="FlashcardImportKeepProgressTitle" xml:space="preserve"><value>Išsaugoti progreso duomenis?</value></data>
+  <data name="FlashcardImportKeepProgressPrompt" xml:space="preserve"><value>Viename ar keliuose šių failų yra mokymosi progresas. Išsaugoti šiuos duomenis, ar pradėti be istorijos?</value></data>
+  <data name="FlashcardImportKeepProgressKeep" xml:space="preserve"><value>Išsaugoti progresą</value></data>
+  <data name="FlashcardImportKeepProgressDiscard" xml:space="preserve"><value>Pradėti iš naujo</value></data>
+  <data name="FlashcardImportCards" xml:space="preserve"><value>Importuoti korteles</value></data>
+  <data name="FlashcardImportCardsDialogTitle" xml:space="preserve"><value>Importuoti korteles</value></data>
+  <data name="FlashcardImportCardsDialogFilter" xml:space="preserve"><value>CSV failai (*.csv)|*.csv|Tekstiniai failai (*.txt)|*.txt|Visi failai (*.*)|*.*</value></data>
+  <data name="FlashcardImportCardsAddedFormat" xml:space="preserve"><value>Pridėta {0} kortelė(-ių).</value></data>
+  <data name="FlashcardImportNoCardsFound" xml:space="preserve"><value>Šiame faile kortelių nerasta.</value></data>
+  <data name="FlashcardImportCardsFailedFormat" xml:space="preserve"><value>Nepavyko importuoti kortelių: {0}</value></data>
   <data name="CombineQuizzes" xml:space="preserve"><value>Sujungti testus</value></data>
   <data name="QuizHistory" xml:space="preserve"><value>Testų istorija</value></data>
   <data name="QuizActions" xml:space="preserve"><value>Testų veiksmai</value></data>
