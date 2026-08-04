@@ -2395,7 +2395,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             StudyModeHardButton.IsEnabled = false;
             StudyModeGoodButton.IsEnabled = false;
             StudyModeEasyButton.IsEnabled = false;
-            StudyModeFlipHintText.Visibility = Visibility.Collapsed;
+            StudyModeFlipHintText.Visibility = Visibility.Hidden;
 
             if (!_studyCompletionDialogShown)
             {
@@ -2431,7 +2431,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 StudyModeHardButton.IsEnabled = false;
                 StudyModeGoodButton.IsEnabled = false;
                 StudyModeEasyButton.IsEnabled = false;
-                StudyModeFlipHintText.Visibility = Visibility.Collapsed;
+                StudyModeFlipHintText.Visibility = Visibility.Hidden;
                 return;
             }
 
@@ -3188,7 +3188,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         StudyModeHardButton.IsEnabled = canGrade;
         StudyModeGoodButton.IsEnabled = canGrade;
         StudyModeEasyButton.IsEnabled = canGrade;
-        StudyModeFlipHintText.Visibility = canGrade ? Visibility.Collapsed : Visibility.Visible;
+        StudyModeFlipHintText.Visibility = canGrade ? Visibility.Hidden : Visibility.Visible;
         UpdateGradeIntervalPreviews();
     }
 

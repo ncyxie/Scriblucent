@@ -56,47 +56,44 @@
                          MouseDoubleClick="HistoryListBox_MouseDoubleClick">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,0,0,6"
-                                  UseLayoutRounding="True"
-                                  SnapsToDevicePixels="True"
-                                  ClipToBounds="False">
-                                <controls:CardShadowLayer/>
-                                <Border Padding="10"
-                                        CornerRadius="{StaticResource Radius.Control}">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-                                            <Setter Property="BorderBrush" Value="Transparent"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                                                    <Setter Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
-                                                    <Setter Property="BorderThickness" Value="2"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
-                                        <TextBlock Text="{Binding TimestampText}"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource TextColor}"
-                                                   Margin="0,0,0,4"/>
-                                        <TextBlock Grid.Row="1"
-                                                   Text="{Binding PreviewText}"
-                                                   Foreground="{DynamicResource TextColorSecondary}"
-                                                   TextWrapping="Wrap"
-                                                   MaxHeight="58"/>
-                                    </Grid>
-                                </Border>
-                            </Grid>
+                            <Border Margin="0,0,0,6"
+                                    Padding="10"
+                                    CornerRadius="{StaticResource Radius.Control}"
+                                    SnapsToDevicePixels="True"
+                                    UseLayoutRounding="True">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Text="{Binding TimestampText}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextColor}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Grid.Row="1"
+                                               Text="{Binding PreviewText}"
+                                               Foreground="{DynamicResource TextColorSecondary}"
+                                               TextWrapping="Wrap"
+                                               MaxHeight="58"/>
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>

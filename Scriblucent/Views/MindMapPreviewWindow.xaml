@@ -37,7 +37,8 @@
             <Setter Property="Margin" Value="0,0,6,0"/>
         </Style>
 
-        <Style x:Key="MindMapLayoutComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource FeatureToolbarComboBoxStyle}">
+        <Style x:Key="MindMapLayoutComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ChromeComboBoxStyle}">
+            <Setter Property="Height" Value="32"/>
             <Setter Property="Padding" Value="8,4"/>
         </Style>
 
@@ -213,7 +214,7 @@
                                 ToolTip="{Binding [MindMapToolbarSearch], Source={StaticResource Loc}}"
                                 Click="SearchPanelToggleButton_Click"/>
                         <Button x:Name="ArrangePanelToggleButton"
-                                Content="{icons:Icon MindMaps}"
+                                Content="{icons:Icon Settings}"
                                 Style="{StaticResource EditorToolIconButtonStyle}"
                                 ToolTip="{Binding [MindMapToolbarArrange], Source={StaticResource Loc}}"
                                 Click="ArrangePanelToggleButton_Click"/>

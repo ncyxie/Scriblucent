@@ -27,7 +27,7 @@ public class AppSettings
     /// </summary>
     public bool ReduceAnimations { get; set; }
     
-    public int AutoSaveIntervalSeconds { get; set; } = 30;
+    public int AutoSaveIntervalSeconds { get; set; } = 300;
 
     public bool IsRecentSectionExpanded { get; set; } = true;
 

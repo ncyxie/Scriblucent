@@ -2386,7 +2386,7 @@ namespace Scriblucent
                 return;
 
             // Create a blank root node with a default title
-            var rootNode = new MindMapNode { Text = "Central Topic" };
+            var rootNode = new MindMapNode { Text = "Central Topic", NodeShape = "Rounded" };
 
             var editor = new MindMapPreviewWindow(
                 rootNode,

@@ -246,7 +246,20 @@ public static class SmoothScrollBehavior
 
     private static void OnPreviewMouseWheel(State state, MouseWheelEventArgs e)
     {
-        if (e.Handled || state.ExternalDrive || !CanScroll(state.ScrollViewer))
+        if (e.Handled || state.ExternalDrive)
+            return;
+
+        // Hovering a specific scrollbar must drive that bar's axis — even if nested content
+        // would otherwise own the wheel, or vertical scroll would normally win.
+        if (TryScrollHoveredScrollbar(state, e))
+            return;
+
+        if (!CanScroll(state.ScrollViewer))
+            return;
+
+        // Nested ScrollViewers: tunnel hits the outer viewer first. Defer when the cursor is
+        // over a deeper scrollable viewer so wheel targets what the user is actually hovering.
+        if (ShouldDeferToDescendantScrollViewer(state.ScrollViewer, e))
             return;
 
         // Ctrl+wheel is reserved for zoom (e.g. mind-map canvas); do not consume it for scrolling.
@@ -265,6 +278,68 @@ public static class SmoothScrollBehavior
                 $"wheel\tdy={deltaY:F0}\tscrollable={state.ScrollViewer.ScrollableHeight:F0}\tviewport={state.ScrollViewer.ViewportHeight:F0}x{state.ScrollViewer.ViewportWidth:F0}");
         }
 
+        ApplyWheelDeltas(state, deltaX, deltaY);
+    }
+
+    /// <summary>
+    /// If the pointer is over this viewer's vertical or horizontal scrollbar, apply wheel to
+    /// that axis only and mark handled.
+    /// </summary>
+    private static bool TryScrollHoveredScrollbar(State state, MouseWheelEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
+            return false;
+
+        ScrollBar? hoveredBar = null;
+        for (var current = source; current != null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is ScrollBar bar)
+            {
+                hoveredBar = bar;
+                break;
+            }
+
+            if (ReferenceEquals(current, state.ScrollViewer))
+                break;
+        }
+
+        if (hoveredBar is null)
+            return false;
+
+        // Nested viewers: their scrollbars are visual descendants of the outer ScrollViewer.
+        // Only handle when this viewer is the immediate ScrollViewer owner of the bar.
+        if (!ReferenceEquals(FindOwningScrollViewer(hoveredBar), state.ScrollViewer))
+            return false;
+
+        var ticks = e.Delta / 120.0;
+        double deltaX = 0;
+        double deltaY = 0;
+
+        if (hoveredBar.Orientation == Orientation.Horizontal && state.ScrollViewer.ScrollableWidth > 0)
+            deltaX = -ticks * Math.Max(1, state.ScrollViewer.ViewportWidth) * WheelViewportRatio;
+        else if (hoveredBar.Orientation == Orientation.Vertical && state.ScrollViewer.ScrollableHeight > 0)
+            deltaY = -ticks * Math.Max(1, state.ScrollViewer.ViewportHeight) * WheelViewportRatio;
+        else
+            return false;
+
+        e.Handled = true;
+        ApplyWheelDeltas(state, deltaX, deltaY);
+        return true;
+    }
+
+    private static ScrollViewer? FindOwningScrollViewer(DependencyObject from)
+    {
+        for (var current = VisualTreeHelper.GetParent(from); current != null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is ScrollViewer scrollViewer)
+                return scrollViewer;
+        }
+
+        return null;
+    }
+
+    private static void ApplyWheelDeltas(State state, double deltaX, double deltaY)
+    {
         if (deltaX == 0 && deltaY == 0)
             return;
 
@@ -286,6 +361,27 @@ public static class SmoothScrollBehavior
             AddImpulse(state, vertical: false, deltaX);
 
         EnsureAnimating(state);
+    }
+
+    /// <summary>
+    /// True when the wheel hit-test lives under a descendant <see cref="ScrollViewer"/> that can
+    /// still scroll — including when the cursor is on that descendant's scrollbar.
+    /// </summary>
+    private static bool ShouldDeferToDescendantScrollViewer(ScrollViewer self, MouseWheelEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
+            return false;
+
+        for (var current = source; current != null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, self))
+                return false;
+
+            if (current is ScrollViewer nested && CanScroll(nested))
+                return true;
+        }
+
+        return false;
     }
 
     private static (double DeltaX, double DeltaY) ComputeWheelDelta(ScrollViewer scrollViewer, MouseWheelEventArgs e)

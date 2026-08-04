@@ -1,7 +1,6 @@
 <Window x:Class="Scriblucent.Views.QuizAttemptHistoryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         Title="Quiz History"
         Height="600"
@@ -38,49 +37,42 @@
                     <StackPanel Grid.Column="1"
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center"
+                                UseLayoutRounding="True"
+                                SnapsToDevicePixels="True"
                                 Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
-                        <Border Padding="10,6"
+                        <Border Style="{StaticResource HistorySummaryChipStyle}"
                                 Margin="10,0,0,0"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="{DynamicResource SelectionBackground}"
-                                BorderThickness="0">
+                                Background="{DynamicResource SelectionBackground}">
                             <StackPanel>
                                 <TextBlock Text="Average"
-                                           FontSize="{StaticResource Type.Chip}"
+                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
                                            Foreground="{DynamicResource TextColorSecondary}"/>
                                 <TextBlock Text="{Binding AverageScoreText}"
-                                           FontSize="{StaticResource Type.Meta}"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource HistorySummaryChipValueStyle}"
                                            Foreground="{DynamicResource TextColor}"/>
                             </StackPanel>
                         </Border>
-                        <Border Padding="10,6"
+                        <Border Style="{StaticResource HistorySummaryChipStyle}"
                                 Margin="8,0,0,0"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="{DynamicResource SelectionBackground}"
-                                BorderThickness="0">
+                                Background="{DynamicResource SelectionBackground}">
                             <StackPanel>
                                 <TextBlock Text="Best"
-                                           FontSize="{StaticResource Type.Chip}"
+                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
                                            Foreground="{DynamicResource TextColorSecondary}"/>
                                 <TextBlock Text="{Binding BestScoreText}"
-                                           FontSize="{StaticResource Type.Meta}"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource HistorySummaryChipValueStyle}"
                                            Foreground="{DynamicResource TextColor}"/>
                             </StackPanel>
                         </Border>
-                        <Border Padding="10,6"
+                        <Border Style="{StaticResource HistorySummaryChipStyle}"
                                 Margin="8,0,0,0"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="{DynamicResource SelectionBackground}"
-                                BorderThickness="0">
+                                Background="{DynamicResource SelectionBackground}">
                             <StackPanel>
                                 <TextBlock Text="Pass rate"
-                                           FontSize="{StaticResource Type.Chip}"
+                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
                                            Foreground="{DynamicResource TextColorSecondary}"/>
                                 <TextBlock Text="{Binding PassRateText}"
-                                           FontSize="{StaticResource Type.Meta}"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource HistorySummaryChipValueStyle}"
                                            Foreground="{DynamicResource TextColor}"/>
                             </StackPanel>
                         </Border>
@@ -96,118 +88,111 @@
                               Background="Transparent"
                               Padding="0"
                               ClipToBounds="True"
-                              behaviors:RoundedClipBehavior.IsEnabled="True"
-                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
-                              behaviors:SmoothScrollBehavior.IsEnabled="True"
+                              UseLayoutRounding="True"
+                              SnapsToDevicePixels="True"
                               Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding Attempts}"
+                                  UseLayoutRounding="True"
+                                  SnapsToDevicePixels="True"
                                   VirtualizingPanel.IsVirtualizing="True"
                                   VirtualizingPanel.VirtualizationMode="Recycling"
                                   VirtualizingPanel.ScrollUnit="Pixel"
                                   ScrollViewer.CanContentScroll="True">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <VirtualizingStackPanel IsItemsHost="True"/>
+                                <VirtualizingStackPanel IsItemsHost="True"
+                                                        UseLayoutRounding="True"
+                                                        SnapsToDevicePixels="True"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,0,0,10"
-                                      UseLayoutRounding="True"
-                                      SnapsToDevicePixels="True"
-                                      ClipToBounds="False">
-                                    <controls:CardShadowLayer/>
-                                    <Border Padding="16,14"
-                                            CornerRadius="10"
-                                            Background="{DynamicResource CardBackground}"
-                                            SnapsToDevicePixels="True"
-                                            UseLayoutRounding="True">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="BorderBrush" Value="Transparent"/>
-                                                <Setter Property="BorderThickness" Value="0"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Passed}" Value="True">
-                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentSuccess}"/>
-                                                        <Setter Property="BorderThickness" Value="2"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Passed}" Value="False">
-                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentDanger}"/>
-                                                        <Setter Property="BorderThickness" Value="2"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <TextBlock Text="{Binding QuizTitle}"
-                                                           FontSize="{StaticResource Type.SectionTitle}"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource TextColor}"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <StackPanel Orientation="Horizontal"
-                                                            Margin="0,6,0,0">
-                                                    <TextBlock Text="{Binding DateDisplay}"
-                                                               FontSize="{StaticResource Type.Caption}"
-                                                               Foreground="{DynamicResource TextColorSecondary}"/>
-                                                    <TextBlock Text="  -  "
-                                                               FontSize="{StaticResource Type.Caption}"
-                                                               Foreground="{DynamicResource TextColorSecondary}"/>
-                                                    <TextBlock Text="{Binding ScoreDisplay}"
-                                                               FontSize="{StaticResource Type.Caption}"
-                                                               Foreground="{DynamicResource TextColorSecondary}"/>
-                                                    <TextBlock Text="  -  "
-                                                               FontSize="{StaticResource Type.Caption}"
-                                                               Foreground="{DynamicResource TextColorSecondary}"/>
-                                                    <TextBlock Text="{Binding TimeDisplay}"
-                                                               FontSize="{StaticResource Type.Caption}"
-                                                               Foreground="{DynamicResource TextColorSecondary}"/>
-                                                </StackPanel>
+                                <Border Margin="0,0,0,10"
+                                        Padding="16,14"
+                                        CornerRadius="10"
+                                        Background="{DynamicResource CardBackground}"
+                                        SnapsToDevicePixels="True"
+                                        UseLayoutRounding="True">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Passed}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentSuccess}"/>
+                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Passed}" Value="False">
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentDanger}"/>
+                                                    <Setter Property="BorderThickness" Value="2"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid UseLayoutRounding="True"
+                                          SnapsToDevicePixels="True">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding QuizTitle}"
+                                                       FontSize="{StaticResource Type.SectionTitle}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextColor}"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <StackPanel Orientation="Horizontal"
+                                                        Margin="0,6,0,0">
+                                                <TextBlock Text="{Binding DateDisplay}"
+                                                           FontSize="{StaticResource Type.Caption}"
+                                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                                                <TextBlock Text="  -  "
+                                                           FontSize="{StaticResource Type.Caption}"
+                                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                                                <TextBlock Text="{Binding ScoreDisplay}"
+                                                           FontSize="{StaticResource Type.Caption}"
+                                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                                                <TextBlock Text="  -  "
+                                                           FontSize="{StaticResource Type.Caption}"
+                                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                                                <TextBlock Text="{Binding TimeDisplay}"
+                                                           FontSize="{StaticResource Type.Caption}"
+                                                           Foreground="{DynamicResource TextColorSecondary}"/>
                                             </StackPanel>
-                                            <Border Grid.Column="1"
-                                                    Padding="12,6"
-                                                    CornerRadius="{StaticResource Radius.Control}"
-                                                    VerticalAlignment="Center"
-                                                    Margin="14,0,0,0"
-                                                    BorderThickness="0">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border" BasedOn="{StaticResource HistoryStatusChipStyle}">
+                                                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Passed}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Passed}" Value="False">
+                                                            <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock>
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource HistoryStatusChipTextStyle}">
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Passed}" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                                                                <Setter Property="Text" Value="PASS"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Passed}" Value="False">
-                                                                <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
+                                                                <Setter Property="Text" Value="FAIL"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </Border.Style>
-                                                <TextBlock FontSize="{StaticResource Type.Meta}"
-                                                           FontWeight="Bold">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Passed}" Value="True">
-                                                                    <Setter Property="Text" Value="PASS"/>
-                                                                    <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Passed}" Value="False">
-                                                                    <Setter Property="Text" Value="FAIL"/>
-                                                                    <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-                                </Grid>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

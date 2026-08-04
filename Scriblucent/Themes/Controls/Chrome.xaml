@@ -148,8 +148,7 @@
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"
                 CornerRadius="{StaticResource Radius.Control}"
-                Padding="{TemplateBinding Padding}"
-                Effect="{StaticResource Elevation.Field}">
+                Padding="{TemplateBinding Padding}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -199,6 +198,7 @@
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="behaviors:ComboBoxWholeAreaOpenBehavior.IsEnabled" Value="True"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
         <!-- Dropdowns can be bound to the full note/set library (hundreds of items); without this
@@ -311,8 +311,7 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Control}"
-                                SnapsToDevicePixels="True"
-                                Effect="{StaticResource Elevation.Field}">
+                                SnapsToDevicePixels="True">
                         </Border>
                         <Border x:Name="FocusRing"
                                 BorderBrush="Transparent"
@@ -369,6 +368,126 @@
                             </ToggleButton.Template>
                         </ToggleButton>
 
+                        <Popup x:Name="PART_Popup"
+                               Placement="Bottom"
+                               PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                               HorizontalOffset="-16"
+                               VerticalOffset="0"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               PopupAnimation="None">
+                            <Border Background="Transparent"
+                                    Padding="16,4,16,18"
+                                    ClipToBounds="False">
+                                <Grid HorizontalAlignment="Left"
+                                      UseLayoutRounding="True"
+                                      SnapsToDevicePixels="True"
+                                      MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource PopupBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Control}"
+                                            IsHitTestVisible="False"
+                                            Effect="{StaticResource Elevation.Popup}"/>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource PopupBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Control}"
+                                            SnapsToDevicePixels="True">
+                                        <Border Background="Transparent"
+                                                CornerRadius="{StaticResource Radius.Control}"
+                                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                SnapsToDevicePixels="True">
+                                            <ScrollViewer Style="{StaticResource PopupListScrollViewerStyle}"
+                                                          MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                        </Trigger>
+                        <Trigger Property="IsDropDownOpen" Value="True">
+                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Form ComboBox: flat closed chrome (no Elevation.Field); popup keeps Elevation.Popup. -->
+    <Style x:Key="ChromeComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ComboBox}">
+                    <Grid SnapsToDevicePixels="True">
+                        <Border x:Name="ComboBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                SnapsToDevicePixels="True"/>
+                        <Border x:Name="FocusRing"
+                                BorderBrush="Transparent"
+                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                Background="Transparent"
+                                IsHitTestVisible="False"
+                                SnapsToDevicePixels="True"/>
+                        <ContentPresenter IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          Margin="10,0,34,0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"/>
+                        <ToggleButton x:Name="DropDownToggle"
+                                      Width="34"
+                                      HorizontalAlignment="Right"
+                                      Focusable="False"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      ClickMode="Press">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent">
+                                        <icons:AppIcon x:Name="Chevron"
+                                                       Kind="ChevronDown"
+                                                       Width="12"
+                                                       Height="12"
+                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       RenderTransformOrigin="0.5,0.5">
+                                            <icons:AppIcon.RenderTransform>
+                                                <RotateTransform Angle="0"/>
+                                            </icons:AppIcon.RenderTransform>
+                                        </icons:AppIcon>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Chevron" Property="RenderTransform">
+                                                <Setter.Value>
+                                                    <RotateTransform Angle="180"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
@@ -578,25 +697,21 @@
     </Style>
 
     <!-- Closed display: Window.LinkedNoteButtonText (null selection shows localized "None"). -->
-    <Style x:Key="LinkedNoteComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource FeatureToolbarComboBoxStyle}">
+    <Style x:Key="LinkedNoteComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource ChromeComboBoxStyle}">
         <Setter Property="MinWidth" Value="160"/>
         <Setter Property="MaxWidth" Value="240"/>
         <Setter Property="Margin" Value="0,0,8,0"/>
-        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Padding" Value="10,6"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ComboBox}">
                     <Grid SnapsToDevicePixels="True">
-                        <ToggleButton x:Name="ToggleButton"
-                                      Focusable="False"
-                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                      ClickMode="Press"
-                                      Template="{StaticResource AppComboBoxToggleButtonTemplate}"
-                                      Background="{TemplateBinding Background}"
-                                      BorderBrush="{TemplateBinding BorderBrush}"
-                                      BorderThickness="{TemplateBinding BorderThickness}"
-                                      Foreground="{TemplateBinding Foreground}"
-                                      Padding="{TemplateBinding Padding}"/>
+                        <Border x:Name="ComboBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                SnapsToDevicePixels="True"/>
                         <Border x:Name="FocusRing"
                                 BorderBrush="Transparent"
                                 BorderThickness="{StaticResource Field.FocusBorderThickness}"
@@ -606,10 +721,46 @@
                                 SnapsToDevicePixels="True"/>
                         <TextBlock IsHitTestVisible="False"
                                    Text="{Binding LinkedNoteButtonText, RelativeSource={RelativeSource AncestorType=Window}}"
-                                   Margin="10,0,30,0"
+                                   Margin="10,0,34,0"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{TemplateBinding Foreground}"/>
+                        <ToggleButton x:Name="DropDownToggle"
+                                      Width="34"
+                                      HorizontalAlignment="Right"
+                                      Focusable="False"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      ClickMode="Press">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent">
+                                        <icons:AppIcon x:Name="Chevron"
+                                                       Kind="ChevronDown"
+                                                       Width="12"
+                                                       Height="12"
+                                                       Foreground="{DynamicResource TextColorSecondary}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       RenderTransformOrigin="0.5,0.5">
+                                            <icons:AppIcon.RenderTransform>
+                                                <RotateTransform Angle="0"/>
+                                            </icons:AppIcon.RenderTransform>
+                                        </icons:AppIcon>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Chevron" Property="RenderTransform">
+                                                <Setter.Value>
+                                                    <RotateTransform Angle="180"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
@@ -619,15 +770,13 @@
                                AllowsTransparency="True"
                                Focusable="False"
                                PopupAnimation="None">
-                            <!-- Padding only for shadow falloff; MinWidth on the card (not shell) keeps left edge aligned.
-                                 Shadow plate is a sibling so list text is not rasterized by DropShadowEffect. -->
                             <Border Background="Transparent"
                                     Padding="16,4,16,18"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
                                       SnapsToDevicePixels="True"
-                                      MinWidth="{TemplateBinding ActualWidth}">
+                                      MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
                                     <Border Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
@@ -654,6 +803,9 @@
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                        </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
                         </Trigger>

@@ -198,8 +198,9 @@ internal static class MindMapFileService
         if (string.Equals(element.Attribute("FOLDED")?.Value, "true", StringComparison.OrdinalIgnoreCase))
             node.IsExpanded = false;
 
-        if (string.Equals(element.Attribute("STYLE")?.Value, "bubble", StringComparison.OrdinalIgnoreCase))
-            node.NodeShape = "Rounded";
+        // FreeMind "bubble" and the app default are both rounded rectangles. Fork/other styles
+        // inherit MindMapNode's Rounded default rather than sharp Rectangle.
+        node.NodeShape = "Rounded";
 
         // Real Freeplane files commonly store multi-line/formatted node titles as
         // <richcontent TYPE="NODE"> HTML instead of the TEXT attribute - fall back to it so such
@@ -314,6 +315,7 @@ internal static class MindMapFileService
         document.Tags ??= new List<string>();
         document.Root ??= new MindMapNode();
         document.Root.Children ??= new List<MindMapNode>();
+        SoftMigrateLegacyRectangleDefault(document.Root);
         document.CreatedAt = DateTime.UtcNow;
         document.LastModified = DateTime.Now;
         document.GroupId = null;
@@ -329,6 +331,34 @@ internal static class MindMapFileService
         var idMap = new Dictionary<Guid, Guid>();
         RegenerateNodeIds(document.Root, idMap);
         RemapCrossLinkTargets(document.Root, idMap);
+    }
+
+    /// <summary>
+    /// Older builds defaulted every new node to sharp <c>Rectangle</c>. When an entire tree is
+    /// still that legacy default (or empty), promote to rounded rectangle — the current product
+    /// default. Mixed trees that intentionally use Circle/Ellipse/Rectangle are left alone.
+    /// </summary>
+    public static void SoftMigrateLegacyRectangleDefault(MindMapNode root)
+    {
+        var nodes = new List<MindMapNode>();
+        CollectNodes(root, nodes);
+        if (nodes.Count == 0)
+            return;
+
+        if (!nodes.All(node =>
+                string.IsNullOrWhiteSpace(node.NodeShape)
+                || string.Equals(node.NodeShape, "Rectangle", StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        foreach (var node in nodes)
+            node.NodeShape = "Rounded";
+    }
+
+    private static void CollectNodes(MindMapNode node, List<MindMapNode> sink)
+    {
+        sink.Add(node);
+        foreach (var child in node.Children)
+            CollectNodes(child, sink);
     }
 
     private static void RegenerateNodeIds(MindMapNode node, Dictionary<Guid, Guid> idMap)

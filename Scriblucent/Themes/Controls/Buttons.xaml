@@ -308,7 +308,7 @@
         <Setter Property="Margin" Value="0,0,8,8"/>
     </Style>
 
-    <Style x:Key="LinkedNoteToolbarButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
+    <Style x:Key="ChromeLinkedNoteButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="LinkedNoteBorder"/>
         <Setter Property="Margin" Value="0,0,8,0"/>
         <Setter Property="MinWidth" Value="160"/>
@@ -317,28 +317,22 @@
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+        <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                IsHitTestVisible="False"
-                                Effect="{StaticResource Elevation.Field}"/>
-                        <Border x:Name="LinkedNoteBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"
-                                              RecognizesAccessKey="True"/>
-                        </Border>
-                    </Grid>
+                    <Border x:Name="LinkedNoteBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource Radius.Control}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="LinkedNoteBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
@@ -354,6 +348,8 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <Style x:Key="LinkedNoteToolbarButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource ChromeLinkedNoteButtonStyle}"/>
 
     <Style x:Key="ChromeDangerIconButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
         <Setter Property="Background" Value="{DynamicResource AccentDanger}"/>

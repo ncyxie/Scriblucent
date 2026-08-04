@@ -104,7 +104,7 @@
             </Setter>
         </Style>
 
-        <Style x:Key="QuizEditorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Style x:Key="QuizEditorComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ChromeComboBoxStyle}">
             <Setter Property="Height" Value="32"/>
         </Style>
     </Window.Resources>
@@ -174,7 +174,8 @@
                                 Style="{StaticResource EditorToolIconButtonStyle}"
                                 ToolTip="{Binding [EditQuiz], Source={StaticResource Loc}}"
                                 Click="ModeToggleButton_Click"/>
-                        <Button Content="{icons:Icon Refresh}"
+                        <Button x:Name="ShuffleQuestionsButton"
+                                Content="{icons:Icon Shuffle, Size=14}"
                                 Style="{StaticResource EditorToolIconButtonStyle}"
                                 ToolTip="{Binding [QuizShuffleTooltip], Source={StaticResource Loc}}"
                                 Click="ShuffleQuestionsButton_Click"/>

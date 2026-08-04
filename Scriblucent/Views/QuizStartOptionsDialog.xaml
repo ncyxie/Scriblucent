@@ -72,11 +72,10 @@
                         Margin="64,0,0,16">
                     <StackPanel>
                         <TextBlock Text="{Binding [QuizStartTimeLimitQuestion], Source={StaticResource Loc}}"
-                                   FontSize="{StaticResource Type.Caption}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"
-                                   Margin="0,0,0,7"/>
+                                   Style="{StaticResource FormOptionLabelStyle}"
+                                   Margin="0,0,0,8"/>
                         <ComboBox x:Name="TimeLimitComboBox"
+                                  Style="{StaticResource ChromeComboBoxStyle}"
                                   SelectedValuePath="Tag"
                                   SelectionChanged="TimeLimitComboBox_SelectionChanged">
                             <ComboBoxItem Content="{Binding [QuizTimeLimitNone], Source={StaticResource Loc}}" Tag="0"/>
@@ -95,16 +94,20 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="CustomTimeTextBox"
-                                     Grid.Column="0"
-                                     Height="42"
-                                     PreviewTextInput="NumberTextBox_PreviewTextInput"
-                                     PreviewKeyDown="NumberTextBox_PreviewKeyDown"/>
+                            <Border Grid.Column="0"
+                                    Style="{StaticResource ChromeFieldBorderStyle}"
+                                    Background="{DynamicResource WindowBackground}"
+                                    Padding="0"
+                                    MinHeight="36">
+                                <TextBox x:Name="CustomTimeTextBox"
+                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                         TextAlignment="Center"
+                                         PreviewTextInput="NumberTextBox_PreviewTextInput"
+                                         PreviewKeyDown="NumberTextBox_PreviewKeyDown"/>
+                            </Border>
                             <TextBlock Grid.Column="1"
                                        Text="{Binding [QuizTimeLimitCustomUnit], Source={StaticResource Loc}}"
-                                       FontSize="{StaticResource Type.Meta}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColor}"
+                                       Style="{StaticResource FormBodyTextStyle}"
                                        VerticalAlignment="Center"
                                        Margin="8,0,0,0"/>
                             <TextBlock Grid.Column="2"
@@ -127,28 +130,29 @@
                         Margin="64,0,0,16">
                     <StackPanel>
                         <TextBlock Text="{Binding [QuizStartPassingScoreQuestion], Source={StaticResource Loc}}"
-                                   FontSize="{StaticResource Type.Caption}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"
-                                   Margin="0,0,0,7"/>
+                                   Style="{StaticResource FormOptionLabelStyle}"
+                                   Margin="0,0,0,8"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="110"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="PassingScoreTextBox"
-                                     Grid.Column="0"
-                                     Height="42"
-                                     VerticalContentAlignment="Center"
-                                     TextAlignment="Center"
-                                     PreviewTextInput="NumberTextBox_PreviewTextInput"
-                                     PreviewKeyDown="NumberTextBox_PreviewKeyDown"/>
+                            <Border Grid.Column="0"
+                                    Style="{StaticResource ChromeFieldBorderStyle}"
+                                    Background="{DynamicResource WindowBackground}"
+                                    Padding="0"
+                                    MinHeight="36">
+                                <TextBox x:Name="PassingScoreTextBox"
+                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                         TextAlignment="Center"
+                                         PreviewTextInput="NumberTextBox_PreviewTextInput"
+                                         PreviewKeyDown="NumberTextBox_PreviewKeyDown"/>
+                            </Border>
                             <TextBlock Grid.Column="1"
                                        Text="%"
-                                       FontSize="{StaticResource Type.Meta}"
+                                       Style="{StaticResource FormBodyTextStyle}"
                                        FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColor}"
                                        VerticalAlignment="Center"
                                        Margin="8,0,0,0"/>
                             <TextBlock Grid.Column="2"
@@ -171,10 +175,8 @@
                         Margin="64,0,0,16">
                     <StackPanel>
                         <TextBlock Text="{Binding [QuizPreferencesHeading], Source={StaticResource Loc}}"
-                                   FontSize="{StaticResource Type.Caption}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"
-                                   Margin="0,0,0,7"/>
+                                   Style="{StaticResource FormOptionLabelStyle}"
+                                   Margin="0,0,0,8"/>
                         <CheckBox x:Name="ShuffleQuestionsCheckBox"
                                   Content="{Binding [QuizShuffleQuestionsLabel], Source={StaticResource Loc}}"
                                   Margin="0,0,0,8"/>

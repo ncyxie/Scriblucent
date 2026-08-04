@@ -16,7 +16,7 @@
             <Setter Property="Height" Value="32"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Style TargetType="ComboBox" BasedOn="{StaticResource ChromeComboBoxStyle}">
             <Setter Property="Height" Value="32"/>
         </Style>
 
@@ -150,60 +150,265 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0"
+                <!-- Appearance -->
+                <TextBlock Grid.Row="0"
+                           Text="{Binding [SettingsCategoryAppearance], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"
+                           Margin="2,0,0,8"/>
+
+                <Border Grid.Row="1"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
                         Padding="16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="22"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SettingsLanguageAndTheme], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="22"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="{Binding [Language], Source={StaticResource Loc}}"
-                                       Style="{StaticResource FormOptionLabelStyle}"/>
-                            <ComboBox Margin="0,8,0,0"
-                                      MinWidth="180"
-                                      SelectedValuePath="Tag"
-                                      SelectedValue="{Binding SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                                <ComboBoxItem Tag="en" Content="{Binding [LanguageEnglish], Source={StaticResource Loc}}"/>
-                                <ComboBoxItem Tag="lt" Content="{Binding [LanguageLithuanian], Source={StaticResource Loc}}"/>
-                            </ComboBox>
-                        </StackPanel>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [Language], Source={StaticResource Loc}}"
+                                           Style="{StaticResource FormOptionLabelStyle}"/>
+                                <ComboBox Margin="0,8,0,0"
+                                          MinWidth="180"
+                                          SelectedValuePath="Tag"
+                                          SelectedValue="{Binding SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                    <ComboBoxItem Tag="en" Content="{Binding [LanguageEnglish], Source={StaticResource Loc}}"/>
+                                    <ComboBoxItem Tag="lt" Content="{Binding [LanguageLithuanian], Source={StaticResource Loc}}"/>
+                                </ComboBox>
+                            </StackPanel>
 
-                        <Border Grid.Column="1"
-                                Width="1"
-                                Margin="10,0"
-                                Background="{DynamicResource BorderColor}"/>
+                            <Border Grid.Column="1"
+                                    Width="1"
+                                    Margin="10,0"
+                                    Background="{DynamicResource BorderColor}"/>
 
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="{Binding [Theme], Source={StaticResource Loc}}"
-                                       Style="{StaticResource FormOptionLabelStyle}"/>
-                            <ComboBox Margin="0,8,0,0"
-                                      MinWidth="180"
-                                      SelectedValuePath="Tag"
-                                      SelectedValue="{Binding SelectedTheme, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                                <ComboBoxItem Tag="System" Content="{Binding [ThemeSystem], Source={StaticResource Loc}}"/>
-                                <ComboBoxItem Tag="Light" Content="{Binding [ThemeLight], Source={StaticResource Loc}}"/>
-                                <ComboBoxItem Tag="Dark" Content="{Binding [ThemeDark], Source={StaticResource Loc}}"/>
-                            </ComboBox>
-                        </StackPanel>
-                    </Grid>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="{Binding [Theme], Source={StaticResource Loc}}"
+                                           Style="{StaticResource FormOptionLabelStyle}"/>
+                                <ComboBox Margin="0,8,0,0"
+                                          MinWidth="180"
+                                          SelectedValuePath="Tag"
+                                          SelectedValue="{Binding SelectedTheme, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                    <ComboBoxItem Tag="System" Content="{Binding [ThemeSystem], Source={StaticResource Loc}}"/>
+                                    <ComboBoxItem Tag="Light" Content="{Binding [ThemeLight], Source={StaticResource Loc}}"/>
+                                    <ComboBoxItem Tag="Dark" Content="{Binding [ThemeDark], Source={StaticResource Loc}}"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
                 </Border>
-                <Border Grid.Row="1"
+
+                <Border Grid.Row="2"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
-                        <TextBlock Text="{Binding [AiToolsSectionTitle], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormSectionTitleStyle}">
+                        <TextBlock Text="{Binding [MeasurementUnitSystem], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <ComboBox x:Name="MeasurementUnitSystemBox"
+                                  Margin="0,0,0,0"
+                                  SelectionChanged="MeasurementUnitSystemBox_SelectionChanged">
+                            <ComboBoxItem Tag="Imperial" Content="{Binding [MeasurementUnitImperial], Source={StaticResource Loc}}"/>
+                            <ComboBoxItem Tag="Metric" Content="{Binding [MeasurementUnitMetric], Source={StaticResource Loc}}"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="3"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Animations], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <CheckBox x:Name="ReduceAnimationsCheckBox"
+                                  Content="{Binding [ReduceAnimations], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  Checked="ReduceAnimationsCheckBox_Changed"
+                                  Unchecked="ReduceAnimationsCheckBox_Changed"/>
+                        <TextBlock Text="{Binding [ReduceAnimationsDescription], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="4"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Scrollbar], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <CheckBox x:Name="EnableScrollbarCheckBox"
+                                  Content="{Binding [EnableScrollbar], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  IsChecked="{Binding EnableScrollbar, Mode=TwoWay}"/>
+                        <StackPanel Margin="24,10,0,0"
+                                    IsEnabled="{Binding IsChecked, ElementName=EnableScrollbarCheckBox}"
+                                    Visibility="{Binding IsChecked, ElementName=EnableScrollbarCheckBox, Converter={StaticResource BoolToVis}}">
+                            <CheckBox x:Name="EnableVerticalScrollbarCheckBox"
+                                      Content="{Binding [EnableVerticalScrollbar], Source={StaticResource Loc}}"
+                                      HorizontalAlignment="Left"
+                                      IsChecked="{Binding EnableVerticalScrollbar, Mode=TwoWay}"/>
+                            <CheckBox x:Name="EnableHorizontalScrollbarCheckBox"
+                                      Margin="0,8,0,0"
+                                      Content="{Binding [EnableHorizontalScrollbar], Source={StaticResource Loc}}"
+                                      HorizontalAlignment="Left"
+                                      IsChecked="{Binding EnableHorizontalScrollbar, Mode=TwoWay}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Workspace -->
+                <TextBlock Grid.Row="7"
+                           Text="{Binding [SettingsCategoryWorkspace], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"/>
+
+                <Border Grid.Row="8"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="0"
+                                   Text="{Binding [RecentItemsLimit], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"
+                                   Margin="0,0,12,0"
+                                   VerticalAlignment="Center"/>
+
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <Border x:Name="RecentItemsLimitFieldBorder"
+                                    Style="{StaticResource ChromeFieldBorderStyle}"
+                                    Padding="6,0"
+                                    MinHeight="30"
+                                    Margin="0,0,8,0">
+                                <TextBox x:Name="RecentItemsLimitTextBox"
+                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                         Width="48"
+                                         TextAlignment="Right"
+                                         TextChanged="RecentItemsLimitTextBox_TextChanged"
+                                         LostFocus="RecentItemsLimitTextBox_LostFocus"
+                                         PreviewKeyDown="RecentItemsLimitTextBox_PreviewKeyDown"/>
+                            </Border>
+                            <TextBlock Text="{Binding [RecentItemsLimitUnit], Source={StaticResource Loc}}"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource FormHelperTextStyle}"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="RecentItemsLimitWarningText"
+                                   Grid.Row="1"
+                                   Grid.Column="0"
+                                   Grid.ColumnSpan="2"
+                                   Margin="0,8,0,0"
+                                   Foreground="{DynamicResource AccentDangerHover}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="AutoSaveSettingsCard"
+                        Grid.Row="9"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [AutoSave], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <CheckBox x:Name="EnableAutoSaveCheckBox"
+                                  Content="{Binding [EnableAutoSave], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  Checked="EnableAutoSaveCheckBox_Checked"
+                                  Unchecked="EnableAutoSaveCheckBox_Unchecked"/>
+
+                        <Grid Margin="0,12,0,0"
+                              Visibility="{Binding IsChecked, ElementName=EnableAutoSaveCheckBox, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding [AutoSaveFrequency], Source={StaticResource Loc}}"
+                                       Style="{StaticResource FormOptionLabelStyle}"/>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        HorizontalAlignment="Right">
+                                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                        Padding="6,0"
+                                        MinHeight="30"
+                                        Margin="0,0,8,0">
+                                    <TextBox x:Name="AutoSaveIntervalTextBox"
+                                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                             Width="48"
+                                             TextAlignment="Right"
+                                             TextChanged="AutoSaveIntervalTextBox_TextChanged"
+                                             LostFocus="AutoSaveIntervalTextBox_LostFocus"
+                                             PreviewKeyDown="AutoSaveIntervalTextBox_PreviewKeyDown"/>
+                                </Border>
+                                <ComboBox x:Name="AutoSaveIntervalUnitBox"
+                                          Width="92"
+                                          SelectionChanged="AutoSaveIntervalUnitBox_SelectionChanged">
+                                    <ComboBoxItem Tag="Seconds" Content="{Binding [AutoSaveUnitSeconds], Source={StaticResource Loc}}"/>
+                                    <ComboBoxItem Tag="Minutes" Content="{Binding [AutoSaveUnitMinutes], Source={StaticResource Loc}}"/>
+                                    <ComboBoxItem Tag="Hours" Content="{Binding [AutoSaveUnitHours], Source={StaticResource Loc}}"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- AI Tools -->
+                <TextBlock Grid.Row="5"
+                           Text="{Binding [SettingsCategoryAiTools], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"/>
+
+                <Border Grid.Row="6"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [AiToolsDefaultModel], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormOptionLabelStyle}">
                             <TextBlock.ContextMenu>
                                 <ContextMenu x:Name="FlashcardModelContextMenu">
                                     <MenuItem Tag="Qwen3.5-0.8B" Click="FlashcardModelMenuItem_Click"/>
@@ -212,9 +417,6 @@
                                 </ContextMenu>
                             </TextBlock.ContextMenu>
                         </TextBlock>
-
-                        <TextBlock Text="{Binding [AiToolsDefaultModel], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormOptionLabelStyle}"/>
 
                         <ComboBox x:Name="FlashcardModelBox"
                                   Margin="0,6,8,8"
@@ -369,235 +571,68 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="2"
-        Margin="0,14,0,0"
-        Background="{DynamicResource SidebarBackground}"
-        BorderThickness="0"
-        CornerRadius="{StaticResource Radius.Card}"
-        Padding="16,12">
+                <!-- Flashcards -->
+                <TextBlock Grid.Row="10"
+                           Text="{Binding [SettingsCategoryFlashcards], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"/>
 
+                <Border Grid.Row="11"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
                     <StackPanel>
-                        <TextBlock Text="{Binding [MeasurementUnitSystem], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormOptionLabelStyle}"/>
-
-                        <ComboBox x:Name="MeasurementUnitSystemBox"
-                                  Margin="0,8,0,0"
-                                  SelectionChanged="MeasurementUnitSystemBox_SelectionChanged">
-                            <ComboBoxItem Tag="Imperial" Content="{Binding [MeasurementUnitImperial], Source={StaticResource Loc}}"/>
-                            <ComboBoxItem Tag="Metric" Content="{Binding [MeasurementUnitMetric], Source={StaticResource Loc}}"/>
+                        <TextBlock Text="{Binding [FlashcardSchedulingAlgorithm], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <TextBlock Text="{Binding [FlashcardSchedulingAlgorithmTooltip], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormHelperTextStyle}"
+                                   Margin="0,0,0,10"/>
+                        <ComboBox x:Name="FlashcardSchedulingAlgorithmBox"
+                                  MinWidth="180"
+                                  HorizontalAlignment="Left"
+                                  SelectionChanged="FlashcardSchedulingAlgorithmBox_SelectionChanged">
+                            <ComboBoxItem Content="SM-2" Tag="Sm2"/>
+                            <ComboBoxItem Content="FSRS-6" Tag="Fsrs6"/>
                         </ComboBox>
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="3"
+                <Border Grid.Row="12"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0"
-                                   Grid.Column="0"
-                                   Text="{Binding [RecentItemsLimit], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormOptionLabelStyle}"/>
-
-                        <StackPanel Grid.Row="0"
-                                    Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    HorizontalAlignment="Right">
-                            <!-- Level 5 form control: Chrome field E.Field + R (not a bare transparent box). -->
-                            <Border x:Name="RecentItemsLimitFieldBorder"
-                                    Style="{StaticResource ChromeFieldBorderStyle}"
-                                    Padding="6,0"
-                                    MinHeight="30"
-                                    Margin="0,0,8,0">
-                                <TextBox x:Name="RecentItemsLimitTextBox"
-                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                         Width="48"
-                                         TextAlignment="Right"
-                                         TextChanged="RecentItemsLimitTextBox_TextChanged"
-                                         LostFocus="RecentItemsLimitTextBox_LostFocus"
-                                         PreviewKeyDown="RecentItemsLimitTextBox_PreviewKeyDown"/>
-                            </Border>
-                            <TextBlock Text="{Binding [RecentItemsLimitUnit], Source={StaticResource Loc}}"
+                    <StackPanel>
+                        <TextBlock Text="{Binding [FlashcardAudioVolume], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <TextBlock Text="{Binding [FlashcardAudioVolumeDescription], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormHelperTextStyle}"
+                                   Margin="0,0,0,10"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Slider x:Name="FlashcardAudioVolumeSlider"
+                                    Width="220"
+                                    Minimum="0"
+                                    Maximum="100"
+                                    TickFrequency="10"
+                                    IsSnapToTickEnabled="True"
+                                    ValueChanged="FlashcardAudioVolumeSlider_ValueChanged"/>
+                            <TextBlock x:Name="FlashcardAudioVolumeValueText"
                                        VerticalAlignment="Center"
-                                       Style="{StaticResource FormHelperTextStyle}"/>
+                                       Margin="10,0,0,0"
+                                       MinWidth="36"
+                                       FontSize="{StaticResource Type.Caption}"
+                                       Foreground="{DynamicResource TextColorSecondary}"/>
                         </StackPanel>
-
-                        <TextBlock x:Name="RecentItemsLimitWarningText"
-                                   Grid.Row="1"
-                                   Grid.Column="0"
-                                   Grid.ColumnSpan="2"
-                                   Margin="0,8,0,0"
-                                   Foreground="{DynamicResource AccentDangerHover}"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"/>
-                    </Grid>
-                </Border>
-
-                <Border Grid.Row="4"
-                        Margin="0,14,0,0"
-                        Background="{DynamicResource SidebarBackground}"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource Radius.Card}"
-                        Padding="16,12">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <TextBlock Text="{Binding [Animations], Source={StaticResource Loc}}"
-                                       Style="{StaticResource FormOptionLabelStyle}"/>
-
-                            <CheckBox x:Name="ReduceAnimationsCheckBox"
-                                      Grid.Column="1"
-                                      Content="{Binding [ReduceAnimations], Source={StaticResource Loc}}"
-                                      HorizontalAlignment="Right"
-                                      VerticalAlignment="Center"
-                                      Checked="ReduceAnimationsCheckBox_Changed"
-                                      Unchecked="ReduceAnimationsCheckBox_Changed"/>
-                        </Grid>
-
-                        <TextBlock Text="{Binding [ReduceAnimationsDescription], Source={StaticResource Loc}}"
-                                   Margin="0,8,0,0"
-                                   Style="{StaticResource FormHelperTextStyle}"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Scrollbar and Auto-Save Settings -->
-                <Border Grid.Row="5"
-        Margin="0,14,0,0"
-        Background="{DynamicResource SidebarBackground}"
-        BorderThickness="0"
-        CornerRadius="{StaticResource Radius.Card}"
-        Padding="16,12">
-                    <StackPanel>
-                        <!-- Scrollbar Setting -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                <!-- Activity -->
+                <TextBlock Grid.Row="13"
+                           Text="{Binding [SettingsCategoryActivity], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                            <TextBlock Text="{Binding [Scrollbar], Source={StaticResource Loc}}"
-                                       Style="{StaticResource FormOptionLabelStyle}"/>
-                            <StackPanel Grid.Column="1"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Center">
-                                <CheckBox x:Name="EnableScrollbarCheckBox"
-                                          Content="{Binding [EnableScrollbar], Source={StaticResource Loc}}"
-                                          HorizontalAlignment="Left"
-                                          IsChecked="{Binding EnableScrollbar, Mode=TwoWay}"/>
-                                <StackPanel Margin="24,10,0,0"
-                                            IsEnabled="{Binding IsChecked, ElementName=EnableScrollbarCheckBox}"
-                                            Visibility="{Binding IsChecked, ElementName=EnableScrollbarCheckBox, Converter={StaticResource BoolToVis}}">
-                                    <CheckBox x:Name="EnableVerticalScrollbarCheckBox"
-                                              Content="{Binding [EnableVerticalScrollbar], Source={StaticResource Loc}}"
-                                              HorizontalAlignment="Left"
-                                              IsChecked="{Binding EnableVerticalScrollbar, Mode=TwoWay}"/>
-                                    <CheckBox x:Name="EnableHorizontalScrollbarCheckBox"
-                                              Margin="0,8,0,0"
-                                              Content="{Binding [EnableHorizontalScrollbar], Source={StaticResource Loc}}"
-                                              HorizontalAlignment="Left"
-                                              IsChecked="{Binding EnableHorizontalScrollbar, Mode=TwoWay}"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Grid>
-
-                    </StackPanel>
-                </Border>
-
-                    <!-- Auto-Save Setting -->
-                    <Border x:Name="AutoSaveSettingsCard"
-                            Grid.Row="6"
-                            Margin="0,14,0,0"
-                            Background="{DynamicResource SidebarBackground}"
-                            BorderThickness="0"
-                            CornerRadius="{StaticResource Radius.Card}">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Padding" Value="16,12"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsChecked, ElementName=EnableAutoSaveCheckBox}" Value="True">
-                                        <Setter Property="Padding" Value="16,12"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <StackPanel>
-                            <!-- Auto-Save Enable/Disable -->
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding [AutoSave], Source={StaticResource Loc}}"
-                                           Style="{StaticResource FormOptionLabelStyle}"/>
-
-                                <CheckBox Grid.Column="1"
-                      x:Name="EnableAutoSaveCheckBox"
-                      Content="{Binding [EnableAutoSave], Source={StaticResource Loc}}"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Center"
-                      Checked="EnableAutoSaveCheckBox_Checked"
-                      Unchecked="EnableAutoSaveCheckBox_Unchecked"/>
-                            </Grid>
-
-                            <!-- Auto-Save Interval Control -->
-                            <Grid Margin="0,8,0,0"
-                                  Visibility="{Binding IsChecked, ElementName=EnableAutoSaveCheckBox, Converter={StaticResource BoolToVis}}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding [AutoSaveFrequency], Source={StaticResource Loc}}"
-                                           Style="{StaticResource FormOptionLabelStyle}"/>
-
-                                <StackPanel Grid.Column="1"
-                                            Orientation="Horizontal"
-                                            HorizontalAlignment="Right">
-                                    <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                                            Padding="6,0"
-                                            MinHeight="30"
-                                            Margin="0,0,8,0">
-                                        <TextBox x:Name="AutoSaveIntervalTextBox"
-                                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                                 Width="48"
-                                                 TextAlignment="Right"
-                                                 TextChanged="AutoSaveIntervalTextBox_TextChanged"
-                                                 LostFocus="AutoSaveIntervalTextBox_LostFocus"
-                                                 PreviewKeyDown="AutoSaveIntervalTextBox_PreviewKeyDown"/>
-                                    </Border>
-                                    <ComboBox x:Name="AutoSaveIntervalUnitBox"
-                                              Width="92"
-                                              SelectionChanged="AutoSaveIntervalUnitBox_SelectionChanged">
-                                        <ComboBoxItem Tag="Seconds" Content="{Binding [AutoSaveUnitSeconds], Source={StaticResource Loc}}"/>
-                                        <ComboBoxItem Tag="Minutes" Content="{Binding [AutoSaveUnitMinutes], Source={StaticResource Loc}}"/>
-                                        <ComboBoxItem Tag="Hours" Content="{Binding [AutoSaveUnitHours], Source={StaticResource Loc}}"/>
-                                    </ComboBox>
-                                </StackPanel>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Activity Summary Settings -->
-                <Border Grid.Row="7"
-                        Margin="0,14,0,0"
+                <Border Grid.Row="14"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -638,9 +673,12 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Reset Factory Settings Section -->
-                <Border Grid.Row="8"
-                        Margin="0,14,0,0"
+                <!-- Data -->
+                <TextBlock Grid.Row="15"
+                           Text="{Binding [SettingsCategoryData], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"/>
+
+                <Border Grid.Row="16"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -660,7 +698,7 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Grid.Row="9" Margin="0,20,0,0">
+                <Grid Grid.Row="17" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

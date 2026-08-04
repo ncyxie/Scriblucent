@@ -16,12 +16,22 @@
   <data name="AddNote" xml:space="preserve"><value>Pridėti užrašą</value></data>
   <data name="About" xml:space="preserve"><value>Apie</value></data>
   <data name="Settings" xml:space="preserve"><value>Nustatymai</value></data>
+  <data name="SettingsCategoryAppearance" xml:space="preserve"><value>Išvaizda</value></data>
+  <data name="SettingsCategoryWorkspace" xml:space="preserve"><value>Darbo erdvė</value></data>
+  <data name="SettingsCategoryFlashcards" xml:space="preserve"><value>Kortelės</value></data>
+  <data name="SettingsCategoryAiTools" xml:space="preserve"><value>DI įrankiai</value></data>
+  <data name="SettingsCategoryActivity" xml:space="preserve"><value>Aktyvumas</value></data>
+  <data name="SettingsCategoryData" xml:space="preserve"><value>Duomenys</value></data>
+  <data name="SettingsLanguageAndTheme" xml:space="preserve"><value>Kalba ir tema</value></data>
   <data name="RecentNotes" xml:space="preserve"><value>Naujausi užrašai</value></data>
   <data name="RecentFlashcards" xml:space="preserve"><value>Naujausios kortelės</value></data>
   <data name="RecentMindMaps" xml:space="preserve"><value>Naujausi minčių žemėlapiai</value></data>
   <data name="RecentQuizzes" xml:space="preserve"><value>Naujausi testai</value></data>
   <data name="Open" xml:space="preserve"><value>Atidaryti</value></data>
   <data name="Delete" xml:space="preserve"><value>Ištrinti</value></data>
+  <data name="DeleteFlashcard" xml:space="preserve"><value>Ištrinti kortelę</value></data>
+  <data name="DeleteFlashcardConfirmation" xml:space="preserve"><value>Ar tikrai norite ištrinti šią kortelę?</value></data>
+  <data name="Edit" xml:space="preserve"><value>Redaguoti</value></data>
   <data name="Close" xml:space="preserve"><value>Uždaryti</value></data>
   <data name="Cancel" xml:space="preserve"><value>Atšaukti</value></data>
   <data name="Ok" xml:space="preserve"><value>Gerai</value></data>
@@ -58,6 +68,8 @@
   <data name="QuizLinkedNoteOpenTooltip" xml:space="preserve"><value>Atidaryti susietą užrašą: {0}</value></data>
   <data name="QuizLinkedNoteSelectorTooltip" xml:space="preserve"><value>Pasirinkite šio elemento šaltinio užrašą.</value></data>
   <data name="QuizModeTitle" xml:space="preserve"><value>Viktorinos režimas</value></data>
+  <data name="QuizMode" xml:space="preserve"><value>Viktorinos režimas</value></data>
+  <data name="QuizNoQuestions" xml:space="preserve"><value>Šioje viktorinoje nėra klausimų.</value></data>
   <data name="QuizQuestionProgressFormat" xml:space="preserve"><value>Klausimas {0} iš {1}</value></data>
   <data name="QuizNavigationTitle" xml:space="preserve"><value>Klausimai</value></data>
   <data name="QuizJumpToQuestionTooltipFormat" xml:space="preserve"><value>Eiti į klausimą {0}</value></data>
@@ -500,6 +512,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ConvertToFlashcardsStatusDownloadingModel" xml:space="preserve"><value>Atsiunčiamas pasirinktas Qwen modelis...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel08B" xml:space="preserve"><value>Atsiunčiamas Qwen3.5-0.8B modelis...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel2B" xml:space="preserve"><value>Atsiunčiamas Qwen3.5-2B modelis...</value></data>
+  <data name="ConvertToFlashcardsStatusDownloadingModel4B" xml:space="preserve"><value>Atsiunčiamas Qwen3.5-4B modelis...</value></data>
   <data name="ConvertToFlashcardsStatusAssetsReady" xml:space="preserve"><value>DI resursai paruošti.</value></data>
   <data name="ConvertToFlashcardsStatusProcessing" xml:space="preserve"><value>DI generuoja mokymosi korteles...</value></data>
   <data name="ConvertToFlashcardsStatusFinalizing" xml:space="preserve"><value>Baigiama formuoti korteles...</value></data>
@@ -705,7 +718,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardAudioVolume" xml:space="preserve"><value>Kortelių garso lygis</value></data>
   <data name="FlashcardAudioVolumeDescription" xml:space="preserve"><value>Taikoma visų mokymosi kortelių garso įrašams - nustatoma vieną kartą ir įsimenama</value></data>
   <data name="FlashcardSchedulingAlgorithm" xml:space="preserve"><value>Kartojimo algoritmas</value></data>
-  <data name="FlashcardSchedulingAlgorithmTooltip" xml:space="preserve"><value>Pasirinkite kartojimo algoritmą, pagal kurį planuojami visi jūsų mokymosi kortelių rinkiniai. Taikoma visai kolekcijai, kaip Anki FSRS jungiklis.</value></data>
+  <data name="FlashcardSchedulingAlgorithmTooltip" xml:space="preserve"><value>Pasirinkite, kaip planuojami kortelių kartojimai. Taikoma visiems rinkiniams.</value></data>
   <data name="FlashcardSchedulingAlgorithmSwitchTitle" xml:space="preserve"><value>Keisti kartojimo algoritmą</value></data>
   <data name="FlashcardSchedulingAlgorithmSwitchConfirmation" xml:space="preserve"><value>Pakeitus kartojimo algoritmą bus atstatyta visų mokymosi kortelių rinkinių mokymosi eiga – pakartojimo datos, žinomos ir nežinomos kortelių būsenos bei viskas, ką algoritmas išmoko apie jūsų korteles. Šio veiksmo anuliuoti negalima. Tęsti?</value></data>
   <data name="MindMapPreviewTitle" xml:space="preserve"><value>Minčių žemėlapis</value></data>
@@ -795,6 +808,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapCopyStyle" xml:space="preserve"><value>Kopijuoti stilių</value></data>
   <data name="MindMapPasteStyle" xml:space="preserve"><value>Įklijuoti stilių</value></data>
   <data name="MindMapCannotCutRoot" xml:space="preserve"><value>Šakninio mazgo iškirpti negalima.</value></data>
+  <data name="MindMapCannotDeleteRoot" xml:space="preserve"><value>Šakninio mazgo ištrinti negalima.</value></data>
+  <data name="MindMapSelectNodeToDelete" xml:space="preserve"><value>Pasirinkite mazgą, kurį norite ištrinti.</value></data>
   <data name="MindMapPasteAsOutline" xml:space="preserve"><value>Įklijuoti kaip struktūrą</value></data>
   <data name="MindMapImport" xml:space="preserve"><value>Importuoti minčių žemėlapį</value></data>
   <data name="MindMapImportDialogTitle" xml:space="preserve"><value>Importuoti minčių žemėlapį</value></data>

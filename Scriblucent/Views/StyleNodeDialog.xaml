@@ -189,8 +189,8 @@
                                       Width="180"
                                       SelectedValuePath="Tag"
                                       SelectionChanged="ShapeComboBox_SelectionChanged">
-                                <ComboBoxItem Content="{Binding [ShapeRectangle], Source={StaticResource Loc}}" Tag="Rectangle"/>
                                 <ComboBoxItem Content="{Binding [ShapeRounded], Source={StaticResource Loc}}" Tag="Rounded"/>
+                                <ComboBoxItem Content="{Binding [ShapeRectangle], Source={StaticResource Loc}}" Tag="Rectangle"/>
                                 <ComboBoxItem Content="{Binding [ShapeCircle], Source={StaticResource Loc}}" Tag="Circle"/>
                                 <ComboBoxItem Content="{Binding [ShapeEllipse], Source={StaticResource Loc}}" Tag="Ellipse"/>
                             </ComboBox>
@@ -275,6 +275,7 @@
                                Margin="0,16,0,8"/>
                     <ComboBox x:Name="LinkedNoteComboBox"
                               HorizontalAlignment="Stretch"
+                              Style="{StaticResource ChromeComboBoxStyle}"
                               SelectedValuePath="Tag"
                               SelectionChanged="LinkedNoteComboBox_SelectionChanged"/>
                 </StackPanel>

@@ -109,6 +109,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private Border? _pendingDragBorder;
     private bool _isManualPositioningMode;
     private bool _suppressManualPositionCapture;
+    private bool _isViewPanning;
+    private Point _viewPanLastPos;
     private readonly Dictionary<MindMapNode, Point> _manualPositions = new();
     private string _lastSavedSnapshot = string.Empty;
     private bool _isInitializing = true;
@@ -190,6 +192,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     {
         _root = root;
         MindMapNodeIconCatalog.NormalizeTreeIcons(_root);
+        MindMapFileService.SoftMigrateLegacyRectangleDefault(_root);
         _openNoteAction = openNoteAction;
         if (noteOptions != null)
         {
@@ -231,6 +234,12 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             MapCanvas.MouseMove += MapCanvas_MouseMove;
             MapCanvas.PreviewMouseLeftButtonUp += MapCanvas_PreviewMouseLeftButtonUp;
             MapCanvas.LostMouseCapture += MapCanvas_LostMouseCapture;
+            MapScrollViewer.PreviewMouseLeftButtonDown += MapScrollViewer_PreviewMouseLeftButtonDown;
+            MapScrollViewer.PreviewMouseDown += MapScrollViewer_PreviewMouseDownForPan;
+            MapScrollViewer.PreviewMouseMove += MapScrollViewer_PreviewMouseMoveForPan;
+            MapScrollViewer.PreviewMouseLeftButtonUp += MapScrollViewer_PreviewMouseButtonUpForPan;
+            MapScrollViewer.PreviewMouseUp += MapScrollViewer_PreviewMouseUpForPan;
+            MapScrollViewer.LostMouseCapture += MapScrollViewer_LostMouseCaptureForPan;
             RebuildMap(animate: false);
             MarkCurrentStateSaved();
             _isInitializing = false;
@@ -2921,7 +2930,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             PushUndoSnapshot();
             var newNode = new MindMapNode
             {
-                Text = NormalizeNodeText(dialog.InputText)
+                Text = NormalizeNodeText(dialog.InputText),
+                NodeShape = "Rounded"
             };
 
             parentNode.Children.Add(newNode);
@@ -2960,7 +2970,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             PushUndoSnapshot();
             var newNode = new MindMapNode
             {
-                Text = NormalizeNodeText(dialog.InputText)
+                Text = NormalizeNodeText(dialog.InputText),
+                NodeShape = "Rounded"
             };
 
             parent.Children.Add(newNode);
@@ -3580,6 +3591,108 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             MapScrollViewer.ScrollToHorizontalOffset(Math.Clamp(targetX, 0, Math.Max(0, MapScrollViewer.ScrollableWidth)));
             MapScrollViewer.ScrollToVerticalOffset(Math.Clamp(targetY, 0, Math.Max(0, MapScrollViewer.ScrollableHeight)));
         }), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Left-drag empty canvas (or middle-drag anywhere on the map) pans the viewport for navigation.
+    /// </summary>
+    private void MapScrollViewer_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_isDraggingNode || _isManualDragPending || _isViewPanning)
+            return;
+
+        if (!IsMapBackgroundHit(e.OriginalSource as DependencyObject))
+            return;
+
+        BeginViewPan(e.GetPosition(MapScrollViewer));
+        MapScrollViewer.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void MapScrollViewer_PreviewMouseDownForPan(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle)
+            return;
+
+        if (_isDraggingNode || _isManualDragPending || _isViewPanning)
+            return;
+
+        BeginViewPan(e.GetPosition(MapScrollViewer));
+        MapScrollViewer.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void MapScrollViewer_PreviewMouseUpForPan(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle || !_isViewPanning)
+            return;
+
+        EndViewPan();
+        e.Handled = true;
+    }
+
+    private void MapScrollViewer_PreviewMouseMoveForPan(object sender, MouseEventArgs e)
+    {
+        if (!_isViewPanning || MapScrollViewer is null)
+            return;
+
+        var pos = e.GetPosition(MapScrollViewer);
+        var dx = pos.X - _viewPanLastPos.X;
+        var dy = pos.Y - _viewPanLastPos.Y;
+        _viewPanLastPos = pos;
+
+        // Drag the map with the pointer (grab-and-drag), same direction as content under the hand.
+        MapScrollViewer.ScrollToHorizontalOffset(
+            Math.Clamp(MapScrollViewer.HorizontalOffset - dx, 0, Math.Max(0, MapScrollViewer.ScrollableWidth)));
+        MapScrollViewer.ScrollToVerticalOffset(
+            Math.Clamp(MapScrollViewer.VerticalOffset - dy, 0, Math.Max(0, MapScrollViewer.ScrollableHeight)));
+        e.Handled = true;
+    }
+
+    private void MapScrollViewer_PreviewMouseButtonUpForPan(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isViewPanning)
+            return;
+
+        EndViewPan();
+        e.Handled = true;
+    }
+
+    private void MapScrollViewer_LostMouseCaptureForPan(object sender, MouseEventArgs e)
+        => EndViewPan();
+
+    private void BeginViewPan(Point startPos)
+    {
+        _isViewPanning = true;
+        _viewPanLastPos = startPos;
+        MapScrollViewer.Cursor = Cursors.SizeAll;
+    }
+
+    private void EndViewPan()
+    {
+        if (!_isViewPanning)
+            return;
+
+        _isViewPanning = false;
+        if (MapScrollViewer.IsMouseCaptured)
+            MapScrollViewer.ReleaseMouseCapture();
+        MapScrollViewer.Cursor = Cursors.Arrow;
+    }
+
+    private bool IsMapBackgroundHit(DependencyObject? source)
+    {
+        if (source is null)
+            return true;
+
+        for (var current = source; current != null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is Border { Tag: MindMapNode })
+                return false;
+            if (ReferenceEquals(current, MapCanvas) || ReferenceEquals(current, MapScrollViewer))
+                return true;
+        }
+
+        return false;
     }
 
     private void MapScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

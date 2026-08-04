@@ -31,6 +31,7 @@
 
         <controls:OverlayDialogShell.Body>
             <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                    Background="{DynamicResource WindowBackground}"
                     Margin="0,0,0,14">
                 <TextBox x:Name="InputBox"
                          Style="{StaticResource EmbeddedFieldTextBoxStyle}"

@@ -1651,6 +1651,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         CheckAnswersButton.IsEnabled = !_isSubmitted && questionCount > 0;
         ResetAnswersButton.IsEnabled = _isSubmitted || answeredCount > 0;
+        if (ShuffleQuestionsButton is not null)
+            ShuffleQuestionsButton.IsEnabled = questionCount >= 2;
 
         if (!_isSubmitted)
         {

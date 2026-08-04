@@ -16,12 +16,22 @@
   <data name="AddNote" xml:space="preserve"><value>Add Note</value></data>
   <data name="About" xml:space="preserve"><value>About</value></data>
   <data name="Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="SettingsCategoryAppearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="SettingsCategoryWorkspace" xml:space="preserve"><value>Workspace</value></data>
+  <data name="SettingsCategoryFlashcards" xml:space="preserve"><value>Flashcards</value></data>
+  <data name="SettingsCategoryAiTools" xml:space="preserve"><value>AI Tools</value></data>
+  <data name="SettingsCategoryActivity" xml:space="preserve"><value>Activity</value></data>
+  <data name="SettingsCategoryData" xml:space="preserve"><value>Data</value></data>
+  <data name="SettingsLanguageAndTheme" xml:space="preserve"><value>Language &amp; theme</value></data>
   <data name="RecentNotes" xml:space="preserve"><value>Recent Notes</value></data>
   <data name="RecentFlashcards" xml:space="preserve"><value>Recent Flashcards</value></data>
   <data name="RecentMindMaps" xml:space="preserve"><value>Recent Mind Maps</value></data>
   <data name="RecentQuizzes" xml:space="preserve"><value>Recent Quizzes</value></data>
   <data name="Open" xml:space="preserve"><value>Open</value></data>
   <data name="Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="DeleteFlashcard" xml:space="preserve"><value>Delete flashcard</value></data>
+  <data name="DeleteFlashcardConfirmation" xml:space="preserve"><value>Are you sure you want to delete this flashcard?</value></data>
+  <data name="Edit" xml:space="preserve"><value>Edit</value></data>
   <data name="Close" xml:space="preserve"><value>Close</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Ok" xml:space="preserve"><value>OK</value></data>
@@ -58,6 +68,8 @@
   <data name="QuizLinkedNoteOpenTooltip" xml:space="preserve"><value>Open linked note: {0}</value></data>
   <data name="QuizLinkedNoteSelectorTooltip" xml:space="preserve"><value>Select the source note linked to this item.</value></data>
   <data name="QuizModeTitle" xml:space="preserve"><value>Quiz Mode</value></data>
+  <data name="QuizMode" xml:space="preserve"><value>Quiz Mode</value></data>
+  <data name="QuizNoQuestions" xml:space="preserve"><value>This quiz has no questions.</value></data>
   <data name="QuizQuestionProgressFormat" xml:space="preserve"><value>Question {0} of {1}</value></data>
   <data name="QuizNavigationTitle" xml:space="preserve"><value>Questions</value></data>
   <data name="QuizJumpToQuestionTooltipFormat" xml:space="preserve"><value>Go to question {0}</value></data>
@@ -552,6 +564,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel" xml:space="preserve"><value>Downloading selected Qwen model...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel08B" xml:space="preserve"><value>Downloading Qwen3.5-0.8B model...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel2B" xml:space="preserve"><value>Downloading Qwen3.5-2B model...</value></data>
+  <data name="ConvertToFlashcardsStatusDownloadingModel4B" xml:space="preserve"><value>Downloading Qwen3.5-4B model...</value></data>
   <data name="ConvertToFlashcardsStatusAssetsReady" xml:space="preserve"><value>AI resources ready.</value></data>
   <data name="ConvertToFlashcardsStatusProcessing" xml:space="preserve"><value>AI is generating flashcards...</value></data>
   <data name="ConvertToFlashcardsStatusFinalizing" xml:space="preserve"><value>Finalizing flashcards...</value></data>
@@ -757,7 +770,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardAudioVolume" xml:space="preserve"><value>Flashcard audio volume</value></data>
   <data name="FlashcardAudioVolumeDescription" xml:space="preserve"><value>Applies to every flashcard's audio playback - set once, remembered from then on</value></data>
   <data name="FlashcardSchedulingAlgorithm" xml:space="preserve"><value>Scheduling algorithm</value></data>
-  <data name="FlashcardSchedulingAlgorithmTooltip" xml:space="preserve"><value>Choose the spaced-repetition engine used to schedule every flashcard set. Applies to your whole collection, like Anki's FSRS toggle.</value></data>
+  <data name="FlashcardSchedulingAlgorithmTooltip" xml:space="preserve"><value>Choose how flashcard reviews are scheduled. Applies to all sets.</value></data>
   <data name="FlashcardSchedulingAlgorithmSwitchTitle" xml:space="preserve"><value>Switch scheduling algorithm</value></data>
   <data name="FlashcardSchedulingAlgorithmSwitchConfirmation" xml:space="preserve"><value>Switching the scheduling algorithm resets study progress for every flashcard set - due dates, known/unknown status, and everything the scheduler has learned about your cards. This can't be undone. Continue?</value></data>
   <data name="MindMapPreviewTitle" xml:space="preserve"><value>Mind map</value></data>
@@ -847,6 +860,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapCopyStyle" xml:space="preserve"><value>Copy style</value></data>
   <data name="MindMapPasteStyle" xml:space="preserve"><value>Paste style</value></data>
   <data name="MindMapCannotCutRoot" xml:space="preserve"><value>The root node can't be cut.</value></data>
+  <data name="MindMapCannotDeleteRoot" xml:space="preserve"><value>The root node can't be deleted.</value></data>
+  <data name="MindMapSelectNodeToDelete" xml:space="preserve"><value>Select a node to delete.</value></data>
   <data name="MindMapPasteAsOutline" xml:space="preserve"><value>Paste as outline</value></data>
   <data name="MindMapImport" xml:space="preserve"><value>Import mind map</value></data>
   <data name="MindMapImportDialogTitle" xml:space="preserve"><value>Import mind map</value></data>

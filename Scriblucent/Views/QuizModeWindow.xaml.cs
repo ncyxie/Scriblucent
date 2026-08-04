@@ -20,6 +20,7 @@ namespace Scriblucent.Views;
 public partial class QuizModeWindow : Window
 {
     private const string PlainTextAnswerMarker = "__PLAINTEXT__:";
+    private static readonly object NavFlagMarkTag = new();
 
     private QuizDocument _quiz;
     private int _currentQuestionIndex;
@@ -355,7 +356,12 @@ public partial class QuizModeWindow : Window
 
     private FrameworkElement CreateQuestionNavButtonContent(int index)
     {
-        var root = new Grid();
+        var root = new Grid
+        {
+            Width = 32,
+            Height = 32
+        };
+
         var number = new TextBlock
         {
             Text = (index + 1).ToString(CultureInfo.CurrentCulture),
@@ -367,7 +373,7 @@ public partial class QuizModeWindow : Window
         // Moodle-style red corner flag marker
         var flagMark = new Polygon
         {
-            Name = "FlagMark",
+            Tag = NavFlagMarkTag,
             Points = new PointCollection
             {
                 new Point(0, 0),
@@ -387,7 +393,7 @@ public partial class QuizModeWindow : Window
 
     private static Polygon? TryGetNavFlagMark(Button button)
         => button.Content is Grid grid
-            ? grid.Children.OfType<Polygon>().FirstOrDefault()
+            ? grid.Children.OfType<Polygon>().FirstOrDefault(p => ReferenceEquals(p.Tag, NavFlagMarkTag))
             : null;
 
     private void RefreshQuestionNavigator()
@@ -426,14 +432,24 @@ public partial class QuizModeWindow : Window
             button.IsEnabled = canJump || isCurrent;
             button.Opacity = canJump || isCurrent ? 1.0 : 0.45;
             button.FontWeight = isCurrent ? FontWeights.Bold : FontWeights.SemiBold;
-            button.Background = isCurrent || isAnswered
+            button.Background = isCurrent
                 ? (Brush)FindResource("SelectionBackground")
-                : (Brush)FindResource("WindowBackground");
+                : isAnswered
+                    ? (Brush)FindResource("AccentSuccessSubtle")
+                    : (Brush)FindResource("WindowBackground");
             button.BorderBrush = isCurrent
                 ? (Brush)FindResource("AccentPrimary")
-                : Brushes.Transparent;
-            button.BorderThickness = isCurrent ? new Thickness(2) : new Thickness(0);
-            button.Foreground = (Brush)FindResource("TextColor");
+                : isAnswered
+                    ? (Brush)FindResource("AccentSuccessSubtleBorder")
+                    : Brushes.Transparent;
+            button.BorderThickness = isCurrent
+                ? new Thickness(2)
+                : isAnswered
+                    ? new Thickness(1)
+                    : new Thickness(0);
+            button.Foreground = isAnswered && !isCurrent
+                ? (Brush)FindResource("AccentSuccessSubtleForeground")
+                : (Brush)FindResource("TextColor");
 
             if (TryGetNavFlagMark(button) is Polygon flagMark)
                 flagMark.Visibility = isFlagged ? Visibility.Visible : Visibility.Collapsed;
@@ -442,11 +458,25 @@ public partial class QuizModeWindow : Window
             {
                 button.ToolTip = LocalizationService.GetString("QuizExamNavLockedTooltip");
             }
+            else if (isFlagged && isAnswered)
+            {
+                button.ToolTip = string.Format(
+                    CultureInfo.CurrentCulture,
+                    LocalizationService.GetString("QuizAnsweredFlaggedNavTooltipFormat"),
+                    index + 1);
+            }
             else if (isFlagged)
             {
                 button.ToolTip = string.Format(
                     CultureInfo.CurrentCulture,
                     LocalizationService.GetString("QuizFlaggedNavTooltipFormat"),
+                    index + 1);
+            }
+            else if (isAnswered)
+            {
+                button.ToolTip = string.Format(
+                    CultureInfo.CurrentCulture,
+                    LocalizationService.GetString("QuizAnsweredNavTooltipFormat"),
                     index + 1);
             }
             else

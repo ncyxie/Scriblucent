@@ -1614,7 +1614,10 @@ public class MainViewModel : ViewModelBase
         foreach (var map in maps)
         {
             if (map.Root is not null)
+            {
                 MindMapNodeIconCatalog.NormalizeTreeIcons(map.Root);
+                MindMapFileService.SoftMigrateLegacyRectangleDefault(map.Root);
+            }
         }
 
         return new MindMapsLoadResult(true, maps, groups, metadataAction);

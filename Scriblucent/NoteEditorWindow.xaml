@@ -27,7 +27,7 @@
             <Setter Property="CaretBrush" Value="{DynamicResource RichTextBoxForeground}"/>
         </Style>
 
-        <Style x:Key="EditorFontComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Style x:Key="EditorFontComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ChromeComboBoxStyle}">
             <Setter Property="Height" Value="32"/>
         </Style>
     </Window.Resources>

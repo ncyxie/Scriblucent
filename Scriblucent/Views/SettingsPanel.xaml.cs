@@ -126,6 +126,15 @@ namespace Scriblucent.Views
                 MeasurementUnitSystemBox,
                 AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem),
                 AppSettings.UnitSystemImperial);
+            SelectComboBoxItemByTag(
+                FlashcardSchedulingAlgorithmBox,
+                settings.FlashcardSchedulingAlgorithm == SpacedRepetitionAlgorithm.Fsrs6 ? "Fsrs6" : "Sm2",
+                "Sm2");
+            FlashcardAudioVolumeSlider.Value = Math.Clamp(
+                settings.FlashcardAudioVolumePercent,
+                AppSettings.MinFlashcardAudioVolumePercent,
+                AppSettings.MaxFlashcardAudioVolumePercent);
+            UpdateFlashcardAudioVolumeText((int)FlashcardAudioVolumeSlider.Value);
             UpdateRecentItemsLimitControls(settings.RecentItemsLimit);
             if (ReduceAnimationsCheckBox is not null)
                 ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
@@ -1244,6 +1253,84 @@ namespace Scriblucent.Views
                         break;
                 }
             }
+        }
+
+        /// <summary>A single, collection-wide choice - matches Anki's own FSRS toggle, which is
+        /// "shared by all presets" rather than configured per deck. SM-2's ease/interval state and
+        /// FSRS's difficulty/stability state have no meaningful conversion between them, so
+        /// switching resets every flashcard set's scheduling progress, after explicit confirmation
+        /// since it's destructive to in-progress review history.</summary>
+        private void FlashcardSchedulingAlgorithmBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isApplyingSettings)
+                return;
+
+            if (FlashcardSchedulingAlgorithmBox.SelectedItem is not ComboBoxItem item)
+                return;
+
+            var settings = AppSettingsService.Load();
+            var newAlgorithm = string.Equals(item.Tag?.ToString(), "Fsrs6", StringComparison.OrdinalIgnoreCase)
+                ? SpacedRepetitionAlgorithm.Fsrs6
+                : SpacedRepetitionAlgorithm.Sm2;
+
+            if (newAlgorithm == settings.FlashcardSchedulingAlgorithm)
+                return;
+
+            var result = ModernMessageBox.Show(
+                LocalizationService.GetString("FlashcardSchedulingAlgorithmSwitchConfirmation"),
+                LocalizationService.GetString("FlashcardSchedulingAlgorithmSwitchTitle"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                _isApplyingSettings = true;
+                SelectComboBoxItemByTag(
+                    FlashcardSchedulingAlgorithmBox,
+                    settings.FlashcardSchedulingAlgorithm == SpacedRepetitionAlgorithm.Fsrs6 ? "Fsrs6" : "Sm2",
+                    "Sm2");
+                _isApplyingSettings = false;
+                return;
+            }
+
+            ResetAllFlashcardSetsSchedulingProgress();
+
+            settings.FlashcardSchedulingAlgorithm = newAlgorithm;
+            AppSettingsService.Save(settings);
+        }
+
+        private void FlashcardAudioVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            var percent = (int)Math.Round(e.NewValue);
+            UpdateFlashcardAudioVolumeText(percent);
+
+            if (_isApplyingSettings)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.FlashcardAudioVolumePercent = percent;
+            AppSettingsService.Save(settings);
+        }
+
+        private void UpdateFlashcardAudioVolumeText(int percent)
+        {
+            if (FlashcardAudioVolumeValueText is not null)
+                FlashcardAudioVolumeValueText.Text = $"{percent}%";
+        }
+
+        private static void ResetAllFlashcardSetsSchedulingProgress()
+        {
+            if (Application.Current?.MainWindow?.DataContext is not MainViewModel mainVm)
+                return;
+
+            foreach (var set in mainVm.FlashcardSets)
+            {
+                FlashcardStudyHistoryWindow.ClearDocumentProgress(set.Document);
+                set.NotifyChanged();
+            }
+
+            mainVm.SaveFlashcardSets();
         }
     }
 }

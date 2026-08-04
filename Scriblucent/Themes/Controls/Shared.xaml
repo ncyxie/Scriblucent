@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
                     xmlns:converters="clr-namespace:Scriblucent.Converters"
                     xmlns:localization="clr-namespace:Scriblucent.Localization">
     <x:Static x:Key="Loc" Member="localization:LocalizationProvider.Instance"/>
@@ -7,6 +8,9 @@
     <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis"/>
     <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
     <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+
+    <sys:Double x:Key="CheckGlyphPathLength">14</sys:Double>
+    <DoubleCollection x:Key="CheckGlyphDashArray">14</DoubleCollection>
 
     <!-- Forms/settings dense overlay chrome (intentional step below dashboard SectionTitle/Body).
          Hierarchy: section Body → label Meta SemiBold → helper Caption. Fields stay Type.Body. -->
@@ -39,5 +43,51 @@
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
         <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+
+    <!-- Settings scroll category labels above card groups. -->
+    <Style x:Key="FormCategoryTitleStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+        <Setter Property="Margin" Value="2,18,0,8"/>
+    </Style>
+
+    <!-- History list/header chips: pixel-snap layout only (Ideal text stays soft for titles). -->
+    <Style x:Key="HistorySummaryChipStyle" TargetType="{x:Type Border}">
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
+    </Style>
+
+    <Style x:Key="HistoryStatusChipStyle" TargetType="{x:Type Border}">
+        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="14,0,0,0"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
+    </Style>
+
+    <Style x:Key="HistoryStatusChipTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="{StaticResource Type.Meta}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <Style x:Key="HistorySummaryChipLabelStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <Style x:Key="HistorySummaryChipValueStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="{StaticResource Type.Meta}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
     </Style>
 </ResourceDictionary>
