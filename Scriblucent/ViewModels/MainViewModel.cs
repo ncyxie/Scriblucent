@@ -94,6 +94,7 @@ public class MainViewModel : ViewModelBase
     private bool _isQuizzesDashboardReady;
     private const int NotesLoadBatchSize = 48;
     private const int NotesSingleCommitMax = 120;
+    private const int TrashRetentionDays = 30;
 
     public event EventHandler? NotesDashboardReady;
 
@@ -703,6 +704,15 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
+        TrashedNotes.Clear();
+        if (result.TrashedDocs is { Count: > 0 } trashedDocs)
+        {
+            foreach (var doc in trashedDocs)
+                TrashedNotes.Add(CreateNoteCard(doc));
+        }
+        PurgeExpiredTrashedNotes();
+        NotifyTrashChanged();
+
         if (result.Docs.Count == 0)
         {
             var starterDocument = new NoteDocument
@@ -834,6 +844,7 @@ public class MainViewModel : ViewModelBase
     private readonly record struct FlashcardsLoadResult(
         bool UsedNewFormat,
         List<FlashcardSetDocument> Sets,
+        List<FlashcardSetDocument> TrashedSets,
         List<FlashcardSetGroupData> Groups,
         GroupMetadataSyncAction GroupMetadataAction,
         List<FlashcardItem> LegacyItems);
@@ -847,6 +858,7 @@ public class MainViewModel : ViewModelBase
         {
             var json = File.ReadAllText(setsPath);
             List<FlashcardSetDocument> sets;
+            List<FlashcardSetDocument> trashedSets = new();
             List<FlashcardSetGroupData> groups = new();
             GroupMetadataSyncAction metadataAction;
             try
@@ -854,7 +866,11 @@ public class MainViewModel : ViewModelBase
                 var store = JsonSerializer.Deserialize<FlashcardSetStoreData>(json);
                 if (store?.Sets != null)
                 {
-                    sets = store.Sets;
+                    var rawSets = store.Sets;
+                    trashedSets = store.TrashedFlashcardSets ?? new List<FlashcardSetDocument>();
+                    // Migrate any soft-deleted rows that were still sitting in the active list.
+                    trashedSets.AddRange(rawSets.Where(set => set.IsDeleted));
+                    sets = rawSets.Where(set => !set.IsDeleted).ToList();
                     groups = store.Groups ?? new List<FlashcardSetGroupData>();
                     metadataAction = GroupMetadataSyncAction.ClearAndSet;
                 }
@@ -878,17 +894,17 @@ public class MainViewModel : ViewModelBase
                 }
             }
 
-            return new FlashcardsLoadResult(true, sets, groups, metadataAction, new List<FlashcardItem>());
+            return new FlashcardsLoadResult(true, sets, trashedSets, groups, metadataAction, new List<FlashcardItem>());
         }
 
         if (File.Exists(legacyPath))
         {
             var json = File.ReadAllText(legacyPath);
             var data = JsonSerializer.Deserialize<List<FlashcardItem>>(json) ?? new();
-            return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, data);
+            return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, data);
         }
 
-        return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, new List<FlashcardItem>());
+        return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, new List<FlashcardItem>());
     }
 
     private void ApplyLoadedFlashcards(FlashcardsLoadResult result)
@@ -920,6 +936,18 @@ public class MainViewModel : ViewModelBase
                 NormalizeFlashcardSetDocument(set);
                 FlashcardSets.Add(new FlashcardSetViewModel(set));
             }
+
+            TrashedFlashcardSets.Clear();
+            foreach (var set in result.TrashedSets.Where(set => set != null))
+            {
+                NormalizeFlashcardSetDocument(set);
+                set.IsDeleted = true;
+                set.DeletedAt ??= DateTime.UtcNow;
+                TrashedFlashcardSets.Add(new FlashcardSetViewModel(set));
+            }
+
+            PurgeExpiredTrashedFlashcardSets();
+            NotifyTrashChanged();
 
             NormalizeFlashcardSetGroups();
             RebuildFlashcardSetGroups();
@@ -1050,6 +1078,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         FlashcardSets.Remove(set);
+        MoveFlashcardSetToTrash(set);
         ApplyFlashcardSetDeleteReaction();
     }
 
@@ -1080,6 +1109,9 @@ public class MainViewModel : ViewModelBase
             var store = new FlashcardSetStoreData
             {
                 Sets = documents,
+                TrashedFlashcardSets = TrashedFlashcardSets
+                    .Select(set => set.Document)
+                    .ToList(),
                 Groups = _flashcardSetGroupMetadata.Values
                     .OrderBy(g => g.SortOrder ?? int.MaxValue)
                     .ThenBy(g => g.Name)
@@ -1566,6 +1598,7 @@ public class MainViewModel : ViewModelBase
     private readonly record struct MindMapsLoadResult(
         bool FileExists,
         List<MindMapDocument> Maps,
+        List<MindMapDocument> TrashedMaps,
         List<MindMapGroupData> Groups,
         GroupMetadataSyncAction GroupMetadataAction);
 
@@ -1574,12 +1607,13 @@ public class MainViewModel : ViewModelBase
     private static MindMapsLoadResult ReadMindMapsFromDisk(string path)
     {
         if (!File.Exists(path))
-            return new MindMapsLoadResult(false, new List<MindMapDocument>(), new List<MindMapGroupData>(), GroupMetadataSyncAction.Leave);
+            return new MindMapsLoadResult(false, new List<MindMapDocument>(), new List<MindMapDocument>(), new List<MindMapGroupData>(), GroupMetadataSyncAction.Leave);
 
         var json = File.ReadAllText(path);
 
         // Try new format first, fall back to legacy list format
         List<MindMapDocument> maps;
+        List<MindMapDocument> trashedMaps = new();
         List<MindMapGroupData> groups = new();
         GroupMetadataSyncAction metadataAction;
         try
@@ -1587,7 +1621,10 @@ public class MainViewModel : ViewModelBase
             var store = JsonSerializer.Deserialize<MindMapStoreData>(json);
             if (store?.Maps != null)
             {
-                maps = store.Maps;
+                var rawMaps = store.Maps;
+                trashedMaps = store.TrashedMindMaps ?? new List<MindMapDocument>();
+                trashedMaps.AddRange(rawMaps.Where(map => map.IsDeleted));
+                maps = rawMaps.Where(map => !map.IsDeleted).ToList();
                 groups = store.Groups ?? new List<MindMapGroupData>();
                 metadataAction = GroupMetadataSyncAction.ClearAndSet;
             }
@@ -1611,7 +1648,7 @@ public class MainViewModel : ViewModelBase
             }
         }
 
-        foreach (var map in maps)
+        foreach (var map in maps.Concat(trashedMaps))
         {
             if (map.Root is not null)
             {
@@ -1620,7 +1657,7 @@ public class MainViewModel : ViewModelBase
             }
         }
 
-        return new MindMapsLoadResult(true, maps, groups, metadataAction);
+        return new MindMapsLoadResult(true, maps, trashedMaps, groups, metadataAction);
     }
 
     private void ApplyLoadedMindMaps(MindMapsLoadResult result)
@@ -1658,6 +1695,18 @@ public class MainViewModel : ViewModelBase
             NormalizeMindMapDocument(map);
             MindMaps.Add(new MindMapViewModel(map));
         }
+
+        TrashedMindMaps.Clear();
+        foreach (var map in result.TrashedMaps.Where(map => map != null))
+        {
+            NormalizeMindMapDocument(map);
+            map.IsDeleted = true;
+            map.DeletedAt ??= DateTime.UtcNow;
+            TrashedMindMaps.Add(new MindMapViewModel(map));
+        }
+
+        PurgeExpiredTrashedMindMaps();
+        NotifyTrashChanged();
 
         NormalizeMindMapGroups();
         RebuildMindMapGroups();
@@ -2083,6 +2132,9 @@ public class MainViewModel : ViewModelBase
             var store = new MindMapStoreData
             {
                 Maps = documents,
+                TrashedMindMaps = TrashedMindMaps
+                    .Select(map => map.Document)
+                    .ToList(),
                 Groups = _mindMapGroupMetadata.Values
                     .OrderBy(g => g.SortOrder ?? int.MaxValue)
                     .ThenBy(g => g.Name)
@@ -2125,6 +2177,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         MindMaps.Remove(mindMapVm);
+        MoveMindMapToTrash(mindMapVm);
         ApplyMindMapDeleteReaction();
     }
 
@@ -2245,6 +2298,7 @@ public class MainViewModel : ViewModelBase
     private readonly record struct QuizzesLoadResult(
         bool FileExists,
         List<QuizDocument> Documents,
+        List<QuizDocument> TrashedDocuments,
         List<QuizGroupData> Groups,
         GroupMetadataSyncAction GroupMetadataAction);
 
@@ -2253,10 +2307,11 @@ public class MainViewModel : ViewModelBase
     private static QuizzesLoadResult ReadQuizzesFromDisk(string path)
     {
         if (!File.Exists(path))
-            return new QuizzesLoadResult(false, new List<QuizDocument>(), new List<QuizGroupData>(), GroupMetadataSyncAction.Leave);
+            return new QuizzesLoadResult(false, new List<QuizDocument>(), new List<QuizDocument>(), new List<QuizGroupData>(), GroupMetadataSyncAction.Leave);
 
         var json = File.ReadAllText(path);
         List<QuizDocument> documents;
+        List<QuizDocument> trashedDocuments = new();
         List<QuizGroupData> groups = new();
         GroupMetadataSyncAction metadataAction;
         try
@@ -2264,7 +2319,10 @@ public class MainViewModel : ViewModelBase
             var store = JsonSerializer.Deserialize<QuizStoreData>(json);
             if (store?.Quizzes != null)
             {
-                documents = store.Quizzes;
+                var rawQuizzes = store.Quizzes;
+                trashedDocuments = store.TrashedQuizzes ?? new List<QuizDocument>();
+                trashedDocuments.AddRange(rawQuizzes.Where(quiz => quiz.IsDeleted));
+                documents = rawQuizzes.Where(quiz => !quiz.IsDeleted).ToList();
                 groups = store.Groups ?? new List<QuizGroupData>();
                 metadataAction = GroupMetadataSyncAction.ClearAndSet;
             }
@@ -2280,7 +2338,7 @@ public class MainViewModel : ViewModelBase
             metadataAction = GroupMetadataSyncAction.Leave;
         }
 
-        return new QuizzesLoadResult(true, documents, groups, metadataAction);
+        return new QuizzesLoadResult(true, documents, trashedDocuments, groups, metadataAction);
     }
 
     private void ApplyLoadedQuizzes(QuizzesLoadResult result)
@@ -2318,6 +2376,18 @@ public class MainViewModel : ViewModelBase
             NormalizeQuizDocument(quiz);
             Quizzes.Add(new QuizViewModel(quiz));
         }
+
+        TrashedQuizzes.Clear();
+        foreach (var quiz in result.TrashedDocuments.Where(quiz => quiz != null))
+        {
+            NormalizeQuizDocument(quiz);
+            quiz.IsDeleted = true;
+            quiz.DeletedAt ??= DateTime.UtcNow;
+            TrashedQuizzes.Add(new QuizViewModel(quiz));
+        }
+
+        PurgeExpiredTrashedQuizzes();
+        NotifyTrashChanged();
 
         NormalizeQuizGroups();
         RebuildQuizGroups();
@@ -2405,6 +2475,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         Quizzes.Remove(quiz);
+        MoveQuizToTrash(quiz);
         ApplyQuizDeleteReaction();
     }
 
@@ -2435,6 +2506,9 @@ public class MainViewModel : ViewModelBase
             var store = new QuizStoreData
             {
                 Quizzes = documents,
+                TrashedQuizzes = TrashedQuizzes
+                    .Select(quiz => quiz.Document)
+                    .ToList(),
                 Groups = _quizGroupMetadata.Values
                     .OrderBy(g => g.SortOrder ?? int.MaxValue)
                     .ThenBy(g => g.Name)
@@ -2925,6 +2999,16 @@ public class MainViewModel : ViewModelBase
 
 
     public ObservableCollection<NoteCardViewModel> Notes { get; }
+    public ObservableCollection<NoteCardViewModel> TrashedNotes { get; } = new();
+    public ObservableCollection<FlashcardSetViewModel> TrashedFlashcardSets { get; } = new();
+    public ObservableCollection<MindMapViewModel> TrashedMindMaps { get; } = new();
+    public ObservableCollection<QuizViewModel> TrashedQuizzes { get; } = new();
+    public ObservableCollection<TrashItemViewModel> TrashedItems { get; } = new();
+
+    public int TrashItemCount =>
+        TrashedNotes.Count + TrashedFlashcardSets.Count + TrashedMindMaps.Count + TrashedQuizzes.Count;
+
+    public bool HasTrashItems => TrashItemCount > 0;
     public IDashboardMotionHost? MotionHost { get; set; }
     public ObservableCollection<NoteGroupViewModel> NoteGroups { get; }
     public ObservableCollection<TagFilterItemViewModel> TagFilters { get; }
@@ -3957,19 +4041,7 @@ public class MainViewModel : ViewModelBase
         {
             Title = $"{noteCard.Document.Title} (Copy)",
             Content = noteCard.Document.Content,
-            Images = noteCard.Document.Images?
-                .Select(image => new NoteImageAttachment
-                {
-                    Id = Guid.NewGuid(),
-                    Data = image.Data,
-                    Layout = image.Layout,
-                    Width = image.Width,
-                    Height = image.Height,
-                    Left = image.Left,
-                    Top = image.Top,
-                    PreserveAspectRatio = image.PreserveAspectRatio
-                })
-                .ToList() ?? new List<NoteImageAttachment>(),
+            Images = CloneImageAttachments(noteCard.Document.Images),
             Tags = noteCard.Document.Tags?.ToList() ?? new List<string>(), // Copy tags if they exist
             FontFamily = noteCard.Document.FontFamily,
             FontSize = noteCard.Document.FontSize,
@@ -3979,6 +4051,23 @@ public class MainViewModel : ViewModelBase
         };
 
         AddNoteFromDocument(duplicateDocument);
+    }
+
+    private static List<NoteImageAttachment> CloneImageAttachments(IEnumerable<NoteImageAttachment>? source)
+    {
+        if (source is null)
+            return new List<NoteImageAttachment>();
+
+        return source.Select(image => new NoteImageAttachment
+        {
+            Id = Guid.NewGuid(),
+            Data = image.Data,
+            Width = image.Width,
+            Height = image.Height,
+            Left = image.Left,
+            Top = image.Top,
+            LockAspectRatio = image.LockAspectRatio
+        }).ToList();
     }
 
     private void TogglePin(NoteCardViewModel noteCard)
@@ -4248,7 +4337,11 @@ public class MainViewModel : ViewModelBase
             MotionHost.RequestDelete(
                 DashboardMotionScope.Flashcards,
                 set.Document.Id,
-                () => FlashcardSets.Remove(set),
+                () =>
+                {
+                    FlashcardSets.Remove(set);
+                    MoveFlashcardSetToTrash(set);
+                },
                 ApplyFlashcardSetDeleteReaction);
             return;
         }
@@ -4263,7 +4356,11 @@ public class MainViewModel : ViewModelBase
             MotionHost.RequestDelete(
                 DashboardMotionScope.Quizzes,
                 quiz.Document.Id,
-                () => Quizzes.Remove(quiz),
+                () =>
+                {
+                    Quizzes.Remove(quiz);
+                    MoveQuizToTrash(quiz);
+                },
                 ApplyQuizDeleteReaction);
             return;
         }
@@ -4278,7 +4375,11 @@ public class MainViewModel : ViewModelBase
             MotionHost.RequestDelete(
                 DashboardMotionScope.MindMaps,
                 mindMapVm.Document.Id,
-                () => MindMaps.Remove(mindMapVm),
+                () =>
+                {
+                    MindMaps.Remove(mindMapVm);
+                    MoveMindMapToTrash(mindMapVm);
+                },
                 ApplyMindMapDeleteReaction);
             return;
         }
@@ -4291,6 +4392,42 @@ public class MainViewModel : ViewModelBase
         _massSelectedNoteIds.Remove(noteCard.Document.Id);
         noteCard.IsSelectedInMassSelect = false;
         Notes.Remove(noteCard);
+        MoveNoteToTrash(noteCard);
+    }
+
+    /// <summary>Deleting a note is a soft-delete - it moves to TrashedNotes rather than vanishing,
+    /// so RestoreNote can bring it back with tags/pin/group membership intact. Only PurgeNotePermanently
+    /// and EmptyTrash perform an actual, irreversible removal.</summary>
+    private void MoveNoteToTrash(NoteCardViewModel noteCard)
+    {
+        noteCard.Document.IsDeleted = true;
+        noteCard.Document.DeletedAt = DateTime.UtcNow;
+        TrashedNotes.Add(noteCard);
+        NotifyTrashChanged();
+    }
+
+    private void MoveFlashcardSetToTrash(FlashcardSetViewModel set)
+    {
+        set.Document.IsDeleted = true;
+        set.Document.DeletedAt = DateTime.UtcNow;
+        TrashedFlashcardSets.Add(set);
+        NotifyTrashChanged();
+    }
+
+    private void MoveMindMapToTrash(MindMapViewModel mindMap)
+    {
+        mindMap.Document.IsDeleted = true;
+        mindMap.Document.DeletedAt = DateTime.UtcNow;
+        TrashedMindMaps.Add(mindMap);
+        NotifyTrashChanged();
+    }
+
+    private void MoveQuizToTrash(QuizViewModel quiz)
+    {
+        quiz.Document.IsDeleted = true;
+        quiz.Document.DeletedAt = DateTime.UtcNow;
+        TrashedQuizzes.Add(quiz);
+        NotifyTrashChanged();
     }
 
     private void ApplyNotesDeleteReaction()
@@ -4303,6 +4440,313 @@ public class MainViewModel : ViewModelBase
         RefreshRecentNotes();
         RefreshCalendarScheduledNotes();
         EnsureMassSelectionConsistency();
+    }
+
+    /// <summary>Brings a trashed note back with its tags/pin/group membership intact - GroupId is
+    /// left untouched, so it rejoins its group automatically once RebuildGroups runs below if that
+    /// group still exists, or just lands ungrouped otherwise (same as any lone note).</summary>
+    public void RestoreNote(NoteCardViewModel noteCard)
+    {
+        if (!TrashedNotes.Remove(noteCard))
+            return;
+
+        noteCard.Document.IsDeleted = false;
+        noteCard.Document.DeletedAt = null;
+        Notes.Add(noteCard);
+        ApplyNotesDeleteReaction();
+        NotifyTrashChanged();
+    }
+
+    public void RestoreFlashcardSet(FlashcardSetViewModel set)
+    {
+        if (!TrashedFlashcardSets.Remove(set))
+            return;
+
+        set.Document.IsDeleted = false;
+        set.Document.DeletedAt = null;
+        FlashcardSets.Add(set);
+        ApplyFlashcardSetDeleteReaction();
+        NotifyTrashChanged();
+    }
+
+    public void RestoreMindMap(MindMapViewModel mindMap)
+    {
+        if (!TrashedMindMaps.Remove(mindMap))
+            return;
+
+        mindMap.Document.IsDeleted = false;
+        mindMap.Document.DeletedAt = null;
+        MindMaps.Add(mindMap);
+        ApplyMindMapDeleteReaction();
+        NotifyTrashChanged();
+    }
+
+    public void RestoreQuiz(QuizViewModel quiz)
+    {
+        if (!TrashedQuizzes.Remove(quiz))
+            return;
+
+        quiz.Document.IsDeleted = false;
+        quiz.Document.DeletedAt = null;
+        Quizzes.Add(quiz);
+        ApplyQuizDeleteReaction();
+        NotifyTrashChanged();
+    }
+
+    public void RestoreTrashItem(TrashItemViewModel item)
+    {
+        switch (item.Source)
+        {
+            case NoteCardViewModel note:
+                RestoreNote(note);
+                break;
+            case FlashcardSetViewModel set:
+                RestoreFlashcardSet(set);
+                break;
+            case MindMapViewModel map:
+                RestoreMindMap(map);
+                break;
+            case QuizViewModel quiz:
+                RestoreQuiz(quiz);
+                break;
+        }
+    }
+
+    /// <summary>Irreversible - the caller is responsible for confirming with the user first
+    /// (unlike the regular move-to-trash delete, which no longer prompts since it's undoable).</summary>
+    public void PurgeNotePermanently(NoteCardViewModel noteCard)
+    {
+        if (TrashedNotes.Remove(noteCard))
+        {
+            QueueSaveNotes();
+            NotifyTrashChanged();
+        }
+    }
+
+    public void PurgeFlashcardSetPermanently(FlashcardSetViewModel set)
+    {
+        if (TrashedFlashcardSets.Remove(set))
+        {
+            SaveFlashcardSets();
+            SweepOrphanedFlashcardMedia();
+            NotifyTrashChanged();
+        }
+    }
+
+    public void PurgeMindMapPermanently(MindMapViewModel mindMap)
+    {
+        if (TrashedMindMaps.Remove(mindMap))
+        {
+            SaveMindMaps();
+            NotifyTrashChanged();
+        }
+    }
+
+    public void PurgeQuizPermanently(QuizViewModel quiz)
+    {
+        if (TrashedQuizzes.Remove(quiz))
+        {
+            SaveQuizzes();
+            NotifyTrashChanged();
+        }
+    }
+
+    public void PurgeTrashItemPermanently(TrashItemViewModel item)
+    {
+        switch (item.Source)
+        {
+            case NoteCardViewModel note:
+                PurgeNotePermanently(note);
+                break;
+            case FlashcardSetViewModel set:
+                PurgeFlashcardSetPermanently(set);
+                break;
+            case MindMapViewModel map:
+                PurgeMindMapPermanently(map);
+                break;
+            case QuizViewModel quiz:
+                PurgeQuizPermanently(quiz);
+                break;
+        }
+    }
+
+    public void RestoreTrashItems(IEnumerable<TrashItemViewModel> items)
+    {
+        foreach (var item in items.ToList())
+            RestoreTrashItem(item);
+    }
+
+    public void PurgeTrashItemsPermanently(IEnumerable<TrashItemViewModel> items)
+    {
+        foreach (var item in items.ToList())
+            PurgeTrashItemPermanently(item);
+    }
+
+    /// <summary>Irreversible - the caller is responsible for confirming with the user first.</summary>
+    public void EmptyTrash() => EmptyTrash(null);
+
+    public void EmptyTrash(TrashItemKind? filterKind)
+    {
+        var changed = false;
+
+        if (filterKind is null or TrashItemKind.Note && TrashedNotes.Count > 0)
+        {
+            TrashedNotes.Clear();
+            QueueSaveNotes();
+            changed = true;
+        }
+
+        if (filterKind is null or TrashItemKind.FlashcardSet && TrashedFlashcardSets.Count > 0)
+        {
+            TrashedFlashcardSets.Clear();
+            SaveFlashcardSets();
+            SweepOrphanedFlashcardMedia();
+            changed = true;
+        }
+
+        if (filterKind is null or TrashItemKind.MindMap && TrashedMindMaps.Count > 0)
+        {
+            TrashedMindMaps.Clear();
+            SaveMindMaps();
+            changed = true;
+        }
+
+        if (filterKind is null or TrashItemKind.Quiz && TrashedQuizzes.Count > 0)
+        {
+            TrashedQuizzes.Clear();
+            SaveQuizzes();
+            changed = true;
+        }
+
+        if (changed)
+            NotifyTrashChanged();
+    }
+
+    public void RefreshTrashedItems()
+    {
+        TrashedItems.Clear();
+
+        foreach (var note in TrashedNotes.OrderByDescending(n => n.Document.DeletedAt ?? DateTime.MinValue))
+        {
+            TrashedItems.Add(new TrashItemViewModel(
+                TrashItemKind.Note,
+                note.Document.Id,
+                note.Title,
+                note.Document.DeletedAt,
+                note,
+                TrashRetentionDays));
+        }
+
+        foreach (var set in TrashedFlashcardSets.OrderByDescending(s => s.Document.DeletedAt ?? DateTime.MinValue))
+        {
+            TrashedItems.Add(new TrashItemViewModel(
+                TrashItemKind.FlashcardSet,
+                set.Document.Id,
+                set.Title,
+                set.Document.DeletedAt,
+                set,
+                TrashRetentionDays));
+        }
+
+        foreach (var map in TrashedMindMaps.OrderByDescending(m => m.Document.DeletedAt ?? DateTime.MinValue))
+        {
+            TrashedItems.Add(new TrashItemViewModel(
+                TrashItemKind.MindMap,
+                map.Document.Id,
+                map.Title,
+                map.Document.DeletedAt,
+                map,
+                TrashRetentionDays));
+        }
+
+        foreach (var quiz in TrashedQuizzes.OrderByDescending(q => q.Document.DeletedAt ?? DateTime.MinValue))
+        {
+            TrashedItems.Add(new TrashItemViewModel(
+                TrashItemKind.Quiz,
+                quiz.Document.Id,
+                quiz.Title,
+                quiz.Document.DeletedAt,
+                quiz,
+                TrashRetentionDays));
+        }
+    }
+
+    private void NotifyTrashChanged()
+    {
+        OnPropertyChanged(nameof(TrashItemCount));
+        OnPropertyChanged(nameof(HasTrashItems));
+        RefreshTrashedItems();
+    }
+
+    /// <summary>Runs once per app start (see ApplyLoadedNotes) rather than on a timer - a note-taking
+    /// app isn't running continuously enough for a background timer to matter here.</summary>
+    private void PurgeExpiredTrashedNotes()
+    {
+        if (TrashedNotes.Count == 0)
+            return;
+
+        var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+        var expired = TrashedNotes.Where(note => (note.Document.DeletedAt ?? DateTime.UtcNow) < cutoff).ToList();
+        if (expired.Count == 0)
+            return;
+
+        foreach (var note in expired)
+            TrashedNotes.Remove(note);
+
+        QueueSaveNotes();
+        NotifyTrashChanged();
+    }
+
+    private void PurgeExpiredTrashedFlashcardSets()
+    {
+        if (TrashedFlashcardSets.Count == 0)
+            return;
+
+        var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+        var expired = TrashedFlashcardSets.Where(set => (set.Document.DeletedAt ?? DateTime.UtcNow) < cutoff).ToList();
+        if (expired.Count == 0)
+            return;
+
+        foreach (var set in expired)
+            TrashedFlashcardSets.Remove(set);
+
+        SaveFlashcardSets();
+        SweepOrphanedFlashcardMedia();
+        NotifyTrashChanged();
+    }
+
+    private void PurgeExpiredTrashedMindMaps()
+    {
+        if (TrashedMindMaps.Count == 0)
+            return;
+
+        var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+        var expired = TrashedMindMaps.Where(map => (map.Document.DeletedAt ?? DateTime.UtcNow) < cutoff).ToList();
+        if (expired.Count == 0)
+            return;
+
+        foreach (var map in expired)
+            TrashedMindMaps.Remove(map);
+
+        SaveMindMaps();
+        NotifyTrashChanged();
+    }
+
+    private void PurgeExpiredTrashedQuizzes()
+    {
+        if (TrashedQuizzes.Count == 0)
+            return;
+
+        var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+        var expired = TrashedQuizzes.Where(quiz => (quiz.Document.DeletedAt ?? DateTime.UtcNow) < cutoff).ToList();
+        if (expired.Count == 0)
+            return;
+
+        foreach (var quiz in expired)
+            TrashedQuizzes.Remove(quiz);
+
+        SaveQuizzes();
+        NotifyTrashChanged();
     }
 
     public void EnterMassSelect(NoteCardViewModel initialNote)
@@ -5426,7 +5870,10 @@ public class MainViewModel : ViewModelBase
     private void CommitRemoveFlashcardSetsBatch(IReadOnlyList<FlashcardSetViewModel> sets)
     {
         foreach (var set in sets)
+        {
             FlashcardSets.Remove(set);
+            MoveFlashcardSetToTrash(set);
+        }
     }
 
     private void DeleteSelectedMindMapsBatch()
@@ -5460,7 +5907,10 @@ public class MainViewModel : ViewModelBase
     private void CommitRemoveMindMapsBatch(IReadOnlyList<MindMapViewModel> maps)
     {
         foreach (var map in maps)
+        {
             MindMaps.Remove(map);
+            MoveMindMapToTrash(map);
+        }
     }
 
     private void DeleteSelectedQuizzesBatch()
@@ -5494,7 +5944,10 @@ public class MainViewModel : ViewModelBase
     private void CommitRemoveQuizzesBatch(IReadOnlyList<QuizViewModel> quizzes)
     {
         foreach (var quiz in quizzes)
+        {
             Quizzes.Remove(quiz);
+            MoveQuizToTrash(quiz);
+        }
     }
 
     private void DeleteSelectedNotesBatch()
@@ -5528,7 +5981,10 @@ public class MainViewModel : ViewModelBase
     private void CommitRemoveNotesBatch(IReadOnlyList<NoteCardViewModel> notes)
     {
         foreach (var note in notes)
+        {
             Notes.Remove(note);
+            MoveNoteToTrash(note);
+        }
     }
 
     private void RemoveSelectedFromGroups()
@@ -5676,6 +6132,7 @@ public class MainViewModel : ViewModelBase
             {
                 Title = $"{note.Document.Title} (Copy)",
                 Content = note.Document.Content,
+                Images = CloneImageAttachments(note.Document.Images),
                 Tags = note.Document.Tags?.ToList() ?? new List<string>(),
                 FontFamily = note.Document.FontFamily,
                 FontSize = note.Document.FontSize,
@@ -7619,9 +8076,14 @@ public class MainViewModel : ViewModelBase
             foreach (var vm in Notes)
                 docs.Add(vm.Document);
 
+            var trashedDocs = new List<NoteDocument>();
+            foreach (var vm in TrashedNotes)
+                trashedDocs.Add(vm.Document);
+
             var store = new NotesStoreData
             {
                 Notes = docs,
+                TrashedNotes = trashedDocs,
                 Groups = _groupMetadata.Values
                     .OrderBy(g => g.SortOrder ?? int.MaxValue)
                     .ThenBy(g => g.Name)
@@ -7837,7 +8299,8 @@ public class MainViewModel : ViewModelBase
         NotesLoadStatus Status,
         List<NoteDocument> Docs,
         List<NoteGroupData> Groups,
-        string? BackupPath = null);
+        string? BackupPath = null,
+        List<NoteDocument>? TrashedDocs = null);
 
     private static NotesLoadResult ReadNotesFromDisk(string path)
     {
@@ -7849,11 +8312,13 @@ public class MainViewModel : ViewModelBase
             var json = File.ReadAllText(path);
             var docs = new List<NoteDocument>();
             var groups = new List<NoteGroupData>();
+            var trashedDocs = new List<NoteDocument>();
             var store = JsonSerializer.Deserialize<NotesStoreData>(json);
             if (store?.Notes != null && store.Notes.Count > 0)
             {
                 docs = store.Notes;
                 groups = store.Groups ?? new List<NoteGroupData>();
+                trashedDocs = store.TrashedNotes ?? new List<NoteDocument>();
             }
             else
             {
@@ -7862,7 +8327,7 @@ public class MainViewModel : ViewModelBase
                     docs = legacyDocs;
             }
 
-            return new NotesLoadResult(NotesLoadStatus.Success, docs, groups);
+            return new NotesLoadResult(NotesLoadStatus.Success, docs, groups, TrashedDocs: trashedDocs);
         }
         catch
         {
@@ -7916,7 +8381,6 @@ public class MainViewModel : ViewModelBase
             var endIndex = Math.Min(startIndex + NotesLoadBatchSize, docs.Count);
             for (var i = startIndex; i < endIndex; i++)
             {
-                EnsureDocumentSchedules(docs[i]);
                 Notes.Add(CreateNoteCard(docs[i]));
             }
 
@@ -7949,7 +8413,6 @@ public class MainViewModel : ViewModelBase
             Notes.Clear();
             foreach (var doc in docs)
             {
-                EnsureDocumentSchedules(doc);
                 Notes.Add(CreateNoteCard(doc));
             }
 
@@ -8097,8 +8560,15 @@ public class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShouldShowQuizzesDashboardContent));
     }
 
+    /// <summary>Every NoteCardViewModel construction funnels through here so ScheduledAt stays in
+    /// sync with the soonest Schedules entry (EnsureDocumentSchedules/SyncLegacyScheduleFields) -
+    /// the dashboard card's reminder tooltip binds to ScheduledAt directly. Load paths used to call
+    /// EnsureDocumentSchedules themselves before this, but AddNoteFromDocument (import) did not,
+    /// so an imported note with populated Schedules but a stale/absent ScheduledAt would show a
+    /// wrong or missing reminder until the next full load.</summary>
     private NoteCardViewModel CreateNoteCard(NoteDocument doc)
     {
+        EnsureDocumentSchedules(doc);
         return new NoteCardViewModel(
             doc, 
             RequestDeleteNote, 

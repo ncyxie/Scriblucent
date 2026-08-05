@@ -127,7 +127,6 @@
                                  ToolTip="{Binding [MindMapTitleHint], Source={StaticResource Loc}}"/>
                         <TextBlock x:Name="EditedIndicatorText"
                                    Grid.Column="1"
-                                   Text="{Binding [EditedIndicator], Source={StaticResource Loc}}"
                                    Margin="12,0,0,0"
                                    FontSize="{StaticResource Type.Caption}"
                                    FontStyle="Italic"

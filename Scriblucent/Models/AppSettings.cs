@@ -103,6 +103,9 @@ public class AppSettings
 
     public int RecentItemsLimit { get; set; } = 20;
 
+    /// <summary>Most-recent color picker choices as #RRGGBB hex (newest first).</summary>
+    public List<string> RecentColors { get; set; } = new();
+
     public bool IsGroupsFirst { get; set; } = true;
 
     public string PreferredFontFamily { get; set; } = "Calibri";
@@ -112,6 +115,20 @@ public class AppSettings
     public bool IsEditorFontPanelOpen { get; set; } = false;
 
     public bool IsEditorWordWrapEnabled { get; set; } = true;
+
+    /// <summary>Master on/off switch for the note editor's spell checker - on by default, matching
+    /// the app's own initial hardcoded behavior before this became a setting. Which single
+    /// language is actually checked against is SpellCheckLanguageKey.</summary>
+    public bool EnableSpellCheck { get; set; } = true;
+
+    /// <summary>The one active spell-check language, matching Word/LibreOffice's model of a single
+    /// proofing language rather than checking against several dictionaries at once - empty means
+    /// no language is selected yet. Key into SpellCheckDictionaryService's catalog (e.g. "en_US").</summary>
+    public string SpellCheckLanguageKey { get; set; } = string.Empty;
+
+    /// <summary>Words added via the spell-check right-click menu's "Add to Dictionary" - excluded
+    /// from misspelling checks app-wide regardless of which languages are enabled.</summary>
+    public List<string> SpellCheckCustomWords { get; set; } = new();
 
     public double PreferredLineSpacing { get; set; } = 1.0;
 

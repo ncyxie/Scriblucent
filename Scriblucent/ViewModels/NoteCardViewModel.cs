@@ -34,7 +34,7 @@ public class NoteCardViewModel : ViewModelBase
         _removeFromGroupAction = removeFromGroupAction;
         _duplicateAction = duplicateAction;
         _togglePinAction = togglePinAction;
-        DeleteCommand = new RelayCommand(ConfirmAndDelete);
+        DeleteCommand = new RelayCommand(DeleteNote);
         RemoveFromGroupCommand = new RelayCommand(RemoveFromGroup, () => IsGrouped);
         DuplicateCommand = new RelayCommand(DuplicateNote);
         TogglePinCommand = new RelayCommand(TogglePin);
@@ -45,6 +45,8 @@ public class NoteCardViewModel : ViewModelBase
     public bool HasSchedule => Document.ScheduledAt.HasValue || (Document.Schedules?.Count ?? 0) > 0;
 
     public bool IsPinned => Document.IsPinned;
+
+    public DateTime? DeletedAt => Document.DeletedAt;
 
     public string TagsDisplay
     {
@@ -149,16 +151,16 @@ public class NoteCardViewModel : ViewModelBase
             var flowDoc = new FlowDocument();
             var tr = new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd);
             tr.Load(ms, dataFormat);
-            return CapPreviewLength(ReplaceImageMarkers(BuildOrderedContentPreview(flowDoc), Document.Images));
+            return CapPreviewLength(StripLegacyImageMarkers(BuildOrderedContentPreview(flowDoc)));
         }
         catch (FormatException)
         {
-            return CapPreviewLength(ReplaceImageMarkers(raw, Document.Images));
+            return CapPreviewLength(StripLegacyImageMarkers(raw));
         }
         catch (Exception ex)
         {
             Scriblucent.Services.CrashLog.Append("NoteCardViewModel.BuildContentPreview", ex);
-            return CapPreviewLength(ReplaceImageMarkers(raw, Document.Images));
+            return CapPreviewLength(StripLegacyImageMarkers(raw));
         }
     }
 
@@ -174,17 +176,10 @@ public class NoteCardViewModel : ViewModelBase
         set => SetProperty(ref _isSelectedInMassSelect, value);
     }
 
-    private async void ConfirmAndDelete()
-    {
-        var confirmed = ModernDialog.ConfirmDanger(
-            Application.Current?.MainWindow,
-            LocalizationService.GetString("ConfirmDelete"),
-            LocalizationService.GetString("DeleteNoteConfirmation"),
-            LocalizationService.GetString("Confirm"));
-
-        if (confirmed)
-            _deleteAction(this);
-    }
+    /// <summary>No confirmation prompt - deleting a note moves it to Trash rather than destroying
+    /// it, so there's nothing to lose by acting immediately. Permanently removing a note (from
+    /// within Trash) is the irreversible step and confirms separately - see TrashPanel.</summary>
+    private void DeleteNote() => _deleteAction(this);
 
     public bool IsGrouped => Document.GroupId.HasValue;
 
@@ -238,8 +233,6 @@ public class NoteCardViewModel : ViewModelBase
     private static string BuildOrderedContentPreview(FlowDocument document)
     {
         var preview = new StringBuilder();
-        var imagePlaceholder = LocalizationService.GetString("PicturePlaceholder");
-        var emittedImages = new HashSet<Image>();
         var navigator = document.ContentStart;
 
         while (navigator != null && navigator.CompareTo(document.ContentEnd) < 0)
@@ -248,22 +241,6 @@ public class NoteCardViewModel : ViewModelBase
             if (context == TextPointerContext.Text)
             {
                 preview.Append(navigator.GetTextInRun(LogicalDirection.Forward));
-            }
-            else if (context == TextPointerContext.EmbeddedElement)
-            {
-                AppendImagePlaceholderIfNeeded(
-                    preview,
-                    TryGetImage(navigator.GetAdjacentElement(LogicalDirection.Forward)),
-                    emittedImages,
-                    imagePlaceholder);
-            }
-            else if (context == TextPointerContext.ElementStart)
-            {
-                AppendImagePlaceholderIfNeeded(
-                    preview,
-                    TryGetImage(navigator.GetAdjacentElement(LogicalDirection.Forward)),
-                    emittedImages,
-                    imagePlaceholder);
             }
             else if (context == TextPointerContext.ElementEnd
                 && navigator.Parent is Paragraph or ListItem or BlockUIContainer)
@@ -277,46 +254,15 @@ public class NoteCardViewModel : ViewModelBase
         return NormalizePreviewWhitespace(preview.ToString());
     }
 
-    private static Image? TryGetImage(object? element)
+    private static string StripLegacyImageMarkers(string text)
     {
-        return element switch
-        {
-            Image image => image,
-            InlineUIContainer { Child: Image image } => image,
-            BlockUIContainer { Child: Image image } => image,
-            _ => null
-        };
-    }
-
-    private static string ReplaceImageMarkers(string text, IReadOnlyList<NoteImageAttachment>? images)
-    {
-        if (string.IsNullOrEmpty(text) || images == null || images.Count == 0)
+        if (string.IsNullOrEmpty(text) || !text.Contains("[[ScriblucentImage:", StringComparison.Ordinal))
             return text;
 
-        var placeholder = LocalizationService.GetString("PicturePlaceholder");
-        foreach (var image in images)
-        {
-            if (image.Id == Guid.Empty)
-                continue;
-
-            text = text.Replace($"[[ScriblucentImage:{image.Id:D}]]", placeholder, StringComparison.Ordinal);
-        }
-
-        return text;
-    }
-
-    private static void AppendImagePlaceholderIfNeeded(
-        StringBuilder preview,
-        Image? image,
-        HashSet<Image> emittedImages,
-        string imagePlaceholder)
-    {
-        if (image is null || !emittedImages.Add(image))
-            return;
-
-        AppendSeparator(preview);
-        preview.Append(imagePlaceholder);
-        preview.Append(' ');
+        return System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"\[\[ScriblucentImage:[^\]]+\]\]",
+            string.Empty);
     }
 
     private static void AppendSeparator(StringBuilder preview)

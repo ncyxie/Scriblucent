@@ -536,6 +536,38 @@
 								   Background="{DynamicResource SidebarSeparator}"
 								   Opacity="1"/>
 
+						<Button Style="{StaticResource SidebarActionButtonStyle}"
+								Click="SidebarTrashButton_Click"
+								ToolTip="{Binding [Trash], Source={StaticResource Loc}}">
+							<Grid VerticalAlignment="Center">
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition Width="48"/>
+									<ColumnDefinition Width="*"/>
+								</Grid.ColumnDefinitions>
+								<Grid Grid.Column="0" Width="48" HorizontalAlignment="Center">
+									<icons:AppIcon Kind="Trash" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" HorizontalAlignment="Center"/>
+									<Border HorizontalAlignment="Right"
+											VerticalAlignment="Top"
+											Margin="0,2,6,0"
+											MinWidth="16"
+											Height="16"
+											Padding="4,0"
+											CornerRadius="8"
+											Background="{DynamicResource AccentPrimary}"
+											Visibility="{Binding HasTrashItems, Converter={StaticResource BoolToVis}}">
+										<TextBlock Text="{Binding TrashItemCount}"
+												   FontSize="10"
+												   FontWeight="SemiBold"
+												   Foreground="{DynamicResource AccentPrimaryForeground}"
+												   HorizontalAlignment="Center"
+												   VerticalAlignment="Center"/>
+									</Border>
+								</Grid>
+								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
+										   Text="{Binding [Trash], Source={StaticResource Loc}}"/>
+							</Grid>
+						</Button>
+
                         <Button Style="{StaticResource SidebarActionButtonStyle}"
 								Click="SidebarSettingsButton_Click"
 								ToolTip="{Binding [Settings], Source={StaticResource Loc}}">
@@ -1167,5 +1199,13 @@
 							 HorizontalAlignment="Stretch"
 							 VerticalAlignment="Stretch"
 							 Panel.ZIndex="202"/>
+
+		<Views:TrashPanel x:Name="TrashPanelControl"
+						 x:FieldModifier="public"
+						 Grid.ColumnSpan="2"
+						 Visibility="Collapsed"
+						 HorizontalAlignment="Stretch"
+						 VerticalAlignment="Stretch"
+						 Panel.ZIndex="203"/>
     </Grid>
 </Window>

@@ -31,7 +31,7 @@ public static class DashboardMassSelectCheckBoxBehavior
             if (source is CheckBox checkBox && GetIsEnabled(checkBox))
                 return true;
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetParent(source);
         }
 
         return false;
@@ -199,8 +199,12 @@ public static class DashboardMassSelectCheckBoxBehavior
         => value is NoteCardViewModel or FlashcardSetViewModel or MindMapViewModel or QuizViewModel;
 
     private static DependencyObject? GetParent(DependencyObject current)
-        => VisualTreeHelper.GetParent(current) as DependencyObject
-           ?? LogicalTreeHelper.GetParent(current) as DependencyObject;
+    {
+        if (current is Visual or System.Windows.Media.Media3D.Visual3D)
+            return VisualTreeHelper.GetParent(current);
+
+        return LogicalTreeHelper.GetParent(current);
+    }
 
     private static IEnumerable<CheckBox> EnumerateMassSelectCheckBoxes(DependencyObject root)
     {

@@ -192,13 +192,31 @@ public partial class NoteEditorTabsWindow : Window
             state.Editor.ApplyMeasurementUnitSystemPreference(unitSystem);
     }
 
+    public void ApplySpellCheckPreference(bool enabled)
+    {
+        foreach (var state in _tabsByDocumentId.Values)
+            state.Editor.ApplySpellCheckPreference(enabled);
+    }
+
+    public void RefreshSpellCheckLanguages()
+    {
+        foreach (var state in _tabsByDocumentId.Values)
+            state.Editor.RefreshSpellCheckLanguages();
+    }
+
     private void NoteEditorTabsWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Handled || EditorTabs.SelectedItem is not TabItem selectedTab)
             return;
 
         var state = _tabsByDocumentId.Values.FirstOrDefault(state => ReferenceEquals(state.TabItem, selectedTab));
-        state?.Editor.TryHandleEditorTabKey(e);
+        if (state is null)
+            return;
+
+        if (state.Editor.TryHandleFloatingImageKey(e))
+            return;
+
+        state.Editor.TryHandleEditorTabKey(e);
     }
 
     private static string GetTabHeaderText(NoteCardViewModel noteViewModel)

@@ -114,6 +114,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private readonly Dictionary<MindMapNode, Point> _manualPositions = new();
     private string _lastSavedSnapshot = string.Empty;
     private bool _isInitializing = true;
+    private bool _isFlashingTitleStatus;
     private bool _allowCloseWithoutPrompt;
     private MindMapNoteLinkOption? _selectedLinkedNote;
 
@@ -314,7 +315,27 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     public bool HasPendingAutoSaveChanges() => HasUnsavedChanges();
 
-    public void MarkCurrentStateAutoSaved() => MarkCurrentStateSaved();
+    public void MarkCurrentStateAutoSaved()
+    {
+        _lastSavedSnapshot = GetEditorSnapshot();
+        ShowAutoSaveIndicator();
+    }
+
+    private void ShowAutoSaveIndicator()
+    {
+        if (EditedIndicatorText is null)
+            return;
+
+        _isFlashingTitleStatus = true;
+        UiMotion.FlashInlineStatus(
+            EditedIndicatorText,
+            LocalizationService.GetString("AutoSaving"),
+            () =>
+            {
+                _isFlashingTitleStatus = false;
+                UpdateEditedIndicator();
+            });
+    }
 
     private bool HasUnsavedChanges()
     {
@@ -326,9 +347,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateEditedIndicator()
     {
-        if (_isInitializing || EditedIndicatorText is null)
+        if (_isInitializing || EditedIndicatorText is null || _isFlashingTitleStatus)
             return;
 
+        EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
         UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
     }
 

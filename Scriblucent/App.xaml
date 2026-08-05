@@ -298,6 +298,100 @@
                 </Setter>
             </Style>
 
+            <!-- Leaf + submenu MenuItem chrome. SubmenuHeader needs PART_Popup / ItemsHost
+                 or nested ContextMenu items (table Insert ▸ etc.) never open or fire. -->
+            <ControlTemplate x:Key="MenuItemLeafTemplate" TargetType="{x:Type MenuItem}">
+                <Border x:Name="ItemBorder"
+                        Background="Transparent"
+                        CornerRadius="{StaticResource Radius.Control}"
+                        Padding="12,8"
+                        Margin="2,1"
+                        SnapsToDevicePixels="True">
+                    <ContentPresenter ContentSource="Header"
+                                      RecognizesAccessKey="True"
+                                      VerticalAlignment="Center"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
+            <ControlTemplate x:Key="MenuItemSubmenuHeaderTemplate" TargetType="{x:Type MenuItem}">
+                <Border x:Name="ItemBorder"
+                        Background="Transparent"
+                        CornerRadius="{StaticResource Radius.Control}"
+                        Padding="12,8"
+                        Margin="2,1"
+                        SnapsToDevicePixels="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter ContentSource="Header"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Center"/>
+                        <Path Grid.Column="1"
+                              Margin="12,0,0,0"
+                              VerticalAlignment="Center"
+                              Data="M0,0 L4,3.5 0,7 Z"
+                              Fill="{TemplateBinding Foreground}"
+                              StrokeThickness="0"/>
+                        <Popup x:Name="PART_Popup"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               HorizontalOffset="6"
+                               IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                               Placement="Right"
+                               PopupAnimation="Fade"
+                               VerticalOffset="-6">
+                            <Border Background="Transparent"
+                                    Padding="18,14,18,20"
+                                    ClipToBounds="False">
+                                <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource PopupBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Card}"
+                                            IsHitTestVisible="False"
+                                            Effect="{StaticResource Elevation.Popup}"/>
+                                    <Border Background="{DynamicResource CardBackground}"
+                                            BorderBrush="{DynamicResource PopupBorder}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource Radius.Card}"
+                                            SnapsToDevicePixels="True">
+                                        <Border Background="Transparent"
+                                                CornerRadius="{StaticResource Radius.Card}"
+                                                Padding="4"
+                                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                        </Border>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
+                    </Trigger>
+                    <Trigger Property="IsSubmenuOpen" Value="True">
+                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+
             <Style TargetType="{x:Type MenuItem}">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -305,29 +399,15 @@
                 <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
                 <Setter Property="FontWeight" Value="Normal"/>
                 <Setter Property="Cursor" Value="Hand"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="{x:Type MenuItem}">
-                            <Border x:Name="ItemBorder"
-                                    Background="Transparent"
-                                    CornerRadius="{StaticResource Radius.Control}"
-                                    Padding="12,8"
-                                    Margin="2,1">
-                                <TextBlock Text="{TemplateBinding Header}"
-                                           Foreground="{TemplateBinding Foreground}"
-                                           FontWeight="{TemplateBinding FontWeight}"/>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsHighlighted" Value="True">
-                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
-                                </Trigger>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
+                <Setter Property="Template" Value="{StaticResource MenuItemLeafTemplate}"/>
+                <Style.Triggers>
+                    <Trigger Property="Role" Value="TopLevelHeader">
+                        <Setter Property="Template" Value="{StaticResource MenuItemSubmenuHeaderTemplate}"/>
+                    </Trigger>
+                    <Trigger Property="Role" Value="SubmenuHeader">
+                        <Setter Property="Template" Value="{StaticResource MenuItemSubmenuHeaderTemplate}"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

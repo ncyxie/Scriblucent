@@ -158,6 +158,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Appearance -->
@@ -396,6 +397,114 @@
                     </StackPanel>
                 </Border>
 
+                <Border x:Name="SpellCheckSettingsCard"
+                        Grid.Row="10"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [SpellCheck], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <CheckBox x:Name="EnableSpellCheckCheckBox"
+                                  Content="{Binding [EnableSpellCheck], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  Checked="EnableSpellCheckCheckBox_Changed"
+                                  Unchecked="EnableSpellCheckCheckBox_Changed"/>
+                        <TextBlock Text="{Binding [SpellCheckDescription], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+
+                        <StackPanel Margin="0,12,0,0"
+                                    Visibility="{Binding IsChecked, ElementName=EnableSpellCheckCheckBox, Converter={StaticResource BoolToVis}}">
+                            <Border Height="1"
+                                    Background="{DynamicResource BorderColor}"
+                                    Margin="0,0,0,12"/>
+                            <TextBlock Text="{Binding [SpellCheckLanguages], Source={StaticResource Loc}}"
+                                       Style="{StaticResource FormOptionLabelStyle}"/>
+                            <TextBlock Text="{Binding [SpellCheckLanguagesDescription], Source={StaticResource Loc}}"
+                                       Style="{StaticResource FormHelperTextStyle}"
+                                       Margin="0,0,0,10"/>
+
+                            <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                    Padding="6"
+                                    Grid.IsSharedSizeScope="True">
+                                <ListBox x:Name="SpellCheckLanguagesListBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         HorizontalContentAlignment="Stretch"
+                                         MaxHeight="260"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ItemContainerStyle="{StaticResource AiToolsListBoxItemStyle}"
+                                         SelectionMode="Single">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="4,2">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto" SharedSizeGroup="SpellCheckLanguageAction"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <RadioButton Grid.Column="0"
+                                                                 Style="{StaticResource SortOptionRadioButtonStyle}"
+                                                                 GroupName="SpellCheckLanguageGroup"
+                                                                 Content="{Binding DisplayName}"
+                                                                 IsChecked="{Binding IsEnabled}"
+                                                                 IsEnabled="{Binding IsDownloaded}"
+                                                                 Tag="{Binding Key}"
+                                                                 Margin="2,4"
+                                                                 VerticalAlignment="Center"
+                                                                 Foreground="{DynamicResource TextColor}"
+                                                                 Checked="SpellCheckLanguageRadioButton_Checked"/>
+
+                                                    <Button Grid.Column="1"
+                                                            Content="{Binding [SpellCheckLanguageDownload], Source={StaticResource Loc}}"
+                                                            Tag="{Binding Key}"
+                                                            Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
+                                                            Padding="10,4"
+                                                            Margin="10,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Click="DownloadSpellCheckLanguage_Click"
+                                                            Visibility="{Binding IsDownloaded, Converter={StaticResource InverseBoolToVis}}"/>
+
+                                                    <Button Grid.Column="1"
+                                                            Content="{Binding [Delete], Source={StaticResource Loc}}"
+                                                            Tag="{Binding Key}"
+                                                            Style="{StaticResource DialogDangerButtonStyle}"
+                                                            Padding="10,4"
+                                                            Margin="10,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Click="DeleteSpellCheckLanguage_Click"
+                                                            Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVis}}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button x:Name="SpellCheckCheckForUpdatesButton"
+                                        Content="{Binding [SpellCheckCheckForUpdates], Source={StaticResource Loc}}"
+                                        Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
+                                        Padding="12,6"
+                                        Click="CheckSpellCheckLanguageUpdates_Click"/>
+                                <Button Content="{Binding [SpellCheckOpenFolder], Source={StaticResource Loc}}"
+                                        Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
+                                        Padding="12,6"
+                                        Margin="8,0,0,0"
+                                        Click="OpenSpellCheckDictionariesFolder_Click"/>
+                            </StackPanel>
+
+                            <TextBlock x:Name="SpellCheckLanguageStatusText"
+                                       Margin="0,8,0,0"
+                                       Style="{StaticResource FormHelperTextStyle}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- AI Tools -->
                 <TextBlock Grid.Row="5"
                            Text="{Binding [SettingsCategoryAiTools], Source={StaticResource Loc}}"
@@ -572,11 +681,11 @@
                 </Border>
 
                 <!-- Flashcards -->
-                <TextBlock Grid.Row="10"
+                <TextBlock Grid.Row="11"
                            Text="{Binding [SettingsCategoryFlashcards], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="11"
+                <Border Grid.Row="12"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -597,7 +706,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="12"
+                <Border Grid.Row="13"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -628,11 +737,11 @@
                 </Border>
 
                 <!-- Activity -->
-                <TextBlock Grid.Row="13"
+                <TextBlock Grid.Row="14"
                            Text="{Binding [SettingsCategoryActivity], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="14"
+                <Border Grid.Row="15"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -674,11 +783,11 @@
                 </Border>
 
                 <!-- Data -->
-                <TextBlock Grid.Row="15"
+                <TextBlock Grid.Row="16"
                            Text="{Binding [SettingsCategoryData], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="16"
+                <Border Grid.Row="17"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -698,7 +807,7 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Grid.Row="17" Margin="0,20,0,0">
+                <Grid Grid.Row="18" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

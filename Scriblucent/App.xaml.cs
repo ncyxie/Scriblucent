@@ -46,7 +46,22 @@ public partial class App : Application
                 freezable.Freeze();
         }
 
-        DispatcherUnhandledException += (_, args) => CrashLog.Append("Unhandled", args.Exception);
+        // Contain UI-thread failures: log the full exception and keep the app alive. Without
+        // Handled=true, ANY unhandled managed exception terminates the process, which turned
+        // every transient editor glitch into a crash with no usable recovery.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            try
+            {
+                CrashLog.Append("Unhandled", args.Exception);
+                args.Handled = true;
+            }
+            catch
+            {
+                // Never let the handler itself take the process down.
+                args.Handled = true;
+            }
+        };
 
         AppSettingsService.MigrateLegacyDataFolder();
 

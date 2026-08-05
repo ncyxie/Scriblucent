@@ -230,7 +230,7 @@ public static class SmoothScrollBehavior
         if (e.OriginalSource is not DependencyObject source)
             return false;
 
-        for (var current = source; current != null; current = VisualTreeHelper.GetParent(current))
+        for (var current = source; current != null; current = GetParentObject(current))
         {
             if (current is Thumb)
                 return true;
@@ -291,7 +291,7 @@ public static class SmoothScrollBehavior
             return false;
 
         ScrollBar? hoveredBar = null;
-        for (var current = source; current != null; current = VisualTreeHelper.GetParent(current))
+        for (var current = source; current != null; current = GetParentObject(current))
         {
             if (current is ScrollBar bar)
             {
@@ -329,13 +329,26 @@ public static class SmoothScrollBehavior
 
     private static ScrollViewer? FindOwningScrollViewer(DependencyObject from)
     {
-        for (var current = VisualTreeHelper.GetParent(from); current != null; current = VisualTreeHelper.GetParent(current))
+        for (var current = GetParentObject(from); current != null; current = GetParentObject(current))
         {
             if (current is ScrollViewer scrollViewer)
                 return scrollViewer;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Walk parents from wheel/mouse hit-test sources. FlowDocument content (<see cref="System.Windows.Documents.Run"/>,
+    /// etc.) is not a <see cref="Visual"/>, so <see cref="VisualTreeHelper.GetParent"/> throws —
+    /// fall back to the logical tree for those nodes.
+    /// </summary>
+    private static DependencyObject? GetParentObject(DependencyObject current)
+    {
+        if (current is Visual or System.Windows.Media.Media3D.Visual3D)
+            return VisualTreeHelper.GetParent(current);
+
+        return LogicalTreeHelper.GetParent(current);
     }
 
     private static void ApplyWheelDeltas(State state, double deltaX, double deltaY)
@@ -372,7 +385,7 @@ public static class SmoothScrollBehavior
         if (e.OriginalSource is not DependencyObject source)
             return false;
 
-        for (var current = source; current != null; current = VisualTreeHelper.GetParent(current))
+        for (var current = source; current != null; current = GetParentObject(current))
         {
             if (ReferenceEquals(current, self))
                 return false;

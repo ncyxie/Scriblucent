@@ -2118,6 +2118,16 @@ namespace Scriblucent
             }
         }
 
+        private void SidebarTrashButton_Click(object sender, RoutedEventArgs e)
+        {
+            var trashPanel = this.FindName("TrashPanelControl") as TrashPanel;
+            if (trashPanel != null)
+            {
+                trashPanel.DataContext = this.DataContext;
+                trashPanel.ShowAnimated();
+            }
+        }
+
         private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
         {
             if (this.DataContext is ViewModels.MainViewModel vm)
@@ -3022,7 +3032,6 @@ namespace Scriblucent
                 (InfoText("InfoLabelTags"), FormatInfoTags(note.Document.Tags)),
                 (InfoText("InfoLabelWords"), CountWords(content).ToString(CultureInfo.CurrentCulture)),
                 (InfoText("InfoLabelCharacters"), content.Length.ToString(CultureInfo.CurrentCulture)),
-                (InfoText("InfoLabelImages"), (note.Document.Images?.Count ?? 0).ToString(CultureInfo.CurrentCulture)),
                 (InfoText("InfoLabelEditHistory"), (note.Document.EditHistory?.Count ?? 0).ToString(CultureInfo.CurrentCulture)),
                 (InfoText("InfoLabelFont"), $"{note.Document.FontFamily}, {note.Document.FontSize.ToString("0.#", CultureInfo.CurrentCulture)}"),
                 (InfoText("InfoLabelId"), note.Document.Id.ToString())

@@ -22,4 +22,11 @@
     <ProjectReference Include="..\Scriblucent\Scriblucent.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Real Hunspell dictionary fixture for SpellCheckServiceTests - downloaded once from the
+         same LibreOffice/dictionaries source SpellCheckDictionaryService fetches from at runtime,
+         committed here so tests are deterministic and don't need network access. -->
+    <None Include="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

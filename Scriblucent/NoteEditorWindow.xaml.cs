@@ -1,4 +1,4 @@
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
@@ -12,15 +12,15 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
-
-using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Scriblucent.Controls;
+using WeCantSpell.Hunspell;
 
 namespace Scriblucent
 {
@@ -36,6 +36,22 @@ namespace Scriblucent
         private bool _lastFindWrapAround = true;
         private bool _hasFindHighlights;
 
+        // Spell check - see SpellCheckDictionaryService/SpellCheckService for the Hunspell-backed
+        // engine this drives. Squiggles are real in-document TextDecorations
+        // (TextDecorationLocation.Baseline, unused by any other feature in this editor) applied
+        // per misspelled-word TextRange and tracked here so they can be cleared precisely
+        // (including before every save/export) without disturbing Underline/Strikethrough or
+        // Find/Replace's own Background highlighting, which use different properties entirely.
+        private bool _isSpellCheckEnabled;
+        private DispatcherTimer? _spellCheckDebounceTimer;
+        private readonly List<TextRange> _spellCheckDecoratedRanges = new();
+        private bool _isSpellCheckScanning;
+        private bool _isApplyingSpellCheckDecorations;
+        private ContextMenu? _defaultContentTextBoxContextMenu;
+        // "Ignore" (Word-style) is session-only, unlike "Add to Dictionary" which persists to
+        // AppSettings.SpellCheckCustomWords - resets the next time this note is opened.
+        private readonly HashSet<string> _sessionIgnoredWords = new(StringComparer.OrdinalIgnoreCase);
+
         // Auto-save fields
         public event Action<NoteDocument>? DocumentAutoSaved;
         public event Action<NoteEditorWindow>? CloseRequested;
@@ -49,11 +65,81 @@ namespace Scriblucent
         private string _lastSavedContent = string.Empty;
         private string _lastSavedSnapshot = string.Empty;
         private NoteDocument? _currentDocument;
-        // Keyed by ResizableImage.ImageId. Lets CreateImageAttachment skip the resize+JPEG-encode
-        // work (real CPU cost, run synchronously on every save including autosave) for images whose
-        // Source/target size haven't changed since the last time they were actually encoded.
-        private readonly Dictionary<Guid, (ImageSource? Source, double Width, double Height)> _lastEncodedImageSignatures = new();
+        private readonly FloatingImageCoordinator _floatingImages = new();
+        private bool _isInsertingPicture;
+        private bool _isInsertingSketch;
         private const int MaxEditHistoryEntries = 100;
+        // Checklist items are plain text (glyph + separator) followed by the item's own runs, not
+        // a real embedded control - see ChecklistButton_Click for why. That keeps them round-
+        // tripping through the existing XamlPackage save/load automatically, same as Bold/Italic/
+        // Underline, with no custom-UIElement marker-swap serialization needed.
+        private const string ChecklistUncheckedGlyph = "☐";
+        private const string ChecklistCheckedGlyph = "☑";
+        private const string ChecklistPrefixSeparator = " ";
+        private static readonly SolidColorBrush ChecklistCompletedForegroundBrush = CreateChecklistCompletedForegroundBrush();
+
+        private static SolidColorBrush CreateChecklistCompletedForegroundBrush()
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
+            brush.Freeze();
+            return brush;
+        }
+
+        /// <summary>Draws spell-check waves with a tiled zigzag brush. Baseline keeps the
+        /// decoration independent of underline and strikethrough formatting.</summary>
+        private static readonly TextDecoration SpellCheckSquiggleDecoration = CreateSpellCheckSquiggleDecoration();
+
+        private static TextDecoration CreateSpellCheckSquiggleDecoration()
+        {
+            const double tileWidth = 4;
+            const double tileHeight = 3;
+
+            var zigzag = new StreamGeometry();
+            using (var context = zigzag.Open())
+            {
+                context.BeginFigure(new Point(0, tileHeight), isFilled: false, isClosed: false);
+                context.LineTo(new Point(tileWidth / 2, 0), isStroked: true, isSmoothJoin: false);
+                context.LineTo(new Point(tileWidth, tileHeight), isStroked: true, isSmoothJoin: false);
+            }
+            zigzag.Freeze();
+
+            var strokeBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0x3E, 0x3E));
+            strokeBrush.Freeze();
+
+            var strokePen = new Pen(strokeBrush, 1.1);
+            strokePen.Freeze();
+
+            var zigzagDrawing = new GeometryDrawing { Geometry = zigzag, Pen = strokePen };
+            zigzagDrawing.Freeze();
+
+            var tileBrush = new DrawingBrush(zigzagDrawing)
+            {
+                TileMode = TileMode.Tile,
+                Viewport = new Rect(0, 0, tileWidth, tileHeight),
+                ViewportUnits = BrushMappingMode.Absolute,
+                Viewbox = new Rect(0, 0, tileWidth, tileHeight),
+                ViewboxUnits = BrushMappingMode.Absolute,
+                Stretch = Stretch.None
+            };
+            tileBrush.Freeze();
+
+            var decorationPen = new Pen(tileBrush, tileHeight)
+            {
+                StartLineCap = PenLineCap.Flat,
+                EndLineCap = PenLineCap.Flat
+            };
+            decorationPen.Freeze();
+
+            return new TextDecoration
+            {
+                Location = TextDecorationLocation.Baseline,
+                Pen = decorationPen,
+                PenOffset = 1.5,
+                PenOffsetUnit = TextDecorationUnit.Pixel,
+                PenThicknessUnit = TextDecorationUnit.Pixel
+            };
+        }
+
         private readonly FlashcardConversionService _flashcardConversionService = new();
         private readonly MindMapConversionService _mindMapConversionService = new();
         private readonly QuizConversionService _quizConversionService = new();
@@ -65,6 +151,8 @@ namespace Scriblucent
         private CancellationTokenSource? _testConversionCancellationSource;
         private bool _isSyncingFontSelectors;
         private bool _isApplyingTypography;
+        private bool _isApplyingHyperlinkCtrlHints;
+        private bool _hyperlinkCtrlHintsVisible;
         private bool _isLoadingDocument;
         private bool _isSerializingEditorContent;
         private bool _allowCloseWithoutPrompt;
@@ -118,37 +206,9 @@ namespace Scriblucent
         private const double PdfPagePadding = 60;
         private const double PdfContentTopOffset = 74;
         private const double StatusIndicatorExpandedHeight = 20;
-        private const double FloatingImageAnchorHeight = 80;
         private const double UnwrappedDocumentPageWidth = 10000;
-        private const string ImageMarkerPrefix = "[[ScriblucentImage:";
-        private const string ImageMarkerSuffix = "]]";
         private ScrollViewer? _contentScrollViewer;
         private INotifyPropertyChanged? _editorSettingsSource;
-        private bool _isUpdatingFloatingImageLayout;
-        private bool _isFloatingImageOverlayLayoutUpdateQueued;
-        private bool _isInlineImageDropPending;
-
-        private static readonly DependencyProperty FloatingDocumentLeftProperty =
-            DependencyProperty.RegisterAttached(
-                "FloatingDocumentLeft",
-                typeof(double),
-                typeof(NoteEditorWindow),
-                new PropertyMetadata(0d));
-
-        private static readonly DependencyProperty FloatingDocumentTopProperty =
-            DependencyProperty.RegisterAttached(
-                "FloatingDocumentTop",
-                typeof(double),
-                typeof(NoteEditorWindow),
-                new PropertyMetadata(0d));
-
-        private static readonly DependencyProperty InlineImageIdProperty =
-            DependencyProperty.RegisterAttached(
-                "InlineImageId",
-                typeof(Guid),
-                typeof(NoteEditorWindow),
-                new PropertyMetadata(Guid.Empty));
-
         private static readonly double[] WordFontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
         private static readonly double[] WordIndentSizes = [24, 48, 72, 96, 120, 144];
         private static readonly string[] PreferredFontFamilyOptions =
@@ -185,14 +245,43 @@ namespace Scriblucent
             ApplyEditorTextLayout();
             ApplyCurrentLineSpacingToDocument();
             UpdateEditorToolButtonStates();
-            ContentTextBox.IsDocumentEnabled = true; // Ensure interactive elements (like ResizableImage) can receive pointer events
+            // Spell check picks its dictionary from the effective Language - the editor's Content
+            // gets reparented into NoteEditorTabsWindow's tree (see that window's host.Content
+            // swap), so setting it on this Window instance wouldn't survive; set it directly on
+            // the RichTextBox instead.
+            ContentTextBox.Language = XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag);
+            ContentTextBox.IsDocumentEnabled = true;
+            // IsDocumentEnabled also makes Hyperlinks raise RequestNavigate on click - always handle
+            // it ourselves so unknown schemes (scriblucent-note://) and default navigation cannot crash.
+            ContentTextBox.AddHandler(
+                Hyperlink.RequestNavigateEvent,
+                new System.Windows.Navigation.RequestNavigateEventHandler(ContentTextBox_HyperlinkRequestNavigate),
+                handledEventsToo: true);
             ContentTextBox.CommandBindings.Add(new CommandBinding(ApplicationCommands.Copy, ContentTextBox_CopyExecuted, ContentTextBox_CopyCanExecute));
+            DataObject.AddPastingHandler(ContentTextBox, ContentTextBox_Pasting);
             ContentTextBox.PreviewMouseDown += ContentTextBox_PreviewMouseDown;
-            ContentTextBox.SizeChanged += (_, _) => ScheduleFloatingImageOverlayLayoutUpdate();
-            EditorSurface.SizeChanged += (_, _) => ScheduleFloatingImageOverlayLayoutUpdate();
+            ContentTextBox.PreviewKeyDown += ContentTextBox_HyperlinkHintPreviewKeyDown;
+            ContentTextBox.PreviewKeyUp += ContentTextBox_HyperlinkHintPreviewKeyUp;
+            // The static Cut/Copy/Paste menu is set via XAML; captured here so
+            // ContentTextBox_ContextMenuOpening can restore it after showing a dynamic
+            // spell-check suggestions menu for a right-click that landed on a misspelled word.
+            _defaultContentTextBoxContextMenu = ContentTextBox.ContextMenu;
+            ContentTextBox.ContextMenuOpening += ContentTextBox_ContextMenuOpening;
             PreviewKeyDown += NoteEditorWindow_PreviewKeyDown;
+            PreviewKeyUp += NoteEditorWindow_PreviewKeyUp;
+            // RootGrid is reparented into NoteEditorTabsWindow; keep image shortcuts on the body
+            // so Delete/Back/Escape still reach the coordinator when this Window is not in the route.
+            RootGrid.PreviewKeyDown += RootGrid_PreviewKeyDown;
+            Deactivated += (_, _) => SetHyperlinkCtrlHintsVisible(false);
             Loaded += NoteEditorWindow_Loaded;
             RootGrid.Loaded += NoteEditorWindow_Loaded;
+
+            _floatingImages.Attach(FloatingImageOverlay, ContentTextBox, EditorSurface);
+            _floatingImages.ImagesChanged += (_, _) =>
+            {
+                MarkEditorContentChanged();
+                UpdateEditedIndicator();
+            };
 
             // Subscribe to theme changes to update RichTextBox foreground
             ThemeManager.ThemeChanged += ThemeManager_ThemeChanged;
@@ -203,6 +292,7 @@ namespace Scriblucent
             var settings = AppSettingsService.Load();
             _measurementUnitSystem = AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem);
             _isWordWrapEnabled = settings.IsEditorWordWrapEnabled;
+            ApplySpellCheckPreference(settings.EnableSpellCheck);
             _lineSpacingMultiplier = NormalizeLineSpacingMultiplier(settings.PreferredLineSpacing);
             _indentSize = NormalizeIndentSize(settings.PreferredIndentSize);
             PopulateIndentSizeOptions();
@@ -372,7 +462,6 @@ namespace Scriblucent
             UpdateEditorToolButtonStates();
             UpdateEditorScrollbarCorner();
             Dispatcher.InvokeAsync(UpdateEditorScrollbarCorner);
-            ScheduleFloatingImageOverlayLayoutUpdate();
         }
 
         private void ThemeManager_ThemeChanged(object? sender, EventArgs e)
@@ -387,8 +476,6 @@ namespace Scriblucent
         {
             UiMotion.ConfigurePopupsForWindow(this);
             AttachContentScrollViewer();
-            UpdateFloatingImageOverlayLayout();
-            ScheduleFloatingImageOverlayLayoutUpdate();
         }
 
         private void AttachContentScrollViewer()
@@ -417,32 +504,48 @@ namespace Scriblucent
         private void ContentScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             UpdateEditorScrollbarCorner();
-            UpdateFloatingImageOverlayLayout();
-            ScheduleFloatingImageOverlayLayoutUpdate();
         }
 
         private void UpdateEditorScrollbarCorner()
         {
-            if (_contentScrollViewer == null || EditorScrollbarCorner == null)
+            if (_contentScrollViewer == null)
                 return;
 
-            var bothScrollbarsVisible =
-                _contentScrollViewer.ComputedVerticalScrollBarVisibility == Visibility.Visible
-                && _contentScrollViewer.ComputedHorizontalScrollBarVisibility == Visibility.Visible;
+            var verticalVisible =
+                _contentScrollViewer.ComputedVerticalScrollBarVisibility == Visibility.Visible;
+            var horizontalVisible =
+                _contentScrollViewer.ComputedHorizontalScrollBarVisibility == Visibility.Visible;
 
-            EditorScrollbarCorner.Visibility = bothScrollbarsVisible
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            if (EditorScrollbarCorner != null)
+            {
+                EditorScrollbarCorner.Visibility = verticalVisible && horizontalVisible
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
+            // Keep floating images in the content viewport — never paint over scrollbar gutters.
+            if (FloatingImageOverlay != null)
+            {
+                var right = verticalVisible ? ResolveVerticalScrollBarWidth() : 0;
+                var bottom = horizontalVisible ? ResolveHorizontalScrollBarHeight() : 0;
+                var margin = new Thickness(0, 0, right, bottom);
+                if (FloatingImageOverlay.Margin != margin)
+                    FloatingImageOverlay.Margin = margin;
+            }
         }
+
+        private double ResolveVerticalScrollBarWidth()
+            => TryFindResource("GlobalVerticalScrollBarWidth") is double width && width > 0 ? width : 6;
+
+        private double ResolveHorizontalScrollBarHeight()
+            => TryFindResource("GlobalHorizontalScrollBarHeight") is double height && height > 0 ? height : 6;
 
         private void UpdateEditorToolButtonStates()
         {
             var horizontalScrollbarAvailable = ResolveEditorScrollbarSettings().Horizontal;
             SetEditorToolButtonActive(WordWrapButton, _isWordWrapEnabled || !horizontalScrollbarAvailable);
             SetEditorToolButtonActive(FontButton, _isFontPanelOpen);
-            SetEditorToolButtonActive(ZoomInButton, _zoomLevel > 1.0001);
-            SetEditorToolButtonActive(ZoomOutButton, _zoomLevel < 0.9999);
-            SetEditorToolButtonActive(ZoomResetButton, false);
+            SetEditorToolButtonActive(ZoomMenuButton, Math.Abs(_zoomLevel - 1.0) > 0.0001);
         }
 
         private static void SetEditorToolButtonActive(Button button, bool isActive)
@@ -488,6 +591,159 @@ namespace Scriblucent
             SyncIndentSizeSelectorFromPreference();
         }
 
+        public void ApplySpellCheckPreference(bool enabled)
+        {
+            _isSpellCheckEnabled = enabled;
+            if (enabled)
+                ScheduleSpellCheck();
+            else
+                ClearSpellCheckDecorations();
+            UpdateSpellCheckLanguageChooserText();
+        }
+
+        /// <summary>Called by the Settings panel whenever the enabled-language set or custom-word
+        /// list changes, so an already-open editor re-scans immediately instead of waiting for the
+        /// next keystroke.</summary>
+        public void RefreshSpellCheckLanguages()
+        {
+            if (_isSpellCheckEnabled)
+                ScheduleSpellCheck();
+            UpdateSpellCheckLanguageChooserText();
+        }
+
+        /// <summary>Status-bar chip mirroring Word/LibreOffice's bottom-bar language indicator -
+        /// shows the single active proofing language using the full "{native name} ({name in the
+        /// app's current UI language})" label, and doubles as the entry point for the quick
+        /// language-picker menu below.</summary>
+        private void UpdateSpellCheckLanguageChooserText()
+        {
+            if (SpellCheckLanguageChooserText is null)
+                return;
+
+            if (!_isSpellCheckEnabled)
+            {
+                SpellCheckLanguageChooserText.Text = LocalizationService.GetString("SpellCheckLanguageChooserOff");
+                return;
+            }
+
+            var settings = AppSettingsService.Load();
+            SpellCheckLanguageChooserText.Text = !string.IsNullOrEmpty(settings.SpellCheckLanguageKey)
+                ? SpellCheckDictionaryService.GetFullLanguageLabel(settings.SpellCheckLanguageKey)
+                : LocalizationService.GetString("SpellCheckLanguageChooserNone");
+        }
+
+        /// <summary>Quick language picker, like clicking the language indicator in Word/LibreOffice's
+        /// status bar - single-select (only one language is ever active at a time, matching that
+        /// model rather than checking against several dictionaries at once), and only offers
+        /// already-downloaded dictionaries; adding new languages stays in Settings, matching how
+        /// Word's own status-bar picker only lists installed proofing languages rather than
+        /// duplicating the full language-install flow inline. Also offers a one-click way to turn
+        /// spell check off entirely, without a trip to Settings.</summary>
+        private void SpellCheckLanguageChooserButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button)
+                return;
+
+            var settings = AppSettingsService.Load();
+            var activeKey = settings.SpellCheckLanguageKey;
+
+            var downloadedLanguages = SpellCheckDictionaryService.GetSupportedLanguages()
+                .Where(language => SpellCheckDictionaryService.IsDictionaryDownloaded(language.Key))
+                .ToList();
+
+            var menu = new ContextMenu
+            {
+                Placement = PlacementMode.Top,
+                PlacementTarget = button
+            };
+
+            if (downloadedLanguages.Count == 0)
+            {
+                menu.Items.Add(new MenuItem
+                {
+                    Header = LocalizationService.GetString("SpellCheckLanguageChooserNoneDownloaded"),
+                    IsEnabled = false
+                });
+            }
+            else
+            {
+                foreach (var language in downloadedLanguages)
+                {
+                    var item = new MenuItem
+                    {
+                        Header = SpellCheckDictionaryService.GetFullLanguageLabel(language.Key),
+                        IsCheckable = true,
+                        IsChecked = string.Equals(language.Key, activeKey, StringComparison.OrdinalIgnoreCase),
+                        Tag = language.Key
+                    };
+                    item.Click += SpellCheckLanguageMenuItem_Click;
+                    menu.Items.Add(item);
+                }
+            }
+
+            menu.Items.Add(new Separator());
+            var disableItem = new MenuItem
+            {
+                Header = LocalizationService.GetString("SpellCheckDisableEntirely"),
+                IsEnabled = _isSpellCheckEnabled
+            };
+            disableItem.Click += DisableSpellCheckMenuItem_Click;
+            menu.Items.Add(disableItem);
+
+            button.ContextMenu = menu;
+            menu.IsOpen = true;
+        }
+
+        private void DisableSpellCheckMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = AppSettingsService.Load();
+            if (!settings.EnableSpellCheck)
+                return;
+
+            settings.EnableSpellCheck = false;
+            AppSettingsService.Save(settings);
+            BroadcastSpellCheckPreference(false);
+        }
+
+        /// <summary>Single-select, like a radio group - picking a language always makes it the sole
+        /// active one (matching Word/LibreOffice's one-proofing-language model). Deliberately
+        /// ignores the menu item's own checked state after the click (WPF auto-toggles it before
+        /// this handler runs) and just always activates the clicked language - there's no
+        /// "uncheck to select none" here, since "Disable spell check" already covers that.</summary>
+        private void SpellCheckLanguageMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem { Tag: string key })
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.SpellCheckLanguageKey = key;
+
+            // Picking a language from this chooser is a clear signal the user wants spell check
+            // active - mirrors Word, where selecting a proofing language just works rather than
+            // silently no-opping because a separate master switch is still off.
+            if (!settings.EnableSpellCheck)
+                settings.EnableSpellCheck = true;
+
+            AppSettingsService.Save(settings);
+            BroadcastSpellCheckPreference(settings.EnableSpellCheck);
+        }
+
+        private static void BroadcastSpellCheckPreference(bool enabled)
+        {
+            foreach (var window in Application.Current.Windows.OfType<Window>())
+            {
+                switch (window)
+                {
+                    case NoteEditorWindow editorWindow:
+                        editorWindow.ApplySpellCheckPreference(enabled);
+                        break;
+                    case NoteEditorTabsWindow tabsWindow:
+                        tabsWindow.ApplySpellCheckPreference(enabled);
+                        break;
+                }
+            }
+        }
+
         public UIElement? DetachEditorContentForHosting()
         {
             // Peel accidental chrome first, then unwrap FeatureWindowShell so the tabs window
@@ -508,8 +764,10 @@ namespace Scriblucent
             StopAutoSaveTimer();
             _counterUpdateDebounceTimer?.Stop();
             DetachContentScrollViewer();
+            _floatingImages.Detach();
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
+            RootGrid.PreviewKeyDown -= RootGrid_PreviewKeyDown;
             DataContextChanged -= NoteEditorWindow_DataContextChanged;
             AttachEditorSettingsSource(null);
             _flashcardConversionCancellationSource?.Cancel();
@@ -526,7 +784,12 @@ namespace Scriblucent
 
         private Window GetDialogOwnerWindow()
         {
-            return Window.GetWindow(ContentTextBox) ?? this;
+            // Hosted editors live inside NoteEditorTabsWindow; this window itself is never
+            // shown, so it must never be used as a dialog Owner (that throws). Fall back to
+            // the main window when the hosted content is already detached.
+            return Window.GetWindow(ContentTextBox)
+                ?? Application.Current?.MainWindow
+                ?? this;
         }
 
         private void NoteEditorWindow_Closing(object sender, CancelEventArgs e)
@@ -545,8 +808,10 @@ namespace Scriblucent
             StopAutoSaveTimer();
             _counterUpdateDebounceTimer?.Stop();
             DetachContentScrollViewer();
+            _floatingImages.Detach();
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
+            RootGrid.PreviewKeyDown -= RootGrid_PreviewKeyDown;
             DataContextChanged -= NoteEditorWindow_DataContextChanged;
             AttachEditorSettingsSource(null);
             _flashcardConversionCancellationSource?.Cancel();
@@ -697,7 +962,9 @@ namespace Scriblucent
 
         private void ContentTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (_isSerializingEditorContent)
+            if (_isSerializingEditorContent
+                || _isApplyingHyperlinkCtrlHints
+                || _floatingImages.IsAdjustingExtentPad)
                 return;
 
             MarkEditorContentChanged();
@@ -711,7 +978,12 @@ namespace Scriblucent
             ScheduleCounterUpdate();
             UpdateEditedIndicator();
             UpdateListRemoveButtonState();
-            ScheduleFloatingImageOverlayLayoutUpdate();
+
+            // Applying/clearing spell-check squiggles is itself a document-content change (real
+            // TextDecorations, not an overlay) - guarded by _isApplyingSpellCheckDecorations so
+            // that doesn't schedule another pass against itself forever.
+            if (_isSpellCheckEnabled && !_isApplyingSpellCheckDecorations)
+                ScheduleSpellCheck();
         }
 
         // UpdateCounter() walks the entire document text (TextRange extraction, multiple full-string
@@ -732,6 +1004,212 @@ namespace Scriblucent
             UpdateCounter();
         }
 
+        // Same 150ms lazy-create/stop/resubscribe/start debounce idiom as ScheduleCounterUpdate -
+        // Hunspell's Check() is cheap (~5.4ms/7000 words per the library's own benchmarks) but
+        // still not worth running synchronously on every keystroke.
+        private void ScheduleSpellCheck()
+        {
+            _spellCheckDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _spellCheckDebounceTimer.Stop();
+            _spellCheckDebounceTimer.Tick -= SpellCheckDebounceTimer_Tick;
+            _spellCheckDebounceTimer.Tick += SpellCheckDebounceTimer_Tick;
+            _spellCheckDebounceTimer.Start();
+        }
+
+        private async void SpellCheckDebounceTimer_Tick(object? sender, EventArgs e)
+        {
+            _spellCheckDebounceTimer?.Stop();
+            await RunSpellCheckPassAsync();
+        }
+
+        private async Task RunSpellCheckPassAsync()
+        {
+            if (!_isSpellCheckEnabled || _isSpellCheckScanning)
+                return;
+
+            _isSpellCheckScanning = true;
+            try
+            {
+                var settings = AppSettingsService.Load();
+                var dictionary = string.IsNullOrEmpty(settings.SpellCheckLanguageKey)
+                    ? null
+                    : await SpellCheckDictionaryService.GetOrLoadWordListAsync(settings.SpellCheckLanguageKey);
+
+                if (dictionary is null)
+                {
+                    ClearSpellCheckDecorations();
+                    return;
+                }
+
+                var text = GetDocumentSearchText();
+                var customWords = new HashSet<string>(settings.SpellCheckCustomWords, StringComparer.OrdinalIgnoreCase);
+                customWords.UnionWith(_sessionIgnoredWords);
+                var spans = SpellCheckService.FindMisspelledWordSpans(text, dictionary, customWords);
+                ApplySpellCheckDecorations(spans);
+            }
+            finally
+            {
+                _isSpellCheckScanning = false;
+            }
+        }
+
+        private void ApplySpellCheckDecorations(IReadOnlyList<SpellCheckService.WordSpan> spans)
+        {
+            _isApplyingSpellCheckDecorations = true;
+            try
+            {
+                ClearSpellCheckDecorations();
+
+                foreach (var span in spans)
+                {
+                    var start = GetTextPointerAtTextOffset(span.Start);
+                    var end = GetTextPointerAtTextOffset(span.Start + span.Length);
+                    if (start is null || end is null)
+                        continue;
+
+                    var range = new TextRange(start, end);
+                    SetRangeTextDecoration(range, SpellCheckSquiggleDecoration, enabled: true);
+                    _spellCheckDecoratedRanges.Add(range);
+                }
+            }
+            finally
+            {
+                _isApplyingSpellCheckDecorations = false;
+            }
+        }
+
+        /// <summary>Clears squiggles range-by-range using the exact TextRange objects they were
+        /// applied to (TextPointers auto-track document edits elsewhere), rather than one call
+        /// across the whole document - SetRangeTextDecoration's read-current-then-diff logic
+        /// assumes a uniform range, which a mixed clear-everything range is not.</summary>
+        private void ClearSpellCheckDecorations()
+        {
+            if (_spellCheckDecoratedRanges.Count == 0)
+                return;
+
+            _isApplyingSpellCheckDecorations = true;
+            try
+            {
+                foreach (var range in _spellCheckDecoratedRanges)
+                    SetRangeTextDecoration(range, SpellCheckSquiggleDecoration, enabled: false);
+
+                _spellCheckDecoratedRanges.Clear();
+            }
+            finally
+            {
+                _isApplyingSpellCheckDecorations = false;
+            }
+        }
+
+        /// <summary>Right-clicking a squiggle-underlined word swaps in a dynamic suggestions/
+        /// Ignore/Add-to-Dictionary menu, mirroring how MindMapPreviewWindow builds per-node
+        /// context menus in code-behind; right-clicking anywhere else restores the static
+        /// Cut/Copy/Paste menu captured at startup.</summary>
+        private void ContentTextBox_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            var point = Mouse.GetPosition(ContentTextBox);
+            var spellRange = FindSpellCheckRangeAtPoint(point);
+            if (spellRange is not null)
+            {
+                ContentTextBox.ContextMenu = BuildSpellCheckContextMenu(spellRange);
+                return;
+            }
+
+            var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: true)
+                ?? ContentTextBox.CaretPosition;
+            var cell = FindAncestorTableCell(pointer);
+            ContentTextBox.ContextMenu = cell is not null
+                ? BuildTableContextMenu(cell)
+                : _defaultContentTextBoxContextMenu;
+        }
+
+        private TextRange? FindSpellCheckRangeAtPoint(Point point)
+        {
+            var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: true);
+            if (pointer is null)
+                return null;
+
+            foreach (var range in _spellCheckDecoratedRanges)
+            {
+                if (pointer.CompareTo(range.Start) >= 0 && pointer.CompareTo(range.End) <= 0)
+                    return range;
+            }
+
+            return null;
+        }
+
+        private ContextMenu BuildSpellCheckContextMenu(TextRange range)
+        {
+            var word = range.Text;
+            var settings = AppSettingsService.Load();
+
+            // Resolving this synchronously is safe here specifically: a word can only be
+            // squiggle-underlined at all if RunSpellCheckPassAsync already loaded the active
+            // dictionary, so GetOrLoadWordListAsync is guaranteed to hit its in-memory cache and
+            // complete synchronously - not a general sync-over-async pattern.
+            var dictionary = string.IsNullOrEmpty(settings.SpellCheckLanguageKey)
+                ? null
+                : SpellCheckDictionaryService.GetOrLoadWordListAsync(settings.SpellCheckLanguageKey).GetAwaiter().GetResult();
+
+            var suggestions = SpellCheckService.GetSuggestions(word, dictionary);
+            var menu = new ContextMenu();
+
+            if (suggestions.Count == 0)
+            {
+                menu.Items.Add(new MenuItem
+                {
+                    Header = LocalizationService.GetString("SpellCheckNoSuggestions"),
+                    IsEnabled = false
+                });
+            }
+            else
+            {
+                foreach (var suggestion in suggestions)
+                {
+                    var suggestionItem = new MenuItem { Header = suggestion };
+                    suggestionItem.Click += (_, _) => ReplaceMisspelledWord(range, suggestion);
+                    menu.Items.Add(suggestionItem);
+                }
+            }
+
+            menu.Items.Add(new Separator());
+
+            var ignoreItem = new MenuItem { Header = LocalizationService.GetString("SpellCheckIgnore") };
+            ignoreItem.Click += (_, _) => IgnoreMisspelledWordForSession(word);
+            menu.Items.Add(ignoreItem);
+
+            var addToDictionaryItem = new MenuItem { Header = LocalizationService.GetString("SpellCheckAddToDictionary") };
+            addToDictionaryItem.Click += (_, _) => AddWordToCustomDictionary(word);
+            menu.Items.Add(addToDictionaryItem);
+
+            return menu;
+        }
+
+        private void ReplaceMisspelledWord(TextRange range, string replacement)
+        {
+            range.Text = replacement;
+            ContentTextBox.Focus();
+        }
+
+        private void IgnoreMisspelledWordForSession(string word)
+        {
+            _sessionIgnoredWords.Add(word);
+            ScheduleSpellCheck();
+        }
+
+        private void AddWordToCustomDictionary(string word)
+        {
+            var settings = AppSettingsService.Load();
+            settings.SpellCheckCustomWords ??= new List<string>();
+            if (!settings.SpellCheckCustomWords.Contains(word, StringComparer.OrdinalIgnoreCase))
+            {
+                settings.SpellCheckCustomWords.Add(word);
+                AppSettingsService.Save(settings);
+            }
+
+            ScheduleSpellCheck();
+        }
+
         private void EditorField_TextChanged(object sender, TextChangedEventArgs e)
         {
             UpdateEditedIndicator();
@@ -739,14 +1217,28 @@ namespace Scriblucent
 
         private void ContentTextBox_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            var clickedImage = FindVisualAncestor<ResizableImage>(e.OriginalSource as DependencyObject);
-            if (clickedImage != null)
+            // Prefer IsKeyDown: Keyboard.Modifiers can lag on the Ctrl key itself.
+            if (e.ChangedButton == MouseButton.Left
+                && IsCtrlHeldForHyperlinkHints()
+                && FindHyperlinkAtPoint(e.GetPosition(ContentTextBox)) is { } hyperlink)
             {
-                ClearImageSelectionsExcept(clickedImage);
+                ActivateHyperlink(hyperlink);
+                e.Handled = true;
                 return;
             }
 
-            ClearImageSelections();
+            if (e.ChangedButton == MouseButton.Left
+                && TryToggleChecklistGlyphAtPoint(e.GetPosition(ContentTextBox)))
+            {
+                e.Handled = true;
+            }
+        }
+
+        private void ContentTextBox_HyperlinkRequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            // Always swallow - default navigation of custom schemes / IsDocumentEnabled clicks crashes
+            // or opens the OS handler. Ctrl+Click activates via PreviewMouseDown instead.
+            e.Handled = true;
         }
 
         private void MarkEditorContentChanged()
@@ -764,7 +1256,7 @@ namespace Scriblucent
 
         private void UpdateOnlineSearchAvailability()
         {
-            OnlineSearchButton.IsEnabled = !string.IsNullOrWhiteSpace(ResolveOnlineSearchQuery());
+            // Online search was removed from note-editor chrome (v2).
         }
 
         private string ResolveOnlineSearchQuery()
@@ -847,11 +1339,18 @@ namespace Scriblucent
 
         private void NoteEditorWindow_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            UpdateHyperlinkCtrlHintsFromKeyEvent(e, isDown: true);
+
+            if (TryHandleFloatingImageKey(e))
+                return;
+
             if (TryHandleEditorTabKey(e))
                 return;
 
-            var isCtrlOnly = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
-                && (Keyboard.Modifiers & ModifierKeys.Alt) != ModifierKeys.Alt;
+            if (TryHandleChecklistEnterKey(e))
+                return;
+
+            var isCtrlOnly = IsCtrlHeldForHyperlinkHints();
 
             if (isCtrlOnly && e.Key == Key.F)
             {
@@ -875,7 +1374,32 @@ namespace Scriblucent
                     PerformFindNext(_lastSearchQuery, _lastFindMatchCase, _lastFindWholeWord, _lastFindWrapAround);
 
                 e.Handled = true;
+                return;
             }
+
+        }
+
+        private void NoteEditorWindow_PreviewKeyUp(object sender, KeyEventArgs e)
+            => UpdateHyperlinkCtrlHintsFromKeyEvent(e, isDown: false);
+
+        private void RootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
+            => TryHandleFloatingImageKey(e);
+
+        /// <summary>
+        /// Handles Escape/Delete/Back for a selected floating image.
+        /// Selection chrome is the gate — RTB often keeps keyboard focus after image mouse-down.
+        /// Public so <see cref="NoteEditorTabsWindow"/> can forward keys when content is hosted.
+        /// </summary>
+        public bool TryHandleFloatingImageKey(KeyEventArgs e)
+        {
+            if (e.Handled
+                || !_floatingImages.HasSelection
+                || e.Key is not (Key.Escape or Key.Delete or Key.Back))
+            {
+                return false;
+            }
+
+            return _floatingImages.TryHandleKeyDown(e);
         }
 
         private bool IsEditorKeyboardFocusWithin(object? eventSource = null)
@@ -918,9 +1442,25 @@ namespace Scriblucent
 
         private void SetAiConversionButtonsEnabled(bool isEnabled)
         {
-            ConvertToFlashcardsButton.IsEnabled = isEnabled;
-            ConvertToMindMapButton.IsEnabled = isEnabled;
-            ConvertToTestButton.IsEnabled = isEnabled;
+            ConvertMenuButton.IsEnabled = isEnabled;
+        }
+
+        private void ConvertMenuButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
+        }
+
+        private void FileMenuButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
+        }
+
+        private void ZoomMenuButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { ContextMenu: { } menu } button)
+                UiMotion.OpenContextMenu(menu, button);
         }
 
         private async void ConvertToFlashcardsButton_Click(object sender, RoutedEventArgs e)
@@ -1762,7 +2302,6 @@ namespace Scriblucent
                 {
                     _isLoadingDocument = true;
                     _currentDocument = document; // Set current document
-                    _lastEncodedImageSignatures.Clear();
                     TitleTextBox.Text = document.Title;
                     TagsTextBox.Text = string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
 
@@ -1839,13 +2378,12 @@ namespace Scriblucent
                     // Initialize last saved content
                     MarkCurrentStateSaved();
 
-                    RestoreImagesFromMarkers(document.Images);
-
                     // Apply theme colors to the loaded content
                     ApplyRichTextBoxTheme();
-                    ConfigureResizableImages();
                     ApplyEditorTextLayout();
                     ApplyCurrentLineSpacingToDocument();
+
+                    _floatingImages.Restore(document.Images);
 
                     // Clear any selection and move caret to start
                     ContentTextBox.CaretPosition = ContentTextBox.Document.ContentStart;
@@ -1905,7 +2443,6 @@ namespace Scriblucent
             if (document != null)
             {
                 var previousContent = document.Content ?? string.Empty;
-                var previousImages = CloneImageAttachments(document.Images);
                 var previousTitle = document.Title ?? string.Empty;
                 var previousTags = document.Tags ?? new List<string>();
                 var previousFontFamily = document.FontFamily ?? string.Empty;
@@ -1915,15 +2452,22 @@ namespace Scriblucent
                 var newTags = ParseTags(TagsTextBox.Text);
                 var newFontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source);
                 var newFontSize = ContentTextBox.FontSize;
-                var newImages = BuildImageAttachments();
                 ClearAllHighlights();
-                var newContent = SerializeEditorContentWithImageMarkers();
+                ClearSpellCheckDecorations();
+                var newContent = SerializeEditorContent();
+                var newImages = _floatingImages.BuildAttachments().ToList();
+                // Squiggles are real TextDecorations - must never end up saved/exported (stale on
+                // reload, and nobody wants spell-check marks baked into a shared PDF/RTF). Content
+                // is already captured into newContent above, so reapplying now doesn't affect what
+                // gets persisted; fire-and-forget since dictionaries are normally already cached
+                // from the previous scan, making this effectively instant.
+                _ = RunSpellCheckPassAsync();
 
-                var imagesChanged = !AreImageListsEqual(previousImages, newImages);
-                var contentChanged = !string.Equals(previousContent, newContent, StringComparison.Ordinal) || imagesChanged;
+                var contentChanged = !string.Equals(previousContent, newContent, StringComparison.Ordinal);
+                var imagesChanged = !AreImageAttachmentsEqual(document.Images, newImages);
                 if (contentChanged)
                 {
-                    AppendEditHistoryVersion(document, previousContent, previousImages);
+                    AppendEditHistoryVersion(document, previousContent);
                 }
 
                 var titleChanged = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
@@ -1931,7 +2475,7 @@ namespace Scriblucent
                 var fontChanged = !string.Equals(previousFontFamily, newFontFamily, StringComparison.Ordinal)
                     || !previousFontSize.Equals(newFontSize);
 
-                if (contentChanged || titleChanged || tagsChanged || fontChanged)
+                if (contentChanged || imagesChanged || titleChanged || tagsChanged || fontChanged)
                 {
                     document.LastModified = DateTime.Now;
                 }
@@ -1939,12 +2483,40 @@ namespace Scriblucent
                 document.Title = newTitle;
                 document.Tags = newTags;
                 document.Content = newContent;
-                document.Images = CloneImageAttachments(newImages);
+                document.Images = newImages;
                 document.FontFamily = newFontFamily;
                 document.FontSize = newFontSize;
                 document.IsEditorFontPanelOpen = _isFontPanelOpen;
                 document.IsWordWrapEnabled = _isWordWrapEnabled;
             }
+        }
+
+        private static bool AreImageAttachmentsEqual(
+            IReadOnlyList<NoteImageAttachment>? left,
+            IReadOnlyList<NoteImageAttachment>? right)
+        {
+            left ??= Array.Empty<NoteImageAttachment>();
+            right ??= Array.Empty<NoteImageAttachment>();
+            if (left.Count != right.Count)
+                return false;
+
+            for (var i = 0; i < left.Count; i++)
+            {
+                var a = left[i];
+                var b = right[i];
+                if (a.Id != b.Id
+                    || !string.Equals(a.Data, b.Data, StringComparison.Ordinal)
+                    || !a.Width.Equals(b.Width)
+                    || !a.Height.Equals(b.Height)
+                    || !a.Left.Equals(b.Left)
+                    || !a.Top.Equals(b.Top)
+                    || a.LockAspectRatio != b.LockAspectRatio)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool AreTagListsEqual(IReadOnlyList<string>? left, IReadOnlyList<string>? right)
@@ -1966,15 +2538,13 @@ namespace Scriblucent
 
         private static void AppendEditHistoryVersion(
             NoteDocument document,
-            string previousContent,
-            IReadOnlyList<NoteImageAttachment>? previousImages)
+            string previousContent)
         {
             document.EditHistory ??= new List<NoteEditHistoryEntry>();
             document.EditHistory.Add(new NoteEditHistoryEntry
             {
                 Timestamp = DateTime.UtcNow,
-                Content = previousContent,
-                Images = CloneImageAttachments(previousImages)
+                Content = previousContent
             });
 
             if (document.EditHistory.Count > MaxEditHistoryEntries)
@@ -2024,6 +2594,10 @@ namespace Scriblucent
             {
                 Scriblucent.Services.ActivityTracker.RecordTyping(0, 1);
             }
+        }
+
+        private void ContentTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
+        {
         }
 
         private void ContentTextBox_CopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
@@ -2130,6 +2704,9 @@ namespace Scriblucent
 
         private bool HandleEditorTabKey(bool decreaseIndent)
         {
+            if (TryNavigateTableCell(decreaseIndent))
+                return true;
+
             var selection = ContentTextBox.Selection;
             if (selection == null)
                 return false;
@@ -2842,12 +3419,21 @@ namespace Scriblucent
 
         private void AutoSaveCallback(object? state)
         {
-            // Switch to UI thread
-            Application.Current.Dispatcher.Invoke(() =>
+            // Switch to the UI thread asynchronously. This runs on a System.Threading.Timer
+            // thread; a synchronous Invoke from here while a modal dialog is open throws
+            // "Dispatcher processing has been suspended, but messages are still being processed".
+            try
             {
-                if (_isAutoSaveEnabled && _currentDocument != null && HasContentChanged())
-                    PerformAutoSave();
-            });
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    if (_isAutoSaveEnabled && _currentDocument != null && HasContentChanged())
+                        PerformAutoSave();
+                });
+            }
+            catch
+            {
+                // Application may be shutting down (dispatcher closing) - nothing to save.
+            }
         }
 
         // Check if content has changed since last save
@@ -2873,11 +3459,14 @@ namespace Scriblucent
             UpdateEditedIndicator();
         }
 
+        private bool _isFlashingTitleStatus;
+
         private void UpdateEditedIndicator()
         {
-            if (_isLoadingDocument || EditedIndicatorText is null)
+            if (_isLoadingDocument || EditedIndicatorText is null || _isFlashingTitleStatus)
                 return;
 
+            EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
             var shouldShow = HasUnsavedChanges();
             if (shouldShow)
                 UiMotion.AnimateInlineReveal(EditedIndicatorText, true);
@@ -2966,18 +3555,7 @@ namespace Scriblucent
                     target.AppendLine();
                     break;
                 case Table table:
-                    foreach (var rowGroup in table.RowGroups)
-                    {
-                        foreach (var row in rowGroup.Rows)
-                        {
-                            foreach (var cell in row.Cells)
-                            {
-                                foreach (Block child in cell.Blocks)
-                                    AppendBlockTextForAi(child, target);
-                            }
-                        }
-                    }
-                    target.AppendLine();
+                    AppendTableTextForAi(table, target);
                     break;
                 case BlockUIContainer:
                     break;
@@ -3007,6 +3585,40 @@ namespace Scriblucent
                         break;
                 }
             }
+        }
+
+        private static void AppendTableTextForAi(Table table, StringBuilder target)
+        {
+            foreach (TableRowGroup rowGroup in table.RowGroups)
+            {
+                foreach (TableRow row in rowGroup.Rows)
+                {
+                    var cells = new List<string>();
+                    foreach (TableCell cell in row.Cells)
+                        cells.Add(GetTableCellPlainText(cell));
+
+                    target.AppendLine(string.Join('\t', cells));
+                }
+            }
+        }
+
+        private static string GetTableCellPlainText(TableCell cell)
+        {
+            var sb = new StringBuilder();
+            foreach (Block child in cell.Blocks)
+            {
+                if (child is Paragraph paragraph)
+                    AppendInlineTextForAi(paragraph.Inlines, sb);
+                else
+                    AppendBlockTextForAi(child, sb);
+            }
+
+            return sb.ToString()
+                .Replace('\t', ' ')
+                .Replace("\r\n", " ", StringComparison.Ordinal)
+                .Replace('\n', ' ')
+                .Replace('\r', ' ')
+                .Trim();
         }
 
         // Perform auto-save
@@ -3044,10 +3656,21 @@ namespace Scriblucent
             }
         }
 
-        // Show visual auto-save indicator
+        // Show visual auto-save indicator beside the title (same slot as Edited).
         private void ShowAutoSaveIndicator()
         {
-            ShowStatusIndicator(LocalizationService.GetString("AutoSaving"));
+            if (EditedIndicatorText is null)
+                return;
+
+            _isFlashingTitleStatus = true;
+            UiMotion.FlashInlineStatus(
+                EditedIndicatorText,
+                LocalizationService.GetString("AutoSaving"),
+                () =>
+                {
+                    _isFlashingTitleStatus = false;
+                    UpdateEditedIndicator();
+                });
         }
 
         // Enable/disable auto-save
@@ -3077,7 +3700,6 @@ namespace Scriblucent
         public void SetCurrentDocument(NoteDocument document)
         {
             _currentDocument = document;
-            _lastEncodedImageSignatures.Clear();
             MarkCurrentStateSaved();
         }
 
@@ -3107,10 +3729,7 @@ namespace Scriblucent
 
         private void ExportButton_Click(object sender, RoutedEventArgs e)
         {
-            if (ExportButton.ContextMenu == null)
-                return;
-
-            UiMotion.OpenContextMenu(ExportButton.ContextMenu, ExportButton);
+            FileMenuButton_Click(FileMenuButton, e);
         }
 
         private void ExportTextMenuItem_Click(object sender, RoutedEventArgs e)
@@ -3137,7 +3756,9 @@ namespace Scriblucent
                 path =>
                 {
                     ClearAllHighlights();
+                    ClearSpellCheckDecorations();
                     NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.Rtf);
+                    _ = RunSpellCheckPassAsync();
                 });
         }
 
@@ -3149,7 +3770,9 @@ namespace Scriblucent
                 path =>
                 {
                     ClearAllHighlights();
+                    ClearSpellCheckDecorations();
                     NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.XamlPackage);
+                    _ = RunSpellCheckPassAsync();
                 });
         }
 
@@ -3270,8 +3893,11 @@ namespace Scriblucent
             {
                 foreach (TableRow row in rowGroup.Rows)
                 {
+                    var cells = new List<string>();
                     foreach (TableCell cell in row.Cells)
-                        AppendBlocksPlainTextForFileExport(cell.Blocks, lines);
+                        cells.Add(GetTableCellPlainText(cell));
+
+                    lines.Add(string.Join('\t', cells));
                 }
             }
         }
@@ -3299,12 +3925,17 @@ namespace Scriblucent
             }
         }
 
+        // Backs NotePackage and PDF export - both must never carry spell-check squiggles into the
+        // exported file, so clear before serializing and reapply right after (fire-and-forget;
+        // dictionaries are normally already cached, so this is effectively instant).
         private NoteDocument CreateExportNoteDocument()
-            => new()
+        {
+            ClearSpellCheckDecorations();
+            var document = new NoteDocument
             {
                 Title = TitleTextBox.Text,
-                Content = SerializeEditorContentWithImageMarkers(),
-                Images = CloneImageAttachments(BuildImageAttachments()),
+                Content = SerializeEditorContent(),
+                Images = _floatingImages.BuildAttachments().ToList(),
                 Tags = ParseTags(TagsTextBox.Text),
                 FontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source),
                 FontSize = ContentTextBox.FontSize,
@@ -3313,6 +3944,9 @@ namespace Scriblucent
                 CreatedAt = _currentDocument?.CreatedAt ?? DateTime.UtcNow,
                 LastModified = DateTime.Now
             };
+            _ = RunSpellCheckPassAsync();
+            return document;
+        }
 
         private bool ExportToPdf(string title)
         {
@@ -3342,7 +3976,7 @@ namespace Scriblucent
             exportDoc.Blocks.Add(separator);
 
             var exportNote = CreateExportNoteDocument();
-            var contentClone = CreatePdfContentDocument(exportNote, exportDoc.ColumnWidth);
+            var contentClone = CreatePdfContentDocument(exportNote);
             if (contentClone != null && contentClone.Blocks.FirstBlock != null)
             {
                 while (contentClone.Blocks.FirstBlock != null)
@@ -3362,7 +3996,7 @@ namespace Scriblucent
                 });
             }
 
-            var printableDocument = CreatePdfFixedDocument(exportDoc, exportNote.Images);
+            var printableDocument = CreatePdfFixedDocument(exportDoc);
             var printDialog = new PrintDialog();
 
             using var printServer = new System.Printing.PrintServer();
@@ -3384,19 +4018,12 @@ namespace Scriblucent
             return queuedJobsAfter > queuedJobsBefore;
         }
 
-        private FlowDocument? CreatePdfContentDocument(NoteDocument exportNote, double maximumImageWidth)
+        private FlowDocument? CreatePdfContentDocument(NoteDocument exportNote)
         {
-            var document = LoadFlowDocumentFromStoredContent(exportNote.Content);
-            if (document == null)
-                return null;
-
-            InsertPdfImages(document, exportNote.Images, maximumImageWidth, includeFloatingImages: false);
-            return document;
+            return LoadFlowDocumentFromStoredContent(exportNote.Content);
         }
 
-        private FixedDocument CreatePdfFixedDocument(
-            FlowDocument sourceDocument,
-            IReadOnlyList<NoteImageAttachment>? images)
+        private FixedDocument CreatePdfFixedDocument(FlowDocument sourceDocument)
         {
             sourceDocument.PageWidth = PdfPageWidth;
             sourceDocument.PageHeight = PdfPageHeight;
@@ -3410,9 +4037,7 @@ namespace Scriblucent
             var fixedDocument = new FixedDocument();
             fixedDocument.DocumentPaginator.PageSize = new Size(PdfPageWidth, PdfPageHeight);
 
-            var pageCount = Math.Max(
-                Math.Max(1, paginator.PageCount),
-                ResolveRequiredPdfPageCountForFloatingImages(images));
+            var pageCount = Math.Max(1, paginator.PageCount);
             for (var pageIndex = 0; pageIndex < pageCount; pageIndex++)
             {
                 var documentPage = paginator.GetPage(pageIndex);
@@ -3439,8 +4064,6 @@ namespace Scriblucent
                     }
                 });
 
-                AddFloatingImagesToPdfPage(fixedPage, images, pageIndex);
-
                 fixedPage.Measure(new Size(PdfPageWidth, PdfPageHeight));
                 fixedPage.Arrange(new Rect(0, 0, PdfPageWidth, PdfPageHeight));
                 fixedPage.UpdateLayout();
@@ -3451,77 +4074,6 @@ namespace Scriblucent
             }
 
             return fixedDocument;
-        }
-
-        private static int ResolveRequiredPdfPageCountForFloatingImages(IReadOnlyList<NoteImageAttachment>? images)
-        {
-            if (images == null || images.Count == 0)
-                return 1;
-
-            var firstPageContentHeight = PdfPageHeight - (PdfPagePadding * 2) - PdfContentTopOffset;
-            var laterPageContentHeight = PdfPageHeight - (PdfPagePadding * 2);
-            var maxPage = 0;
-            foreach (var image in images.Where(image =>
-                         string.Equals(image.Layout, NoteImageLayout.Floating, StringComparison.OrdinalIgnoreCase)))
-            {
-                var top = double.IsNaN(image.Top) ? 0 : Math.Max(0, image.Top);
-                maxPage = Math.Max(maxPage, ResolvePdfFloatingPlacement(
-                    top,
-                    firstPageContentHeight,
-                    laterPageContentHeight).PageIndex);
-            }
-
-            return maxPage + 1;
-        }
-
-        private static void AddFloatingImagesToPdfPage(
-            FixedPage fixedPage,
-            IReadOnlyList<NoteImageAttachment>? images,
-            int pageIndex)
-        {
-            if (images == null || images.Count == 0)
-                return;
-
-            var contentWidth = PdfPageWidth - (PdfPagePadding * 2);
-            var firstPageContentHeight = PdfPageHeight - (PdfPagePadding * 2) - PdfContentTopOffset;
-            var laterPageContentHeight = PdfPageHeight - (PdfPagePadding * 2);
-            foreach (var attachment in images.Where(image =>
-                         string.Equals(image.Layout, NoteImageLayout.Floating, StringComparison.OrdinalIgnoreCase)
-                         && !string.IsNullOrWhiteSpace(image.Data)))
-            {
-                var imageTop = double.IsNaN(attachment.Top) ? 0 : Math.Max(0, attachment.Top);
-                var placement = ResolvePdfFloatingPlacement(imageTop, firstPageContentHeight, laterPageContentHeight);
-                var targetPage = placement.PageIndex;
-                if (targetPage != pageIndex)
-                    continue;
-
-                var imageElement = CreatePdfImageElement(attachment, contentWidth);
-                if (imageElement == null)
-                    continue;
-
-                var imageLeft = double.IsNaN(attachment.Left) ? 0 : Math.Max(0, attachment.Left);
-                FixedPage.SetLeft(imageElement, PdfPagePadding + Math.Min(imageLeft, contentWidth - 1));
-                FixedPage.SetTop(imageElement, PdfPagePadding + placement.TopOffset);
-                Panel.SetZIndex(imageElement, 1000);
-                fixedPage.Children.Add(imageElement);
-            }
-        }
-
-        private static (int PageIndex, double TopOffset) ResolvePdfFloatingPlacement(
-            double documentTop,
-            double firstPageContentHeight,
-            double laterPageContentHeight)
-        {
-            firstPageContentHeight = Math.Max(1, firstPageContentHeight);
-            laterPageContentHeight = Math.Max(1, laterPageContentHeight);
-
-            if (documentTop < firstPageContentHeight)
-                return (0, PdfContentTopOffset + documentTop);
-
-            var remainingTop = documentTop - firstPageContentHeight;
-            var laterPageOffset = remainingTop % laterPageContentHeight;
-            var pageIndex = 1 + (int)Math.Floor(remainingTop / laterPageContentHeight);
-            return (pageIndex, laterPageOffset);
         }
 
         private static FlowDocument? LoadFlowDocumentFromStoredContent(string? content)
@@ -3565,218 +4117,6 @@ namespace Scriblucent
 
             range.Text = content;
             return document;
-        }
-
-        private static void InsertPdfImages(
-            FlowDocument document,
-            IReadOnlyList<NoteImageAttachment>? images,
-            double maximumImageWidth,
-            bool includeFloatingImages)
-        {
-            if (images == null || images.Count == 0)
-                return;
-
-            var inserted = new HashSet<Guid>();
-            foreach (var image in images.Where(image => image.Id != Guid.Empty && !string.IsNullOrWhiteSpace(image.Data)))
-            {
-                var marker = FindTextRange(document, CreateImageMarker(image.Id));
-                if (marker == null)
-                    continue;
-
-                if (string.Equals(image.Layout, NoteImageLayout.Inline, StringComparison.OrdinalIgnoreCase))
-                {
-                    InsertPdfInlineImage(marker, image, maximumImageWidth);
-                }
-                else if (includeFloatingImages)
-                {
-                    InsertPdfBlockImage(marker, image, maximumImageWidth);
-                }
-                else
-                {
-                    marker.Text = string.Empty;
-                }
-
-                inserted.Add(image.Id);
-            }
-
-            if (!includeFloatingImages)
-                return;
-
-            foreach (var image in images
-                         .Where(image => image.Id != Guid.Empty
-                                         && !inserted.Contains(image.Id)
-                                         && !string.IsNullOrWhiteSpace(image.Data))
-                         .OrderBy(image => double.IsNaN(image.Top) ? 0 : image.Top)
-                         .ThenBy(image => double.IsNaN(image.Left) ? 0 : image.Left))
-            {
-                var imageElement = CreatePdfImageElement(image, maximumImageWidth);
-                if (imageElement == null)
-                    continue;
-
-                document.Blocks.Add(new BlockUIContainer(imageElement)
-                {
-                    Margin = new Thickness(
-                        Math.Max(0, Math.Min(double.IsNaN(image.Left) ? 0 : image.Left, 96)),
-                        8,
-                        0,
-                        8)
-                });
-            }
-        }
-
-        private static void InsertPdfInlineImage(
-            TextRange markerRange,
-            NoteImageAttachment attachment,
-            double maximumImageWidth)
-        {
-            var imageElement = CreatePdfImageElement(attachment, maximumImageWidth);
-            if (imageElement == null)
-            {
-                markerRange.Text = string.Empty;
-                return;
-            }
-
-            var insertionPosition = markerRange.Start;
-            markerRange.Text = string.Empty;
-            insertionPosition = insertionPosition.GetInsertionPosition(LogicalDirection.Forward) ?? insertionPosition;
-            new InlineUIContainer(imageElement, insertionPosition);
-        }
-
-        private static void InsertPdfBlockImage(
-            TextRange markerRange,
-            NoteImageAttachment attachment,
-            double maximumImageWidth)
-        {
-            var imageElement = CreatePdfImageElement(attachment, maximumImageWidth);
-            if (imageElement == null)
-            {
-                markerRange.Text = string.Empty;
-                return;
-            }
-
-            var markerParagraph = markerRange.Start.Paragraph;
-            var parentBlocks = markerParagraph == null ? null : GetParentBlockCollection(markerParagraph);
-            if (markerParagraph != null
-                && parentBlocks != null
-                && IsParagraphMarkerOnly(markerParagraph, CreateImageMarker(attachment.Id)))
-            {
-                var imageBlock = new BlockUIContainer(imageElement)
-                {
-                    Margin = new Thickness(
-                        Math.Max(0, Math.Min(double.IsNaN(attachment.Left) ? markerParagraph.Margin.Left : attachment.Left, 96)),
-                        markerParagraph.Margin.Top,
-                        markerParagraph.Margin.Right,
-                        Math.Max(markerParagraph.Margin.Bottom, 8))
-                };
-
-                parentBlocks.InsertBefore(markerParagraph, imageBlock);
-                parentBlocks.Remove(markerParagraph);
-                return;
-            }
-
-            var insertionPosition = markerRange.Start;
-            markerRange.Text = string.Empty;
-            insertionPosition = insertionPosition.GetInsertionPosition(LogicalDirection.Forward) ?? insertionPosition;
-            new InlineUIContainer(imageElement, insertionPosition);
-        }
-
-        private static Image? CreatePdfImageElement(NoteImageAttachment attachment, double maximumImageWidth)
-        {
-            // The attachment already carries its display size from when it was inserted, so the
-            // target decode width is known up front - decode at (roughly) that size directly
-            // instead of decoding at full native resolution and downscaling via layout.
-            var decodePixelWidth = ResolvePdfImageDecodePixelWidth(attachment, maximumImageWidth);
-
-            var source = TryCreateImageSourceFromBase64(attachment.Data, decodePixelWidth);
-            if (source == null)
-                return null;
-
-            var size = ResolvePdfImageSize(attachment, source, maximumImageWidth);
-            return new Image
-            {
-                Source = source,
-                Width = size.Width,
-                Height = size.Height,
-                Stretch = Stretch.Uniform,
-                SnapsToDevicePixels = true,
-                Margin = new Thickness(0, 4, 0, 4)
-            };
-        }
-
-        private static int ResolvePdfImageDecodePixelWidth(NoteImageAttachment attachment, double maximumImageWidth)
-        {
-            if (attachment.Width <= 0 || attachment.Height <= 0)
-                return 0; // Unknown display size - fall back to a full decode.
-
-            var width = attachment.Width;
-            var height = attachment.Height;
-
-            var maxWidth = maximumImageWidth > 0 ? maximumImageWidth : 680;
-            if (width > maxWidth)
-            {
-                height *= maxWidth / width;
-                width = maxWidth;
-            }
-
-            const double maxHeight = 880;
-            if (height > maxHeight)
-                width *= maxHeight / height;
-
-            return (int)Math.Ceiling(Math.Max(1, width));
-        }
-
-        private static BitmapImage? TryCreateImageSourceFromBase64(string imageData, int decodePixelWidth = 0)
-        {
-            try
-            {
-                var bytes = Convert.FromBase64String(imageData);
-                using var stream = new MemoryStream(bytes);
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                if (decodePixelWidth > 0)
-                    bitmap.DecodePixelWidth = decodePixelWidth;
-                bitmap.StreamSource = stream;
-                bitmap.EndInit();
-                bitmap.Freeze();
-                return bitmap;
-            }
-            catch (Exception ex)
-            {
-                CrashLog.Append("NoteEditorWindow.TryCreateImageSourceFromBase64", ex);
-                return null;
-            }
-        }
-
-        private static Size ResolvePdfImageSize(
-            NoteImageAttachment attachment,
-            BitmapSource source,
-            double maximumImageWidth)
-        {
-            var width = attachment.Width > 0 ? attachment.Width : source.Width;
-            var height = attachment.Height > 0 ? attachment.Height : source.Height;
-            if (width <= 0)
-                width = Math.Max(1, source.PixelWidth);
-            if (height <= 0)
-                height = Math.Max(1, source.PixelHeight);
-
-            var maxWidth = maximumImageWidth > 0 ? maximumImageWidth : 680;
-            if (width > maxWidth)
-            {
-                var scale = maxWidth / width;
-                width = maxWidth;
-                height *= scale;
-            }
-
-            const double maxHeight = 880;
-            if (height > maxHeight)
-            {
-                var scale = maxHeight / height;
-                height = maxHeight;
-                width *= scale;
-            }
-
-            return new Size(Math.Max(1, width), Math.Max(1, height));
         }
 
         private static TextRange? FindTextRange(FlowDocument document, string text)
@@ -3870,7 +4210,7 @@ namespace Scriblucent
             if (dialog.ShowDialog() != true || dialog.SelectedVersion == null)
                 return;
 
-            ApplyContentToEditor(dialog.SelectedVersion.Content, dialog.SelectedVersion.Images);
+            ApplyContentToEditor(dialog.SelectedVersion.Content);
             SaveToDocument(_currentDocument);
             MarkCurrentStateSaved();
 
@@ -3911,20 +4251,16 @@ namespace Scriblucent
                 mainVm.SaveNotes();
             }
 
-            ShowStatusIndicator(LocalizationService.GetString("Saved"));
             return true;
         }
 
-        private void ApplyContentToEditor(string? content, IReadOnlyList<NoteImageAttachment>? images = null)
+        private void ApplyContentToEditor(string? content)
         {
             TextRange tr = new TextRange(ContentTextBox.Document.ContentStart, ContentTextBox.Document.ContentEnd);
-            FloatingImageOverlay.Children.Clear();
 
             if (string.IsNullOrEmpty(content))
             {
                 tr.Text = string.Empty;
-                RestoreImagesFromMarkers(images);
-                ConfigureResizableImages();
                 SyncFontSelectorsFromSelection();
                 return;
             }
@@ -3960,8 +4296,6 @@ namespace Scriblucent
                 tr.Text = content;
             }
 
-            RestoreImagesFromMarkers(images);
-            ConfigureResizableImages();
             SyncFontSelectorsFromSelection();
         }
 
@@ -4029,6 +4363,58 @@ namespace Scriblucent
                 return;
             }
 
+            ApplyEditorFontSize(NormalizeEditorFontSize(size), persistPreference: true);
+        }
+
+        private void IncreaseFontSizeButton_Click(object sender, RoutedEventArgs e)
+            => BumpEditorFontSize(+1);
+
+        private void DecreaseFontSizeButton_Click(object sender, RoutedEventArgs e)
+            => BumpEditorFontSize(-1);
+
+        private void BumpEditorFontSize(int direction)
+        {
+            var currentSize = NormalizeEditorFontSize(ResolveCurrentSelectionTypography().FontSize);
+            var nextSize = ResolveAdjacentFontSize(currentSize, direction);
+            if (Math.Abs(nextSize - currentSize) < 0.01)
+                return;
+
+            ApplyEditorFontSize(nextSize, persistPreference: true);
+            _isSyncingFontSelectors = true;
+            try
+            {
+                SelectOrAddFontSizeItem(nextSize);
+            }
+            finally
+            {
+                _isSyncingFontSelectors = false;
+            }
+        }
+
+        private static double ResolveAdjacentFontSize(double currentSize, int direction)
+        {
+            if (direction > 0)
+            {
+                foreach (var size in WordFontSizes)
+                {
+                    if (size > currentSize + 0.01)
+                        return size;
+                }
+
+                return WordFontSizes[^1];
+            }
+
+            for (var i = WordFontSizes.Length - 1; i >= 0; i--)
+            {
+                if (WordFontSizes[i] < currentSize - 0.01)
+                    return WordFontSizes[i];
+            }
+
+            return WordFontSizes[0];
+        }
+
+        private void ApplyEditorFontSize(double size, bool persistPreference)
+        {
             size = NormalizeEditorFontSize(size);
             var selection = ContentTextBox.Selection;
             var selectionStart = selection?.Start;
@@ -4053,7 +4439,9 @@ namespace Scriblucent
             if (selectionStart is not null && selectionEnd is not null)
                 RefreshEditorSelectionLayout(selectionStart, selectionEnd);
 
-            SavePreferredFontSize(size);
+            if (persistPreference)
+                SavePreferredFontSize(size);
+
             UpdateFontButtonText();
 
             if (selectionChangesDocument || activeLists.Count > 0)
@@ -4061,6 +4449,24 @@ namespace Scriblucent
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
             }
+        }
+
+        private void ClearFormattingButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selection = ContentTextBox.Selection;
+            selection.ClearAllProperties();
+
+            // ClearAllProperties leaves some brushes as UnsetValue; normalize colors/decorations
+            // the same way the color-clear menu items do so theme defaults apply cleanly.
+            ApplySelectionColor(TextElement.ForegroundProperty, null);
+            ApplySelectionColor(TextElement.BackgroundProperty, null);
+            selection.ApplyPropertyValue(Inline.TextDecorationsProperty, new TextDecorationCollection());
+
+            SyncFontSelectorsFromSelection();
+            UpdateFontButtonText();
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            ContentTextBox.Focus();
         }
 
         private void LineSpacingBox_Changed(object sender, SelectionChangedEventArgs e)
@@ -4345,6 +4751,7 @@ namespace Scriblucent
                 {
                     case Paragraph paragraph when TextElementIntersectsRange(paragraph, start, end):
                         paragraphs.Add(paragraph);
+                        CollectParagraphsFromInlines(paragraph.Inlines, start, end, paragraphs);
                         break;
                     case Section section:
                         CollectParagraphs(section.Blocks, start, end, paragraphs);
@@ -4364,6 +4771,23 @@ namespace Scriblucent
                         }
                         break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Floater/Figure (AnchoredBlock) host their own Blocks inside a paragraph's inlines;
+        /// their paragraphs need the same spacing/stacking treatment as regular ones.
+        /// </summary>
+        private static void CollectParagraphsFromInlines(
+            InlineCollection inlines,
+            TextPointer start,
+            TextPointer end,
+            ICollection<Paragraph> paragraphs)
+        {
+            foreach (Inline inline in inlines)
+            {
+                if (inline is AnchoredBlock anchoredBlock)
+                    CollectParagraphs(anchoredBlock.Blocks, start, end, paragraphs);
             }
         }
 
@@ -4554,20 +4978,1222 @@ namespace Scriblucent
         }
 
         private void ToggleUnderlineButton_Click(object sender, RoutedEventArgs e)
+            => ToggleSelectionTextDecoration(TextDecorations.Underline[0]);
+
+        private void ToggleStrikethroughButton_Click(object sender, RoutedEventArgs e)
+            => ToggleSelectionTextDecoration(TextDecorations.Strikethrough[0]);
+
+        private void ToggleSelectionTextDecoration(TextDecoration decoration)
         {
             var selection = ContentTextBox.Selection;
-            var currentValue = selection.GetPropertyValue(Inline.TextDecorationsProperty);
-            var isUnderlined = currentValue != DependencyProperty.UnsetValue
-                && currentValue is TextDecorationCollection decorations
-                && decorations == TextDecorations.Underline;
-
-            selection.ApplyPropertyValue(
-                Inline.TextDecorationsProperty,
-                isUnderlined ? DependencyProperty.UnsetValue : TextDecorations.Underline);
+            SetRangeTextDecoration(selection, decoration, !RangeHasTextDecoration(selection, decoration.Location));
 
             MarkEditorContentChanged();
             UpdateEditedIndicator();
             ContentTextBox.Focus();
+        }
+
+        private static bool RangeHasTextDecoration(TextRange range, TextDecorationLocation location)
+        {
+            var currentValue = range.GetPropertyValue(Inline.TextDecorationsProperty);
+            return currentValue is TextDecorationCollection decorations && decorations.Any(d => d.Location == location);
+        }
+
+        /// <summary>Adds or removes a single decoration (by Location) within whatever decorations
+        /// a range already has, so e.g. Underline and Strikethrough can coexist - a naive whole-
+        /// collection replace would wipe out one when toggling/setting the other. Shared by the
+        /// Underline/Strikethrough toolbar toggles and checklist item completion styling.</summary>
+        private static void SetRangeTextDecoration(TextRange range, TextDecoration decoration, bool enabled)
+        {
+            var currentValue = range.GetPropertyValue(Inline.TextDecorationsProperty);
+            var currentDecorations = currentValue as TextDecorationCollection ?? new TextDecorationCollection();
+            var hasDecoration = currentDecorations.Any(d => d.Location == decoration.Location);
+            if (hasDecoration == enabled)
+                return;
+
+            var newDecorations = new TextDecorationCollection(
+                currentDecorations.Where(d => d.Location != decoration.Location));
+            if (enabled)
+                newDecorations.Add(decoration);
+
+            // TextRange.ApplyPropertyValue rejects DependencyProperty.UnsetValue for
+            // TextDecorations too (same ArgumentException("'NamedObject' parameter type is not
+            // valid...") already hit and fixed for Foreground/Background) - an empty
+            // TextDecorationCollection is a properly-typed value that means the same thing ("no
+            // decorations") and is accepted.
+            range.ApplyPropertyValue(Inline.TextDecorationsProperty, newDecorations);
+        }
+
+        private void TextColorButton_Click(object sender, RoutedEventArgs e)
+            => OpenButtonContextMenu(TextColorButton);
+
+        private void HighlightButton_Click(object sender, RoutedEventArgs e)
+            => OpenButtonContextMenu(HighlightButton);
+
+        private void TextColorChooseMenuItem_Click(object sender, RoutedEventArgs e)
+            => ChooseAndApplySelectionColor(TextElement.ForegroundProperty);
+
+        private void TextColorClearMenuItem_Click(object sender, RoutedEventArgs e)
+            => ApplySelectionColor(TextElement.ForegroundProperty, null);
+
+        private void HighlightChooseMenuItem_Click(object sender, RoutedEventArgs e)
+            => ChooseAndApplySelectionColor(TextElement.BackgroundProperty);
+
+        private void HighlightClearMenuItem_Click(object sender, RoutedEventArgs e)
+            => ApplySelectionColor(TextElement.BackgroundProperty, null);
+
+        private const string InternalNoteLinkScheme = "scriblucent-note";
+
+        /// <summary>Opens the same dialog for both a plain web link and a link to another note in
+        /// this app - the two share all their insertion/click mechanics, only the resulting Uri's
+        /// scheme differs.</summary>
+        private void InsertLinkButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selection = ContentTextBox.Selection;
+            var initialText = selection is { IsEmpty: false } ? selection.Text : string.Empty;
+
+            var dialog = new InsertHyperlinkDialog(initialText, ResolveNoteLinkOptions())
+            {
+                Owner = GetDialogOwnerWindow()
+            };
+
+            if (dialog.ShowDialog() != true || dialog.ResultUri is null)
+                return;
+
+            InsertOrReplaceHyperlink(dialog.LinkText, dialog.ResultUri);
+        }
+
+        private static IReadOnlyList<InsertHyperlinkDialog.NoteLinkOption> ResolveNoteLinkOptions()
+        {
+            if (Application.Current.MainWindow is not MainWindow mainWindow || mainWindow.DataContext is not MainViewModel mainViewModel)
+                return Array.Empty<InsertHyperlinkDialog.NoteLinkOption>();
+
+            return mainViewModel.Notes
+                .Select(note => new InsertHyperlinkDialog.NoteLinkOption(note.Document.Id, note.Document.Title))
+                .ToList();
+        }
+
+        /// <summary>Replaces the current selection (if any) with a Hyperlink, or inserts one at the
+        /// caret otherwise. Uses Hyperlink's own (Inline, TextPointer) constructor to insert directly
+        /// at a position rather than manipulating BlockCollections - selection.Text is cleared first
+        /// so the TextPointer captured beforehand tracks the correct now-collapsed insertion spot
+        /// (same TextPointer-auto-tracks-edits guarantee the spell-check feature already relies on).</summary>
+        private void InsertOrReplaceHyperlink(string displayText, Uri uri)
+        {
+            var selection = ContentTextBox.Selection;
+            var insertionPoint = selection.IsEmpty ? ContentTextBox.CaretPosition : selection.Start;
+
+            if (!selection.IsEmpty)
+                selection.Text = string.Empty;
+
+            var hyperlink = new Hyperlink(new Run(displayText), insertionPoint)
+            {
+                NavigateUri = uri,
+                // Keep links accent-colored and undecorated; Ctrl-hint underlines are drawn on
+                // HyperlinkHintOverlay so we never mutate TextDecorations via TextRange (that
+                // corrupted older links and could crash on click).
+                TextDecorations = null,
+                Foreground = ResolveHyperlinkForeground()
+            };
+
+            ContentTextBox.CaretPosition = hyperlink.ElementEnd;
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            ContentTextBox.Focus();
+            if (_hyperlinkCtrlHintsVisible)
+                ApplyHyperlinkCtrlHintDecorations(true);
+        }
+
+        private void ContentTextBox_HyperlinkHintPreviewKeyDown(object sender, KeyEventArgs e)
+            => UpdateHyperlinkCtrlHintsFromKeyEvent(e, isDown: true);
+
+        private void ContentTextBox_HyperlinkHintPreviewKeyUp(object sender, KeyEventArgs e)
+            => UpdateHyperlinkCtrlHintsFromKeyEvent(e, isDown: false);
+
+        private void UpdateHyperlinkCtrlHintsFromKeyEvent(KeyEventArgs e, bool isDown)
+        {
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key is Key.LeftCtrl or Key.RightCtrl)
+            {
+                // Don't trust IsKeyDown/Modifiers on the Ctrl event itself - they often lag.
+                SetHyperlinkCtrlHintsVisible(isDown && !IsAltHeld());
+                return;
+            }
+
+            UpdateHyperlinkCtrlHints();
+        }
+
+        private void UpdateHyperlinkCtrlHints()
+            => SetHyperlinkCtrlHintsVisible(IsCtrlHeldForHyperlinkHints());
+
+        private static bool IsAltHeld()
+            => Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt);
+
+        private static bool IsCtrlHeldForHyperlinkHints()
+        {
+            var ctrlHeld = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+            return ctrlHeld && !IsAltHeld();
+        }
+
+        private void SetHyperlinkCtrlHintsVisible(bool visible)
+        {
+            if (_hyperlinkCtrlHintsVisible == visible)
+                return;
+
+            _hyperlinkCtrlHintsVisible = visible;
+            ApplyHyperlinkCtrlHintDecorations(visible);
+        }
+
+        private void ApplyHyperlinkCtrlHintDecorations(bool visible)
+        {
+            if (ContentTextBox?.Document is null)
+                return;
+
+            _isApplyingHyperlinkCtrlHints = true;
+            try
+            {
+                // Set decorations on the Hyperlink and its Runs. TextDecorations does not inherit,
+                // so Runs need the value directly. On hide, ClearValue (not empty collection) so
+                // we don't leave sticky local formatting in the document.
+                //
+                // Materialize first: applying TextDecorations can make WPF reflow/split inlines
+                // (InlineCollection mutation) while the lazy enumerator is still walking it -
+                // "Collection was modified; enumeration operation may not execute".
+                var hyperlinks = EnumerateHyperlinks(ContentTextBox.Document.Blocks).ToList();
+                foreach (var hyperlink in hyperlinks)
+                {
+                    if (visible)
+                    {
+                        hyperlink.TextDecorations = TextDecorations.Underline;
+                        SetInlineTextDecorations(hyperlink.Inlines, TextDecorations.Underline);
+                    }
+                    else
+                    {
+                        hyperlink.TextDecorations = null;
+                        ClearInlineTextDecorations(hyperlink.Inlines);
+                    }
+                }
+            }
+            finally
+            {
+                _isApplyingHyperlinkCtrlHints = false;
+            }
+        }
+
+        private static void SetInlineTextDecorations(InlineCollection inlines, TextDecorationCollection decorations)
+        {
+            // ToList: property sets below can reflow/split the collection mid-enumeration.
+            foreach (var inline in inlines.ToList())
+            {
+                inline.TextDecorations = decorations;
+                if (inline is Span span)
+                    SetInlineTextDecorations(span.Inlines, decorations);
+            }
+        }
+
+        private static void ClearInlineTextDecorations(InlineCollection inlines)
+        {
+            // ToList: ClearValue below can reflow/split the collection mid-enumeration.
+            foreach (var inline in inlines.ToList())
+            {
+                inline.ClearValue(Inline.TextDecorationsProperty);
+                if (inline is Span span)
+                    ClearInlineTextDecorations(span.Inlines);
+            }
+        }
+
+        /// <summary>
+        /// Repair link chrome after load / after older TextRange-based hint code may have
+        /// pushed decorations/foreground onto child Runs (black text + sticky blue underline).
+        /// </summary>
+        private void NormalizeHyperlinkAppearance()
+        {
+            if (ContentTextBox?.Document is null)
+                return;
+
+            _isApplyingHyperlinkCtrlHints = true;
+            try
+            {
+                var brush = ResolveHyperlinkForeground();
+                foreach (var hyperlink in EnumerateHyperlinks(ContentTextBox.Document.Blocks).ToList())
+                {
+                    hyperlink.TextDecorations = null;
+                    hyperlink.Foreground = brush;
+                    ClearInheritedInlineChrome(hyperlink.Inlines);
+                }
+            }
+            finally
+            {
+                _isApplyingHyperlinkCtrlHints = false;
+            }
+
+            if (_hyperlinkCtrlHintsVisible)
+                ApplyHyperlinkCtrlHintDecorations(true);
+        }
+
+        private static void ClearInheritedInlineChrome(InlineCollection inlines)
+        {
+            // ToList: ClearValue below can reflow/split the collection mid-enumeration.
+            foreach (var inline in inlines.ToList())
+            {
+                inline.ClearValue(Inline.TextDecorationsProperty);
+                inline.ClearValue(TextElement.ForegroundProperty);
+
+                if (inline is Span span)
+                    ClearInheritedInlineChrome(span.Inlines);
+            }
+        }
+
+        private static IEnumerable<Hyperlink> EnumerateHyperlinks(BlockCollection blocks)
+        {
+            foreach (Block block in blocks)
+            {
+                foreach (var hyperlink in EnumerateHyperlinksInBlock(block))
+                    yield return hyperlink;
+            }
+        }
+
+        private static IEnumerable<Hyperlink> EnumerateHyperlinksInBlock(Block block)
+        {
+            switch (block)
+            {
+                case Paragraph paragraph:
+                    foreach (var hyperlink in EnumerateHyperlinksInInlines(paragraph.Inlines))
+                        yield return hyperlink;
+                    break;
+                case Section section:
+                    foreach (var hyperlink in EnumerateHyperlinks(section.Blocks))
+                        yield return hyperlink;
+                    break;
+                case List list:
+                    foreach (ListItem item in list.ListItems)
+                    {
+                        foreach (var hyperlink in EnumerateHyperlinks(item.Blocks))
+                            yield return hyperlink;
+                    }
+                    break;
+                case Table table:
+                    foreach (TableRowGroup group in table.RowGroups)
+                    {
+                        foreach (TableRow row in group.Rows)
+                        {
+                            foreach (TableCell cell in row.Cells)
+                            {
+                                foreach (var hyperlink in EnumerateHyperlinks(cell.Blocks))
+                                    yield return hyperlink;
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+
+        private static IEnumerable<Hyperlink> EnumerateHyperlinksInInlines(InlineCollection inlines)
+        {
+            foreach (Inline inline in inlines)
+            {
+                switch (inline)
+                {
+                    case Hyperlink hyperlink:
+                        yield return hyperlink;
+                        break;
+                    case Span span:
+                        foreach (var nested in EnumerateHyperlinksInInlines(span.Inlines))
+                            yield return nested;
+                        break;
+                    case InlineUIContainer:
+                        break;
+                }
+            }
+        }
+
+        private static Brush ResolveHyperlinkForeground()
+        {
+            if (Application.Current.Resources.Contains("AccentPrimary")
+                && Application.Current.Resources["AccentPrimary"] is Brush brush)
+            {
+                return brush;
+            }
+
+            return Brushes.RoyalBlue;
+        }
+
+        /// <summary>Editable RichTextBoxes don't auto-navigate a Hyperlink on click (that's a
+        /// read-only-viewer default) - Ctrl+Click is handled explicitly here instead, so a plain
+        /// click still just places the caret and link text stays editable.</summary>
+        private Hyperlink? FindHyperlinkAtPoint(Point point)
+        {
+            var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: true);
+            var parent = pointer?.Parent;
+            while (parent is TextElement element)
+            {
+                if (element is Hyperlink hyperlink)
+                    return hyperlink;
+
+                parent = element.Parent;
+            }
+
+            return null;
+        }
+
+        private void ActivateHyperlink(Hyperlink hyperlink)
+        {
+            try
+            {
+                var uri = hyperlink.NavigateUri;
+                if (uri is null)
+                    return;
+
+                if (string.Equals(uri.Scheme, InternalNoteLinkScheme, StringComparison.OrdinalIgnoreCase))
+                {
+                    NavigateToInternalNote(uri);
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo { FileName = uri.AbsoluteUri, UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                CrashLog.Append("ActivateHyperlink", ex);
+            }
+        }
+
+        /// <summary>A link to a trashed or deleted note resolves to null via FindNoteById (which
+        /// only searches the active Notes collection) and no-ops here by design - but a dead click
+        /// otherwise looks like a bug, so this surfaces a brief status message instead of staying
+        /// fully silent.</summary>
+        private void NavigateToInternalNote(Uri uri)
+        {
+            if (!Guid.TryParse(uri.Host, out var targetId))
+                return;
+
+            if (Application.Current.MainWindow is not MainWindow mainWindow || mainWindow.DataContext is not MainViewModel mainViewModel)
+                return;
+
+            var targetNote = mainViewModel.FindNoteById(targetId);
+            if (targetNote is null)
+            {
+                ShowStatusIndicator(LocalizationService.GetString("InsertLinkTargetNoteMovedToTrash"));
+                return;
+            }
+
+            mainWindow.OpenNoteById(mainViewModel, targetId);
+        }
+
+        private const int DefaultInsertedTableRows = 3;
+        private const int DefaultInsertedTableColumns = 3;
+        private const int MaxTableSizePickerDimension = 8;
+        private bool _tableSizePickerInitialized;
+        private int _tableSizePickerHoverRows = DefaultInsertedTableRows;
+        private int _tableSizePickerHoverColumns = DefaultInsertedTableColumns;
+
+        private void InsertTableButton_Click(object sender, RoutedEventArgs e)
+        {
+            EnsureTableSizePickerInitialized();
+            HighlightTableSizePicker(DefaultInsertedTableRows, DefaultInsertedTableColumns);
+            TableSizePickerPopup.IsOpen = true;
+        }
+
+        private void EnsureTableSizePickerInitialized()
+        {
+            if (_tableSizePickerInitialized || TableSizePickerGrid is null)
+                return;
+
+            TableSizePickerGrid.Children.Clear();
+            for (var row = 1; row <= MaxTableSizePickerDimension; row++)
+            {
+                for (var column = 1; column <= MaxTableSizePickerDimension; column++)
+                {
+                    var cell = new Border
+                    {
+                        Width = 18,
+                        Height = 18,
+                        Margin = new Thickness(2),
+                        BorderThickness = new Thickness(1),
+                        BorderBrush = TryFindResource("BorderColor") as Brush ?? Brushes.Gray,
+                        Background = TryFindResource("CardBackground") as Brush ?? Brushes.White,
+                        Cursor = Cursors.Hand,
+                        Tag = (row, column)
+                    };
+                    cell.MouseEnter += TableSizePickerCell_MouseEnter;
+                    cell.MouseLeftButtonUp += TableSizePickerCell_MouseLeftButtonUp;
+                    TableSizePickerGrid.Children.Add(cell);
+                }
+            }
+
+            _tableSizePickerInitialized = true;
+        }
+
+        private void TableSizePickerCell_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is not Border { Tag: (int rows, int columns) })
+                return;
+
+            HighlightTableSizePicker(rows, columns);
+        }
+
+        private void TableSizePickerCell_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not Border { Tag: (int rows, int columns) })
+                return;
+
+            TableSizePickerPopup.IsOpen = false;
+            InsertTableOfSize(rows, columns);
+            e.Handled = true;
+        }
+
+        private void HighlightTableSizePicker(int rows, int columns)
+        {
+            _tableSizePickerHoverRows = rows;
+            _tableSizePickerHoverColumns = columns;
+
+            if (TableSizePickerLabel is not null)
+            {
+                TableSizePickerLabel.Text = string.Format(
+                    LocalizationService.GetString("InsertTableSizeFormat"),
+                    rows,
+                    columns);
+            }
+
+            var selectedBackground = TryFindResource("HoverBackground") as Brush ?? Brushes.LightGray;
+            var idleBackground = TryFindResource("CardBackground") as Brush ?? Brushes.White;
+            var selectedBorder = TryFindResource("TextColor") as Brush ?? Brushes.Black;
+            var idleBorder = TryFindResource("BorderColor") as Brush ?? Brushes.Gray;
+
+            foreach (Border cell in TableSizePickerGrid.Children.OfType<Border>())
+            {
+                if (cell.Tag is not (int cellRows, int cellColumns))
+                    continue;
+
+                var selected = cellRows <= rows && cellColumns <= columns;
+                cell.Background = selected ? selectedBackground : idleBackground;
+                cell.BorderBrush = selected ? selectedBorder : idleBorder;
+            }
+        }
+
+        private void InsertTableOfSize(int rows, int columns)
+        {
+            var table = BuildTable(rows, columns);
+            InsertTableAtCaret(table);
+            FocusTableCell(table, 0, 0);
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            ContentTextBox.Focus();
+        }
+
+        private static Table BuildTable(int rows, int columns)
+        {
+            rows = Math.Clamp(rows, 1, MaxTableSizePickerDimension);
+            columns = Math.Clamp(columns, 1, MaxTableSizePickerDimension);
+
+            var table = new Table();
+            for (var c = 0; c < columns; c++)
+            {
+                table.Columns.Add(new TableColumn
+                {
+                    Width = new GridLength(1, GridUnitType.Star)
+                });
+            }
+
+            var rowGroup = new TableRowGroup();
+            for (var r = 0; r < rows; r++)
+            {
+                var row = new TableRow();
+                for (var c = 0; c < columns; c++)
+                    row.Cells.Add(CreateEmptyTableCell());
+
+                rowGroup.Rows.Add(row);
+            }
+
+            table.RowGroups.Add(rowGroup);
+            return table;
+        }
+
+        private static TableCell CreateEmptyTableCell()
+        {
+            return new TableCell(new Paragraph())
+            {
+                BorderBrush = ResolveTableCellBorderBrush(),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(6, 4, 6, 4)
+            };
+        }
+
+        private static Brush ResolveTableCellBorderBrush()
+        {
+            if (Application.Current.Resources.Contains("BorderColor")
+                && Application.Current.Resources["BorderColor"] is Brush brush)
+            {
+                return brush;
+            }
+
+            return Brushes.Gray;
+        }
+
+        private void InsertTableAtCaret(Table table)
+        {
+            var caret = ContentTextBox.CaretPosition;
+            var enclosingCell = FindAncestorTableCell(caret);
+            if (enclosingCell is not null)
+            {
+                var outerTable = FindAncestorTable(enclosingCell);
+                if (outerTable is not null)
+                {
+                    var outerParentBlocks = GetParentBlockCollection(outerTable);
+                    if (outerParentBlocks is not null)
+                    {
+                        outerParentBlocks.InsertAfter(outerTable, table);
+                        outerParentBlocks.InsertAfter(table, new Paragraph());
+                        return;
+                    }
+                }
+            }
+
+            var paragraph = caret?.Paragraph;
+            var parentBlocks = paragraph is not null ? GetParentBlockCollection(paragraph) : null;
+
+            if (paragraph is not null && parentBlocks is not null)
+            {
+                parentBlocks.InsertAfter(paragraph, table);
+                parentBlocks.InsertAfter(table, new Paragraph());
+            }
+            else
+            {
+                ContentTextBox.Document.Blocks.Add(table);
+                ContentTextBox.Document.Blocks.Add(new Paragraph());
+            }
+        }
+
+        private bool TryNavigateTableCell(bool reverse)
+        {
+            var pointer = ContentTextBox.Selection?.Start ?? ContentTextBox.CaretPosition;
+            var cell = FindAncestorTableCell(pointer);
+            if (cell is null)
+                return false;
+
+            var table = FindAncestorTable(cell);
+            if (table is null || !TryGetTableCellIndices(table, cell, out var rowIndex, out var columnIndex))
+                return false;
+
+            var rowCount = GetTableRowCount(table);
+            var columnCount = Math.Max(1, table.Columns.Count);
+            if (rowCount <= 0)
+                return false;
+
+            if (reverse)
+            {
+                if (rowIndex == 0 && columnIndex == 0)
+                    return true;
+
+                if (columnIndex > 0)
+                    columnIndex--;
+                else
+                {
+                    rowIndex--;
+                    columnIndex = columnCount - 1;
+                }
+            }
+            else
+            {
+                if (rowIndex == rowCount - 1 && columnIndex == columnCount - 1)
+                {
+                    InsertTableRow(table, rowCount);
+                    rowIndex = rowCount;
+                    columnIndex = 0;
+                    MarkEditorContentChanged();
+                    UpdateEditedIndicator();
+                }
+                else if (columnIndex < columnCount - 1)
+                {
+                    columnIndex++;
+                }
+                else
+                {
+                    rowIndex++;
+                    columnIndex = 0;
+                }
+            }
+
+            FocusTableCell(table, rowIndex, columnIndex);
+            return true;
+        }
+
+        private ContextMenu BuildTableContextMenu(TableCell cell)
+        {
+            var menu = new ContextMenu();
+            var table = FindAncestorTable(cell);
+            if (table is null || !TryGetTableCellIndices(table, cell, out var rowIndex, out var columnIndex))
+                return _defaultContentTextBoxContextMenu ?? menu;
+
+            var rowCount = GetTableRowCount(table);
+            var columnCount = Math.Max(1, table.Columns.Count);
+
+            var insertMenu = CreateTableSubMenu("TableInsert");
+            insertMenu.Items.Add(CreateTableMenuItem(
+                "TableInsertRowAbove",
+                () =>
+                {
+                    InsertTableRow(table, rowIndex);
+                    FocusTableCell(table, rowIndex, columnIndex);
+                }));
+            insertMenu.Items.Add(CreateTableMenuItem(
+                "TableInsertRowBelow",
+                () =>
+                {
+                    InsertTableRow(table, rowIndex + 1);
+                    FocusTableCell(table, rowIndex + 1, columnIndex);
+                }));
+            insertMenu.Items.Add(new Separator());
+            insertMenu.Items.Add(CreateTableMenuItem(
+                "TableInsertColumnLeft",
+                () =>
+                {
+                    InsertTableColumn(table, columnIndex);
+                    FocusTableCell(table, rowIndex, columnIndex);
+                }));
+            insertMenu.Items.Add(CreateTableMenuItem(
+                "TableInsertColumnRight",
+                () =>
+                {
+                    InsertTableColumn(table, columnIndex + 1);
+                    FocusTableCell(table, rowIndex, columnIndex + 1);
+                }));
+            menu.Items.Add(insertMenu);
+
+            var duplicateMenu = CreateTableSubMenu("TableDuplicate");
+            duplicateMenu.Items.Add(CreateTableMenuItem(
+                "TableDuplicateRow",
+                () =>
+                {
+                    DuplicateTableRow(table, rowIndex);
+                    FocusTableCell(table, rowIndex + 1, columnIndex);
+                }));
+            duplicateMenu.Items.Add(CreateTableMenuItem(
+                "TableDuplicateColumn",
+                () =>
+                {
+                    DuplicateTableColumn(table, columnIndex);
+                    FocusTableCell(table, rowIndex, columnIndex + 1);
+                }));
+            menu.Items.Add(duplicateMenu);
+
+            var moveMenu = CreateTableSubMenu("TableMove");
+            var moveUpItem = CreateTableMenuItem(
+                "TableMoveRowUp",
+                () =>
+                {
+                    if (MoveTableRow(table, rowIndex, -1))
+                        FocusTableCell(table, rowIndex - 1, columnIndex);
+                });
+            moveUpItem.IsEnabled = rowIndex > 0;
+            moveMenu.Items.Add(moveUpItem);
+
+            var moveDownItem = CreateTableMenuItem(
+                "TableMoveRowDown",
+                () =>
+                {
+                    if (MoveTableRow(table, rowIndex, 1))
+                        FocusTableCell(table, rowIndex + 1, columnIndex);
+                });
+            moveDownItem.IsEnabled = rowIndex < rowCount - 1;
+            moveMenu.Items.Add(moveDownItem);
+            menu.Items.Add(moveMenu);
+
+            var clearMenu = CreateTableSubMenu("TableClear");
+            clearMenu.Items.Add(CreateTableMenuItem(
+                "TableClearCell",
+                () =>
+                {
+                    ClearTableCell(cell);
+                    FocusTableCell(table, rowIndex, columnIndex);
+                }));
+            clearMenu.Items.Add(CreateTableMenuItem(
+                "TableClearRow",
+                () =>
+                {
+                    ClearTableRow(table, rowIndex);
+                    FocusTableCell(table, rowIndex, columnIndex);
+                }));
+            menu.Items.Add(clearMenu);
+
+            var alignMenu = CreateTableSubMenu("TableAlign");
+            alignMenu.Items.Add(CreateTableMenuItem(
+                "TableAlignLeft",
+                () => SetTableCellAlignment(cell, TextAlignment.Left)));
+            alignMenu.Items.Add(CreateTableMenuItem(
+                "TableAlignCenter",
+                () => SetTableCellAlignment(cell, TextAlignment.Center)));
+            alignMenu.Items.Add(CreateTableMenuItem(
+                "TableAlignRight",
+                () => SetTableCellAlignment(cell, TextAlignment.Right)));
+            menu.Items.Add(alignMenu);
+
+            var selectMenu = CreateTableSubMenu("TableSelect");
+            selectMenu.Items.Add(CreateTableMenuItem(
+                "TableSelectRow",
+                () => SelectTableRow(table, rowIndex)));
+            selectMenu.Items.Add(CreateTableMenuItem(
+                "TableSelectColumn",
+                () => SelectTableColumn(table, columnIndex)));
+            selectMenu.Items.Add(CreateTableMenuItem(
+                "TableSelectTable",
+                () => SelectTable(table)));
+            menu.Items.Add(selectMenu);
+
+            var deleteMenu = CreateTableSubMenu("TableDelete");
+            deleteMenu.Items.Add(CreateTableMenuItem(
+                "TableDeleteRow",
+                () =>
+                {
+                    if (rowCount <= 1)
+                    {
+                        DeleteTable(table);
+                        return;
+                    }
+
+                    DeleteTableRow(table, rowIndex);
+                    FocusTableCell(table, Math.Min(rowIndex, rowCount - 2), columnIndex);
+                }));
+            deleteMenu.Items.Add(CreateTableMenuItem(
+                "TableDeleteColumn",
+                () =>
+                {
+                    if (columnCount <= 1)
+                    {
+                        DeleteTable(table);
+                        return;
+                    }
+
+                    DeleteTableColumn(table, columnIndex);
+                    FocusTableCell(table, rowIndex, Math.Min(columnIndex, columnCount - 2));
+                }));
+            deleteMenu.Items.Add(new Separator());
+            deleteMenu.Items.Add(CreateTableMenuItem("TableDeleteTable", () => DeleteTable(table)));
+            menu.Items.Add(deleteMenu);
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Cut"), Command = ApplicationCommands.Cut });
+            menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Copy"), Command = ApplicationCommands.Copy });
+            menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Paste"), Command = ApplicationCommands.Paste });
+            menu.Items.Add(new Separator());
+            menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("SelectAll"), Command = ApplicationCommands.SelectAll });
+            return menu;
+        }
+
+        private static MenuItem CreateTableSubMenu(string localizationKey)
+            => new() { Header = LocalizationService.GetString(localizationKey) };
+
+        private MenuItem CreateTableMenuItem(string localizationKey, Action action)
+        {
+            var item = new MenuItem { Header = LocalizationService.GetString(localizationKey) };
+            item.Click += (_, _) =>
+            {
+                // Run after the context menu closes so FlowDocument edits are not discarded.
+                Dispatcher.BeginInvoke(() =>
+                {
+                    action();
+                    MarkEditorContentChanged();
+                    UpdateEditedIndicator();
+                    ContentTextBox.Focus();
+                }, DispatcherPriority.Input);
+            };
+            return item;
+        }
+
+        private static void InsertTableRow(Table table, int rowIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null)
+                return;
+
+            var columnCount = Math.Max(table.Columns.Count, 1);
+            while (table.Columns.Count < columnCount)
+            {
+                table.Columns.Add(new TableColumn
+                {
+                    Width = new GridLength(1, GridUnitType.Star)
+                });
+            }
+
+            var row = new TableRow();
+            for (var c = 0; c < columnCount; c++)
+                row.Cells.Add(CreateEmptyTableCell());
+
+            rowIndex = Math.Clamp(rowIndex, 0, rowGroup.Rows.Count);
+            rowGroup.Rows.Insert(rowIndex, row);
+        }
+
+        private static void InsertTableColumn(Table table, int columnIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null)
+                return;
+
+            columnIndex = Math.Clamp(columnIndex, 0, table.Columns.Count);
+            table.Columns.Insert(columnIndex, new TableColumn
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+
+            foreach (TableRow row in rowGroup.Rows)
+            {
+                var insertAt = Math.Min(columnIndex, row.Cells.Count);
+                row.Cells.Insert(insertAt, CreateEmptyTableCell());
+            }
+        }
+
+        private static void DuplicateTableRow(Table table, int rowIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+                return;
+
+            var source = rowGroup.Rows[rowIndex];
+            var copy = new TableRow();
+            foreach (TableCell cell in source.Cells)
+                copy.Cells.Add(CloneTableCell(cell));
+
+            rowGroup.Rows.Insert(rowIndex + 1, copy);
+        }
+
+        private static void DuplicateTableColumn(Table table, int columnIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || columnIndex < 0 || columnIndex >= table.Columns.Count)
+                return;
+
+            table.Columns.Insert(columnIndex + 1, new TableColumn
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+
+            foreach (TableRow row in rowGroup.Rows)
+            {
+                if (columnIndex >= row.Cells.Count)
+                {
+                    row.Cells.Add(CreateEmptyTableCell());
+                    continue;
+                }
+
+                row.Cells.Insert(columnIndex + 1, CloneTableCell(row.Cells[columnIndex]));
+            }
+        }
+
+        private static bool MoveTableRow(Table table, int rowIndex, int delta)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null)
+                return false;
+
+            var targetIndex = rowIndex + delta;
+            if (rowIndex < 0 || rowIndex >= rowGroup.Rows.Count || targetIndex < 0 || targetIndex >= rowGroup.Rows.Count)
+                return false;
+
+            var row = rowGroup.Rows[rowIndex];
+            rowGroup.Rows.RemoveAt(rowIndex);
+            rowGroup.Rows.Insert(targetIndex, row);
+            return true;
+        }
+
+        private static void ClearTableCell(TableCell cell)
+        {
+            cell.Blocks.Clear();
+            cell.Blocks.Add(new Paragraph());
+        }
+
+        private static void ClearTableRow(Table table, int rowIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+                return;
+
+            foreach (TableCell cell in rowGroup.Rows[rowIndex].Cells)
+                ClearTableCell(cell);
+        }
+
+        private static void SetTableCellAlignment(TableCell cell, TextAlignment alignment)
+        {
+            cell.TextAlignment = alignment;
+            foreach (Block block in cell.Blocks)
+            {
+                if (block is Paragraph paragraph)
+                    paragraph.TextAlignment = alignment;
+            }
+        }
+
+        private void SelectTableRow(Table table, int rowIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+                return;
+
+            var row = rowGroup.Rows[rowIndex];
+            if (row.Cells.Count == 0)
+                return;
+
+            var start = row.Cells[0].ContentStart;
+            var end = row.Cells[^1].ContentEnd;
+            if (start is null || end is null)
+                return;
+
+            ContentTextBox.Selection.Select(start, end);
+        }
+
+        private void SelectTableColumn(Table table, int columnIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || rowGroup.Rows.Count == 0 || columnIndex < 0)
+                return;
+
+            TextPointer? start = null;
+            TextPointer? end = null;
+            foreach (TableRow row in rowGroup.Rows)
+            {
+                if (columnIndex >= row.Cells.Count)
+                    continue;
+
+                var cell = row.Cells[columnIndex];
+                start ??= cell.ContentStart;
+                end = cell.ContentEnd;
+            }
+
+            if (start is null || end is null)
+                return;
+
+            ContentTextBox.Selection.Select(start, end);
+        }
+
+        private void SelectTable(Table table)
+        {
+            if (table.ContentStart is null || table.ContentEnd is null)
+                return;
+
+            ContentTextBox.Selection.Select(table.ContentStart, table.ContentEnd);
+        }
+
+        private static TableCell CloneTableCell(TableCell source)
+        {
+            var clone = CreateEmptyTableCell();
+            clone.TextAlignment = source.TextAlignment;
+            if (source.Background is not null)
+                clone.Background = source.Background;
+
+            try
+            {
+                var sourceRange = new TextRange(source.ContentStart, source.ContentEnd);
+                using var stream = new MemoryStream();
+                sourceRange.Save(stream, DataFormats.Xaml);
+                stream.Position = 0;
+                clone.Blocks.Clear();
+                clone.Blocks.Add(new Paragraph());
+                new TextRange(clone.ContentStart, clone.ContentEnd).Load(stream, DataFormats.Xaml);
+            }
+            catch
+            {
+                // Keep empty cell on clone failure.
+            }
+
+            return clone;
+        }
+
+        private static void DeleteTableRow(Table table, int rowIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+                return;
+
+            rowGroup.Rows.RemoveAt(rowIndex);
+        }
+
+        private static void DeleteTableColumn(Table table, int columnIndex)
+        {
+            var rowGroup = GetPrimaryTableRowGroup(table);
+            if (rowGroup is null || columnIndex < 0 || columnIndex >= table.Columns.Count)
+                return;
+
+            table.Columns.RemoveAt(columnIndex);
+            foreach (TableRow row in rowGroup.Rows)
+            {
+                if (columnIndex < row.Cells.Count)
+                    row.Cells.RemoveAt(columnIndex);
+            }
+        }
+
+        private void DeleteTable(Table table)
+        {
+            var parentBlocks = GetParentBlockCollection(table);
+            parentBlocks?.Remove(table);
+        }
+
+        private void FocusTableCell(Table table, int rowIndex, int columnIndex)
+        {
+            if (!TryGetTableCell(table, rowIndex, columnIndex, out var cell))
+                return;
+
+            var pointer = cell.ContentStart?.GetInsertionPosition(LogicalDirection.Forward)
+                ?? cell.ContentStart;
+            if (pointer is null)
+                return;
+
+            ContentTextBox.CaretPosition = pointer;
+            ContentTextBox.Selection.Select(pointer, pointer);
+        }
+
+        private static TableRowGroup? GetPrimaryTableRowGroup(Table table)
+            => table.RowGroups.Count > 0 ? table.RowGroups[0] : null;
+
+        private static int GetTableRowCount(Table table)
+        {
+            var count = 0;
+            foreach (TableRowGroup rowGroup in table.RowGroups)
+                count += rowGroup.Rows.Count;
+            return count;
+        }
+
+        private static bool TryGetTableCell(Table table, int rowIndex, int columnIndex, out TableCell cell)
+        {
+            cell = null!;
+            var absoluteRow = 0;
+            foreach (TableRowGroup rowGroup in table.RowGroups)
+            {
+                foreach (TableRow row in rowGroup.Rows)
+                {
+                    if (absoluteRow == rowIndex)
+                    {
+                        if (columnIndex < 0 || columnIndex >= row.Cells.Count)
+                            return false;
+
+                        cell = row.Cells[columnIndex];
+                        return true;
+                    }
+
+                    absoluteRow++;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryGetTableCellIndices(Table table, TableCell cell, out int rowIndex, out int columnIndex)
+        {
+            rowIndex = -1;
+            columnIndex = -1;
+            var absoluteRow = 0;
+            foreach (TableRowGroup rowGroup in table.RowGroups)
+            {
+                foreach (TableRow row in rowGroup.Rows)
+                {
+                    for (var c = 0; c < row.Cells.Count; c++)
+                    {
+                        if (!ReferenceEquals(row.Cells[c], cell))
+                            continue;
+
+                        rowIndex = absoluteRow;
+                        columnIndex = c;
+                        return true;
+                    }
+
+                    absoluteRow++;
+                }
+            }
+
+            return false;
+        }
+
+        private static TableCell? FindAncestorTableCell(TextPointer? pointer)
+        {
+            for (var current = pointer?.Parent as DependencyObject;
+                 current is not null;
+                 current = GetTextElementParent(current))
+            {
+                if (current is TableCell cell)
+                    return cell;
+            }
+
+            return null;
+        }
+
+        private static Table? FindAncestorTable(DependencyObject start)
+        {
+            for (var current = start; current is not null; current = GetTextElementParent(current))
+            {
+                if (current is Table table)
+                    return table;
+            }
+
+            return null;
+        }
+
+        private static DependencyObject? GetTextElementParent(DependencyObject current)
+        {
+            return current switch
+            {
+                FrameworkContentElement contentElement => contentElement.Parent,
+                FrameworkElement element => element.Parent,
+                _ => LogicalTreeHelper.GetParent(current)
+            };
+        }
+
+        private void ChooseAndApplySelectionColor(DependencyProperty property)
+        {
+            var dialog = new ColorPickerDialog { Owner = GetDialogOwnerWindow() };
+            if (dialog.ShowDialog() == true && dialog.SelectedColor.HasValue)
+                ApplySelectionColor(property, dialog.SelectedColor.Value);
+        }
+
+        /// <summary>Shared by text-color and highlight - both are plain TextElement.Foreground/
+        /// Background overrides on the selection, same ApplyPropertyValue mechanism Bold/Italic
+        /// already use (see ToggleSelectionTextStyle). A null color clears back to the default for
+        /// that property. Unlike TextDecorations, TextRange.ApplyPropertyValue does NOT accept
+        /// DependencyProperty.UnsetValue for Brush-typed properties - it throws
+        /// ArgumentException("'NamedObject' parameter type is not valid for formatting property")
+        /// - so clearing needs a real Brush: the theme's actual text color for Foreground (same
+        /// brush ApplyRichTextBoxTheme uses), Transparent for Background (highlight's natural
+        /// "none").</summary>
+        private void ApplySelectionColor(DependencyProperty property, Color? color)
+        {
+            var selection = ContentTextBox.Selection;
+            selection.ApplyPropertyValue(property, ResolveSelectionColorBrush(property, color));
+
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            ContentTextBox.Focus();
+        }
+
+        /// <summary>A real highlighter marker is translucent - it tints the page color through
+        /// rather than covering it, which is also what keeps the text underneath readable. The
+        /// swatch colors are picked at full opacity (so they look right as solid text-color
+        /// swatches too), so highlight specifically knocks the alpha down before applying.
+        ///
+        /// The same alpha reads very differently depending on what it's blended against: over a
+        /// light background a translucent color washes out to an obviously pale tint, but over
+        /// this app's dark-theme editor background (#262626, RichTextBoxBackground) any bright
+        /// color blended at the same alpha lands on a darker, still fairly saturated result that
+        /// looks like a solid patch rather than a see-through one - alpha-blend math, not a bug.
+        /// Dark mode needs a noticeably lower alpha to read as translucent rather than opaque.</summary>
+        private const byte HighlightAlphaLight = 110; // ~43%
+        private const byte HighlightAlphaDark = 55;   // ~22% - less alpha needed since blending
+                                                        // toward near-black already darkens it a lot
+
+        private static Brush ResolveSelectionColorBrush(DependencyProperty property, Color? color)
+        {
+            var isHighlight = property == TextElement.BackgroundProperty;
+
+            if (color.HasValue)
+            {
+                if (!isHighlight)
+                    return new SolidColorBrush(color.Value);
+
+                var alpha = ThemeManager.CurrentTheme == ThemeManager.DarkTheme
+                    ? HighlightAlphaDark
+                    : HighlightAlphaLight;
+                return new SolidColorBrush(Color.FromArgb(alpha, color.Value.R, color.Value.G, color.Value.B));
+            }
+
+            if (isHighlight)
+                return Brushes.Transparent;
+
+            return TryGetRichTextBoxForeground(out var foregroundBrush) ? foregroundBrush : Brushes.Black;
         }
 
         private void BulletListButton_Click(object sender, RoutedEventArgs e)
@@ -4601,6 +6227,206 @@ namespace Scriblucent
 
         private void ListNumberUpperRomanMenuItem_Click(object sender, RoutedEventArgs e)
             => ApplyListStyle(TextMarkerStyle.UpperRoman);
+
+        /// <summary>Toggle semantics matching bullet/numbered lists: if every targeted paragraph
+        /// is already a checklist item, strip the prefix from all of them; otherwise add it to
+        /// whichever ones don't have it yet (leaving already-checklist paragraphs untouched).</summary>
+        private void ChecklistButton_Click(object sender, RoutedEventArgs e)
+        {
+            var paragraphs = GetTargetParagraphsForInlineFormatting();
+            if (paragraphs.Count == 0)
+                return;
+
+            var allAreChecklistItems = paragraphs.All(IsChecklistParagraph);
+            var changeStarted = false;
+
+            try
+            {
+                ContentTextBox.BeginChange();
+                changeStarted = true;
+
+                foreach (var paragraph in paragraphs)
+                {
+                    if (allAreChecklistItems)
+                        RemoveChecklistPrefix(paragraph);
+                    else if (!IsChecklistParagraph(paragraph))
+                        InsertChecklistPrefix(paragraph, ChecklistUncheckedGlyph);
+                }
+            }
+            finally
+            {
+                if (changeStarted)
+                    ContentTextBox.EndChange();
+            }
+
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            ContentTextBox.Focus();
+        }
+
+        private static bool IsChecklistParagraph(Paragraph paragraph)
+            => TryGetChecklistPrefixEnd(paragraph, out _, out _);
+
+        /// <summary>True if the paragraph starts with a checklist glyph + separator. When true,
+        /// prefixEnd is the position right after the separator (start of the item's own text) and
+        /// isChecked reflects which glyph. Reads via plain text (TextRange.Text), not by assuming
+        /// the glyph stays its own dedicated Run - WPF coalesces adjacent same-formatted Runs as
+        /// the user types, so a Run-identity check would break the moment someone typed past it.</summary>
+        private static bool TryGetChecklistPrefixEnd(Paragraph paragraph, out TextPointer? prefixEnd, out bool isChecked)
+        {
+            prefixEnd = null;
+            isChecked = false;
+
+            var start = paragraph.ContentStart;
+            var text = new TextRange(start, paragraph.ContentEnd).Text;
+            if (text.StartsWith(ChecklistUncheckedGlyph + ChecklistPrefixSeparator, StringComparison.Ordinal))
+            {
+                isChecked = false;
+            }
+            else if (text.StartsWith(ChecklistCheckedGlyph + ChecklistPrefixSeparator, StringComparison.Ordinal))
+            {
+                isChecked = true;
+            }
+            else
+            {
+                return false;
+            }
+
+            prefixEnd = start.GetPositionAtOffset(2, LogicalDirection.Forward);
+            return prefixEnd != null;
+        }
+
+        private static void InsertChecklistPrefix(Paragraph paragraph, string glyph)
+        {
+            var start = paragraph.ContentStart;
+            new TextRange(start, start).Text = glyph + ChecklistPrefixSeparator;
+        }
+
+        private static void RemoveChecklistPrefix(Paragraph paragraph)
+        {
+            if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
+                return;
+
+            // Clear completion styling before the prefix text goes away - once IsChecklistParagraph
+            // can no longer see the glyph there is nothing left to target it with.
+            ApplyChecklistCompletionStyle(paragraph, isChecked: false);
+            new TextRange(paragraph.ContentStart, prefixEnd).Text = string.Empty;
+        }
+
+        /// <summary>Strikethrough + dimmed foreground on the item's own text (after the prefix),
+        /// reusing the same per-decoration-Location toggle Underline/Strikethrough already use so
+        /// this never clobbers a decoration the user applied manually. The dimmed color is a fixed
+        /// neutral gray rather than a theme resource - simpler than re-walking every checked item
+        /// on ThemeManager.ThemeChanged, and reads acceptably in both themes.</summary>
+        private static void ApplyChecklistCompletionStyle(Paragraph paragraph, bool isChecked)
+        {
+            if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
+                return;
+
+            var itemRange = new TextRange(prefixEnd, paragraph.ContentEnd);
+            SetRangeTextDecoration(itemRange, TextDecorations.Strikethrough[0], isChecked);
+            itemRange.ApplyPropertyValue(
+                TextElement.ForegroundProperty,
+                isChecked ? ChecklistCompletedForegroundBrush : ResolveSelectionColorBrush(TextElement.ForegroundProperty, null));
+        }
+
+        /// <summary>Hit-tests a mouse-down against the checklist glyph at the very start of
+        /// whatever paragraph was clicked. Clicking the glyph itself toggles checked/unchecked;
+        /// clicking anywhere else on a checklist line just moves the caret as normal, same as any
+        /// other text.</summary>
+        private bool TryToggleChecklistGlyphAtPoint(Point point)
+        {
+            var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: true);
+            var paragraph = pointer?.Paragraph;
+            if (pointer is null || paragraph is null)
+                return false;
+
+            if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out var isChecked) || prefixEnd is null)
+                return false;
+
+            if (pointer.CompareTo(paragraph.ContentStart) < 0 || pointer.CompareTo(prefixEnd) >= 0)
+                return false;
+
+            var changeStarted = false;
+            try
+            {
+                ContentTextBox.BeginChange();
+                changeStarted = true;
+                new TextRange(paragraph.ContentStart, prefixEnd).Text =
+                    (isChecked ? ChecklistUncheckedGlyph : ChecklistCheckedGlyph) + ChecklistPrefixSeparator;
+                ApplyChecklistCompletionStyle(paragraph, !isChecked);
+            }
+            finally
+            {
+                if (changeStarted)
+                    ContentTextBox.EndChange();
+            }
+
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            return true;
+        }
+
+        /// <summary>Enter on a non-empty checklist item continues the list with a fresh unchecked
+        /// item, matching bullet/numbered lists. Enter on an EMPTY checklist item exits the list
+        /// instead (strips the prefix, then falls through to a normal paragraph break) - same
+        /// escape hatch Word/most editors give empty list items. Runs the native paragraph-break
+        /// command itself (rather than manually splitting Inlines) so arbitrary rich content -
+        /// images, mixed formatting - splits exactly the way native Enter would.</summary>
+        private bool TryHandleChecklistEnterKey(KeyEventArgs e)
+        {
+            if (e.Key != Key.Return
+                || (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift
+                || !IsEditorKeyboardFocusWithin(e.OriginalSource))
+            {
+                return false;
+            }
+
+            var selection = ContentTextBox.Selection;
+            if (selection is null || !selection.IsEmpty)
+                return false;
+
+            var paragraph = ContentTextBox.CaretPosition?.Paragraph;
+            if (paragraph is null || !TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
+                return false;
+
+            var itemIsEmpty = string.IsNullOrWhiteSpace(new TextRange(prefixEnd, paragraph.ContentEnd).Text);
+
+            var changeStarted = false;
+            try
+            {
+                ContentTextBox.BeginChange();
+                changeStarted = true;
+
+                if (itemIsEmpty)
+                {
+                    RemoveChecklistPrefix(paragraph);
+                    return false; // let the native Enter handler create a plain new paragraph
+                }
+
+                if (EditingCommands.EnterParagraphBreak.CanExecute(null, ContentTextBox))
+                    EditingCommands.EnterParagraphBreak.Execute(null, ContentTextBox);
+
+                var newParagraph = ContentTextBox.CaretPosition?.Paragraph;
+                if (newParagraph is not null && !IsChecklistParagraph(newParagraph))
+                {
+                    InsertChecklistPrefix(newParagraph, ChecklistUncheckedGlyph);
+                    ContentTextBox.CaretPosition = newParagraph.ContentStart.GetPositionAtOffset(2, LogicalDirection.Forward)
+                        ?? newParagraph.ContentStart;
+                    ContentTextBox.Selection.Select(ContentTextBox.CaretPosition, ContentTextBox.CaretPosition);
+                }
+            }
+            finally
+            {
+                if (changeStarted)
+                    ContentTextBox.EndChange();
+            }
+
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
+            e.Handled = true;
+            return true;
+        }
 
         private void ListRemoveButton_Click(object sender, RoutedEventArgs e)
         {
@@ -5320,7 +7146,7 @@ namespace Scriblucent
             ContentTextBox.FontSize = document.FontSize > 0 ? document.FontSize : 14;
             _isWordWrapEnabled = document.IsWordWrapEnabled ?? _isWordWrapEnabled;
             SetFontPanelOpen(document.IsEditorFontPanelOpen ?? _isFontPanelOpen, animate: false);
-            ApplyContentToEditor(document.Content, document.Images);
+            ApplyContentToEditor(document.Content);
             ApplyEditorTextLayout();
             SyncFontSelectorsFromSelection();
         }
@@ -5351,7 +7177,6 @@ namespace Scriblucent
                     // Clear all content from the RichTextBox
                     TextRange tr = new TextRange(ContentTextBox.Document.ContentStart, ContentTextBox.Document.ContentEnd);
                     tr.Text = string.Empty;
-                    FloatingImageOverlay.Children.Clear();
                     MarkEditorContentChanged();
                     UpdateEditedIndicator();
                 }
@@ -5364,304 +7189,172 @@ namespace Scriblucent
             }
         }
 
-        private void InsertImageButton_Click(object sender, RoutedEventArgs e)
+        private async void InsertPictureButton_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog();
-            dlg.Filter = LocalizationService.GetString("ImageOpenFileDialogFilter");
-            dlg.Title = LocalizationService.GetString("SelectImageToInsert");
-
-            if (dlg.ShowDialog() != true)
+            if (_isInsertingPicture)
                 return;
 
             try
             {
-                InsertImageFromFile(dlg.FileName);
+                var dialog = new OpenFileDialog
+                {
+                    Title = LocalizationService.GetString("InsertPicture"),
+                    Filter = LocalizationService.GetString("ImageOpenFileDialogFilter"),
+                    Multiselect = false
+                };
+
+                if (dialog.ShowDialog(GetDialogOwnerWindow()) != true)
+                    return;
+
+                var dpi = 1.0;
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget is not null)
+                    dpi = source.CompositionTarget.TransformToDevice.M11;
+
+                _isInsertingPicture = true;
+                InsertPictureButton.IsEnabled = false;
+
+                var (ok, load, error) = await NoteImageLoader.TryLoadFromFileAsync(
+                    dialog.FileName,
+                    NoteImageLoader.DefaultInsertMaxWidthDip,
+                    dpi);
+
+                if (!ok || load is null)
+                {
+                    ModernMessageBox.Show(
+                        $"{LocalizationService.GetString("FailedToInsertPicture")}\n\n{error}",
+                        LocalizationService.GetString("InsertPicture"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return;
+                }
+
+                var (width, height) = NoteImageLoader.FitWithinBox(
+                    load.NaturalPixelWidth,
+                    load.NaturalPixelHeight,
+                    NoteImageLoader.DefaultInsertMaxWidthDip,
+                    NoteImageLoader.DefaultInsertMaxHeightDip);
+
+                _floatingImages.Insert(load, width, height);
+                ContentTextBox.Focus();
             }
             catch (Exception ex)
             {
                 ModernMessageBox.Show(
-                    $"{LocalizationService.GetString("FailedToInsertImage")}\n\n{ex.Message}",
-                    LocalizationService.GetString("ImageInsertError"),
+                    $"{LocalizationService.GetString("FailedToInsertPicture")}\n\n{ex.Message}",
+                    LocalizationService.GetString("InsertPicture"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
-        }
-
-        private void ConfigureResizableImages()
-        {
-            ConfigureResizableImages(ContentTextBox.Document.Blocks);
-            ConfigureFloatingImageOverlay();
-        }
-
-        private void ConfigureResizableImages(BlockCollection blocks)
-        {
-            foreach (Block block in blocks)
+            finally
             {
-                switch (block)
+                _isInsertingPicture = false;
+                if (InsertPictureButton is not null)
+                    InsertPictureButton.IsEnabled = true;
+            }
+        }
+
+        private async void InsertSketchButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isInsertingSketch)
+                return;
+
+            var sketchDialog = new SketchDialog
+            {
+                Owner = GetDialogOwnerWindow()
+            };
+
+            if (sketchDialog.ShowDialog() != true
+                || sketchDialog.SketchPngBytes is null
+                || sketchDialog.SketchPngBytes.Length == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var dpi = 1.0;
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget is not null)
+                    dpi = source.CompositionTarget.TransformToDevice.M11;
+
+                _isInsertingSketch = true;
+                if (InsertSketchButton is not null)
+                    InsertSketchButton.IsEnabled = false;
+
+                var (ok, load, error) = await NoteImageLoader.TryLoadFromBytesAsync(
+                    sketchDialog.SketchPngBytes,
+                    NoteImageLoader.DefaultInsertMaxWidthDip,
+                    dpi);
+
+                if (!ok || load is null)
                 {
-                    case BlockUIContainer { Child: Canvas canvas }:
-                        ConfigureImageCanvas(canvas);
-                        break;
-                    case BlockUIContainer { Child: ResizableImage image }:
-                        ConfigureImageControl(image);
-                        break;
-                    case Paragraph paragraph:
-                        ConfigureResizableImages(paragraph.Inlines);
-                        break;
-                    case Section section:
-                        ConfigureResizableImages(section.Blocks);
-                        break;
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                        {
-                            ConfigureResizableImages(item.Blocks);
-                        }
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                {
-                                    ConfigureResizableImages(cell.Blocks);
-                                }
-                            }
-                        }
-                        break;
+                    ModernMessageBox.Show(
+                        $"{LocalizationService.GetString("FailedToInsertSketch")}\n\n{error}",
+                        LocalizationService.GetString("InsertSketch"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return;
                 }
-            }
-        }
 
-        private void ConfigureResizableImages(InlineCollection inlines)
-        {
-            foreach (Inline inline in inlines)
+                var (width, height) = NoteImageLoader.FitWithinBox(
+                    load.NaturalPixelWidth,
+                    load.NaturalPixelHeight,
+                    NoteImageLoader.DefaultInsertMaxWidthDip,
+                    NoteImageLoader.DefaultInsertMaxHeightDip);
+
+                _floatingImages.Insert(load, width, height);
+                ContentTextBox.Focus();
+            }
+            catch (Exception ex)
             {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage image }:
-                        ConfigureImageControl(image);
-                        break;
-                    case Span span:
-                        ConfigureResizableImages(span.Inlines);
-                        break;
-                    case AnchoredBlock anchoredBlock:
-                        ConfigureResizableImages(anchoredBlock.Blocks);
-                        break;
-                }
+                ModernMessageBox.Show(
+                    $"{LocalizationService.GetString("FailedToInsertSketch")}\n\n{ex.Message}",
+                    LocalizationService.GetString("InsertSketch"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
-        }
-
-        private void ConfigureImageCanvas(Canvas canvas)
-        {
-            canvas.Background ??= Brushes.Transparent;
-            canvas.ClipToBounds = false;
-            canvas.PreviewMouseDown -= ImageCanvas_PreviewMouseDown;
-            canvas.PreviewMouseDown += ImageCanvas_PreviewMouseDown;
-
-            foreach (ResizableImage image in canvas.Children.OfType<ResizableImage>())
+            finally
             {
-                Panel.SetZIndex(image, 1001);
-                image.LayoutMode = NoteImageLayout.Floating;
-                ConfigureImageControl(image);
+                _isInsertingSketch = false;
+                if (InsertSketchButton is not null)
+                    InsertSketchButton.IsEnabled = true;
             }
-
-            EnsureImageCanvasSize(canvas);
         }
 
-        private void ConfigureImageControl(ResizableImage image)
-        {
-            if (image.ImageId == Guid.Empty)
-                image.ImageId = Guid.NewGuid();
 
-            image.EditorHost = ContentTextBox;
-            image.RefreshVisualState();
-            image.PreviewMouseLeftButtonDown -= ResizableImage_PreviewMouseLeftButtonDown;
-            image.PreviewMouseLeftButtonDown += ResizableImage_PreviewMouseLeftButtonDown;
-            image.ImageBoundsChanged -= ResizableImage_ImageBoundsChanged;
-            image.ImageBoundsChanged += ResizableImage_ImageBoundsChanged;
-            image.LayoutChangeRequested -= ResizableImage_LayoutChangeRequested;
-            image.LayoutChangeRequested += ResizableImage_LayoutChangeRequested;
-            image.InlineMoveRequested -= ResizableImage_InlineMoveRequested;
-            image.InlineMoveRequested += ResizableImage_InlineMoveRequested;
-        }
-
-        private void ConfigureFloatingImageOverlay()
+        private string SerializeEditorContent()
         {
-            foreach (ResizableImage image in FloatingImageOverlay.Children.OfType<ResizableImage>())
+            _isSerializingEditorContent = true;
+            try
             {
-                Panel.SetZIndex(image, 1001);
-                ConfigureImageControl(image);
+                _floatingImages.StripImageExtentPad();
+
+                var textRange = new TextRange(
+                    ContentTextBox.Document.ContentStart,
+                    ContentTextBox.Document.ContentEnd);
+
+                using var stream = new MemoryStream();
+                textRange.Save(stream, DataFormats.XamlPackage);
+                return Convert.ToBase64String(stream.ToArray());
             }
-
-            UpdateFloatingImageOverlayLayout();
-        }
-
-        private void ResizableImage_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (sender is ResizableImage image)
-                ClearImageSelectionsExcept(image);
-        }
-
-        private void ClearImageSelections()
-        {
-            foreach (ResizableImage image in FloatingImageOverlay.Children.OfType<ResizableImage>())
-                image.IsSelected = false;
-
-            ClearImageSelections(ContentTextBox.Document.Blocks);
-        }
-
-        private void ClearImageSelectionsExcept(ResizableImage selectedImage)
-        {
-            foreach (ResizableImage image in FloatingImageOverlay.Children.OfType<ResizableImage>())
+            finally
             {
-                if (!ReferenceEquals(image, selectedImage))
-                    image.IsSelected = false;
-            }
-
-            ClearImageSelectionsExcept(ContentTextBox.Document.Blocks, selectedImage);
-        }
-
-        private static void ClearImageSelections(BlockCollection blocks)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case BlockUIContainer { Child: Canvas canvas }:
-                        foreach (ResizableImage image in canvas.Children.OfType<ResizableImage>())
-                            image.IsSelected = false;
-                        break;
-                    case BlockUIContainer { Child: ResizableImage image }:
-                        image.IsSelected = false;
-                        break;
-                    case Paragraph paragraph:
-                        ClearImageSelections(paragraph.Inlines);
-                        break;
-                    case Section section:
-                        ClearImageSelections(section.Blocks);
-                        break;
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                            ClearImageSelections(item.Blocks);
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                    ClearImageSelections(cell.Blocks);
-                            }
-                        }
-                        break;
-                }
+                _isSerializingEditorContent = false;
+                _floatingImages.EnsureImageExtentPad();
             }
         }
 
-        private static void ClearImageSelectionsExcept(BlockCollection blocks, ResizableImage selectedImage)
+        private static BlockCollection? GetParentBlockCollection(Block block)
         {
-            foreach (Block block in blocks)
+            return block.Parent switch
             {
-                switch (block)
-                {
-                    case BlockUIContainer { Child: Canvas canvas }:
-                        foreach (ResizableImage image in canvas.Children.OfType<ResizableImage>())
-                        {
-                            if (!ReferenceEquals(image, selectedImage))
-                                image.IsSelected = false;
-                        }
-                        break;
-                    case BlockUIContainer { Child: ResizableImage image }:
-                        if (!ReferenceEquals(image, selectedImage))
-                            image.IsSelected = false;
-                        break;
-                    case Paragraph paragraph:
-                        ClearImageSelectionsExcept(paragraph.Inlines, selectedImage);
-                        break;
-                    case Section section:
-                        ClearImageSelectionsExcept(section.Blocks, selectedImage);
-                        break;
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                            ClearImageSelectionsExcept(item.Blocks, selectedImage);
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                    ClearImageSelectionsExcept(cell.Blocks, selectedImage);
-                            }
-                        }
-                        break;
-                }
-            }
-        }
-
-        private static void ClearImageSelections(InlineCollection inlines)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage image }:
-                        image.IsSelected = false;
-                        break;
-                    case Span span:
-                        ClearImageSelections(span.Inlines);
-                        break;
-                    case AnchoredBlock anchoredBlock:
-                        ClearImageSelections(anchoredBlock.Blocks);
-                        break;
-                }
-            }
-        }
-
-        private static void ClearImageSelectionsExcept(InlineCollection inlines, ResizableImage selectedImage)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage image }:
-                        if (!ReferenceEquals(image, selectedImage))
-                            image.IsSelected = false;
-                        break;
-                    case Span span:
-                        ClearImageSelectionsExcept(span.Inlines, selectedImage);
-                        break;
-                    case AnchoredBlock anchoredBlock:
-                        ClearImageSelectionsExcept(anchoredBlock.Blocks, selectedImage);
-                        break;
-                }
-            }
-        }
-
-        private static T? FindVisualAncestor<T>(DependencyObject? source)
-            where T : DependencyObject
-        {
-            while (source != null)
-            {
-                if (source is T match)
-                    return match;
-
-                DependencyObject? parent = null;
-                if (source is Visual or System.Windows.Media.Media3D.Visual3D)
-                    parent = VisualTreeHelper.GetParent(source);
-
-                parent ??= source switch
-                {
-                    FrameworkElement element => element.Parent,
-                    FrameworkContentElement contentElement => contentElement.Parent,
-                    _ => null
-                };
-
-                source = parent;
-            }
-
-            return null;
+                FlowDocument document => document.Blocks,
+                Section section => section.Blocks,
+                ListItem listItem => listItem.Blocks,
+                TableCell tableCell => tableCell.Blocks,
+                _ => null
+            };
         }
 
         private static T? FindVisualChild<T>(DependencyObject? source)
@@ -5683,1754 +7376,6 @@ namespace Scriblucent
             }
 
             return null;
-        }
-
-        private static double GetFloatingDocumentLeft(DependencyObject image)
-        {
-            return (double)image.GetValue(FloatingDocumentLeftProperty);
-        }
-
-        private static void SetFloatingDocumentLeft(DependencyObject image, double value)
-        {
-            image.SetValue(FloatingDocumentLeftProperty, value);
-        }
-
-        private static double GetFloatingDocumentTop(DependencyObject image)
-        {
-            return (double)image.GetValue(FloatingDocumentTopProperty);
-        }
-
-        private static void SetFloatingDocumentTop(DependencyObject image, double value)
-        {
-            image.SetValue(FloatingDocumentTopProperty, value);
-        }
-
-        private static Guid GetInlineImageId(DependencyObject element)
-        {
-            return (Guid)element.GetValue(InlineImageIdProperty);
-        }
-
-        private static void SetInlineImageId(DependencyObject element, Guid value)
-        {
-            element.SetValue(InlineImageIdProperty, value);
-        }
-
-        private bool IsFloatingOverlayImage(ResizableImage image)
-        {
-            return ReferenceEquals(image.Parent, FloatingImageOverlay);
-        }
-
-        private bool IsInlineOverlayImage(ResizableImage image)
-        {
-            return IsFloatingOverlayImage(image)
-                && string.Equals(image.LayoutMode, NoteImageLayout.Inline, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private void AddFloatingImageToOverlay(ResizableImage image, double documentLeft, double documentTop)
-        {
-            if (image.Parent is Canvas currentCanvas)
-                currentCanvas.Children.Remove(image);
-
-            image.LayoutMode = NoteImageLayout.Floating;
-            SetFloatingDocumentLeft(image, Math.Max(0, documentLeft));
-            SetFloatingDocumentTop(image, Math.Max(0, documentTop));
-            Panel.SetZIndex(image, 1001);
-            FloatingImageOverlay.Children.Add(image);
-            ConfigureImageControl(image);
-            UpdateFloatingImageCanvasPosition(image);
-        }
-
-        private void AddInlineImageToOverlay(ResizableImage image)
-        {
-            if (image.Parent is Canvas currentCanvas)
-                currentCanvas.Children.Remove(image);
-
-            image.LayoutMode = NoteImageLayout.Inline;
-            Panel.SetZIndex(image, 1001);
-            FloatingImageOverlay.Children.Add(image);
-            ConfigureImageControl(image);
-            UpdateInlineImagePlaceholderSize(image);
-            UpdateInlineImageCanvasPosition(image);
-            ScheduleFloatingImageOverlayLayoutUpdate();
-        }
-
-        private Point ResolveFloatingInsertionPosition()
-        {
-            var documentLeft = 12d;
-            var documentTop = ContentTextBox.VerticalOffset + 12d;
-
-            try
-            {
-                var caretRect = ContentTextBox.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
-                if (!caretRect.IsEmpty && caretRect.Top >= 0)
-                {
-                    documentLeft = Math.Max(0, caretRect.Left + ContentTextBox.HorizontalOffset - ContentTextBox.Padding.Left);
-                    documentTop = Math.Max(0, caretRect.Bottom + ContentTextBox.VerticalOffset - ContentTextBox.Padding.Top + 8);
-                }
-            }
-            catch
-            {
-                // The caret can be outside the realized viewport; the visible top fallback is good enough.
-            }
-
-            return new Point(documentLeft, documentTop);
-        }
-
-        private Point ResolveFloatingDocumentPosition(ResizableImage image)
-        {
-            try
-            {
-                var visualPosition = image.TransformToAncestor(ContentTextBox).Transform(new Point(0, 0));
-                return new Point(
-                    Math.Max(0, visualPosition.X + ContentTextBox.HorizontalOffset - ContentTextBox.Padding.Left),
-                    Math.Max(0, visualPosition.Y + ContentTextBox.VerticalOffset - ContentTextBox.Padding.Top));
-            }
-            catch
-            {
-                return ResolveFloatingInsertionPosition();
-            }
-        }
-
-        private void UpdateFloatingImageDocumentPositionFromCanvas(ResizableImage image)
-        {
-            if (!IsFloatingOverlayImage(image) || _isUpdatingFloatingImageLayout)
-                return;
-
-            var canvasLeft = Canvas.GetLeft(image);
-            if (double.IsNaN(canvasLeft))
-                canvasLeft = 0;
-
-            var canvasTop = Canvas.GetTop(image);
-            if (double.IsNaN(canvasTop))
-                canvasTop = 0;
-
-            SetFloatingDocumentLeft(image, Math.Max(0, canvasLeft + ContentTextBox.HorizontalOffset - ContentTextBox.Padding.Left));
-            SetFloatingDocumentTop(image, Math.Max(0, canvasTop + ContentTextBox.VerticalOffset - ContentTextBox.Padding.Top));
-        }
-
-        private void UpdateFloatingImageCanvasPosition(ResizableImage image)
-        {
-            var canvasLeft = GetFloatingDocumentLeft(image) - ContentTextBox.HorizontalOffset + ContentTextBox.Padding.Left;
-            var canvasTop = GetFloatingDocumentTop(image) - ContentTextBox.VerticalOffset + ContentTextBox.Padding.Top;
-            Canvas.SetLeft(image, canvasLeft);
-            Canvas.SetTop(image, canvasTop);
-        }
-
-        private void UpdateInlineImageCanvasPosition(ResizableImage image, bool queueRetry = true)
-        {
-            if (!IsInlineOverlayImage(image))
-                return;
-
-            if (TryResolveInlineImageOverlayPosition(image.ImageId, out var position))
-            {
-                image.Visibility = Visibility.Visible;
-                Canvas.SetLeft(image, position.X);
-                Canvas.SetTop(image, position.Y);
-                return;
-            }
-
-            if (!double.IsNaN(Canvas.GetLeft(image)) && !double.IsNaN(Canvas.GetTop(image)))
-                image.Visibility = Visibility.Visible;
-
-            if (queueRetry)
-                ScheduleFloatingImageOverlayLayoutUpdate();
-        }
-
-        private bool TryResolveInlineImageOverlayPosition(Guid imageId, out Point position)
-        {
-            position = new Point();
-            var placeholder = FindInlineImagePlaceholder(imageId);
-            if (placeholder == null)
-                return false;
-
-            try
-            {
-                if (!placeholder.IsMeasureValid || !placeholder.IsArrangeValid)
-                    ContentTextBox.UpdateLayout();
-
-                position = placeholder.TransformToAncestor(EditorSurface).Transform(new Point(0, 0));
-                return IsFinitePoint(position);
-            }
-            catch (Exception)
-            {
-            }
-
-            var container = FindInlineImagePlaceholderContainer(imageId);
-            return container != null && TryResolveInlineImageTextPosition(container, out position);
-        }
-
-        private bool TryResolveInlineImageTextPosition(InlineUIContainer container, out Point position)
-        {
-            position = new Point();
-
-            try
-            {
-                var rect = container.ElementStart.GetCharacterRect(LogicalDirection.Forward);
-                if (rect.IsEmpty)
-                    rect = container.ElementEnd.GetCharacterRect(LogicalDirection.Backward);
-
-                if (rect.IsEmpty)
-                    return false;
-
-                position = ContentTextBox.TranslatePoint(new Point(rect.Left, rect.Top), EditorSurface);
-                return IsFinitePoint(position);
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        private static bool IsFinitePoint(Point point)
-        {
-            return !double.IsNaN(point.X)
-                && !double.IsInfinity(point.X)
-                && !double.IsNaN(point.Y)
-                && !double.IsInfinity(point.Y);
-        }
-
-        private void ScheduleFloatingImageOverlayLayoutUpdate()
-        {
-            if (_isFloatingImageOverlayLayoutUpdateQueued)
-                return;
-
-            _isFloatingImageOverlayLayoutUpdateQueued = true;
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                _isFloatingImageOverlayLayoutUpdateQueued = false;
-                UpdateFloatingImageOverlayLayout();
-            }), System.Windows.Threading.DispatcherPriority.Loaded);
-        }
-
-        private void UpdateFloatingImageOverlayLayout()
-        {
-            if (_isUpdatingFloatingImageLayout)
-                return;
-
-            try
-            {
-                _isUpdatingFloatingImageLayout = true;
-                foreach (ResizableImage image in FloatingImageOverlay.Children.OfType<ResizableImage>())
-                {
-                    if (string.Equals(image.LayoutMode, NoteImageLayout.Inline, StringComparison.OrdinalIgnoreCase))
-                        UpdateInlineImageCanvasPosition(image, queueRetry: false);
-                    else
-                        UpdateFloatingImageCanvasPosition(image);
-                }
-            }
-            finally
-            {
-                _isUpdatingFloatingImageLayout = false;
-            }
-        }
-
-        private Border CreateInlineImagePlaceholder(ResizableImage image)
-        {
-            if (image.ImageId == Guid.Empty)
-                image.ImageId = Guid.NewGuid();
-
-            var placeholder = new Border
-            {
-                Width = ResolveElementWidth(image),
-                Height = ResolveElementHeight(image),
-                Background = Brushes.Transparent,
-                IsHitTestVisible = false,
-                Focusable = false,
-                SnapsToDevicePixels = true
-            };
-
-            SetInlineImageId(placeholder, image.ImageId);
-            return placeholder;
-        }
-
-        private void UpdateInlineImagePlaceholderSize(ResizableImage image)
-        {
-            var placeholder = FindInlineImagePlaceholder(image.ImageId);
-            if (placeholder == null)
-                return;
-
-            placeholder.Width = ResolveElementWidth(image);
-            placeholder.Height = ResolveElementHeight(image);
-        }
-
-        private bool TryInsertInlineImagePlaceholder(
-            TextPointer insertionPosition,
-            ResizableImage image,
-            out InlineUIContainer container)
-        {
-            container = new InlineUIContainer();
-
-            try
-            {
-                var normalizedPosition = insertionPosition.GetInsertionPosition(LogicalDirection.Forward)
-                    ?? insertionPosition;
-                container = new InlineUIContainer(CreateInlineImagePlaceholder(image), normalizedPosition);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        private bool TryInsertInlineImagePlaceholderAtPoint(
-            Point editorPoint,
-            ResizableImage image,
-            out InlineUIContainer container)
-        {
-            var insertionPosition = ResolveInlineInsertionPosition(editorPoint)
-                ?? ContentTextBox.CaretPosition;
-
-            if (TryInsertInlineImagePlaceholder(insertionPosition, image, out container))
-                return true;
-
-            return TryInsertInlineImagePlaceholderAtDocumentEnd(image, out container);
-        }
-
-        private bool TryInsertInlineImagePlaceholderAtDocumentEnd(
-            ResizableImage image,
-            out InlineUIContainer container)
-        {
-            container = new InlineUIContainer();
-
-            try
-            {
-                var paragraph = ContentTextBox.Document.Blocks.LastBlock as Paragraph;
-                if (paragraph == null)
-                {
-                    paragraph = new Paragraph();
-                    ContentTextBox.Document.Blocks.Add(paragraph);
-                }
-
-                container = new InlineUIContainer(CreateInlineImagePlaceholder(image));
-                paragraph.Inlines.Add(container);
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        private TextPointer? ResolveInlineInsertionPosition(Point editorPoint)
-        {
-            var insertionPosition = ContentTextBox.GetPositionFromPoint(editorPoint, snapToText: true);
-            if (insertionPosition != null)
-                return insertionPosition;
-
-            if (ContentTextBox.ActualWidth > 0 && ContentTextBox.ActualHeight > 0)
-            {
-                var minimumX = Math.Max(0, ContentTextBox.Padding.Left + 1);
-                var maximumX = Math.Max(minimumX, ContentTextBox.ActualWidth - ContentTextBox.Padding.Right - 1);
-                var minimumY = Math.Max(0, ContentTextBox.Padding.Top + 1);
-                var maximumY = Math.Max(minimumY, ContentTextBox.ActualHeight - ContentTextBox.Padding.Bottom - 1);
-                var clampedPoint = new Point(
-                    Math.Min(Math.Max(editorPoint.X, minimumX), maximumX),
-                    Math.Min(Math.Max(editorPoint.Y, minimumY), maximumY));
-
-                insertionPosition = ContentTextBox.GetPositionFromPoint(clampedPoint, snapToText: true);
-                if (insertionPosition != null)
-                    return insertionPosition;
-            }
-
-            return ContentTextBox.CaretPosition?.GetInsertionPosition(LogicalDirection.Forward)
-                ?? ContentTextBox.Document.ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
-        }
-
-        private FrameworkElement? FindInlineImagePlaceholder(Guid imageId)
-        {
-            return FindInlineImagePlaceholder(ContentTextBox.Document.Blocks, imageId);
-        }
-
-        private InlineUIContainer? FindInlineImagePlaceholderContainer(Guid imageId)
-        {
-            return FindInlineImagePlaceholderContainer(ContentTextBox.Document.Blocks, imageId);
-        }
-
-        private static FrameworkElement? FindInlineImagePlaceholder(BlockCollection blocks, Guid imageId)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case Paragraph paragraph:
-                    {
-                        var match = FindInlineImagePlaceholder(paragraph.Inlines, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case Section section:
-                    {
-                        var match = FindInlineImagePlaceholder(section.Blocks, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                        {
-                            var match = FindInlineImagePlaceholder(item.Blocks, imageId);
-                            if (match != null)
-                                return match;
-                        }
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                {
-                                    var match = FindInlineImagePlaceholder(cell.Blocks, imageId);
-                                    if (match != null)
-                                        return match;
-                                }
-                            }
-                        }
-                        break;
-                }
-            }
-
-            return null;
-        }
-
-        private static FrameworkElement? FindInlineImagePlaceholder(InlineCollection inlines, Guid imageId)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: FrameworkElement element }
-                        when GetInlineImageId(element) == imageId:
-                        return element;
-                    case Span span:
-                    {
-                        var match = FindInlineImagePlaceholder(span.Inlines, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case AnchoredBlock anchoredBlock:
-                    {
-                        var match = FindInlineImagePlaceholder(anchoredBlock.Blocks, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static InlineUIContainer? FindInlineImagePlaceholderContainer(BlockCollection blocks, Guid imageId)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case Paragraph paragraph:
-                    {
-                        var match = FindInlineImagePlaceholderContainer(paragraph.Inlines, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case Section section:
-                    {
-                        var match = FindInlineImagePlaceholderContainer(section.Blocks, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                        {
-                            var match = FindInlineImagePlaceholderContainer(item.Blocks, imageId);
-                            if (match != null)
-                                return match;
-                        }
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                {
-                                    var match = FindInlineImagePlaceholderContainer(cell.Blocks, imageId);
-                                    if (match != null)
-                                        return match;
-                                }
-                            }
-                        }
-                        break;
-                }
-            }
-
-            return null;
-        }
-
-        private static InlineUIContainer? FindInlineImagePlaceholderContainer(InlineCollection inlines, Guid imageId)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: FrameworkElement element }
-                        when GetInlineImageId(element) == imageId:
-                        return (InlineUIContainer)inline;
-                    case Span span:
-                    {
-                        var match = FindInlineImagePlaceholderContainer(span.Inlines, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case AnchoredBlock anchoredBlock:
-                    {
-                        var match = FindInlineImagePlaceholderContainer(anchoredBlock.Blocks, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static void RemoveInlineContainer(InlineUIContainer container)
-        {
-            var parentInlines = GetParentInlineCollection(container);
-            if (parentInlines == null)
-                return;
-
-            parentInlines.Remove(container);
-        }
-
-        private void ImageCanvas_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (sender is not Canvas canvas || e.OriginalSource != canvas)
-                return;
-
-            ClearImageSelections();
-
-            Keyboard.ClearFocus();
-            e.Handled = true;
-        }
-
-        private void ResizableImage_ImageBoundsChanged(object? sender, EventArgs e)
-        {
-            if (sender is ResizableImage image && IsInlineOverlayImage(image))
-            {
-                UpdateInlineImagePlaceholderSize(image);
-                UpdateInlineImageCanvasPosition(image);
-                ScheduleFloatingImageOverlayLayoutUpdate();
-            }
-            else if (sender is ResizableImage floatingImage && IsFloatingOverlayImage(floatingImage))
-            {
-                UpdateFloatingImageDocumentPositionFromCanvas(floatingImage);
-            }
-            else if (sender is ResizableImage { Parent: Canvas canvas })
-            {
-                EnsureImageCanvasSize(canvas);
-            }
-
-            ContentTextBox.InvalidateMeasure();
-            ContentTextBox.InvalidateArrange();
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-        }
-
-        private void ResizableImage_LayoutChangeRequested(object? sender, ImageLayoutChangeRequestedEventArgs e)
-        {
-            if (sender is not ResizableImage image)
-                return;
-
-            try
-            {
-                if (string.Equals(e.LayoutMode, NoteImageLayout.Inline, StringComparison.OrdinalIgnoreCase))
-                {
-                    MoveImageInline(image);
-                }
-                else
-                {
-                    MoveImageFloating(image);
-                }
-            }
-            catch (Exception)
-            {
-                return;
-            }
-
-            ConfigureResizableImages();
-            ContentTextBox.InvalidateMeasure();
-            ContentTextBox.InvalidateArrange();
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-        }
-
-        private void ResizableImage_InlineMoveRequested(object? sender, InlineImageMoveRequestedEventArgs e)
-        {
-            if (sender is not ResizableImage image || !IsInlineOverlayImage(image) || _isInlineImageDropPending)
-                return;
-
-            var insertionPosition = ResolveInlineInsertionPosition(e.EditorPoint);
-            if (insertionPosition == null)
-                return;
-
-            _isInlineImageDropPending = true;
-            try
-            {
-                MoveInlineImageToTextPosition(image.ImageId, insertionPosition);
-            }
-            catch (Exception)
-            {
-            }
-            finally
-            {
-                _isInlineImageDropPending = false;
-            }
-        }
-
-        private void MoveImageInline(ResizableImage image)
-        {
-            if (IsFloatingOverlayImage(image))
-            {
-                var canvasLeft = Canvas.GetLeft(image);
-                var canvasTop = Canvas.GetTop(image);
-                var editorPoint = new Point(
-                    (double.IsNaN(canvasLeft) ? 0 : canvasLeft) + ResolveElementWidth(image) / 2,
-                    (double.IsNaN(canvasTop) ? 0 : canvasTop) + ResolveElementHeight(image) / 2);
-
-                if (!TryInsertInlineImagePlaceholderAtPoint(editorPoint, image, out _))
-                    return;
-
-                image.LayoutMode = NoteImageLayout.Inline;
-                image.IsSelected = true;
-                UpdateInlineImageCanvasPosition(image);
-                ScheduleFloatingImageOverlayLayoutUpdate();
-                return;
-            }
-
-            if (image.Parent is not Canvas canvas)
-                return;
-
-            var block = canvas.Parent as BlockUIContainer;
-            var parentBlocks = block == null ? null : GetParentBlockCollection(block);
-            if (block == null || parentBlocks == null)
-                return;
-
-            canvas.Children.Remove(image);
-
-            var paragraph = new Paragraph
-            {
-                Margin = new Thickness(0, 4, 0, 4)
-            };
-            paragraph.Inlines.Add(new InlineUIContainer(CreateInlineImagePlaceholder(image)));
-
-            parentBlocks.InsertBefore(block, paragraph);
-            parentBlocks.Remove(block);
-            AddInlineImageToOverlay(image);
-            image.IsSelected = true;
-        }
-
-        private void MoveImageFloating(ResizableImage image)
-        {
-            if (IsInlineOverlayImage(image))
-            {
-                var placeholderContainer = FindInlineImagePlaceholderContainer(image.ImageId);
-                var canvasLeft = Canvas.GetLeft(image);
-                var canvasTop = Canvas.GetTop(image);
-                var documentLeft = Math.Max(0, (double.IsNaN(canvasLeft) ? 0 : canvasLeft) + ContentTextBox.HorizontalOffset - ContentTextBox.Padding.Left);
-                var documentTop = Math.Max(0, (double.IsNaN(canvasTop) ? 0 : canvasTop) + ContentTextBox.VerticalOffset - ContentTextBox.Padding.Top);
-
-                if (placeholderContainer != null)
-                    RemoveInlineContainer(placeholderContainer);
-
-                AddFloatingImageToOverlay(image, documentLeft, documentTop);
-                image.IsSelected = true;
-                return;
-            }
-
-            var inlineContainer = FindInlineContainerForImage(image);
-            if (inlineContainer == null)
-                return;
-
-            var paragraph = FindParentParagraph(inlineContainer);
-            var parentBlocks = paragraph == null ? null : GetParentBlockCollection(paragraph);
-            var parentInlines = GetParentInlineCollection(inlineContainer);
-            if (paragraph == null || parentBlocks == null || parentInlines == null)
-                return;
-
-            var floatingPosition = ResolveFloatingDocumentPosition(image);
-
-            try
-            {
-                inlineContainer.Child = null;
-                parentInlines.Remove(inlineContainer);
-
-                AddFloatingImageToOverlay(image, floatingPosition.X, floatingPosition.Y);
-
-                if (IsParagraphEffectivelyEmpty(paragraph))
-                    parentBlocks.Remove(paragraph);
-            }
-            catch (Exception)
-            {
-                if (image.Parent == null && inlineContainer.Child == null)
-                    inlineContainer.Child = image;
-
-                if (inlineContainer.Parent == null)
-                    parentInlines.Add(inlineContainer);
-            }
-        }
-
-        private void MoveInlineImageToTextPosition(Guid imageId, TextPointer insertionPosition)
-        {
-            var image = FloatingImageOverlay.Children
-                .OfType<ResizableImage>()
-                .FirstOrDefault(candidate => candidate.ImageId == imageId);
-            if (image == null || !IsInlineOverlayImage(image))
-                return;
-
-            var oldPlaceholderContainer = FindInlineImagePlaceholderContainer(imageId);
-            if (oldPlaceholderContainer == null)
-                return;
-
-            if (IsTextPointerInsideElement(insertionPosition, oldPlaceholderContainer))
-                return;
-
-            if (!TryInsertInlineImagePlaceholder(insertionPosition, image, out var newPlaceholderContainer)
-                && !TryInsertInlineImagePlaceholderAtDocumentEnd(image, out newPlaceholderContainer))
-                return;
-
-            try
-            {
-                image.LayoutMode = NoteImageLayout.Inline;
-                image.IsSelected = true;
-                RemoveInlineContainer(oldPlaceholderContainer);
-                UpdateInlineImageCanvasPosition(image);
-                ScheduleFloatingImageOverlayLayoutUpdate();
-
-                ConfigureResizableImages();
-                ContentTextBox.Focus();
-                MarkEditorContentChanged();
-                UpdateEditedIndicator();
-            }
-            catch (Exception)
-            {
-                RemoveInlineContainer(newPlaceholderContainer);
-            }
-        }
-
-        private static bool IsTextPointerInsideElement(TextPointer pointer, TextElement element)
-        {
-            try
-            {
-                return pointer.CompareTo(element.ElementStart) >= 0
-                    && pointer.CompareTo(element.ElementEnd) <= 0;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static void EnsureImageCanvasSize(Canvas canvas)
-        {
-            if (double.IsNaN(canvas.Height) || Math.Abs(canvas.Height - FloatingImageAnchorHeight) > 0.5)
-            {
-                canvas.Height = FloatingImageAnchorHeight;
-            }
-
-            canvas.MinHeight = FloatingImageAnchorHeight;
-            canvas.InvalidateMeasure();
-            canvas.InvalidateArrange();
-        }
-
-        private Canvas CreateImageCanvas(ResizableImage image, double height)
-        {
-            var canvas = new Canvas
-            {
-                Width = double.NaN,
-                Height = Math.Max(FloatingImageAnchorHeight, height),
-                Background = Brushes.Transparent,
-                ClipToBounds = false
-            };
-
-            Panel.SetZIndex(canvas, 1000);
-            Panel.SetZIndex(image, 1001);
-            canvas.Children.Add(image);
-            ConfigureImageCanvas(canvas);
-            return canvas;
-        }
-
-        private string SerializeEditorContentWithImageMarkers()
-        {
-            var replacements = new List<ImageMarkerReplacement>();
-            _isSerializingEditorContent = true;
-
-            try
-            {
-                ReplaceImagesWithMarkers(ContentTextBox.Document.Blocks, replacements);
-
-                var textRange = new TextRange(
-                    ContentTextBox.Document.ContentStart,
-                    ContentTextBox.Document.ContentEnd);
-
-                using var stream = new MemoryStream();
-                textRange.Save(stream, DataFormats.XamlPackage);
-                return Convert.ToBase64String(stream.ToArray());
-            }
-            finally
-            {
-                for (var i = replacements.Count - 1; i >= 0; i--)
-                {
-                    replacements[i].Restore();
-                }
-
-                _isSerializingEditorContent = false;
-                ConfigureResizableImages();
-            }
-        }
-
-        private void ReplaceImagesWithMarkers(BlockCollection blocks, List<ImageMarkerReplacement> replacements)
-        {
-            for (var block = blocks.FirstBlock; block != null;)
-            {
-                var nextBlock = block.NextBlock;
-
-                switch (block)
-                {
-                    case BlockUIContainer { Child: Canvas canvas }:
-                    {
-                        var image = canvas.Children.OfType<ResizableImage>().FirstOrDefault();
-                        if (image != null)
-                            ReplaceBlockWithImageMarker(blocks, block, image, replacements);
-                        break;
-                    }
-                    case BlockUIContainer { Child: ResizableImage image }:
-                        ReplaceBlockWithImageMarker(blocks, block, image, replacements);
-                        break;
-                    case Paragraph paragraph:
-                        ReplaceInlineImagesWithMarkers(paragraph.Inlines, replacements);
-                        break;
-                    case Section section:
-                        ReplaceImagesWithMarkers(section.Blocks, replacements);
-                        break;
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                            ReplaceImagesWithMarkers(item.Blocks, replacements);
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                    ReplaceImagesWithMarkers(cell.Blocks, replacements);
-                            }
-                        }
-                        break;
-                }
-
-                block = nextBlock;
-            }
-        }
-
-        private void ReplaceInlineImagesWithMarkers(InlineCollection inlines, List<ImageMarkerReplacement> replacements)
-        {
-            foreach (Inline inline in inlines.ToList())
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage image }:
-                        ReplaceInlineWithImageMarker(inlines, inline, image, replacements);
-                        break;
-                    case InlineUIContainer { Child: FrameworkElement element } when GetInlineImageId(element) is var imageId && imageId != Guid.Empty:
-                        ReplaceInlinePlaceholderWithImageMarker(inlines, inline, imageId, replacements);
-                        break;
-                    case Span span:
-                        ReplaceInlineImagesWithMarkers(span.Inlines, replacements);
-                        break;
-                    case AnchoredBlock anchoredBlock:
-                        ReplaceImagesWithMarkers(anchoredBlock.Blocks, replacements);
-                        break;
-                }
-            }
-        }
-
-        private static void ReplaceBlockWithImageMarker(
-            BlockCollection blocks,
-            Block originalBlock,
-            ResizableImage image,
-            List<ImageMarkerReplacement> replacements)
-        {
-            if (image.ImageId == Guid.Empty)
-                image.ImageId = Guid.NewGuid();
-
-            var markerBlock = new Paragraph(new Run(CreateImageMarker(image.ImageId)))
-            {
-                Margin = originalBlock.Margin
-            };
-
-            blocks.InsertBefore(originalBlock, markerBlock);
-            blocks.Remove(originalBlock);
-            replacements.Add(new ImageMarkerReplacement(() =>
-            {
-                blocks.InsertBefore(markerBlock, originalBlock);
-                blocks.Remove(markerBlock);
-            }));
-        }
-
-        private static void ReplaceInlineWithImageMarker(
-            InlineCollection inlines,
-            Inline originalInline,
-            ResizableImage image,
-            List<ImageMarkerReplacement> replacements)
-        {
-            if (image.ImageId == Guid.Empty)
-                image.ImageId = Guid.NewGuid();
-
-            var markerRun = new Run(CreateImageMarker(image.ImageId));
-            inlines.InsertBefore(originalInline, markerRun);
-            inlines.Remove(originalInline);
-            replacements.Add(new ImageMarkerReplacement(() =>
-            {
-                inlines.InsertBefore(markerRun, originalInline);
-                inlines.Remove(markerRun);
-            }));
-        }
-
-        private static void ReplaceInlinePlaceholderWithImageMarker(
-            InlineCollection inlines,
-            Inline originalInline,
-            Guid imageId,
-            List<ImageMarkerReplacement> replacements)
-        {
-            var markerRun = new Run(CreateImageMarker(imageId));
-            inlines.InsertBefore(originalInline, markerRun);
-            inlines.Remove(originalInline);
-            replacements.Add(new ImageMarkerReplacement(() =>
-            {
-                inlines.InsertBefore(markerRun, originalInline);
-                inlines.Remove(markerRun);
-            }));
-        }
-
-        private void RestoreImagesFromMarkers(IReadOnlyList<NoteImageAttachment>? images)
-        {
-            if (images == null || images.Count == 0)
-                return;
-
-            foreach (var image in images.Where(image => image.Id != Guid.Empty && !string.IsNullOrWhiteSpace(image.Data)))
-            {
-                var markerRange = FindTextRange(CreateImageMarker(image.Id));
-                var resizableImage = CreateResizableImage(image);
-                if (markerRange == null)
-                {
-                    AppendFloatingImageAtEnd(resizableImage, image);
-                    continue;
-                }
-
-                if (string.Equals(image.Layout, NoteImageLayout.Inline, StringComparison.OrdinalIgnoreCase))
-                {
-                    ReplaceMarkerWithInlineImage(markerRange, resizableImage);
-                }
-                else
-                {
-                    ReplaceMarkerWithFloatingImage(markerRange, resizableImage, image);
-                }
-            }
-        }
-
-        private void AppendFloatingImageAtEnd(ResizableImage image, NoteImageAttachment attachment)
-        {
-            AddFloatingImageToOverlay(
-                image,
-                double.IsNaN(attachment.Left) ? 12 : attachment.Left,
-                double.IsNaN(attachment.Top) ? 12 : attachment.Top);
-        }
-
-        private void ReplaceMarkerWithInlineImage(TextRange markerRange, ResizableImage image)
-        {
-            image.LayoutMode = NoteImageLayout.Inline;
-            var insertionPosition = markerRange.Start;
-            markerRange.Text = string.Empty;
-            insertionPosition = insertionPosition.GetInsertionPosition(LogicalDirection.Forward) ?? insertionPosition;
-            new InlineUIContainer(CreateInlineImagePlaceholder(image), insertionPosition);
-            AddInlineImageToOverlay(image);
-        }
-
-        private void ReplaceMarkerWithFloatingImage(
-            TextRange markerRange,
-            ResizableImage image,
-            NoteImageAttachment attachment)
-        {
-            var markerParagraph = markerRange.Start.Paragraph;
-            var parentBlocks = markerParagraph == null ? null : GetParentBlockCollection(markerParagraph);
-
-            if (markerParagraph != null && parentBlocks != null && IsParagraphMarkerOnly(markerParagraph, CreateImageMarker(attachment.Id)))
-            {
-                parentBlocks.Remove(markerParagraph);
-            }
-            else
-            {
-                markerRange.Text = string.Empty;
-            }
-
-            AddFloatingImageToOverlay(
-                image,
-                double.IsNaN(attachment.Left) ? 12 : attachment.Left,
-                double.IsNaN(attachment.Top) ? 12 : attachment.Top);
-        }
-
-        private ResizableImage CreateResizableImage(NoteImageAttachment attachment)
-        {
-            var image = new ResizableImage
-            {
-                ImageId = attachment.Id == Guid.Empty ? Guid.NewGuid() : attachment.Id,
-                LayoutMode = NormalizeImageLayout(attachment.Layout),
-                // Width/Height must be set before ImageData - OnImageDataChanged reads the display
-                // size to pick a DecodePixelWidth, instead of decoding the source at full resolution.
-                Width = Math.Max(50, attachment.Width),
-                Height = Math.Max(50, attachment.Height),
-                ImageData = attachment.Data,
-                PreserveAspectRatio = attachment.PreserveAspectRatio
-            };
-
-            ConfigureImageControl(image);
-            return image;
-        }
-
-        private TextRange? FindTextRange(string text)
-        {
-            var navigator = ContentTextBox.Document.ContentStart;
-            while (navigator != null && navigator.CompareTo(ContentTextBox.Document.ContentEnd) < 0)
-            {
-                var runText = navigator.GetTextInRun(LogicalDirection.Forward);
-                if (!string.IsNullOrEmpty(runText))
-                {
-                    var index = runText.IndexOf(text, StringComparison.Ordinal);
-                    if (index >= 0)
-                    {
-                        var start = navigator.GetPositionAtOffset(index);
-                        var end = start?.GetPositionAtOffset(text.Length);
-                        if (start != null && end != null)
-                            return new TextRange(start, end);
-                    }
-                }
-
-                navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
-            }
-
-            return null;
-        }
-
-        private List<NoteImageAttachment> BuildImageAttachments()
-        {
-            var images = new List<NoteImageAttachment>();
-            var seen = new HashSet<Guid>();
-            AppendImageAttachments(ContentTextBox.Document.Blocks, images, seen);
-            foreach (ResizableImage image in FloatingImageOverlay.Children.OfType<ResizableImage>())
-                AddImageAttachment(image, images, seen);
-
-            return images;
-        }
-
-        private void AppendImageAttachments(
-            BlockCollection blocks,
-            List<NoteImageAttachment> images,
-            HashSet<Guid> seen)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case BlockUIContainer { Child: Canvas canvas }:
-                        foreach (ResizableImage image in canvas.Children.OfType<ResizableImage>())
-                            AddImageAttachment(image, images, seen);
-                        break;
-                    case BlockUIContainer { Child: ResizableImage image }:
-                        AddImageAttachment(image, images, seen);
-                        break;
-                    case Paragraph paragraph:
-                        AppendImageAttachments(paragraph.Inlines, images, seen);
-                        break;
-                    case Section section:
-                        AppendImageAttachments(section.Blocks, images, seen);
-                        break;
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                            AppendImageAttachments(item.Blocks, images, seen);
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                    AppendImageAttachments(cell.Blocks, images, seen);
-                            }
-                        }
-                        break;
-                }
-            }
-        }
-
-        private void AppendImageAttachments(
-            InlineCollection inlines,
-            List<NoteImageAttachment> images,
-            HashSet<Guid> seen)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage image }:
-                        AddImageAttachment(image, images, seen);
-                        break;
-                    case Span span:
-                        AppendImageAttachments(span.Inlines, images, seen);
-                        break;
-                    case AnchoredBlock anchoredBlock:
-                        AppendImageAttachments(anchoredBlock.Blocks, images, seen);
-                        break;
-                }
-            }
-        }
-
-        private void AddImageAttachment(
-            ResizableImage image,
-            List<NoteImageAttachment> images,
-            HashSet<Guid> seen)
-        {
-            var attachment = CreateImageAttachment(image);
-            if (attachment == null || !seen.Add(attachment.Id))
-                return;
-
-            images.Add(attachment);
-        }
-
-        private NoteImageAttachment? CreateImageAttachment(ResizableImage image, string? forcedLayout = null)
-        {
-            ConfigureImageControl(image);
-
-            if (image.ImageId == Guid.Empty)
-                image.ImageId = Guid.NewGuid();
-
-            var width = ResolveElementWidth(image);
-            var height = ResolveElementHeight(image);
-            var existingData = image.ImageData;
-
-            // Re-encoding is real CPU work (resize + JPEG encode + base64) and this runs on every
-            // save including autosave - skip it when nothing about the image has changed since the
-            // last time it was actually encoded (same Source instance, same target size).
-            string encodedSource;
-            if (!string.IsNullOrWhiteSpace(existingData)
-                && _lastEncodedImageSignatures.TryGetValue(image.ImageId, out var lastEncoded)
-                && ReferenceEquals(lastEncoded.Source, image.Source)
-                && lastEncoded.Width.Equals(width)
-                && lastEncoded.Height.Equals(height))
-            {
-                encodedSource = existingData;
-            }
-            else
-            {
-                encodedSource = TryEncodeImageSource(image.Source, width, height);
-            }
-
-            var data = SelectCompactImageData(existingData, encodedSource);
-            if (string.IsNullOrWhiteSpace(data))
-                return null;
-
-            if (!string.Equals(image.ImageData, data, StringComparison.Ordinal))
-                image.ImageData = data;
-
-            _lastEncodedImageSignatures[image.ImageId] = (image.Source, width, height);
-
-            var layout = forcedLayout ?? NormalizeImageLayout(image.LayoutMode);
-            var isFloating = string.Equals(layout, NoteImageLayout.Floating, StringComparison.OrdinalIgnoreCase);
-            var isOverlayImage = IsFloatingOverlayImage(image);
-            if (isOverlayImage && isFloating)
-                UpdateFloatingImageDocumentPositionFromCanvas(image);
-
-            var left = isFloating && isOverlayImage
-                ? GetFloatingDocumentLeft(image)
-                : isFloating && image.Parent is Canvas ? Canvas.GetLeft(image) : 0;
-            var top = isFloating && isOverlayImage
-                ? GetFloatingDocumentTop(image)
-                : isFloating && image.Parent is Canvas ? Canvas.GetTop(image) : 0;
-
-            return new NoteImageAttachment
-            {
-                Id = image.ImageId,
-                Data = data,
-                Layout = NormalizeImageLayout(layout),
-                Width = width,
-                Height = height,
-                Left = double.IsNaN(left) ? 0 : left,
-                Top = double.IsNaN(top) ? 0 : top,
-                PreserveAspectRatio = image.PreserveAspectRatio
-            };
-        }
-
-        private string GetImageSnapshot()
-        {
-            var images = BuildImageAttachments();
-            if (images.Count == 0)
-                return string.Empty;
-
-            return string.Join(
-                '\u001D',
-                images.Select(image => string.Join(
-                    '\u001C',
-                    image.Id.ToString("D"),
-                    NormalizeImageLayout(image.Layout),
-                    image.Width.ToString("R", CultureInfo.InvariantCulture),
-                    image.Height.ToString("R", CultureInfo.InvariantCulture),
-                    image.Left.ToString("R", CultureInfo.InvariantCulture),
-                    image.Top.ToString("R", CultureInfo.InvariantCulture),
-                    image.PreserveAspectRatio ? "1" : "0",
-                    image.Data)));
-        }
-
-        private static string SelectCompactImageData(string? existingData, string? encodedSource)
-        {
-            if (string.IsNullOrWhiteSpace(existingData))
-                return encodedSource ?? string.Empty;
-
-            if (string.IsNullOrWhiteSpace(encodedSource))
-                return existingData;
-
-            if (ImageDataHasAlpha(existingData))
-                return encodedSource;
-
-            return encodedSource.Length < existingData.Length
-                ? encodedSource
-                : existingData;
-        }
-
-        private static string TryEncodeImageSource(ImageSource? source, double targetWidth, double targetHeight)
-        {
-            if (source is not BitmapSource bitmapSource)
-                return string.Empty;
-
-            try
-            {
-                var resized = ResizeBitmapForStorage(bitmapSource, targetWidth, targetHeight);
-                var encoder = CreateStorageEncoder(resized);
-                using var stream = new MemoryStream();
-                encoder.Save(stream);
-                return Convert.ToBase64String(stream.ToArray());
-            }
-            catch
-            {
-                return string.Empty;
-            }
-        }
-
-        private static BitmapSource ResizeBitmapForStorage(BitmapSource source, double targetWidth, double targetHeight)
-        {
-            var maxWidth = targetWidth > 0 ? targetWidth : source.PixelWidth;
-            var maxHeight = targetHeight > 0 ? targetHeight : source.PixelHeight;
-
-            maxWidth = Math.Min(maxWidth, 1200);
-            maxHeight = Math.Min(maxHeight, 1200);
-
-            var scale = Math.Min(maxWidth / source.PixelWidth, maxHeight / source.PixelHeight);
-            if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0 || scale >= 0.98)
-                return source;
-
-            var resized = new TransformedBitmap(source, new ScaleTransform(scale, scale));
-            resized.Freeze();
-            return resized;
-        }
-
-        private static BitmapEncoder CreateStorageEncoder(BitmapSource source)
-        {
-            var storageSource = HasAlpha(source.Format)
-                ? CreateOpaqueStorageSource(source)
-                : source;
-
-            var converted = storageSource.Format == PixelFormats.Bgr24
-                ? storageSource
-                : new FormatConvertedBitmap(storageSource, PixelFormats.Bgr24, null, 0);
-
-            if (converted.CanFreeze)
-                converted.Freeze();
-
-            var jpeg = new JpegBitmapEncoder
-            {
-                QualityLevel = 86
-            };
-            jpeg.Frames.Add(BitmapFrame.Create(converted));
-            return jpeg;
-        }
-
-        private static BitmapSource CreateOpaqueStorageSource(BitmapSource source)
-        {
-            try
-            {
-                var pixelWidth = Math.Max(1, source.PixelWidth);
-                var pixelHeight = Math.Max(1, source.PixelHeight);
-                var visual = new DrawingVisual();
-
-                using (var context = visual.RenderOpen())
-                {
-                    var bounds = new Rect(0, 0, pixelWidth, pixelHeight);
-                    context.DrawRectangle(ResolveOpaqueImageBackgroundBrush(), null, bounds);
-                    context.DrawImage(source, bounds);
-                }
-
-                var rendered = new RenderTargetBitmap(pixelWidth, pixelHeight, 96, 96, PixelFormats.Pbgra32);
-                rendered.Render(visual);
-
-                var opaque = new FormatConvertedBitmap(rendered, PixelFormats.Bgr24, null, 0);
-                if (opaque.CanFreeze)
-                    opaque.Freeze();
-
-                return opaque;
-            }
-            catch
-            {
-                return source;
-            }
-        }
-
-        private static Brush ResolveOpaqueImageBackgroundBrush()
-        {
-            var brush = Application.Current?.TryFindResource("RichTextBoxBackground") as SolidColorBrush
-                ?? Application.Current?.TryFindResource("CardBackground") as SolidColorBrush;
-            if (brush == null)
-                return Brushes.White;
-
-            var color = brush.Color;
-            color.A = 255;
-            var opaqueBrush = new SolidColorBrush(color);
-            opaqueBrush.Freeze();
-            return opaqueBrush;
-        }
-
-        private static bool HasAlpha(PixelFormat format)
-        {
-            return format == PixelFormats.Bgra32
-                || format == PixelFormats.Pbgra32
-                || format == PixelFormats.Prgba64
-                || format == PixelFormats.Rgba64;
-        }
-
-        private static bool ImageDataHasAlpha(string? imageData)
-        {
-            if (string.IsNullOrWhiteSpace(imageData))
-                return false;
-
-            try
-            {
-                var bytes = Convert.FromBase64String(imageData);
-                using var stream = new MemoryStream(bytes);
-                var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                var frame = decoder.Frames.FirstOrDefault();
-                return frame != null && HasAlpha(frame.Format);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static List<NoteImageAttachment> CloneImageAttachments(IReadOnlyList<NoteImageAttachment>? images)
-        {
-            if (images == null || images.Count == 0)
-                return new List<NoteImageAttachment>();
-
-            return images
-                .Where(image => image != null)
-                .Select(image => new NoteImageAttachment
-                {
-                    Id = image.Id,
-                    Data = image.Data ?? string.Empty,
-                    Layout = NormalizeImageLayout(image.Layout),
-                    Width = image.Width,
-                    Height = image.Height,
-                    Left = image.Left,
-                    Top = image.Top,
-                    PreserveAspectRatio = image.PreserveAspectRatio
-                })
-                .ToList();
-        }
-
-        private static bool AreImageListsEqual(
-            IReadOnlyList<NoteImageAttachment>? left,
-            IReadOnlyList<NoteImageAttachment>? right)
-        {
-            left ??= Array.Empty<NoteImageAttachment>();
-            right ??= Array.Empty<NoteImageAttachment>();
-
-            if (left.Count != right.Count)
-                return false;
-
-            for (var i = 0; i < left.Count; i++)
-            {
-                if (left[i].Id != right[i].Id
-                    || !string.Equals(left[i].Data, right[i].Data, StringComparison.Ordinal)
-                    || !string.Equals(NormalizeImageLayout(left[i].Layout), NormalizeImageLayout(right[i].Layout), StringComparison.Ordinal)
-                    || !NearlyEqual(left[i].Width, right[i].Width)
-                    || !NearlyEqual(left[i].Height, right[i].Height)
-                    || !NearlyEqual(left[i].Left, right[i].Left)
-                    || !NearlyEqual(left[i].Top, right[i].Top)
-                    || left[i].PreserveAspectRatio != right[i].PreserveAspectRatio)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private static bool NearlyEqual(double left, double right)
-        {
-            return Math.Abs(left - right) < 0.5;
-        }
-
-        private static string NormalizeImageLayout(string? layout)
-        {
-            return string.Equals(layout, NoteImageLayout.Inline, StringComparison.OrdinalIgnoreCase)
-                ? NoteImageLayout.Inline
-                : NoteImageLayout.Floating;
-        }
-
-        private static string CreateImageMarker(Guid id)
-        {
-            return $"{ImageMarkerPrefix}{id:D}{ImageMarkerSuffix}";
-        }
-
-        private static bool IsParagraphMarkerOnly(Paragraph paragraph, string marker)
-        {
-            var text = new TextRange(paragraph.ContentStart, paragraph.ContentEnd).Text;
-            return string.Equals(text.Trim(), marker, StringComparison.Ordinal);
-        }
-
-        private static bool IsParagraphEffectivelyEmpty(Paragraph paragraph)
-        {
-            return string.IsNullOrWhiteSpace(new TextRange(paragraph.ContentStart, paragraph.ContentEnd).Text);
-        }
-
-        private static double ResolveElementWidth(FrameworkElement element)
-        {
-            if (!double.IsNaN(element.Width) && element.Width > 0)
-                return element.Width;
-
-            if (element.ActualWidth > 0)
-                return element.ActualWidth;
-
-            return Math.Max(50, element.MinWidth);
-        }
-
-        private static double ResolveElementHeight(FrameworkElement element)
-        {
-            if (!double.IsNaN(element.Height) && element.Height > 0)
-                return element.Height;
-
-            if (element.ActualHeight > 0)
-                return element.ActualHeight;
-
-            return Math.Max(50, element.MinHeight);
-        }
-
-        private InlineUIContainer? FindInlineContainerForImage(ResizableImage image)
-        {
-            return FindInlineContainerForImage(ContentTextBox.Document.Blocks, image);
-        }
-
-        private InlineUIContainer? FindInlineContainerForImage(Guid imageId)
-        {
-            return FindInlineContainerForImage(ContentTextBox.Document.Blocks, imageId);
-        }
-
-        private static InlineUIContainer? FindInlineContainerForImage(BlockCollection blocks, ResizableImage image)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case Paragraph paragraph:
-                    {
-                        var match = FindInlineContainerForImage(paragraph.Inlines, image);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case Section section:
-                    {
-                        var match = FindInlineContainerForImage(section.Blocks, image);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                        {
-                            var match = FindInlineContainerForImage(item.Blocks, image);
-                            if (match != null)
-                                return match;
-                        }
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                {
-                                    var match = FindInlineContainerForImage(cell.Blocks, image);
-                                    if (match != null)
-                                        return match;
-                                }
-                            }
-                        }
-                        break;
-                }
-            }
-
-            return null;
-        }
-
-        private static InlineUIContainer? FindInlineContainerForImage(BlockCollection blocks, Guid imageId)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case Paragraph paragraph:
-                    {
-                        var match = FindInlineContainerForImage(paragraph.Inlines, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case Section section:
-                    {
-                        var match = FindInlineContainerForImage(section.Blocks, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case System.Windows.Documents.List list:
-                        foreach (ListItem item in list.ListItems)
-                        {
-                            var match = FindInlineContainerForImage(item.Blocks, imageId);
-                            if (match != null)
-                                return match;
-                        }
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                {
-                                    var match = FindInlineContainerForImage(cell.Blocks, imageId);
-                                    if (match != null)
-                                        return match;
-                                }
-                            }
-                        }
-                        break;
-                }
-            }
-
-            return null;
-        }
-
-        private static InlineUIContainer? FindInlineContainerForImage(InlineCollection inlines, ResizableImage image)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage child } when ReferenceEquals(child, image):
-                        return (InlineUIContainer)inline;
-                    case Span span:
-                    {
-                        var match = FindInlineContainerForImage(span.Inlines, image);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case AnchoredBlock anchoredBlock:
-                    {
-                        var match = FindInlineContainerForImage(anchoredBlock.Blocks, image);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static InlineUIContainer? FindInlineContainerForImage(InlineCollection inlines, Guid imageId)
-        {
-            foreach (Inline inline in inlines)
-            {
-                switch (inline)
-                {
-                    case InlineUIContainer { Child: ResizableImage child } when child.ImageId == imageId:
-                        return (InlineUIContainer)inline;
-                    case Span span:
-                    {
-                        var match = FindInlineContainerForImage(span.Inlines, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                    case AnchoredBlock anchoredBlock:
-                    {
-                        var match = FindInlineContainerForImage(anchoredBlock.Blocks, imageId);
-                        if (match != null)
-                            return match;
-                        break;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static Paragraph? FindParentParagraph(TextElement element)
-        {
-            DependencyObject? current = element;
-            while (current != null)
-            {
-                if (current is Paragraph paragraph)
-                    return paragraph;
-
-                current = current is TextElement textElement ? textElement.Parent : null;
-            }
-
-            return null;
-        }
-
-        private static InlineCollection? GetParentInlineCollection(Inline inline)
-        {
-            return inline.Parent switch
-            {
-                Paragraph paragraph => paragraph.Inlines,
-                Span span => span.Inlines,
-                _ => null
-            };
-        }
-
-        private static BlockCollection? GetParentBlockCollection(Block block)
-        {
-            return block.Parent switch
-            {
-                FlowDocument document => document.Blocks,
-                Section section => section.Blocks,
-                ListItem listItem => listItem.Blocks,
-                TableCell tableCell => tableCell.Blocks,
-                _ => null
-            };
-        }
-
-        private sealed class ImageMarkerReplacement
-        {
-            private readonly Action _restore;
-
-            public ImageMarkerReplacement(Action restore)
-            {
-                _restore = restore;
-            }
-
-            public void Restore() => _restore();
-        }
-
-        private void InsertImageFromFile(string imagePath)
-        {
-            try
-            {
-                // Read dimensions only - no full pixel decode - so we can compute the
-                // target display size before ever decoding actual pixel data.
-                var (sourceWidth, sourceHeight) = ReadImagePixelSize(imagePath);
-
-                // Set a max width/height for the image to fit in the note
-                const double maxWidth = 400;
-                const double maxHeight = 300;
-
-                double displayWidth = sourceWidth;
-                double displayHeight = sourceHeight;
-
-                // Scale down if too large
-                if (displayWidth > maxWidth || displayHeight > maxHeight)
-                {
-                    double aspectRatio = displayWidth / displayHeight;
-                    if (displayWidth > maxWidth)
-                    {
-                        displayWidth = maxWidth;
-                        displayHeight = displayWidth / aspectRatio;
-                    }
-                    if (displayHeight > maxHeight)
-                    {
-                        displayHeight = maxHeight;
-                        displayWidth = displayHeight * aspectRatio;
-                    }
-                }
-
-                var displayBitmap = LoadBitmapFromFile(imagePath, (int)Math.Ceiling(displayWidth));
-                var imageData = TryEncodeImageSource(displayBitmap, displayWidth, displayHeight);
-                if (string.IsNullOrWhiteSpace(imageData))
-                    imageData = Convert.ToBase64String(File.ReadAllBytes(imagePath));
-
-                var resizableImage = new ResizableImage
-                {
-                    ImageId = Guid.NewGuid(),
-                    Source = displayBitmap,
-                    ImageData = imageData,
-                    LayoutMode = NoteImageLayout.Floating,
-                    Width = displayWidth,
-                    Height = displayHeight
-                };
-
-                var insertionPosition = ResolveFloatingInsertionPosition();
-                AddFloatingImageToOverlay(resizableImage, insertionPosition.X, insertionPosition.Y);
-                resizableImage.IsSelected = true;
-                MarkEditorContentChanged();
-                UpdateEditedIndicator();
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"{LocalizationService.GetString("ErrorLoadingImage")}: {ex.Message}", ex);
-            }
-        }
-
-        /// <summary>
-        /// Reads an image's pixel dimensions from its header without decoding pixel data,
-        /// so callers can compute a target display/decode size before paying for a full decode.
-        /// </summary>
-        private static (int Width, int Height) ReadImagePixelSize(string imagePath)
-        {
-            using var stream = File.OpenRead(imagePath);
-            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
-            var frame = decoder.Frames[0];
-            return (frame.PixelWidth, frame.PixelHeight);
-        }
-
-        private static BitmapImage LoadBitmapFromFile(string imagePath, int decodePixelWidth = 0)
-        {
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            if (decodePixelWidth > 0)
-                bitmap.DecodePixelWidth = decodePixelWidth;
-            bitmap.EndInit();
-            bitmap.Freeze();
-            return bitmap;
         }
 
         private double _zoomLevel = 1.0;
@@ -7476,7 +7421,9 @@ namespace Scriblucent
             if (_zoomLevel < 0.5) _zoomLevel = 0.5;
             if (_zoomLevel > 3.0) _zoomLevel = 3.0;
 
-            ContentTextBox.LayoutTransform = new ScaleTransform(_zoomLevel, _zoomLevel);
+            // Zoom the whole editor surface so floating/inline overlay images scale with text.
+            ContentTextBox.LayoutTransform = Transform.Identity;
+            EditorSurface.LayoutTransform = new ScaleTransform(_zoomLevel, _zoomLevel);
             UpdateEditorToolButtonStates();
         }
         private bool _isWordWrapEnabled = true;

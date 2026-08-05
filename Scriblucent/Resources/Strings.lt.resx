@@ -15,6 +15,23 @@
   <data name="Menu" xml:space="preserve"><value>Meniu</value></data>
   <data name="AddNote" xml:space="preserve"><value>Pridėti užrašą</value></data>
   <data name="About" xml:space="preserve"><value>Apie</value></data>
+  <data name="Trash" xml:space="preserve"><value>Šiukšlinė</value></data>
+  <data name="TrashRetentionNotice" xml:space="preserve"><value>Elementai negrįžtamai ištrinami po 30 dienų šiukšlinėje.</value></data>
+  <data name="TrashEmptyState" xml:space="preserve"><value>Šiukšlinė tuščia.</value></data>
+  <data name="TrashEmptyStateFiltered" xml:space="preserve"><value>Šioje kategorijoje elementų nėra.</value></data>
+  <data name="TrashRestore" xml:space="preserve"><value>Atkurti</value></data>
+  <data name="TrashEmptyAction" xml:space="preserve"><value>Ištuštinti šiukšlinę</value></data>
+  <data name="EmptyTrashConfirmation" xml:space="preserve"><value>Ar tikrai norite negrįžtamai ištrinti visus šiukšlinėje esančius elementus? Šio veiksmo negalima atšaukti.</value></data>
+  <data name="EmptyTrashFilteredConfirmation" xml:space="preserve"><value>Ar tikrai norite negrįžtamai ištrinti visus filtruotus šiukšlinės elementus? Šio veiksmo negalima atšaukti.</value></data>
+  <data name="TrashRestoreSelected" xml:space="preserve"><value>Atkurti pažymėtus</value></data>
+  <data name="TrashDeleteSelected" xml:space="preserve"><value>Ištrinti pažymėtus</value></data>
+  <data name="TrashDeleteSelectedConfirmation" xml:space="preserve"><value>Negrįžtamai ištrinti {0} pažymėtą(-us) elementą(-us)? Šio veiksmo negalima atšaukti.</value></data>
+  <data name="TrashDeleteItemConfirmation" xml:space="preserve"><value>Negrįžtamai ištrinti šį elementą? Šio veiksmo negalima atšaukti.</value></data>
+  <data name="TrashSearchHint" xml:space="preserve"><value>Ieškoti šiukšlinėje</value></data>
+  <data name="TrashFilterAll" xml:space="preserve"><value>Visi</value></data>
+  <data name="TrashDaysLeftFormat" xml:space="preserve"><value>Liko {0} d.</value></data>
+  <data name="TrashExpiresToday" xml:space="preserve"><value>Baigiasi šiandien</value></data>
+  <data name="Untitled" xml:space="preserve"><value>Be pavadinimo</value></data>
   <data name="Settings" xml:space="preserve"><value>Nustatymai</value></data>
   <data name="SettingsCategoryAppearance" xml:space="preserve"><value>Išvaizda</value></data>
   <data name="SettingsCategoryWorkspace" xml:space="preserve"><value>Darbo erdvė</value></data>
@@ -152,6 +169,43 @@
   <data name="Animations" xml:space="preserve"><value>Animacijos</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Mažinti animacijas</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>
+  <data name="SpellCheck" xml:space="preserve"><value>Rašybos tikrinimas</value></data>
+  <data name="EnableSpellCheck" xml:space="preserve"><value>Įjungti rašybos tikrinimą</value></data>
+  <data name="SpellCheckDescription" xml:space="preserve"><value>Pabraukti klaidingai parašytus žodžius užrašų rengyklėje. Atsisiųskite kalbą žemiau ir pasirinkite ją tikrinimui - panašiai kaip Word ar LibreOffice rašybos tikrinimo kalba.</value></data>
+  <data name="SpellCheckLanguages" xml:space="preserve"><value>Kalbos</value></data>
+  <data name="SpellCheckLanguagesDescription" xml:space="preserve"><value>Pasirinkite vieną kalbą, pagal kurią bus tikrinama. Kiekvienai pirmą kartą atsisiunčiamas žodynas.</value></data>
+  <data name="SpellCheckLanguageDownload" xml:space="preserve"><value>Atsisiųsti</value></data>
+  <data name="SpellCheckLanguageDownloadingFormat" xml:space="preserve"><value>Atsisiunčiama {0}...</value></data>
+  <data name="SpellCheckLanguageDownloadSuccessFormat" xml:space="preserve"><value>{0} atsisiųsta.</value></data>
+  <data name="SpellCheckLanguageDownloadFailedFormat" xml:space="preserve"><value>Nepavyko atsisiųsti {0}.</value></data>
+  <data name="SpellCheckLanguageDownloadErrorDialogFormat" xml:space="preserve"><value>Nepavyko atsisiųsti {0} žodyno: {1}</value></data>
+  <data name="SpellCheckLanguageDeletedFormat" xml:space="preserve"><value>{0} žodynas ištrintas.</value></data>
+  <data name="SpellCheckNoSuggestions" xml:space="preserve"><value>Pasiūlymų nėra</value></data>
+  <data name="SpellCheckIgnore" xml:space="preserve"><value>Ignoruoti</value></data>
+  <data name="SpellCheckAddToDictionary" xml:space="preserve"><value>Pridėti į žodyną</value></data>
+  <data name="SpellCheckCheckForUpdates" xml:space="preserve"><value>Tikrinti atnaujinimus</value></data>
+  <data name="SpellCheckCheckingForUpdates" xml:space="preserve"><value>Tikrinami atnaujinimai...</value></data>
+  <data name="SpellCheckCheckingLanguageFormat" xml:space="preserve"><value>Tikrinama {0}...</value></data>
+  <data name="SpellCheckUpdatesAppliedFormat" xml:space="preserve"><value>Atnaujinta žodynų: {0}.</value></data>
+  <data name="SpellCheckNoUpdatesFormat" xml:space="preserve"><value>Patikrinta žodynų: {0} - visi atnaujinti.</value></data>
+  <data name="SpellCheckCheckForUpdatesFailed" xml:space="preserve"><value>Nepavyko patikrinti žodynų atnaujinimų.</value></data>
+  <data name="SpellCheckOpenFolder" xml:space="preserve"><value>Atverti aplanką</value></data>
+  <data name="SpellCheckLanguageChooserTooltip" xml:space="preserve"><value>Rašybos tikrinimo kalba</value></data>
+  <data name="SpellCheckLanguageChooserOff" xml:space="preserve"><value>Rašybos tikrinimas: išjungtas</value></data>
+  <data name="SpellCheckLanguageChooserNone" xml:space="preserve"><value>Nepasirinkta kalba</value></data>
+  <data name="SpellCheckLanguageChooserNoneDownloaded" xml:space="preserve"><value>Nėra atsisiųstų žodynų - pridėkite kalbų nustatymuose</value></data>
+  <data name="SpellCheckDisableEntirely" xml:space="preserve"><value>Išjungti rašybos tikrinimą</value></data>
+  <data name="SpellCheckLanguageNameEnUS" xml:space="preserve"><value>Anglų (JAV)</value></data>
+  <data name="SpellCheckLanguageNameEnGB" xml:space="preserve"><value>Anglų (JK)</value></data>
+  <data name="SpellCheckLanguageNameLtLT" xml:space="preserve"><value>Lietuvių</value></data>
+  <data name="SpellCheckLanguageNameDeDE" xml:space="preserve"><value>Vokiečių</value></data>
+  <data name="SpellCheckLanguageNameFrFR" xml:space="preserve"><value>Prancūzų</value></data>
+  <data name="SpellCheckLanguageNameEsES" xml:space="preserve"><value>Ispanų</value></data>
+  <data name="SpellCheckLanguageNameItIT" xml:space="preserve"><value>Italų</value></data>
+  <data name="SpellCheckLanguageNamePtPT" xml:space="preserve"><value>Portugalų</value></data>
+  <data name="SpellCheckLanguageNameRuRU" xml:space="preserve"><value>Rusų</value></data>
+  <data name="SpellCheckLanguageNamePlPL" xml:space="preserve"><value>Lenkų</value></data>
+  <data name="SpellCheckLanguageNameNlNL" xml:space="preserve"><value>Olandų</value></data>
   <data name="RecentItemsLimit" xml:space="preserve"><value>Rodomų naujausių elementų skaičius</value></data>
   <data name="RecentItemsLimitUnit" xml:space="preserve"><value>vnt.</value></data>
   <data name="RecentItemsLimitRangeWarning" xml:space="preserve"><value>Įveskite skaičių nuo {0} iki {1}.</value></data>
@@ -221,6 +275,7 @@
   <data name="ExportMarkdown" xml:space="preserve"><value>Markdown (*.md)</value></data>
   <data name="ExportXamlPackage" xml:space="preserve"><value>Raiškusis užrašo turinys (*.xamlpackage)</value></data>
   <data name="ToggleWordWrap" xml:space="preserve"><value>Perjungti žodžių laužymą</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Mastelis</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Priartinti</value></data>
   <data name="ZoomOut" xml:space="preserve"><value>Atitolinti</value></data>
   <data name="ZoomReset" xml:space="preserve"><value>Atstatyti mastelį</value></data>
@@ -230,6 +285,7 @@
   <data name="SearchOnlineHint" xml:space="preserve"><value>Pažymėkite tekstą užraše arba įveskite užklausą paieškai internete</value></data>
   <data name="SearchOnlineFailed" xml:space="preserve"><value>Nepavyko atidaryti internetinės paieškos.</value></data>
   <data name="Font" xml:space="preserve"><value>Šriftas</value></data>
+  <data name="File" xml:space="preserve"><value>Failas</value></data>
   <data name="FontLabel" xml:space="preserve"><value>Šriftas:</value></data>
   <data name="SizeLabel" xml:space="preserve"><value>Dydis:</value></data>
   <data name="SpacingLabel" xml:space="preserve"><value>Tarpai:</value></data>
@@ -237,6 +293,14 @@
   <data name="Bold" xml:space="preserve"><value>Paryškinti</value></data>
   <data name="Italic" xml:space="preserve"><value>Kursyvas</value></data>
   <data name="Underline" xml:space="preserve"><value>Pabraukti</value></data>
+  <data name="Strikethrough" xml:space="preserve"><value>Perbraukti</value></data>
+  <data name="TextColor" xml:space="preserve"><value>Teksto spalva</value></data>
+  <data name="Highlight" xml:space="preserve"><value>Paryškinimas</value></data>
+  <data name="InsertLink" xml:space="preserve"><value>Įterpti nuorodą</value></data>
+  <data name="ClearFormatting" xml:space="preserve"><value>Išvalyti formatavimą</value></data>
+  <data name="IncreaseFontSize" xml:space="preserve"><value>Didinti šrifto dydį</value></data>
+  <data name="DecreaseFontSize" xml:space="preserve"><value>Mažinti šrifto dydį</value></data>
+  <data name="Checklist" xml:space="preserve"><value>Užduočių sąrašas</value></data>
   <data name="ListStyle" xml:space="preserve"><value>Sąrašo stilius</value></data>
   <data name="BulletListStyle" xml:space="preserve"><value>Punktų sąrašo stilius</value></data>
   <data name="NumberedListStyle" xml:space="preserve"><value>Numeruoto sąrašo stilius</value></data>
@@ -247,6 +311,45 @@
   <data name="ListNumberLowerLatin" xml:space="preserve"><value>Raidės (a, b, c)</value></data>
   <data name="ListNumberUpperRoman" xml:space="preserve"><value>Romėniški skaičiai (I, II, III)</value></data>
   <data name="ListRemove" xml:space="preserve"><value>Pašalinti sąrašą</value></data>
+  <data name="InsertTable" xml:space="preserve"><value>Įterpti lentelę</value></data>
+  <data name="InsertTableSizeFormat" xml:space="preserve"><value>{0} × {1} lentelė</value></data>
+  <data name="TableInsert" xml:space="preserve"><value>Įterpti</value></data>
+  <data name="TableDuplicate" xml:space="preserve"><value>Dubliuoti</value></data>
+  <data name="TableMove" xml:space="preserve"><value>Perkelti</value></data>
+  <data name="TableClear" xml:space="preserve"><value>Išvalyti</value></data>
+  <data name="TableAlign" xml:space="preserve"><value>Lygiuoti</value></data>
+  <data name="TableSelect" xml:space="preserve"><value>Pažymėti</value></data>
+  <data name="TableDelete" xml:space="preserve"><value>Ištrinti</value></data>
+  <data name="TableInsertRowAbove" xml:space="preserve"><value>Eilutę aukščiau</value></data>
+  <data name="TableInsertRowBelow" xml:space="preserve"><value>Eilutę žemiau</value></data>
+  <data name="TableInsertColumnLeft" xml:space="preserve"><value>Stulpelį kairėje</value></data>
+  <data name="TableInsertColumnRight" xml:space="preserve"><value>Stulpelį dešinėje</value></data>
+  <data name="TableDuplicateRow" xml:space="preserve"><value>Eilutę</value></data>
+  <data name="TableDuplicateColumn" xml:space="preserve"><value>Stulpelį</value></data>
+  <data name="TableMoveRowUp" xml:space="preserve"><value>Eilutę aukštyn</value></data>
+  <data name="TableMoveRowDown" xml:space="preserve"><value>Eilutę žemyn</value></data>
+  <data name="TableClearCell" xml:space="preserve"><value>Langelį</value></data>
+  <data name="TableClearRow" xml:space="preserve"><value>Eilutę</value></data>
+  <data name="TableAlignLeft" xml:space="preserve"><value>Kairėn</value></data>
+  <data name="TableAlignCenter" xml:space="preserve"><value>Centre</value></data>
+  <data name="TableAlignRight" xml:space="preserve"><value>Dešinėn</value></data>
+  <data name="TableSelectRow" xml:space="preserve"><value>Eilutę</value></data>
+  <data name="TableSelectColumn" xml:space="preserve"><value>Stulpelį</value></data>
+  <data name="TableSelectTable" xml:space="preserve"><value>Lentelę</value></data>
+  <data name="TableDeleteRow" xml:space="preserve"><value>Eilutę</value></data>
+  <data name="TableDeleteColumn" xml:space="preserve"><value>Stulpelį</value></data>
+  <data name="TableDeleteTable" xml:space="preserve"><value>Lentelę</value></data>
+  <data name="InsertLinkDialogTitle" xml:space="preserve"><value>Įterpti nuorodą</value></data>
+  <data name="InsertLinkModeWeb" xml:space="preserve"><value>Interneto adresas</value></data>
+  <data name="InsertLinkModeNote" xml:space="preserve"><value>Užrašas šioje programoje</value></data>
+  <data name="InsertLinkDisplayTextLabel" xml:space="preserve"><value>Rodomas tekstas</value></data>
+  <data name="InsertLinkUrlLabel" xml:space="preserve"><value>Adresas</value></data>
+  <data name="InsertLinkUrlPlaceholder" xml:space="preserve"><value>https://example.com</value></data>
+  <data name="InsertLinkNoteSearchPlaceholder" xml:space="preserve"><value>Ieškoti užrašų...</value></data>
+  <data name="InsertLinkNoNotesFound" xml:space="preserve"><value>Užrašų nerasta</value></data>
+  <data name="InsertLinkInvalidUrl" xml:space="preserve"><value>Įveskite tinkamą interneto adresą, pvz., https://example.com</value></data>
+  <data name="InsertLinkNoNoteSelected" xml:space="preserve"><value>Pasirinkite užrašą, į kurį nukreipti</value></data>
+  <data name="InsertLinkTargetNoteMovedToTrash" xml:space="preserve"><value>Šis užrašas perkeltas į šiukšlinę</value></data>
   <data name="DecreaseIndent" xml:space="preserve"><value>Sumažinti įtrauką</value></data>
   <data name="IncreaseIndent" xml:space="preserve"><value>Padidinti įtrauką</value></data>
   <data name="IndentLabel" xml:space="preserve"><value>Įtrauka:</value></data>
@@ -288,21 +391,6 @@
   <data name="NoContent" xml:space="preserve"><value>(Nėra turinio)</value></data>
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Paveikslėlių failai (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|Visi failai (*.*)|*.*</value></data>
   <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Garso failai (*.mp3;*.wav)|*.mp3;*.wav|Visi failai (*.*)|*.*</value></data>
-  <data name="SelectImageToInsert" xml:space="preserve"><value>Pasirinkite paveikslėlį įterpimui</value></data>
-  <data name="FailedToInsertImage" xml:space="preserve"><value>Nepavyko įterpti paveikslėlio:</value></data>
-  <data name="ImageInsertError" xml:space="preserve"><value>Paveikslėlio įterpimo klaida</value></data>
-  <data name="ErrorLoadingImage" xml:space="preserve"><value>Klaida įkeliant paveikslėlį</value></data>
-  <data name="RemoveImage" xml:space="preserve"><value>Pašalinti paveikslėlį</value></data>
-  <data name="PicturePlaceholder" xml:space="preserve"><value>[Nuotrauka]</value></data>
-  <data name="ImageLayoutOptions" xml:space="preserve"><value>Nuotraukos išdėstymo parinktys</value></data>
-  <data name="ImageLayoutInline" xml:space="preserve"><value>Vienoje eilutėje su tekstu</value></data>
-  <data name="ImageLayoutFloating" xml:space="preserve"><value>Plaukiojanti virš teksto</value></data>
-  <data name="ImageLayoutInlineShort" xml:space="preserve"><value>Eilutėje</value></data>
-  <data name="ImageLayoutFloatingShort" xml:space="preserve"><value>Plaukiojanti</value></data>
-  <data name="ImageAspectRatioLockTooltip" xml:space="preserve"><value>Užrakinti nuotraukos proporcijas keičiant dydį</value></data>
-  <data name="ImageAspectRatioUnlockTooltip" xml:space="preserve"><value>Atrakinti nuotraukos proporcijas</value></data>
-  <data name="ImageResizeTooltip" xml:space="preserve"><value>Laikykite Shift ir tempkite, kad keistumėte dydį
-Dešiniu pelės mygtuku pašalinsite</value></data>
   <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Nepavyko nuskaityti užrašų failo</value></data>
   <data name="NotesLoadFailedWithBackupFormat" xml:space="preserve"><value>Panašu, kad jūsų užrašų failas yra pažeistas ir jo nepavyko atverti. Niekas nebuvo ištrinta ar perrašyta - originalaus failo kopija išsaugota čia:
 
@@ -351,7 +439,6 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="InfoLabelTags" xml:space="preserve"><value>Žymės</value></data>
   <data name="InfoLabelWords" xml:space="preserve"><value>Žodžiai</value></data>
   <data name="InfoLabelCharacters" xml:space="preserve"><value>Simboliai</value></data>
-  <data name="InfoLabelImages" xml:space="preserve"><value>Paveikslėliai</value></data>
   <data name="InfoLabelEditHistory" xml:space="preserve"><value>Redagavimo istorija</value></data>
   <data name="InfoLabelFont" xml:space="preserve"><value>Šriftas</value></data>
   <data name="InfoLabelId" xml:space="preserve"><value>ID</value></data>
@@ -434,8 +521,32 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ImportSuccess" xml:space="preserve"><value>Sėkmingai importuota {0} užrašai(-ų)</value></data>
   <data name="ImportError" xml:space="preserve"><value>Klaida importuojant failą:</value></data>
   <data name="SupportedFormats" xml:space="preserve"><value>Palaikomi užrašų failai (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent paketas (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Tekstiniai failai (*.txt)|*.txt|Markdown failai (*.md)|*.md|Raiškusis užrašo turinys (*.xamlpackage)|*.xamlpackage|Visi failai (*.*)|*.*</value></data>
-  <data name="InsertImage" xml:space="preserve"><value>Įterpti paveikslėlį</value></data>
-  <data name="ImageTooltip" xml:space="preserve"><value>Įterpti paveikslėlį į užrašą</value></data>
+  <data name="InsertPicture" xml:space="preserve"><value>Įterpti paveikslėlį</value></data>
+  <data name="FailedToInsertPicture" xml:space="preserve"><value>Nepavyko įterpti paveikslėlio:</value></data>
+  <data name="DeleteImage" xml:space="preserve"><value>Ištrinti paveikslėlį</value></data>
+  <data name="LockAspectRatio" xml:space="preserve"><value>Užrakinti kraštinių santykį</value></data>
+  <data name="UnlockAspectRatio" xml:space="preserve"><value>Atrakinti kraštinių santykį</value></data>
+  <data name="InsertSketch" xml:space="preserve"><value>Įterpti eskizą</value></data>
+  <data name="Sketch" xml:space="preserve"><value>Eskizas</value></data>
+  <data name="SketchDialogTitle" xml:space="preserve"><value>Greitas eskizas</value></data>
+  <data name="SketchPen" xml:space="preserve"><value>Pieštukas</value></data>
+  <data name="SketchEraser" xml:space="preserve"><value>Trintukas</value></data>
+  <data name="SketchClear" xml:space="preserve"><value>Išvalyti eskizą</value></data>
+  <data name="SketchStrokeThin" xml:space="preserve"><value>Plonas brūkšnys</value></data>
+  <data name="SketchStrokeMedium" xml:space="preserve"><value>Vidutinis brūkšnys</value></data>
+  <data name="SketchStrokeThick" xml:space="preserve"><value>Storas brūkšnys</value></data>
+  <data name="SketchColorBlack" xml:space="preserve"><value>Juoda</value></data>
+  <data name="SketchColorAccent" xml:space="preserve"><value>Akcentas</value></data>
+  <data name="SketchColorRed" xml:space="preserve"><value>Raudona</value></data>
+  <data name="SketchColorGreen" xml:space="preserve"><value>Žalia</value></data>
+  <data name="SketchEmpty" xml:space="preserve"><value>Prieš įterpdami nupieškite eskizą.</value></data>
+  <data name="FailedToInsertSketch" xml:space="preserve"><value>Nepavyko įterpti eskizo:</value></data>
+  <data name="SketchMarker" xml:space="preserve"><value>Žymeklis</value></data>
+  <data name="SketchStrokeWidth" xml:space="preserve"><value>Dydis</value></data>
+  <data name="SketchPenColor" xml:space="preserve"><value>Pieštukas</value></data>
+  <data name="SketchBackground" xml:space="preserve"><value>Fonas</value></data>
+  <data name="SketchBackgroundTransparent" xml:space="preserve"><value>Permatomas</value></data>
+  <data name="SketchBackgroundCustom" xml:space="preserve"><value>Pasirinktinė fono spalva</value></data>
   <data name="ReplaceFromFile" xml:space="preserve"><value>Pakeisti iš failo...</value></data>
   <data name="CloseTab" xml:space="preserve"><value>Uždaryti skirtuką</value></data>
   <data name="OpenInTab" xml:space="preserve"><value>Atidaryti skirtuke</value></data>
@@ -475,11 +586,12 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MassSelectDuplicateSelected" xml:space="preserve"><value>Kopijuoti pažymėtus</value></data>
   <data name="MassSelectAddTagsTitle" xml:space="preserve"><value>Pridėti žymes pažymėtiems elementams</value></data>
   <data name="MassSelectAddTagsPrompt" xml:space="preserve"><value>Įveskite žymes atskirtas kableliais (pvz.: darbas, skubu):</value></data>
-  <data name="ConfirmDelete" xml:space="preserve"><value>Ištrinti užrašą</value></data>
+  <data name="ConfirmDelete" xml:space="preserve"><value>Ištrinti negrįžtamai</value></data>
   <data name="DeleteNotesTitle" xml:space="preserve"><value>Ištrinti užrašus</value></data>
-  <data name="DeleteNoteConfirmation" xml:space="preserve"><value>Ar tikrai norite ištrinti šį užrašą? Šio veiksmo negalima atšaukti.</value></data>
+  <data name="DeleteNoteConfirmation" xml:space="preserve"><value>Ar tikrai norite negrįžtamai ištrinti šį užrašą? Šio veiksmo negalima atšaukti.</value></data>
   <data name="Confirm" xml:space="preserve"><value>Ištrinti</value></data>
-  <data name="DeleteSelectedNotesConfirmation" xml:space="preserve"><value>Ar tikrai norite ištrinti {0} pažymėtus elementus? Šio veiksmo negalima atšaukti.</value></data>
+  <data name="DeleteSelectedNotesConfirmation" xml:space="preserve"><value>Perkelti {0} pažymėtą(-us) elementą(-us) į šiukšlinę?</value></data>
+  <data name="Convert" xml:space="preserve"><value>Konvertuoti</value></data>
   <data name="ConvertToFlashcards" xml:space="preserve"><value>Paversti į mokymosi korteles</value></data>
   <data name="ConvertToFlashcardsEmpty" xml:space="preserve"><value>Prieš konvertuodami į mokymosi korteles, įrašykite užrašo tekstą.</value></data>
   <data name="ConvertToFlashcardsInProgress" xml:space="preserve"><value>Generuojamos mokymosi kortelės...</value></data>
@@ -797,6 +909,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="AddCustomIcon" xml:space="preserve"><value>Pridėti savo ikoną</value></data>
   <data name="ClearIcon" xml:space="preserve"><value>Pašalinti ikoną</value></data>
   <data name="SelectColor" xml:space="preserve"><value>Pasirinkti spalvą</value></data>
+  <data name="RecentColors" xml:space="preserve"><value>Naujausios</value></data>
+  <data name="ColorHex" xml:space="preserve"><value>Hex</value></data>
   <data name="ClearColor" xml:space="preserve"><value>Išvalyti spalvą</value></data>
   <data name="MindMapZoom" xml:space="preserve"><value>Mastelis:</value></data>
   <data name="MindMapSearchLabel" xml:space="preserve"><value>Paieška:</value></data>

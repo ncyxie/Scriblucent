@@ -70,6 +70,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     // change instead of re-joining every field of every question and option on every keystroke.
     private long _questionsChangeVersion;
     private bool _isInitializing = true;
+    private bool _isFlashingTitleStatus;
     private bool _allowCloseWithoutPrompt;
 
     public QuizPreviewWindow(
@@ -340,7 +341,27 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     public bool HasPendingAutoSaveChanges() => HasUnsavedChanges();
 
-    public void MarkCurrentStateAutoSaved() => MarkCurrentStateSaved();
+    public void MarkCurrentStateAutoSaved()
+    {
+        _lastSavedSnapshot = GetEditorSnapshot();
+        ShowAutoSaveIndicator();
+    }
+
+    private void ShowAutoSaveIndicator()
+    {
+        if (EditedIndicatorText is null)
+            return;
+
+        _isFlashingTitleStatus = true;
+        UiMotion.FlashInlineStatus(
+            EditedIndicatorText,
+            LocalizationService.GetString("AutoSaving"),
+            () =>
+            {
+                _isFlashingTitleStatus = false;
+                UpdateEditedIndicator();
+            });
+    }
 
     private bool HasUnsavedChanges()
     {
@@ -352,9 +373,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateEditedIndicator()
     {
-        if (_isInitializing || EditedIndicatorText is null)
+        if (_isInitializing || EditedIndicatorText is null || _isFlashingTitleStatus)
             return;
 
+        EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
         UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
     }
 

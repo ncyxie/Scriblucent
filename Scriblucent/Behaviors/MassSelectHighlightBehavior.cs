@@ -446,8 +446,13 @@ public static class MassSelectHighlightBehavior
     }
 
     private static DependencyObject? GetParent(DependencyObject current)
-        => VisualTreeHelper.GetParent(current) as DependencyObject
-           ?? LogicalTreeHelper.GetParent(current) as DependencyObject;
+    {
+        // VisualTreeHelper.GetParent throws on FlowDocument content (Run, Paragraph, …).
+        if (current is Visual or System.Windows.Media.Media3D.Visual3D)
+            return VisualTreeHelper.GetParent(current);
+
+        return LogicalTreeHelper.GetParent(current);
+    }
 
     private static IEnumerable<Border> EnumerateEnabledBorders(DependencyObject root)
     {

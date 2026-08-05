@@ -1852,6 +1852,64 @@ public static class UiMotion
         SlideFadePanel(element, false, NavFadeOutMs, SubtleLiftY, onComplete);
     }
 
+    /// <summary>
+    /// Briefly shows <paramref name="message"/> on a title-adjacent status TextBlock
+    /// (same slot as the Edited indicator), then fades out and invokes <paramref name="onFinished"/>.
+    /// </summary>
+    public static void FlashInlineStatus(
+        TextBlock element,
+        string message,
+        Action? onFinished = null,
+        int holdMs = 1150,
+        int fadeMs = 800)
+    {
+        Stop(element);
+        Clear(element, UIElement.OpacityProperty);
+        element.Text = message;
+
+        if (PrefersReducedMotion)
+        {
+            element.Visibility = Visibility.Visible;
+            element.Opacity = 1;
+            ResetTranslate(element);
+
+            var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(holdMs) };
+            delay.Tick += (_, _) =>
+            {
+                delay.Stop();
+                element.Visibility = Visibility.Collapsed;
+                onFinished?.Invoke();
+            };
+            delay.Start();
+            return;
+        }
+
+        element.Visibility = Visibility.Visible;
+        element.Opacity = 0;
+        ResetTranslate(element);
+        Fade(element, 1, OpenMs, OutQuad);
+
+        Run(
+            element,
+            new[]
+            {
+                Track(
+                    fadeMs,
+                    OutQuad,
+                    1,
+                    0,
+                    value => element.Opacity = value,
+                    () =>
+                    {
+                        element.Visibility = Visibility.Collapsed;
+                        element.Opacity = 1;
+                        ResetTranslate(element);
+                        onFinished?.Invoke();
+                    },
+                    startDelayMs: holdMs)
+            });
+    }
+
     public static void PulseOpacity(
         UIElement element,
         object key,

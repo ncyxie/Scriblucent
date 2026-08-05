@@ -481,7 +481,7 @@ internal static class ShellWindowChrome
     }
 
     private static bool IsShellOverlay(FrameworkElement element)
-        => element is SettingsPanel or AboutPanel or NoteSchedulePanel;
+        => element is SettingsPanel or AboutPanel or NoteSchedulePanel or TrashPanel;
 
     private static Border CreateCaptionBar(Window window)
     {

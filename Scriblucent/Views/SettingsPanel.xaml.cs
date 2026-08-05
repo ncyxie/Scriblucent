@@ -27,6 +27,14 @@ namespace Scriblucent.Views
             public bool IsDownloaded { get; set; }
         }
 
+        private sealed class ManagedSpellCheckLanguageItem
+        {
+            public string Key { get; init; } = string.Empty;
+            public string DisplayName { get; init; } = string.Empty;
+            public bool IsEnabled { get; set; }
+            public bool IsDownloaded { get; set; }
+        }
+
         private const int MinAutoSaveIntervalSeconds = 5;
         private const int MaxAutoSaveIntervalSeconds = 86400;
 
@@ -38,6 +46,9 @@ namespace Scriblucent.Views
         private bool _isCheckingForUpdates;
         private string _lastSelectedFlashcardModelKey = "Qwen3.5-0.8B";
         private readonly ObservableCollection<ManagedAiToolItem> _managedAiTools = new();
+        private readonly ObservableCollection<ManagedSpellCheckLanguageItem> _managedSpellCheckLanguages = new();
+        private bool _isDownloadingSpellCheckLanguage;
+        private bool _isCheckingSpellCheckUpdates;
         private readonly GitHubUpdateService _updateService = new();
 
         public SettingsPanel()
@@ -46,6 +57,7 @@ namespace Scriblucent.Views
             UiMotion.ConfigurePopupsForElement(this);
             _overlayAnimator = OverlayPanelAnimator.Bind(this, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
             AiToolsListBox.ItemsSource = _managedAiTools;
+            SpellCheckLanguagesListBox.ItemsSource = _managedSpellCheckLanguages;
             LocalizationProvider.Instance.PropertyChanged += LocalizationProvider_PropertyChanged;
             Unloaded += (_, _) => LocalizationProvider.Instance.PropertyChanged -= LocalizationProvider_PropertyChanged;
             NoteEditorWindow.AiGenerationStateChanged += NoteEditorWindow_AiGenerationStateChanged;
@@ -138,6 +150,9 @@ namespace Scriblucent.Views
             UpdateRecentItemsLimitControls(settings.RecentItemsLimit);
             if (ReduceAnimationsCheckBox is not null)
                 ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
+            if (EnableSpellCheckCheckBox is not null)
+                EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
+            LoadManagedSpellCheckLanguages(settings);
             _isApplyingSettings = false;
         }
 
@@ -228,6 +243,156 @@ namespace Scriblucent.Views
             UpdateAiToolsStatusText();
             UpdateRuntimeStatusText();
             UpdateAiActionButtons();
+        }
+
+        private void LoadManagedSpellCheckLanguages(AppSettings settings)
+        {
+            _managedSpellCheckLanguages.Clear();
+            foreach (var language in SpellCheckDictionaryService.GetSupportedLanguages())
+            {
+                _managedSpellCheckLanguages.Add(new ManagedSpellCheckLanguageItem
+                {
+                    Key = language.Key,
+                    DisplayName = SpellCheckDictionaryService.GetFullLanguageLabel(language.Key),
+                    IsEnabled = string.Equals(language.Key, settings.SpellCheckLanguageKey, StringComparison.OrdinalIgnoreCase),
+                    IsDownloaded = SpellCheckDictionaryService.IsDictionaryDownloaded(language.Key)
+                });
+            }
+        }
+
+        /// <summary>Single-select, matching Word/LibreOffice's one-proofing-language model -
+        /// at most one item ever has IsEnabled true, so the persisted setting is just that item's
+        /// key (or empty when none is selected).</summary>
+        private void PersistManagedSpellCheckLanguages()
+        {
+            var settings = AppSettingsService.Load();
+            settings.SpellCheckLanguageKey = _managedSpellCheckLanguages
+                .FirstOrDefault(item => item.IsEnabled)?.Key ?? string.Empty;
+            AppSettingsService.Save(settings);
+            RefreshOpenEditorSpellCheckLanguages();
+        }
+
+        private static void RefreshOpenEditorSpellCheckLanguages()
+        {
+            foreach (var window in Application.Current.Windows.OfType<Window>())
+            {
+                switch (window)
+                {
+                    case NoteEditorWindow editorWindow:
+                        editorWindow.RefreshSpellCheckLanguages();
+                        break;
+                    case NoteEditorTabsWindow tabsWindow:
+                        tabsWindow.RefreshSpellCheckLanguages();
+                        break;
+                }
+            }
+        }
+
+        /// <summary>Only wired to RadioButton.Checked, not Unchecked - explicitly clearing every
+        /// other item here rather than relying on WPF's own radio-group unchecking to propagate
+        /// through each item's binding avoids depending on the order Checked/Unchecked fire in.</summary>
+        private void SpellCheckLanguageRadioButton_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings)
+                return;
+
+            if (sender is not RadioButton radioButton || radioButton.Tag is not string key)
+                return;
+
+            foreach (var language in _managedSpellCheckLanguages)
+                language.IsEnabled = string.Equals(language.Key, key, StringComparison.OrdinalIgnoreCase);
+
+            SpellCheckLanguagesListBox.Items.Refresh();
+            PersistManagedSpellCheckLanguages();
+        }
+
+        private async void DownloadSpellCheckLanguage_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isDownloadingSpellCheckLanguage || sender is not Button { Tag: string key } || SpellCheckLanguageStatusText is null)
+                return;
+
+            var item = _managedSpellCheckLanguages.FirstOrDefault(language => string.Equals(language.Key, key, StringComparison.OrdinalIgnoreCase));
+            if (item is null)
+                return;
+
+            _isDownloadingSpellCheckLanguage = true;
+            SpellCheckLanguageStatusText.Text = string.Format(LocalizationService.GetString("SpellCheckLanguageDownloadingFormat"), item.DisplayName);
+
+            try
+            {
+                await SpellCheckDictionaryService.DownloadDictionaryAsync(key);
+                item.IsDownloaded = true;
+                SpellCheckLanguagesListBox.Items.Refresh();
+                SpellCheckLanguageStatusText.Text = string.Format(LocalizationService.GetString("SpellCheckLanguageDownloadSuccessFormat"), item.DisplayName);
+            }
+            catch (Exception ex)
+            {
+                SpellCheckLanguageStatusText.Text = string.Format(LocalizationService.GetString("SpellCheckLanguageDownloadFailedFormat"), item.DisplayName);
+                ModernDialog.ShowError(
+                    Window.GetWindow(this),
+                    LocalizationService.GetString("Error"),
+                    string.Format(LocalizationService.GetString("SpellCheckLanguageDownloadErrorDialogFormat"), item.DisplayName, ex.Message));
+            }
+            finally
+            {
+                _isDownloadingSpellCheckLanguage = false;
+            }
+        }
+
+        private void DeleteSpellCheckLanguage_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: string key } || SpellCheckLanguageStatusText is null)
+                return;
+
+            var item = _managedSpellCheckLanguages.FirstOrDefault(language => string.Equals(language.Key, key, StringComparison.OrdinalIgnoreCase));
+            if (item is null)
+                return;
+
+            SpellCheckDictionaryService.DeleteDictionary(key);
+            item.IsDownloaded = false;
+            item.IsEnabled = false;
+            SpellCheckLanguagesListBox.Items.Refresh();
+            PersistManagedSpellCheckLanguages();
+            SpellCheckLanguageStatusText.Text = string.Format(LocalizationService.GetString("SpellCheckLanguageDeletedFormat"), item.DisplayName);
+        }
+
+        /// <summary>Combines check-and-update into one action for every downloaded language, same
+        /// as CheckRuntimeUpdates_Click does for the llama.cpp runtime - re-checking against the
+        /// LibreOffice source and re-downloading whatever changed, rather than a separate
+        /// check-only step most users would never act on anyway.</summary>
+        private async void CheckSpellCheckLanguageUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isCheckingSpellCheckUpdates || _isDownloadingSpellCheckLanguage || SpellCheckLanguageStatusText is null)
+                return;
+
+            _isCheckingSpellCheckUpdates = true;
+            SpellCheckLanguageStatusText.Text = LocalizationService.GetString("SpellCheckCheckingForUpdates");
+
+            try
+            {
+                var progress = new Progress<string>(languageName =>
+                    SpellCheckLanguageStatusText.Text = string.Format(LocalizationService.GetString("SpellCheckCheckingLanguageFormat"), languageName));
+
+                var (checkedCount, updatedCount) = await SpellCheckDictionaryService.CheckAndUpdateAllAsync(progress);
+
+                SpellCheckLanguageStatusText.Text = updatedCount > 0
+                    ? string.Format(LocalizationService.GetString("SpellCheckUpdatesAppliedFormat"), updatedCount)
+                    : string.Format(LocalizationService.GetString("SpellCheckNoUpdatesFormat"), checkedCount);
+
+                RefreshOpenEditorSpellCheckLanguages();
+            }
+            catch (Exception ex)
+            {
+                SpellCheckLanguageStatusText.Text = LocalizationService.GetString("SpellCheckCheckForUpdatesFailed");
+                ModernDialog.ShowError(
+                    Window.GetWindow(this),
+                    LocalizationService.GetString("Error"),
+                    ex.Message);
+            }
+            finally
+            {
+                _isCheckingSpellCheckUpdates = false;
+            }
         }
 
         private void UpdateAiToolsStatusText()
@@ -927,6 +1092,25 @@ namespace Scriblucent.Views
             }
         }
 
+        private void OpenSpellCheckDictionariesFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dictionariesPath = SpellCheckDictionaryService.GetDictionariesRootDirectoryPath();
+                Directory.CreateDirectory(dictionariesPath);
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = dictionariesPath,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+            }
+        }
+
         public void HideAnimated()
         {
             _overlayAnimator.Hide();
@@ -1222,6 +1406,34 @@ namespace Scriblucent.Views
             AppSettingsService.Save(settings);
             ReducedMotionPreferences.Configure(reduceAnimations);
             ReducedMotionPreferences.Refresh();
+        }
+
+        private void EnableSpellCheckCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings || EnableSpellCheckCheckBox is null)
+                return;
+
+            var enabled = EnableSpellCheckCheckBox.IsChecked == true;
+            var settings = AppSettingsService.Load();
+            settings.EnableSpellCheck = enabled;
+            AppSettingsService.Save(settings);
+            RefreshOpenEditorSpellCheck(enabled);
+        }
+
+        private static void RefreshOpenEditorSpellCheck(bool enabled)
+        {
+            foreach (var window in Application.Current.Windows.OfType<Window>())
+            {
+                switch (window)
+                {
+                    case NoteEditorWindow editorWindow:
+                        editorWindow.ApplySpellCheckPreference(enabled);
+                        break;
+                    case NoteEditorTabsWindow tabsWindow:
+                        tabsWindow.ApplySpellCheckPreference(enabled);
+                        break;
+                }
+            }
         }
 
         private void MeasurementUnitSystemBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

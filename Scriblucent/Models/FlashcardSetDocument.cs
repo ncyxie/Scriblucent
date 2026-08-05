@@ -16,6 +16,9 @@ public sealed class FlashcardSetDocument
     public List<NoteScheduleEntry> Schedules { get; set; } = new();
     public bool IsPinned { get; set; }
 
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+
     /// <summary>
     /// Preferred flip animation duration for this set (ms). 0 = fall back to app settings.
     /// </summary>

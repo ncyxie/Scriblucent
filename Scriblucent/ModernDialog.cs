@@ -57,7 +57,9 @@ public static class ModernDialog
             cancelStyle,
             defaultChoice);
         var resolvedOwner = owner ?? ResolveOwner();
-        if (resolvedOwner is not null)
+        // A Window can only own another Window once it has been shown - assigning an unshown
+        // owner (e.g. a hosted editor whose content is already detached) throws, so guard it.
+        if (resolvedOwner is { IsVisible: true })
             dialog.Owner = resolvedOwner;
 
         dialog.ShowDialog();

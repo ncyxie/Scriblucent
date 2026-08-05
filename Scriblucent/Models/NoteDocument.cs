@@ -19,24 +19,24 @@ public class NoteDocument
     public List<NoteScheduleEntry> Schedules { get; set; } = new();
     public bool IsPinned { get; set; } = false;
     public List<NoteEditHistoryEntry> EditHistory { get; set; } = new();
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
 }
 
-public static class NoteImageLayout
-{
-    public const string Inline = "Inline";
-    public const string Floating = "Floating";
-}
-
+/// <summary>
+/// Floating image attachment stored with a note. Geometry is in document space (DIPs);
+/// <see cref="Data"/> holds the original image bytes as base64.
+/// </summary>
 public class NoteImageAttachment
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Data { get; set; } = string.Empty;
-    public string Layout { get; set; } = NoteImageLayout.Floating;
     public double Width { get; set; }
     public double Height { get; set; }
     public double Left { get; set; }
     public double Top { get; set; }
-    public bool PreserveAspectRatio { get; set; }
+    /// <summary>When true, resize keeps aspect ratio. Missing on old notes → treated as true.</summary>
+    public bool LockAspectRatio { get; set; } = true;
 }
 
 public class NoteScheduleEntry
@@ -49,5 +49,4 @@ public class NoteEditHistoryEntry
 {
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public string Content { get; set; } = string.Empty;
-    public List<NoteImageAttachment> Images { get; set; } = new();
 }

@@ -43,6 +43,7 @@
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="SharpVectors.Wpf" Version="1.8.5" />
     <PackageReference Include="VirtualizingWrapPanel" Version="2.5.4" />
+    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
   </ItemGroup>
 
 </Project>

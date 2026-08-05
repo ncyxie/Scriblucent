@@ -60,14 +60,14 @@ public partial class EditHistoryWindow : Window
         {
             Version = version;
             TimestampText = version.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture);
-            PreviewText = BuildPreview(version.Content, version.Images);
+            PreviewText = BuildPreview(version.Content);
         }
 
         public NoteEditHistoryEntry Version { get; }
         public string TimestampText { get; }
         public string PreviewText { get; }
 
-        private static string BuildPreview(string? encodedContent, IReadOnlyList<NoteImageAttachment>? images)
+        private static string BuildPreview(string? encodedContent)
         {
             if (string.IsNullOrWhiteSpace(encodedContent))
                 return LocalizationService.GetString("EditHistoryEmptyPreview");
@@ -114,25 +114,20 @@ public partial class EditHistoryWindow : Window
             if (string.IsNullOrWhiteSpace(normalized))
                 return LocalizationService.GetString("EditHistoryEmptyPreview");
 
-            normalized = ReplaceImageMarkers(normalized, images);
+            if (normalized.Contains("[[ScriblucentImage:", StringComparison.Ordinal))
+            {
+                normalized = System.Text.RegularExpressions.Regex.Replace(
+                    normalized,
+                    @"\[\[ScriblucentImage:[^\]]+\]\]",
+                    string.Empty).Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized))
+                return LocalizationService.GetString("EditHistoryEmptyPreview");
+
             return normalized.Length > PreviewMaxLength
                 ? normalized[..PreviewMaxLength] + "..."
                 : normalized;
-        }
-
-        private static string ReplaceImageMarkers(string text, IReadOnlyList<NoteImageAttachment>? images)
-        {
-            if (string.IsNullOrEmpty(text) || images == null || images.Count == 0)
-                return text;
-
-            var placeholder = LocalizationService.GetString("PicturePlaceholder");
-            foreach (var image in images)
-            {
-                if (image.Id != Guid.Empty)
-                    text = text.Replace($"[[ScriblucentImage:{image.Id:D}]]", placeholder, StringComparison.Ordinal);
-            }
-
-            return text;
         }
     }
 }

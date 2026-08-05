@@ -15,6 +15,23 @@
   <data name="Menu" xml:space="preserve"><value>Menu</value></data>
   <data name="AddNote" xml:space="preserve"><value>Add Note</value></data>
   <data name="About" xml:space="preserve"><value>About</value></data>
+  <data name="Trash" xml:space="preserve"><value>Trash</value></data>
+  <data name="TrashRetentionNotice" xml:space="preserve"><value>Items are permanently deleted after 30 days in Trash.</value></data>
+  <data name="TrashEmptyState" xml:space="preserve"><value>Trash is empty.</value></data>
+  <data name="TrashEmptyStateFiltered" xml:space="preserve"><value>No items in this category.</value></data>
+  <data name="TrashRestore" xml:space="preserve"><value>Restore</value></data>
+  <data name="TrashEmptyAction" xml:space="preserve"><value>Empty Trash</value></data>
+  <data name="EmptyTrashConfirmation" xml:space="preserve"><value>Are you sure you want to permanently delete all items in Trash? This action cannot be undone.</value></data>
+  <data name="EmptyTrashFilteredConfirmation" xml:space="preserve"><value>Are you sure you want to permanently delete all filtered items in Trash? This action cannot be undone.</value></data>
+  <data name="TrashRestoreSelected" xml:space="preserve"><value>Restore selected</value></data>
+  <data name="TrashDeleteSelected" xml:space="preserve"><value>Delete selected</value></data>
+  <data name="TrashDeleteSelectedConfirmation" xml:space="preserve"><value>Permanently delete {0} selected item(s)? This cannot be undone.</value></data>
+  <data name="TrashDeleteItemConfirmation" xml:space="preserve"><value>Permanently delete this item? This cannot be undone.</value></data>
+  <data name="TrashSearchHint" xml:space="preserve"><value>Search trash</value></data>
+  <data name="TrashFilterAll" xml:space="preserve"><value>All</value></data>
+  <data name="TrashDaysLeftFormat" xml:space="preserve"><value>{0} days left</value></data>
+  <data name="TrashExpiresToday" xml:space="preserve"><value>Expires today</value></data>
+  <data name="Untitled" xml:space="preserve"><value>Untitled</value></data>
   <data name="Settings" xml:space="preserve"><value>Settings</value></data>
   <data name="SettingsCategoryAppearance" xml:space="preserve"><value>Appearance</value></data>
   <data name="SettingsCategoryWorkspace" xml:space="preserve"><value>Workspace</value></data>
@@ -152,6 +169,43 @@
   <data name="Animations" xml:space="preserve"><value>Animations</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Reduce animations</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>
+  <data name="SpellCheck" xml:space="preserve"><value>Spell check</value></data>
+  <data name="EnableSpellCheck" xml:space="preserve"><value>Enable spell check</value></data>
+  <data name="SpellCheckDescription" xml:space="preserve"><value>Underline misspelled words in the note editor. Download a language below and select it to check against, like Word or LibreOffice's proofing language.</value></data>
+  <data name="SpellCheckLanguages" xml:space="preserve"><value>Languages</value></data>
+  <data name="SpellCheckLanguagesDescription" xml:space="preserve"><value>Choose one language to check against. Each one downloads its dictionary the first time.</value></data>
+  <data name="SpellCheckLanguageDownload" xml:space="preserve"><value>Download</value></data>
+  <data name="SpellCheckLanguageDownloadingFormat" xml:space="preserve"><value>Downloading {0}...</value></data>
+  <data name="SpellCheckLanguageDownloadSuccessFormat" xml:space="preserve"><value>{0} downloaded.</value></data>
+  <data name="SpellCheckLanguageDownloadFailedFormat" xml:space="preserve"><value>Failed to download {0}.</value></data>
+  <data name="SpellCheckLanguageDownloadErrorDialogFormat" xml:space="preserve"><value>Could not download the {0} dictionary: {1}</value></data>
+  <data name="SpellCheckLanguageDeletedFormat" xml:space="preserve"><value>{0} dictionary deleted.</value></data>
+  <data name="SpellCheckNoSuggestions" xml:space="preserve"><value>No suggestions</value></data>
+  <data name="SpellCheckIgnore" xml:space="preserve"><value>Ignore</value></data>
+  <data name="SpellCheckAddToDictionary" xml:space="preserve"><value>Add to Dictionary</value></data>
+  <data name="SpellCheckCheckForUpdates" xml:space="preserve"><value>Check for Updates</value></data>
+  <data name="SpellCheckCheckingForUpdates" xml:space="preserve"><value>Checking for updates...</value></data>
+  <data name="SpellCheckCheckingLanguageFormat" xml:space="preserve"><value>Checking {0}...</value></data>
+  <data name="SpellCheckUpdatesAppliedFormat" xml:space="preserve"><value>Updated {0} dictionaries.</value></data>
+  <data name="SpellCheckNoUpdatesFormat" xml:space="preserve"><value>Checked {0} dictionaries - all up to date.</value></data>
+  <data name="SpellCheckCheckForUpdatesFailed" xml:space="preserve"><value>Could not check for dictionary updates.</value></data>
+  <data name="SpellCheckOpenFolder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="SpellCheckLanguageChooserTooltip" xml:space="preserve"><value>Spell check language</value></data>
+  <data name="SpellCheckLanguageChooserOff" xml:space="preserve"><value>Spell check: Off</value></data>
+  <data name="SpellCheckLanguageChooserNone" xml:space="preserve"><value>No language</value></data>
+  <data name="SpellCheckLanguageChooserNoneDownloaded" xml:space="preserve"><value>No dictionaries downloaded - add languages in Settings</value></data>
+  <data name="SpellCheckDisableEntirely" xml:space="preserve"><value>Disable spell check</value></data>
+  <data name="SpellCheckLanguageNameEnUS" xml:space="preserve"><value>English (US)</value></data>
+  <data name="SpellCheckLanguageNameEnGB" xml:space="preserve"><value>English (UK)</value></data>
+  <data name="SpellCheckLanguageNameLtLT" xml:space="preserve"><value>Lithuanian</value></data>
+  <data name="SpellCheckLanguageNameDeDE" xml:space="preserve"><value>German</value></data>
+  <data name="SpellCheckLanguageNameFrFR" xml:space="preserve"><value>French</value></data>
+  <data name="SpellCheckLanguageNameEsES" xml:space="preserve"><value>Spanish</value></data>
+  <data name="SpellCheckLanguageNameItIT" xml:space="preserve"><value>Italian</value></data>
+  <data name="SpellCheckLanguageNamePtPT" xml:space="preserve"><value>Portuguese</value></data>
+  <data name="SpellCheckLanguageNameRuRU" xml:space="preserve"><value>Russian</value></data>
+  <data name="SpellCheckLanguageNamePlPL" xml:space="preserve"><value>Polish</value></data>
+  <data name="SpellCheckLanguageNameNlNL" xml:space="preserve"><value>Dutch</value></data>
   <data name="RecentItemsLimit" xml:space="preserve"><value>Recent items shown</value></data>
   <data name="RecentItemsLimitUnit" xml:space="preserve"><value>items</value></data>
   <data name="RecentItemsLimitRangeWarning" xml:space="preserve"><value>Enter a number between {0} and {1}.</value></data>
@@ -221,6 +275,7 @@
   <data name="ExportMarkdown" xml:space="preserve"><value>Markdown (*.md)</value></data>
   <data name="ExportXamlPackage" xml:space="preserve"><value>Rich note body (*.xamlpackage)</value></data>
   <data name="ToggleWordWrap" xml:space="preserve"><value>Toggle word wrap</value></data>
+  <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
   <data name="ZoomOut" xml:space="preserve"><value>Zoom out</value></data>
   <data name="ZoomReset" xml:space="preserve"><value>Reset zoom</value></data>
@@ -230,6 +285,7 @@
   <data name="SearchOnlineHint" xml:space="preserve"><value>Select text in note or type a query to search online</value></data>
   <data name="SearchOnlineFailed" xml:space="preserve"><value>Failed to open online search.</value></data>
   <data name="Font" xml:space="preserve"><value>Font</value></data>
+  <data name="File" xml:space="preserve"><value>File</value></data>
   <data name="FontLabel" xml:space="preserve"><value>Font:</value></data>
   <data name="SizeLabel" xml:space="preserve"><value>Size:</value></data>
   <data name="SpacingLabel" xml:space="preserve"><value>Spacing:</value></data>
@@ -237,6 +293,14 @@
   <data name="Bold" xml:space="preserve"><value>Bold</value></data>
   <data name="Italic" xml:space="preserve"><value>Italic</value></data>
   <data name="Underline" xml:space="preserve"><value>Underline</value></data>
+  <data name="Strikethrough" xml:space="preserve"><value>Strikethrough</value></data>
+  <data name="TextColor" xml:space="preserve"><value>Text color</value></data>
+  <data name="Highlight" xml:space="preserve"><value>Highlight</value></data>
+  <data name="InsertLink" xml:space="preserve"><value>Insert link</value></data>
+  <data name="ClearFormatting" xml:space="preserve"><value>Clear formatting</value></data>
+  <data name="IncreaseFontSize" xml:space="preserve"><value>Increase font size</value></data>
+  <data name="DecreaseFontSize" xml:space="preserve"><value>Decrease font size</value></data>
+  <data name="Checklist" xml:space="preserve"><value>Checklist</value></data>
   <data name="ListStyle" xml:space="preserve"><value>List style</value></data>
   <data name="BulletListStyle" xml:space="preserve"><value>Bullet list style</value></data>
   <data name="NumberedListStyle" xml:space="preserve"><value>Numbered list style</value></data>
@@ -247,6 +311,45 @@
   <data name="ListNumberLowerLatin" xml:space="preserve"><value>Letters (a, b, c)</value></data>
   <data name="ListNumberUpperRoman" xml:space="preserve"><value>Roman numerals (I, II, III)</value></data>
   <data name="ListRemove" xml:space="preserve"><value>Remove list</value></data>
+  <data name="InsertTable" xml:space="preserve"><value>Insert table</value></data>
+  <data name="InsertTableSizeFormat" xml:space="preserve"><value>{0} × {1} table</value></data>
+  <data name="TableInsert" xml:space="preserve"><value>Insert</value></data>
+  <data name="TableDuplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="TableMove" xml:space="preserve"><value>Move</value></data>
+  <data name="TableClear" xml:space="preserve"><value>Clear</value></data>
+  <data name="TableAlign" xml:space="preserve"><value>Align</value></data>
+  <data name="TableSelect" xml:space="preserve"><value>Select</value></data>
+  <data name="TableDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="TableInsertRowAbove" xml:space="preserve"><value>Row above</value></data>
+  <data name="TableInsertRowBelow" xml:space="preserve"><value>Row below</value></data>
+  <data name="TableInsertColumnLeft" xml:space="preserve"><value>Column left</value></data>
+  <data name="TableInsertColumnRight" xml:space="preserve"><value>Column right</value></data>
+  <data name="TableDuplicateRow" xml:space="preserve"><value>Row</value></data>
+  <data name="TableDuplicateColumn" xml:space="preserve"><value>Column</value></data>
+  <data name="TableMoveRowUp" xml:space="preserve"><value>Row up</value></data>
+  <data name="TableMoveRowDown" xml:space="preserve"><value>Row down</value></data>
+  <data name="TableClearCell" xml:space="preserve"><value>Cell</value></data>
+  <data name="TableClearRow" xml:space="preserve"><value>Row</value></data>
+  <data name="TableAlignLeft" xml:space="preserve"><value>Left</value></data>
+  <data name="TableAlignCenter" xml:space="preserve"><value>Center</value></data>
+  <data name="TableAlignRight" xml:space="preserve"><value>Right</value></data>
+  <data name="TableSelectRow" xml:space="preserve"><value>Row</value></data>
+  <data name="TableSelectColumn" xml:space="preserve"><value>Column</value></data>
+  <data name="TableSelectTable" xml:space="preserve"><value>Table</value></data>
+  <data name="TableDeleteRow" xml:space="preserve"><value>Row</value></data>
+  <data name="TableDeleteColumn" xml:space="preserve"><value>Column</value></data>
+  <data name="TableDeleteTable" xml:space="preserve"><value>Table</value></data>
+  <data name="InsertLinkDialogTitle" xml:space="preserve"><value>Insert Link</value></data>
+  <data name="InsertLinkModeWeb" xml:space="preserve"><value>Web address</value></data>
+  <data name="InsertLinkModeNote" xml:space="preserve"><value>Note in this app</value></data>
+  <data name="InsertLinkDisplayTextLabel" xml:space="preserve"><value>Text to display</value></data>
+  <data name="InsertLinkUrlLabel" xml:space="preserve"><value>Address</value></data>
+  <data name="InsertLinkUrlPlaceholder" xml:space="preserve"><value>https://example.com</value></data>
+  <data name="InsertLinkNoteSearchPlaceholder" xml:space="preserve"><value>Search notes...</value></data>
+  <data name="InsertLinkNoNotesFound" xml:space="preserve"><value>No notes found</value></data>
+  <data name="InsertLinkInvalidUrl" xml:space="preserve"><value>Enter a valid web address, e.g. https://example.com</value></data>
+  <data name="InsertLinkNoNoteSelected" xml:space="preserve"><value>Choose a note to link to</value></data>
+  <data name="InsertLinkTargetNoteMovedToTrash" xml:space="preserve"><value>This note was moved to Trash</value></data>
   <data name="DecreaseIndent" xml:space="preserve"><value>Decrease indent</value></data>
   <data name="IncreaseIndent" xml:space="preserve"><value>Increase indent</value></data>
   <data name="IndentLabel" xml:space="preserve"><value>Indent:</value></data>
@@ -288,21 +391,6 @@
   <data name="NoContent" xml:space="preserve"><value>(No content)</value></data>
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Image files (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|All files (*.*)|*.*</value></data>
   <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Audio files (*.mp3;*.wav)|*.mp3;*.wav|All files (*.*)|*.*</value></data>
-  <data name="SelectImageToInsert" xml:space="preserve"><value>Select an image to insert</value></data>
-  <data name="FailedToInsertImage" xml:space="preserve"><value>Failed to insert image:</value></data>
-  <data name="ImageInsertError" xml:space="preserve"><value>Image Insert Error</value></data>
-  <data name="ErrorLoadingImage" xml:space="preserve"><value>Error loading image</value></data>
-  <data name="RemoveImage" xml:space="preserve"><value>Remove image</value></data>
-  <data name="PicturePlaceholder" xml:space="preserve"><value>[Picture]</value></data>
-  <data name="ImageLayoutOptions" xml:space="preserve"><value>Picture layout options</value></data>
-  <data name="ImageLayoutInline" xml:space="preserve"><value>In line with text</value></data>
-  <data name="ImageLayoutFloating" xml:space="preserve"><value>Floating over text</value></data>
-  <data name="ImageLayoutInlineShort" xml:space="preserve"><value>Inline</value></data>
-  <data name="ImageLayoutFloatingShort" xml:space="preserve"><value>Floating</value></data>
-  <data name="ImageAspectRatioLockTooltip" xml:space="preserve"><value>Lock picture proportions while resizing</value></data>
-  <data name="ImageAspectRatioUnlockTooltip" xml:space="preserve"><value>Unlock picture proportions</value></data>
-  <data name="ImageResizeTooltip" xml:space="preserve"><value>Shift+Drag to resize image
-Right-click to remove</value></data>
   <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Notes file couldn't be read</value></data>
   <data name="NotesLoadFailedWithBackupFormat" xml:space="preserve"><value>Your notes file appears to be damaged and couldn't be opened. Nothing was deleted or overwritten - a copy of the original file was saved to:
 
@@ -351,7 +439,6 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="InfoLabelTags" xml:space="preserve"><value>Tags</value></data>
   <data name="InfoLabelWords" xml:space="preserve"><value>Words</value></data>
   <data name="InfoLabelCharacters" xml:space="preserve"><value>Characters</value></data>
-  <data name="InfoLabelImages" xml:space="preserve"><value>Images</value></data>
   <data name="InfoLabelEditHistory" xml:space="preserve"><value>Edit history</value></data>
   <data name="InfoLabelFont" xml:space="preserve"><value>Font</value></data>
   <data name="InfoLabelId" xml:space="preserve"><value>ID</value></data>
@@ -486,8 +573,32 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ImportSuccess" xml:space="preserve"><value>Successfully imported {0} note(s)</value></data>
   <data name="ImportError" xml:space="preserve"><value>Error importing file:</value></data>
   <data name="SupportedFormats" xml:space="preserve"><value>Supported note files (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent Package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|Markdown Files (*.md)|*.md|Rich Note Body (*.xamlpackage)|*.xamlpackage|All files (*.*)|*.*</value></data>
-  <data name="InsertImage" xml:space="preserve"><value>Insert Image</value></data>
-  <data name="ImageTooltip" xml:space="preserve"><value>Insert an image into the note</value></data>
+  <data name="InsertPicture" xml:space="preserve"><value>Insert picture</value></data>
+  <data name="FailedToInsertPicture" xml:space="preserve"><value>Failed to insert picture:</value></data>
+  <data name="DeleteImage" xml:space="preserve"><value>Delete image</value></data>
+  <data name="LockAspectRatio" xml:space="preserve"><value>Lock aspect ratio</value></data>
+  <data name="UnlockAspectRatio" xml:space="preserve"><value>Unlock aspect ratio</value></data>
+  <data name="InsertSketch" xml:space="preserve"><value>Insert sketch</value></data>
+  <data name="Sketch" xml:space="preserve"><value>Sketch</value></data>
+  <data name="SketchDialogTitle" xml:space="preserve"><value>Quick sketch</value></data>
+  <data name="SketchPen" xml:space="preserve"><value>Pen</value></data>
+  <data name="SketchEraser" xml:space="preserve"><value>Eraser</value></data>
+  <data name="SketchClear" xml:space="preserve"><value>Clear sketch</value></data>
+  <data name="SketchStrokeThin" xml:space="preserve"><value>Thin stroke</value></data>
+  <data name="SketchStrokeMedium" xml:space="preserve"><value>Medium stroke</value></data>
+  <data name="SketchStrokeThick" xml:space="preserve"><value>Thick stroke</value></data>
+  <data name="SketchColorBlack" xml:space="preserve"><value>Black</value></data>
+  <data name="SketchColorAccent" xml:space="preserve"><value>Accent</value></data>
+  <data name="SketchColorRed" xml:space="preserve"><value>Red</value></data>
+  <data name="SketchColorGreen" xml:space="preserve"><value>Green</value></data>
+  <data name="SketchEmpty" xml:space="preserve"><value>Draw something before inserting the sketch.</value></data>
+  <data name="FailedToInsertSketch" xml:space="preserve"><value>Failed to insert sketch:</value></data>
+  <data name="SketchMarker" xml:space="preserve"><value>Marker</value></data>
+  <data name="SketchStrokeWidth" xml:space="preserve"><value>Size</value></data>
+  <data name="SketchPenColor" xml:space="preserve"><value>Pen</value></data>
+  <data name="SketchBackground" xml:space="preserve"><value>Background</value></data>
+  <data name="SketchBackgroundTransparent" xml:space="preserve"><value>Transparent</value></data>
+  <data name="SketchBackgroundCustom" xml:space="preserve"><value>Custom background color</value></data>
   <data name="ReplaceFromFile" xml:space="preserve"><value>Replace from file...</value></data>
   <data name="CloseTab" xml:space="preserve"><value>Close Tab</value></data>
   <data name="OpenInTab" xml:space="preserve"><value>Open in Tab</value></data>
@@ -527,11 +638,12 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MassSelectDuplicateSelected" xml:space="preserve"><value>Duplicate selected</value></data>
   <data name="MassSelectAddTagsTitle" xml:space="preserve"><value>Add tags to selected items</value></data>
   <data name="MassSelectAddTagsPrompt" xml:space="preserve"><value>Enter tags separated by commas (example: work, urgent):</value></data>
-  <data name="ConfirmDelete" xml:space="preserve"><value>Delete note</value></data>
+  <data name="ConfirmDelete" xml:space="preserve"><value>Delete permanently</value></data>
   <data name="DeleteNotesTitle" xml:space="preserve"><value>Delete notes</value></data>
-  <data name="DeleteNoteConfirmation" xml:space="preserve"><value>Are you sure you want to delete this note? This action cannot be undone.</value></data>
+  <data name="DeleteNoteConfirmation" xml:space="preserve"><value>Are you sure you want to permanently delete this note? This action cannot be undone.</value></data>
   <data name="Confirm" xml:space="preserve"><value>Delete</value></data>
-  <data name="DeleteSelectedNotesConfirmation" xml:space="preserve"><value>Are you sure you want to delete {0} selected items? This action cannot be undone.</value></data>
+  <data name="DeleteSelectedNotesConfirmation" xml:space="preserve"><value>Move {0} selected item(s) to Trash?</value></data>
+  <data name="Convert" xml:space="preserve"><value>Convert</value></data>
   <data name="ConvertToFlashcards" xml:space="preserve"><value>Convert to flashcards</value></data>
   <data name="ConvertToFlashcardsEmpty" xml:space="preserve"><value>Add note text before converting to flashcards.</value></data>
   <data name="ConvertToFlashcardsInProgress" xml:space="preserve"><value>Generating flashcards...</value></data>
@@ -849,6 +961,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="AddCustomIcon" xml:space="preserve"><value>Add custom icon</value></data>
   <data name="ClearIcon" xml:space="preserve"><value>Clear icon</value></data>
   <data name="SelectColor" xml:space="preserve"><value>Select color</value></data>
+  <data name="RecentColors" xml:space="preserve"><value>Recent</value></data>
+  <data name="ColorHex" xml:space="preserve"><value>Hex</value></data>
   <data name="ClearColor" xml:space="preserve"><value>Clear color</value></data>
   <data name="MindMapZoom" xml:space="preserve"><value>Zoom:</value></data>
   <data name="MindMapSearchLabel" xml:space="preserve"><value>Search:</value></data>

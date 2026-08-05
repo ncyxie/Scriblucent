@@ -1,0 +1,123 @@
+<Window x:Class="Scriblucent.Views.InsertHyperlinkDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
+        Title="{Binding [InsertLinkDialogTitle], Source={StaticResource Loc}}"
+        Width="440"
+        Height="440"
+        WindowStartupLocation="CenterOwner"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        ShowInTaskbar="False">
+    <controls:OverlayDialogShell MaxCardWidth="400"
+                                  CardPadding="20">
+        <controls:OverlayDialogShell.Header>
+            <TextBlock Text="{Binding [InsertLinkDialogTitle], Source={StaticResource Loc}}"
+                       FontSize="{StaticResource Type.DialogTitle}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextColor}"
+                       Margin="0,0,0,14"/>
+        </controls:OverlayDialogShell.Header>
+
+        <controls:OverlayDialogShell.Body>
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                    <RadioButton x:Name="WebModeRadioButton"
+                                 Style="{StaticResource SortOptionRadioButtonStyle}"
+                                 GroupName="InsertLinkMode"
+                                 Content="{Binding [InsertLinkModeWeb], Source={StaticResource Loc}}"
+                                 IsChecked="True"
+                                 Margin="0,0,18,0"
+                                 Checked="ModeRadioButton_Checked"/>
+                    <RadioButton x:Name="NoteModeRadioButton"
+                                 Style="{StaticResource SortOptionRadioButtonStyle}"
+                                 GroupName="InsertLinkMode"
+                                 Content="{Binding [InsertLinkModeNote], Source={StaticResource Loc}}"
+                                 Checked="ModeRadioButton_Checked"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding [InsertLinkDisplayTextLabel], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormOptionLabelStyle}"
+                           Margin="0,0,0,6"/>
+                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}"
+                        Margin="0,0,0,14">
+                    <TextBox x:Name="DisplayTextBox"
+                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
+                </Border>
+
+                <Grid x:Name="WebModePanel">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [InsertLinkUrlLabel], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormOptionLabelStyle}"
+                                   Margin="0,0,0,6"/>
+                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                Background="{DynamicResource WindowBackground}">
+                            <TextBox x:Name="UrlTextBox"
+                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <Grid x:Name="NoteModePanel" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [InsertLinkNoteSearchPlaceholder], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormOptionLabelStyle}"
+                                   Margin="0,0,0,6"/>
+                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                                Background="{DynamicResource WindowBackground}"
+                                Margin="0,0,0,10">
+                            <TextBox x:Name="NoteSearchTextBox"
+                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                     TextChanged="NoteSearchTextBox_TextChanged"/>
+                        </Border>
+                        <Border Style="{StaticResource ChromePanelBorderStyle}"
+                                Background="{DynamicResource WindowBackground}"
+                                Padding="4"
+                                Height="150">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ListBox x:Name="NoteResultsListBox"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         SelectionMode="Single"
+                                         DisplayMemberPath="Title"
+                                         SelectionChanged="NoteResultsListBox_SelectionChanged"/>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock x:Name="ValidationText"
+                           Foreground="{DynamicResource AccentDangerSubtleForeground}"
+                           Style="{StaticResource FormHelperTextStyle}"
+                           Margin="0,10,0,0"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed"/>
+            </StackPanel>
+        </controls:OverlayDialogShell.Body>
+
+        <controls:OverlayDialogShell.Footer>
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Margin="0,20,0,0">
+                <Button Content="{Binding [Cancel], Source={StaticResource Loc}}"
+                        Style="{StaticResource DialogSecondaryButtonStyle}"
+                        MinWidth="96"
+                        Padding="16,8"
+                        Margin="0,0,8,0"
+                        Click="Cancel_Click"/>
+                <Button Content="{Binding [InsertLink], Source={StaticResource Loc}}"
+                        Style="{StaticResource DialogPrimaryButtonStyle}"
+                        MinWidth="96"
+                        Padding="16,8"
+                        Click="Insert_Click"/>
+            </StackPanel>
+        </controls:OverlayDialogShell.Footer>
+    </controls:OverlayDialogShell>
+</Window>

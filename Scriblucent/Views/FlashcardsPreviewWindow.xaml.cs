@@ -72,6 +72,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private DispatcherTimer? _editedIndicatorDebounceTimer;
     private DispatcherTimer? _searchFilterDebounceTimer;
     private bool _isInitializing = true;
+    private bool _isFlashingTitleStatus;
     private bool _studyModeLayoutVisible;
     private bool _allowCloseWithoutPrompt;
     private bool _isApplyingFlipSpeed;
@@ -377,7 +378,27 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     public bool HasPendingAutoSaveChanges() => HasUnsavedChanges();
 
-    public void MarkCurrentStateAutoSaved() => MarkCurrentStateSaved();
+    public void MarkCurrentStateAutoSaved()
+    {
+        _lastSavedSnapshot = GetEditorSnapshot();
+        ShowAutoSaveIndicator();
+    }
+
+    private void ShowAutoSaveIndicator()
+    {
+        if (EditedIndicatorText is null)
+            return;
+
+        _isFlashingTitleStatus = true;
+        UiMotion.FlashInlineStatus(
+            EditedIndicatorText,
+            LocalizationService.GetString("AutoSaving"),
+            () =>
+            {
+                _isFlashingTitleStatus = false;
+                UpdateEditedIndicator();
+            });
+    }
 
     private bool HasUnsavedChanges()
     {
@@ -389,9 +410,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateEditedIndicator()
     {
-        if (_isInitializing || EditedIndicatorText is null)
+        if (_isInitializing || EditedIndicatorText is null || _isFlashingTitleStatus)
             return;
 
+        EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
         UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
     }
 

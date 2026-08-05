@@ -101,7 +101,6 @@ internal static class NoteFileService
             ? fallbackTitle
             : document.Title.Trim();
         document.Content ??= string.Empty;
-        document.Images ??= new List<NoteImageAttachment>();
         document.Tags = document.Tags?
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .Select(tag => tag.Trim())
