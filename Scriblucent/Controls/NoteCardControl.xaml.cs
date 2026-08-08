@@ -74,9 +74,11 @@ public partial class NoteCardControl : UserControl
         var icon = new Icons.AppIcon
         {
             Kind = Icons.AppIconKind.Image,
-            Width = 11,
-            Height = 11,
-            Margin = new Thickness(0, 0, 2, 0),
+            Width = 14,
+            Height = 14,
+            // Flush on both sides - the photo in the editor sits directly between its
+            // surrounding text, so the preview icon must not invent a gap on either side.
+            Margin = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center
         };
         icon.SetResourceReference(TextElement.ForegroundProperty, "TextColorSecondary");

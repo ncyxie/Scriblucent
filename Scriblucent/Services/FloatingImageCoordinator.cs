@@ -53,6 +53,11 @@ public sealed class FloatingImageCoordinator
     private readonly Dictionary<Guid, TextBlock> _captionElements = new();
     private List<Guid>? _pendingInlineRestoreOrder;
 
+    /// <summary>True while the host window is loading document content into the flow (before
+    /// <see cref="Restore"/> runs). The freshly loaded in-line markers are legitimate there -
+    /// the undo/redo sweep must not remove them mid-load.</summary>
+    public bool SuppressMarkerSweep { get; set; }
+
     public event EventHandler? ImagesChanged;
 
     /// <summary>Raised when the user asks to copy a photo (the window owns the clipboard).</summary>
@@ -532,12 +537,14 @@ public sealed class FloatingImageCoordinator
             if (container.Child is InlineNoteImageElement element)
                 element.IsSelected = true;
 
-            // Park the editor's caret at the photo. Clicks on the element are swallowed
+            // Park the editor's caret right AFTER the photo. Clicks on the element are swallowed
             // (e.Handled) so the caret never moves, yet WPF scrolls the caret into view when
             // the editor gains focus - with a stale caret at the top of the note that would
-            // teleport the view. Anchoring here keeps any focus-scroll at the photo instead.
+            // teleport the view. Anchoring here keeps any focus-scroll at the photo, and the
+            // position is deterministic and visible (typing continues after the photo, not
+            // before it - where the user cannot tell the caret will land).
             if (_editor is not null)
-                ParkCaretPreservingView(container.ContentStart);
+                ParkCaretPreservingView(container.ContentEnd);
         }
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -587,6 +594,18 @@ public sealed class FloatingImageCoordinator
         {
             _scrollViewer.ScrollToHorizontalOffset(offset.X);
             _scrollViewer.ScrollToVerticalOffset(offset.Y);
+
+            // The caret-set above can make the RichTextBox scroll the caret into view on the
+            // NEXT layout pass. Re-assert the offsets after the frame's layout - same pattern
+            // as RestoreViewState - so the click never shifts the text under the cursor.
+            var scrollX = offset.X;
+            var scrollY = offset.Y;
+            var viewer = _scrollViewer;
+            _editor.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+            {
+                viewer.ScrollToHorizontalOffset(scrollX);
+                viewer.ScrollToVerticalOffset(scrollY);
+            });
         }
     }
 
@@ -1764,6 +1783,11 @@ public sealed class FloatingImageCoordinator
         if (_editor?.Document is null)
             return;
 
+        // Stray markers (a failed restore, a pasted RTF with markers, an undo resurrection)
+        // are swept before fresh markers are created - the marker char is only ever transient
+        // and must never re-enter the serialized content or stay visible as "obj".
+        SweepStrayInlineMarkers();
+
         _pendingInlineRestoreOrder = new List<Guid>();
         foreach (var (id, container) in _inlineContainers.ToList())
         {
@@ -1772,6 +1796,10 @@ public sealed class FloatingImageCoordinator
                 continue;
 
             var marker = new Run(new string(InlineMarkerChar, 1)) { Tag = id };
+            // A transparent background differs from the neighbors' null background, which stops
+            // the text engine from coalescing the marker run into an adjacent run (which would
+            // drop the Tag and orphan the restore). Renders identically.
+            marker.Background = Brushes.Transparent;
             host.InsertBefore(container, marker);
             host.Remove(container);
             _pendingInlineRestoreOrder.Add(id);
@@ -1793,7 +1821,13 @@ public sealed class FloatingImageCoordinator
         foreach (var run in markers)
         {
             if (run.Tag is not Guid id || !_inlineContainers.TryGetValue(id, out var container))
+            {
+                // Unpaired marker (its run was coalesced during serialization and lost the
+                // tag, or the container is gone): the char is not user text - remove it
+                // instead of leaving an "obj" in the visible text.
+                RemoveMarkerChars(run);
                 continue;
+            }
 
             var host = run.Parent switch
             {
@@ -1804,12 +1838,82 @@ public sealed class FloatingImageCoordinator
             if (host is not null)
             {
                 host.InsertBefore(run, container);
-                host.Remove(run);
+                // Remove exactly the marker chars (a coalesced run may also carry real text,
+                // which must survive - never remove the whole run).
+                RemoveMarkerChars(run);
+            }
+            else
+            {
+                RemoveMarkerChars(run);
             }
         }
 
         _pendingInlineRestoreOrder = null;
         SyncInlineParagraphLineStrategies();
+    }
+
+    /// <summary>Deletes every <see cref="InlineMarkerChar"/> left in the document - the char is
+    /// only ever a transient serialization marker, never legitimate user text.</summary>
+    private void SweepStrayInlineMarkers()
+    {
+        if (_editor?.Document is null)
+            return;
+
+        foreach (var run in EnumerateAllRuns(_editor.Document)
+            .Where(run => run.Text.Contains(InlineMarkerChar))
+            .ToList())
+        {
+            RemoveMarkerChars(run);
+        }
+    }
+
+    /// <summary>Removes every marker char inside a run, keeping any real text it was coalesced
+    /// with.</summary>
+    private static void RemoveMarkerChars(Run run)
+    {
+        if (run.Text.IndexOf(InlineMarkerChar) < 0)
+            return;
+
+        run.Text = run.Text.Replace(InlineMarkerChar.ToString(), string.Empty);
+    }
+
+    /// <summary>Removes the single marker char at a text position, tolerating the end-of-document
+    /// case where <see cref="TextPointer.GetPositionAtOffset"/> returns null.</summary>
+    private static void RemoveMarkerCharAt(TextPointer position)
+    {
+        if (position.Parent is Run run)
+        {
+            var offset = run.ContentStart.GetOffsetToPosition(position);
+            if (offset >= 0 && offset < run.Text.Length && run.Text[offset] == InlineMarkerChar)
+            {
+                run.Text = run.Text.Remove(offset, 1);
+                return;
+            }
+        }
+
+        // Fallback - the position sits at an element boundary (e.g. the marker is the document's
+        // last run and the container was inserted at its start). Locate the marker char in the
+        // next text run; never touch the container itself.
+        for (var cursor = position;
+             cursor is not null && cursor.CompareTo(cursor.DocumentEnd) < 0;
+             cursor = cursor.GetNextContextPosition(LogicalDirection.Forward))
+        {
+            if (cursor.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text)
+                continue;
+
+            var text = cursor.GetTextInRun(LogicalDirection.Forward);
+            var markerIndex = text.IndexOf(InlineMarkerChar);
+            if (markerIndex < 0)
+                continue;
+
+            if (cursor.GetPositionAtOffset(markerIndex, LogicalDirection.Forward) is { Parent: Run markerRun } markerPosition)
+            {
+                var offset = markerRun.ContentStart.GetOffsetToPosition(markerPosition);
+                markerRun.Text = markerRun.Text.Remove(offset, 1);
+            }
+
+            return;
+        }
     }
 
     private void RecordInlineAnchorOffsets()
@@ -1837,6 +1941,14 @@ public sealed class FloatingImageCoordinator
 
     private void Editor_TextChanged(object sender, TextChangedEventArgs e)
     {
+        // Undo/redo can resurrect the in-line photo marker char (renders as "obj") from the
+        // save-cycle operations; the char is never legitimate text, so sweep it on sight.
+        // Skipped while the marker swap is in flight (serialization), while sessions are
+        // being re-anchored (load), and while the host loads document content - all three
+        // legitimately carry transient markers.
+        if (_pendingInlineRestoreOrder is null && !_isRestoring && !SuppressMarkerSweep)
+            SweepStrayInlineMarkers();
+
         SyncInlineParagraphLineStrategies();
         SyncInlineButtonPlacement();
     }
@@ -1986,6 +2098,8 @@ public sealed class FloatingImageCoordinator
             return;
         }
 
+        // Markers are deleted (never left) by the paired restore, and any that remain are
+        // swept below, so no undo interaction can leave an "obj" behind.
         var markers = new List<(int Offset, TextPointer Position)>();
         var accumulated = 0;
         foreach (var run in EnumerateAllRuns(_editor.Document))
@@ -2012,18 +2126,21 @@ public sealed class FloatingImageCoordinator
             var container = new InlineUIContainer(element);
             _inlineContainers[session.Id] = container;
 
+            // Insert the element at the marker's position first (the position is still inside
+            // a run there, so the insertion always lands), then delete the marker char with
+            // the robust removal - including the end-of-document case where
+            // GetPositionAtOffset(1) returns null and the char would survive as "obj".
             var paragraph = FindParagraphFor(match.Position);
             if (paragraph is not null)
                 NoteWrapLayoutEngine.InsertInlineAt(paragraph, match.Position, new Inline[] { container });
             else
                 InsertAtDocumentEnd(container);
-
-            // Remove the marker character itself.
-            var markerEnd = match.Position.GetPositionAtOffset(1, LogicalDirection.Forward);
-            if (markerEnd is not null)
-                new TextRange(match.Position, markerEnd).Text = string.Empty;
+            RemoveMarkerCharAt(match.Position);
         }
 
+        // Any markers that never paired (a stray from a paste, an old save, or an edge
+        // case) are swept - the marker char is not user text.
+        SweepStrayInlineMarkers();
         SyncInlineParagraphLineStrategies();
     }
 
@@ -2217,6 +2334,14 @@ public sealed class FloatingImageCoordinator
         }
 
         TryEdgeAutoScroll(_gestureWidget);
+        // The edge auto-scroll is the only intended view movement during a drag. The caret
+        // parked at the photo's text position makes the RichTextBox scroll it into view on
+        // every layout (MakeCaretVisible) - with wrap off nothing else masks it, so the text
+        // visibly "runs away" from the dragged photo. Pin the view to the post-edge-scroll
+        // offsets and re-assert them after the tick's layout churn.
+        var pinX = _scrollViewer?.HorizontalOffset ?? 0;
+        var pinY = _scrollViewer?.VerticalOffset ?? 0;
+
         // Follow first so pad/clamp use the pointer target (avoids vanishing when dragged deep).
         FollowPointer(_gestureWidget);
         EnsureImageExtentPad(dragHeadroom: true);
@@ -2229,6 +2354,14 @@ public sealed class FloatingImageCoordinator
             && _scrollViewer.ScrollableHeight - _scrollViewer.VerticalOffset < _scrollViewer.ViewportHeight)
         {
             _editor?.UpdateLayout();
+        }
+
+        if (_scrollViewer is not null
+            && (Math.Abs(_scrollViewer.HorizontalOffset - pinX) >= 0.01
+                || Math.Abs(_scrollViewer.VerticalOffset - pinY) >= 0.01))
+        {
+            _scrollViewer.ScrollToHorizontalOffset(pinX);
+            _scrollViewer.ScrollToVerticalOffset(pinY);
         }
 
         if (_sessions.TryGetValue(_gestureWidget.ImageId, out var session))

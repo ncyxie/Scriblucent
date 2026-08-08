@@ -24,6 +24,18 @@ public class NoteWrapLayoutEngineTests
         => RunOnSta(RunSquareScenario);
 
     [Fact]
+    public void Engine_SquareLane_Hysteresis_KeepsSideUntilClearlyBetter()
+        => RunOnSta(RunLaneHysteresisScenario);
+
+    [Fact]
+    public void Engine_Square_PhotoBetweenWords_SplitsTheLine()
+        => RunOnSta(RunBetweenWordsSplitScenario);
+
+    [Fact]
+    public void Engine_SquareLiveApply_AdjustsWithoutResettingMargins()
+        => RunOnSta(RunSquareLiveStabilityScenario);
+
+    [Fact]
     public void Engine_TopAndBottom_PushesFirstBandParagraphBelowBand()
         => RunOnSta(RunTopAndBottomScenario);
 
@@ -285,13 +297,14 @@ public class NoteWrapLayoutEngineTests
         }
     }
 
-    /// <summary>The engine's transient inline spacer stack inside a paragraph, if present.</summary>
+    /// <summary>The engine's transient inline spacer stack inside a paragraph, if present.
+    /// (Height > 2 distinguishes the TopAndBottom band spacers from the 1px Square lane spacers.)</summary>
     private static List<InlineUIContainer> FindSpacers(Paragraph paragraph)
     {
         var found = new List<InlineUIContainer>();
         foreach (Inline inline in paragraph.Inlines)
         {
-            if (inline is InlineUIContainer { Child: Border })
+            if (inline is InlineUIContainer { Child: Border { Height: > 2 } })
                 found.Add((InlineUIContainer)inline);
         }
 
@@ -441,6 +454,65 @@ public class NoteWrapLayoutEngineTests
             throw failure;
     }
 
+    private static List<InlineUIContainer> FindSquareSpacers(Paragraph paragraph)
+    {
+        var result = new List<InlineUIContainer>();
+        foreach (var inline in paragraph.Inlines)
+        {
+            switch (inline)
+            {
+                case InlineUIContainer { Child: Border { Height: <= 2 } } container:
+                    result.Add(container);
+                    break;
+                case Span span:
+                    foreach (var nested in span.Inlines)
+                    {
+                        if (nested is InlineUIContainer { Child: Border { Height: <= 2 } } c)
+                            result.Add(c);
+                    }
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Groups a paragraph's characters into laid-out lines (top, min char x, max char x)
+    /// so tests can assert the Word-style wrap geometry around the photo.</summary>
+    private static List<(double Top, double MinLeft, double MaxRight)> MeasureLines(Paragraph paragraph)
+    {
+        var groups = new SortedDictionary<double, (double Min, double Max)>();
+        var nav = paragraph.ContentStart;
+        while (nav is not null && nav.CompareTo(paragraph.ContentEnd) < 0)
+        {
+            if (nav.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var text = nav.GetTextInRun(LogicalDirection.Forward);
+                for (var i = 0; i < text.Length; i++)
+                {
+                    var position = nav.GetPositionAtOffset(i, LogicalDirection.Forward);
+                    if (position is null)
+                        continue;
+
+                    var rect = position.GetCharacterRect(LogicalDirection.Forward);
+                    if (rect.IsEmpty)
+                        continue;
+
+                    var key = Math.Round(rect.Top);
+                    if (!groups.TryGetValue(key, out var extent))
+                        extent = (rect.Left, rect.Right);
+                    else
+                        extent = (Math.Min(extent.Min, rect.Left), Math.Max(extent.Max, rect.Right));
+                    groups[key] = extent;
+                }
+            }
+
+            nav = nav.GetNextContextPosition(LogicalDirection.Forward);
+        }
+
+        return groups.Select(kv => (kv.Key, kv.Value.Min, kv.Value.Max)).ToList();
+    }
+
     private static void RunSquareScenario()
     {
         using var harness = CreateHarness(paragraphCount: 14);
@@ -451,33 +523,38 @@ public class NoteWrapLayoutEngineTests
         var marginsBefore = AllMargins(harness.Editor.Document);
         Assert.All(marginsBefore.Values, m => Assert.Equal(0, m.Left, precision: 3));
         Assert.All(marginsBefore.Values, m => Assert.Equal(0, m.Right, precision: 3));
+        Assert.All(EnumerateAllParagraphs(harness.Editor.Document.Blocks), p => Assert.Empty(FindSquareSpacers(p)));
 
-        // Square wrap: paragraphs in the image's vertical band get pushed to the larger
-        // (right) lane - left inset = image right edge + gap = 40 + 200 + 10.
+        // Square wrap: the lines inside the photo's band get transient spacers that split the
+        // words around the photo (Word-style "word word [photo] word word") - the paragraphs
+        // themselves keep their margins (lines above/below the band stay full-width).
         harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
         harness.Editor.UpdateLayout();
         harness.Engine.Apply();
         harness.Editor.UpdateLayout();
 
-        var marginsAfter = AllMargins(harness.Editor.Document);
-        var wrapped = marginsAfter
-            .Where(kv => kv.Value.Left > 0 || kv.Value.Right > 0)
-            .ToList();
+        var paragraphs = EnumerateAllParagraphs(harness.Editor.Document.Blocks).ToList();
+        var wrapped = paragraphs.Where(p => FindSquareSpacers(p).Count > 0).ToList();
         Assert.True(wrapped.Count >= 2, $"expected >= 2 wrapped paragraphs, got {wrapped.Count}");
-        Assert.All(wrapped, kv => Assert.Equal(250, kv.Value.Left, precision: 3));
-        Assert.All(wrapped, kv => Assert.Equal(0, kv.Value.Right, precision: 3));
+        Assert.All(wrapped, p =>
+        {
+            var widths = FindSquareSpacers(p).Select(c => ((Border)c.Child).Width).ToList();
+            Assert.All(widths, w => Assert.True(w > 0 && w <= 256, $"spacer width {w:F1} out of range"));
+        });
+        Assert.All(wrapped, p => Assert.Equal(0, Normalize(p.Margin).Left, precision: 3));
 
-        // Paragraphs far above and below the image keep full width.
-        Assert.Equal(0, marginsAfter.First().Value.Left);
-        Assert.Equal(0, marginsAfter.First().Value.Right);
-        Assert.Equal(0, marginsAfter.Last().Value.Left);
-        Assert.Equal(0, marginsAfter.Last().Value.Right);
+        // Paragraphs far above and below the image keep full width (no spacers, no margins).
+        Assert.Empty(FindSquareSpacers(paragraphs.First()));
+        Assert.Equal(0, Normalize(paragraphs.First().Margin).Left);
+        Assert.Empty(FindSquareSpacers(paragraphs.Last()));
+        Assert.Equal(0, Normalize(paragraphs.Last().Margin).Right);
 
-        // Clear restores every margin exactly.
+        // Clear restores every margin and removes every spacer.
         harness.Engine.Clear();
         var marginsCleared = AllMargins(harness.Editor.Document);
         Assert.All(marginsCleared.Values, m => Assert.Equal(0, m.Left, precision: 3));
         Assert.All(marginsCleared.Values, m => Assert.Equal(0, m.Right, precision: 3));
+        Assert.All(EnumerateAllParagraphs(harness.Editor.Document.Blocks), p => Assert.Empty(FindSquareSpacers(p)));
 
         // Disabling wrap also clears.
         harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.None);
@@ -485,6 +562,144 @@ public class NoteWrapLayoutEngineTests
         var marginsOff = AllMargins(harness.Editor.Document);
         Assert.All(marginsOff.Values, m => Assert.Equal(0, m.Left, precision: 3));
         Assert.All(marginsOff.Values, m => Assert.Equal(0, m.Right, precision: 3));
+        Assert.All(EnumerateAllParagraphs(harness.Editor.Document.Blocks), p => Assert.Empty(FindSquareSpacers(p)));
+    }
+
+    private static void RunBetweenWordsSplitScenario()
+    {
+        // The office-suite behavior: a Square-wrapped photo pushed into a line splits the words
+        // around it - "word word [photo] word word". Words before the photo's left edge stay in
+        // place; the words after it flow on the same line beside the photo; the lines below in
+        // the band start after the photo; lines above and below the band keep full width.
+        using var harness = CreateHarness(paragraphCount: 0, tallParagraph: true);
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
+        harness.Editor.UpdateLayout();
+
+        // Photo 200 wide at x=200: wrap box left=184, right=416 - inside the tall paragraph's
+        // line text (lines run ~24..~740), and the right lane (764-416=348) wins over the left
+        // (184), so the band lines split at the photo.
+        var session = harness.Coordinator.GetWrapSessions().First();
+        session.DocumentLeft = 200;
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+
+        var tall = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
+        var lines = MeasureLines(tall);
+        Assert.True(lines.Count >= 6, $"expected a tall wrapped paragraph, got {lines.Count} lines");
+
+        // The straddling line has words on BOTH sides of the photo (left of 184, right of 416).
+        var splitLines = lines.Where(l => l.MinLeft < 184 && l.MaxRight > 416).ToList();
+        Assert.NotEmpty(splitLines);
+
+        // Lines deeper in the band start after the photo's right edge.
+        var belowBandStart = lines.Where(l => l.MinLeft >= 416 - 1).ToList();
+        Assert.NotEmpty(belowBandStart);
+
+        // Lines above and below the band keep full width (start at the text edge, reach the end).
+        var fullWidth = lines.Where(l => l.MinLeft < 100 && l.MaxRight > 700).ToList();
+        Assert.True(fullWidth.Count >= 2, $"expected full-width lines above/below the band, got {fullWidth.Count}");
+
+        // The wrap is transient - clearing removes every spacer.
+        harness.Engine.Clear();
+        Assert.All(EnumerateAllParagraphs(harness.Editor.Document.Blocks), p => Assert.Empty(FindSquareSpacers(p)));
+    }
+
+    private static void RunLaneHysteresisScenario()
+    {
+        // The "text keeps running away" regression: as a photo moves across a line's center,
+        // the straddling paragraph must not flip left/right on every small move - it keeps its
+        // current lane until the other side is clearly better (1.25x).
+        using var harness = CreateHarness(paragraphCount: 0, tallParagraph: true);
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
+        harness.Editor.UpdateLayout();
+
+        // Photo at x=40, 200 wide: the right lane (764-256=508) dwarfs the left (24), so the
+        // tall straddling paragraph wraps to the photo's right - the band lines get split/leading
+        // spacers; the paragraph itself keeps full-width margins.
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+        var tall = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
+        var spacers = FindSquareSpacers(tall);
+        Assert.NotEmpty(spacers);
+
+        var session = harness.Coordinator.GetWrapSessions().First();
+
+        // Move the photo right until the lanes nearly tie (x=250: left=234, right=244; the tie
+        // point is x~255). The bigger-side rule alone would flip the text to the left lane;
+        // hysteresis must keep it right (244*1.25 >= 234).
+        session.DocumentLeft = 250;
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+        spacers = FindSquareSpacers(tall);
+        Assert.NotEmpty(spacers);
+
+        // Past the hysteresis band (x=290: left=274, right=204; 204*1.25 < 274) the text flips
+        // to the left lane - that lane is applied as a paragraph right margin (right inset).
+        session.DocumentLeft = 290;
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+        var margins = Normalize(tall.Margin);
+        Assert.True(margins.Right > 400 && margins.Left < 1,
+            $"the text should flip to the left lane past the hysteresis band, got left={margins.Left:F1} right={margins.Right:F1}");
+        Assert.Empty(FindSquareSpacers(tall));
+
+        // Moving back within the band must keep the left lane (no thrash).
+        session.DocumentLeft = 260;
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+        margins = Normalize(tall.Margin);
+        Assert.True(margins.Right > 400 && margins.Left < 1,
+            $"moving back within the band must keep the current side, got left={margins.Left:F1} right={margins.Right:F1}");
+        Assert.Empty(FindSquareSpacers(tall));
+    }
+
+    private static void RunSquareLiveStabilityScenario()
+    {
+        // During an image drag the Square lanes reflow in REAL TIME (the words are pushed
+        // around the moving photo, like TopAndBottom): the first band line's split spacer
+        // follows the photo's left edge. The gesture-end full apply settles exactly.
+        using var harness = CreateHarness(paragraphCount: 0, tallParagraph: true);
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+
+        var tall = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
+        var session = harness.Coordinator.GetWrapSessions().First();
+
+        for (var x = 40; x <= 240; x += 40)
+        {
+            session.DocumentLeft = x;
+            harness.Editor.UpdateLayout();
+            harness.Engine.Apply(live: true);
+            harness.Editor.UpdateLayout();
+
+            var spacers = FindSquareSpacers(tall);
+            Assert.NotEmpty(spacers);
+            Assert.Equal(0, Normalize(tall.Margin).Left, precision: 3);
+            Assert.Equal(0, Normalize(tall.Margin).Right, precision: 3);
+        }
+
+        // The live reflow moved the first band line's split spacer right of its original
+        // position (it started at ~24 with the photo at x=40; the photo ended at x=240).
+        var liveSpacers = FindSquareSpacers(tall);
+        var liveLeft = liveSpacers.First().ContentStart.GetCharacterRect(LogicalDirection.Forward).Left;
+        Assert.True(liveLeft > 60, $"the live reflow should have pushed the split right (left={liveLeft:F1})");
+
+        // The gesture-end full apply settles exactly at the final position (x=240): the first
+        // band line splits at the photo's left edge (224).
+        harness.Engine.ScheduleApply();
+        PumpDispatcher(harness.Editor, 150);
+        harness.Editor.UpdateLayout();
+        var settled = FindSquareSpacers(tall);
+        Assert.NotEmpty(settled);
+        var settledLeft = settled.First().ContentStart.GetCharacterRect(LogicalDirection.Forward).Left;
+        Assert.True(Math.Abs(settledLeft - 224) < 25,
+            $"the settled split should sit at the photo's left edge (left={settledLeft:F1}, expected ~224)");
     }
 
     private static void RunTopAndBottomScenario()
@@ -758,9 +973,9 @@ public class NoteWrapLayoutEngineTests
         Assert.NotEmpty(stack);
         Assert.Equal(1, stack.Select(c => c.Parent).Distinct().Count()); // one shared stack
 
-        // The stack covers the deepest band bottom (350 + 150 + 10).
+        // The stack covers the deepest band bottom (350 + 150 + 16).
         var tailTop = GetInlineAfterStack(tall.Inlines, stack).ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
-        Assert.True(tailTop >= 510 - 2, $"tail should clear the deepest band bottom, got {tailTop:F1}");
+        Assert.True(tailTop >= 516 - 2, $"tail should clear the deepest band bottom, got {tailTop:F1}");
 
         // Moving only the deeper band keeps the shared split (the head) untouched and just
         // extends the stack.
@@ -923,10 +1138,15 @@ public class NoteWrapLayoutEngineTests
 
         var margins = AllMargins(harness.Editor.Document);
 
-        var squareWrapped = margins
-            .Where(kv => Math.Abs(kv.Value.Left - 250) < 0.5)
+        // Image A (Square): its band's lines carry transient split/leading spacers, not margins.
+        var squareWrapped = EnumerateAllParagraphs(harness.Editor.Document.Blocks)
+            .Where(p => FindSquareSpacers(p).Count > 0)
             .ToList();
         Assert.True(squareWrapped.Count >= 2, $"expected >= 2 square-wrapped paragraphs, got {squareWrapped.Count}");
+        Assert.All(
+            squareWrapped.SelectMany(FindSquareSpacers).Select(c => ((Border)c.Child).Width),
+            w => Assert.True(w > 0 && w <= 256, $"spacer width {w:F1} out of range"));
+        Assert.DoesNotContain(margins.Values, m => Math.Abs(m.Left - 256) < 0.5);
 
         // Image B's straddling paragraph is handled by the between-lines inline spacer,
         // so no paragraph carries a top margin.
@@ -939,7 +1159,7 @@ public class NoteWrapLayoutEngineTests
         var stack = FindSpacers(spacerHost!);
         Assert.NotEmpty(stack);
         var tailTop = GetInlineAfterStack(spacerHost!.Inlines, stack).ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
-        Assert.True(tailTop >= 758, $"spacer tail top {tailTop:F1} should be at/after band bottom 760");
+        Assert.True(tailTop >= 764, $"spacer tail top {tailTop:F1} should be at/after band bottom 766");
 
         // The spacer's paragraph must not carry a side lane.
         Assert.Equal(0, margins[spacerHost!].Left);

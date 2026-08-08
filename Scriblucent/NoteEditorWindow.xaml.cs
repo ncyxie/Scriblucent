@@ -2360,6 +2360,12 @@ namespace Scriblucent
                     TitleTextBox.Text = document.Title;
                     TagsTextBox.Text = string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
 
+                    // The loaded flow legitimately carries in-line photo markers from the content
+                    // until RestoreInlineSessions re-anchors them below. Formatting changes
+                    // (font, theme, line spacing) fire TextChanged, so the undo/redo sweep must
+                    // stay away across all of it - reset in the outer finally.
+                    _floatingImages.SuppressMarkerSweep = true;
+
                     if (!string.IsNullOrEmpty(document.Content))
                     {
                         TextRange tr = new TextRange(ContentTextBox.Document.ContentStart, ContentTextBox.Document.ContentEnd);
@@ -2460,6 +2466,7 @@ namespace Scriblucent
             finally
             {
                 _isLoadingDocument = false;
+                _floatingImages.SuppressMarkerSweep = false;
                 UpdateEditedIndicator();
             }
         }
@@ -2683,14 +2690,51 @@ namespace Scriblucent
             // Image data on the clipboard (with or without text) becomes a new floating photo
             // at the caret; plain text keeps the default paste. If the image insert fails, let
             // the default paste run rather than swallowing the command.
-            if (e.DataObject is not { } data || !IsImageData(data))
+            if (e.DataObject is not { } data)
                 return;
 
-            if (PasteImageFromDataObject(data))
+            if (IsImageData(data))
             {
-                e.CancelCommand();
-                e.Handled = true;
+                if (PasteImageFromDataObject(data))
+                {
+                    e.CancelCommand();
+                    e.Handled = true;
+                }
+                return;
             }
+
+            // Text/RTF pastes can carry the in-line photo marker (\uFFFC) when the source was a
+            // selection copied from this editor - the marker is the photo's transient
+            // serialization stand-in. It renders as "obj", so strip it from the pasted data.
+            if (ContainsInlineMarkers(data))
+                e.DataObject = SanitizePasteDataObject(data);
+        }
+
+        private static bool ContainsInlineMarkers(IDataObject data)
+        {
+            if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string unicode
+                && unicode.Contains('\uFFFC'))
+                return true;
+
+            if (data.GetDataPresent(DataFormats.Text) && data.GetData(DataFormats.Text) is string text
+                && text.Contains('\uFFFC'))
+                return true;
+
+            return data.GetDataPresent(DataFormats.Rtf) && data.GetData(DataFormats.Rtf) is string rtf
+                && rtf.Contains("\\u-4", StringComparison.Ordinal);
+        }
+
+        private static DataObject SanitizePasteDataObject(IDataObject data)
+        {
+            var sanitized = new DataObject();
+            if (data.GetDataPresent(DataFormats.UnicodeText) && data.GetData(DataFormats.UnicodeText) is string unicode)
+                sanitized.SetData(DataFormats.UnicodeText, unicode.Replace('\uFFFC', ' '));
+            if (data.GetDataPresent(DataFormats.Text) && data.GetData(DataFormats.Text) is string text)
+                sanitized.SetData(DataFormats.Text, text.Replace('\uFFFC', ' '));
+            if (data.GetDataPresent(DataFormats.Rtf) && data.GetData(DataFormats.Rtf) is string rtf)
+                sanitized.SetData(DataFormats.Rtf, System.Text.RegularExpressions.Regex.Replace(rtf, @"\\u-4\?", " "));
+
+            return sanitized;
         }
 
         /// <summary>True when the pasted data carries an image in any common clipboard format.
@@ -2891,10 +2935,15 @@ namespace Scriblucent
 
         private string GetClipboardPlainText(TextSelection selection, out bool convertedIndentationForPlainText)
         {
+            string text;
             if (TryGetWholeParagraphSelectionParagraphs(selection, out var selectedParagraphs))
-                return BuildWholeParagraphClipboardText(selectedParagraphs, out convertedIndentationForPlainText);
+                text = BuildWholeParagraphClipboardText(selectedParagraphs, out convertedIndentationForPlainText);
+            else
+                text = NormalizeIndentationForPlainTextExport(selection.Text, out convertedIndentationForPlainText);
 
-            return NormalizeIndentationForPlainTextExport(selection.Text, out convertedIndentationForPlainText);
+            // In-line photo markers (object replacement chars) would read as "obj" - the photo
+            // is a picture, not text.
+            return text.Replace('\uFFFC', ' ');
         }
 
         private string BuildWholeParagraphClipboardText(
@@ -3808,7 +3857,8 @@ namespace Scriblucent
 
         private string GetEditorPlainText()
         {
-            var text = GetContentAsText();
+            // In-line photo markers (object replacement chars) read as "obj" - never export them.
+            var text = GetContentAsText().Replace('\uFFFC', ' ');
 
             if (text.EndsWith("\r\n", StringComparison.Ordinal))
                 text = text[..^2];

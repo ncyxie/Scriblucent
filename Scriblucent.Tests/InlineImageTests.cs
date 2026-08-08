@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -13,6 +14,7 @@ using System.Windows.Threading;
 using Scriblucent.Controls;
 using Scriblucent.Models;
 using Scriblucent.Services;
+using Scriblucent.Views;
 using Xunit;
 
 namespace Scriblucent.Tests;
@@ -40,12 +42,101 @@ public class InlineImageTests
         => RunOnSta(RunReanchorScenario);
 
     [Fact]
+    public void InlinePhotoClick_ParksCaretAfterThePhoto()
+        => RunOnSta(RunInlineSelectCaretParkScenario);
+
+    [Fact]
+    public void InlineCaretPlacement_LeftBefore_RightAfter()
+        => RunOnSta(RunInlineCaretSideScenario);
+
+    private static void RunInlineSelectCaretParkScenario()
+    {
+        // Selecting an inline photo must park the caret deterministically RIGHT AFTER the
+        // photo (visible, and typing continues after it) - not before it, where the user
+        // cannot tell where the caret will land.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var container = FindInlineContainer(harness.Editor.Document);
+        Assert.NotNull(container);
+        var element = container.Child as InlineNoteImageElement;
+        Assert.NotNull(element);
+
+        var photoImage = FindVisualChildren<System.Windows.Controls.Image>(element!).First();
+        element.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+        {
+            RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+            Source = photoImage
+        });
+        harness.Editor.UpdateLayout();
+
+        Assert.True(element.IsSelected);
+        Assert.True(
+            container.ContentEnd.GetOffsetToPosition(harness.Editor.CaretPosition) <= 1,
+            "the caret must sit right after the photo");
+        Assert.True(
+            harness.Editor.CaretPosition.CompareTo(container.ContentStart) > 0,
+            "the caret must not sit before the photo");
+    }
+
+    private static void RunInlineCaretSideScenario()
+    {
+        // Clicking the TEXT directly beside an inline photo must place the caret predictably:
+        // left of the photo -> before it, right of the photo -> after it.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var container = FindInlineContainer(harness.Editor.Document);
+        Assert.NotNull(container);
+        var element = container.Child as InlineNoteImageElement;
+        Assert.NotNull(element);
+
+        var rect = container.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+        Assert.False(rect.IsEmpty);
+        var midY = rect.Top + rect.Height / 2;
+        var photoWidth = Math.Max(1, element.ActualWidth);
+
+        var left = harness.Editor.GetPositionFromPoint(new Point(rect.Left - 6, midY), snapToText: true);
+        var right = harness.Editor.GetPositionFromPoint(new Point(rect.Left + photoWidth + 10, midY), snapToText: true);
+        Assert.NotNull(left);
+        Assert.NotNull(right);
+        Assert.True(left.CompareTo(container.ContentStart) < 0, "click left of the photo must give the caret before it");
+        Assert.True(right.CompareTo(container.ContentEnd) >= 0, "click right of the photo must give the caret after it");
+    }
+
+    [Fact]
+    public void InlineResize_LockMaintainsAspect_FreeformWithout()
+        => RunOnSta(RunInlineLockResizeScenario);
+
+    [Fact]
     public void ResizeInlineImage_UpdatesSessionAndAttachment()
         => RunOnSta(RunResizeScenario);
 
     [Fact]
     public void SaveLoadRoundTrip_PreservesAnchorAndText()
         => RunOnSta(RunRoundTripScenario);
+
+    [Fact]
+    public void MarkerAtDocumentEnd_LoadsWithoutObj()
+        => RunOnSta(RunMarkerAtDocumentEndScenario);
+
+    [Fact]
+    public void UnpairedMarker_SweptOnSaveAndLoad()
+        => RunOnSta(RunUnpairedMarkerSweepScenario);
+
+    [Fact]
+    public void LoadedMarkers_SurviveFormattingChangesUntilReanchored()
+        => RunOnSta(RunLoadFormattingGapScenario);
+
+    [Fact]
+    public void SaveCycleUndo_NeverResurrectsObjMarker()
+        => RunOnSta(RunSaveUndoCycleScenario);
+
+    [Fact]
+    public void PastedRtfWithMarker_IsSanitized()
+        => RunOnSta(RunPasteSanitizerScenario);
 
     [Fact]
     public void GetImageBytes_ReturnsStoredBytes()
@@ -865,8 +956,7 @@ public class InlineImageTests
             harness.Coordinator.Clear(raiseChanged: false);
             harness.Editor.Document.Blocks.Clear();
             stream.Position = 0;
-            range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
-            range.Load(stream, DataFormats.XamlPackage);
+            LoadIntoEditor(harness, stream, DataFormats.XamlPackage);
             harness.Coordinator.Restore(attachments);
             harness.Editor.UpdateLayout();
 
@@ -897,6 +987,10 @@ public class InlineImageTests
     [Fact]
     public void ClickingInlineImage_SelectsIt()
         => RunOnSta(RunClickScenario);
+
+    [Fact]
+    public void SelectingFloatingPhoto_NeverMovesTheView()
+        => RunOnSta(RunSelectionParkKeepsViewScenario);
 
     [Fact]
     public void InlineImage_UnderFixedLineSpacing_GrowsTheLine()
@@ -934,10 +1028,21 @@ public class InlineImageTests
         Assert.Contains(FindVisualChildren<Button>(element!), b => b.Name == "LockAspectButton");
         Assert.Contains(FindVisualChildren<Button>(element!), b => b.Name == "DeleteButton");
 
-        // The lock chip toggles the session's aspect lock.
+        // The photo is part of the text flow, so it consistently shows the text cursor.
+        Assert.Equal(Cursors.IBeam, element.Cursor);
+
+        // The lock chip toggles the session's aspect lock - through the real input path (a
+        // mouse-down routed via the editor with the chip as the source), because the chip
+        // lives inside the flow and ordinary Button clicks can be swallowed for caret input.
         Assert.True(harness.Coordinator.BuildAttachments().Single().LockAspectRatio);
         var lockButton = FindVisualChildren<Button>(element!).First(b => b.Name == "LockAspectButton");
-        lockButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var chipDown = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+        {
+            RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
+            Source = lockButton
+        };
+        element.RaiseEvent(chipDown);
+        Assert.False(element.LockAspectRatio);
         Assert.False(harness.Coordinator.BuildAttachments().Single().LockAspectRatio);
     }
 
@@ -972,6 +1077,62 @@ public class InlineImageTests
         harness.Coordinator.RemoveInlineImage(harness.ImageId);
         harness.Editor.UpdateLayout();
         Assert.Equal(LineStackingStrategy.BlockLineHeight, imageParagraph.LineStackingStrategy);
+    }
+
+    private static void RunSelectionParkKeepsViewScenario()
+    {
+        // Regression: selecting a photo parks the caret at its text anchor, which makes the
+        // RichTextBox scroll the caret into view on the next layout - the text "runs away"
+        // from the photo being grabbed (worst with wrap off, where nothing else masks it).
+        // The click must never move the view, even after layout churn.
+        using var harness = CreateHarness();
+        var sv = FindEditorScrollViewer(harness.Editor);
+
+        // Move the photo deep below the text so its anchor is far off-screen when we scroll.
+        harness.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        var sessionsField = typeof(FloatingImageCoordinator).GetField(
+            "_sessions",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(sessionsField);
+        var sessions = (Dictionary<Guid, NoteImageSession>)sessionsField!.GetValue(harness.Coordinator)!;
+        var session = sessions[harness.ImageId];
+        session.SetGeometry(40, 2000, session.Width, session.Height);
+        harness.Coordinator.SyncAll();
+        harness.Editor.UpdateLayout();
+
+        // Scroll deep: the photo's anchor (y=2000) is now below the fold, so the caret park
+        // would make the editor scroll down to reveal it.
+        sv.ScrollToVerticalOffset(800);
+        harness.Editor.UpdateLayout();
+        var offsetBefore = sv.VerticalOffset;
+        Assert.True(offsetBefore > 100, $"expected a deep scroll for the probe, got {offsetBefore:F1}");
+
+        InvokeWidgetSelectionRequested(harness.Coordinator, harness.Overlay.Children.OfType<NoteImageWidget>().Single());
+        harness.Editor.UpdateLayout();
+        PumpDispatcherFrame();
+
+        Assert.Equal(offsetBefore, sv.VerticalOffset, precision: 1);
+
+        // Drag-time layout churn (extent pad growth / forced re-layouts) must not move it either.
+        harness.Editor.UpdateLayout();
+        PumpDispatcherFrame();
+        Assert.Equal(offsetBefore, sv.VerticalOffset, precision: 1);
+    }
+
+    private static void InvokeWidgetSelectionRequested(FloatingImageCoordinator coordinator, NoteImageWidget widget)
+    {
+        var method = typeof(FloatingImageCoordinator).GetMethod(
+            "Widget_SelectionRequested",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        method!.Invoke(coordinator, new object[] { widget, EventArgs.Empty });
+    }
+
+    private static void PumpDispatcherFrame()
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => frame.Continue = false);
+        Dispatcher.PushFrame(frame);
     }
 
     private static void RunClickScenario()
@@ -1051,6 +1212,36 @@ public class InlineImageTests
         Assert.True(
             ReferenceEquals(GetContainerParagraph(movedContainer!), snippets[0]),
             "the container should move into the target paragraph");
+    }
+
+    private static void RunInlineLockResizeScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        Assert.True(element.LockAspectRatio, "inline lock should default on");
+        Assert.Equal(Cursors.IBeam, element.Cursor);
+
+        // Locked: a diagonal BR drag must keep the 200:150 ratio.
+        var thumb = FindVisualChildren<Thumb>(element!).First(t => Equals(t.Tag, "BR"));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(80, 100) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        Assert.Equal(200.0 / 150.0, element.Width / element.Height, precision: 4);
+
+        // Unlocked: the same drag becomes freeform (the ratio changes with the deltas).
+        element.LockAspectRatio = false;
+        var wBefore = element.Width;
+        var hBefore = element.Height;
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(40, 10) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        Assert.Equal(wBefore + 40, element.Width, precision: 3);
+        Assert.Equal(hBefore + 10, element.Height, precision: 3);
+        Assert.NotEqual(wBefore / hBefore, element.Width / element.Height, precision: 4);
     }
 
     private static void RunResizeScenario()
@@ -1517,8 +1708,7 @@ public class InlineImageTests
         harness.Coordinator.Clear(raiseChanged: false);
         harness.Editor.Document.Blocks.Clear();
         stream.Position = 0;
-        range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
-        range.Load(stream, DataFormats.XamlPackage);
+        LoadIntoEditor(harness, stream, DataFormats.XamlPackage);
         harness.Coordinator.Restore(attachments);
         harness.Editor.UpdateLayout();
 
@@ -1526,6 +1716,265 @@ public class InlineImageTests
         Assert.NotNull(element);
         Assert.Equal(beforeText, GetTextBeforeFirstInline(harness.Editor.Document));
         Assert.Equal(originalText, GetRunsText(harness.Editor.Document)); // no text loss, no leftover markers
+    }
+
+    private static void LoadIntoEditor(EditorHarness harness, MemoryStream stream, string dataFormat)
+    {
+        harness.Coordinator.SuppressMarkerSweep = true;
+        try
+        {
+            var range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+            range.Load(stream, dataFormat);
+        }
+        finally
+        {
+            harness.Coordinator.SuppressMarkerSweep = false;
+        }
+    }
+
+    private static void RunMarkerAtDocumentEndScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.Clear(raiseChanged: false);
+
+        // A note whose photo is the LAST thing in the text: the trailing marker is dropped by
+        // the RichTextBox while loading (before it could ever pair), so the session falls back
+        // to floating. The load must never render an "obj" or lose the photo.
+        harness.Editor.Document.Blocks.Clear();
+        harness.Editor.Document.Blocks.Add(new Paragraph(new Run("Text before\uFFFC")));
+        harness.Editor.UpdateLayout();
+
+        var range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+        using var stream = new MemoryStream();
+        range.Save(stream, DataFormats.XamlPackage);
+
+        var attachment = new NoteImageAttachment
+        {
+            Data = Convert.ToBase64String(File.ReadAllBytes(FixturePath)),
+            Width = 200,
+            Height = 150,
+            Left = 40,
+            Top = 300,
+            WrapMode = NoteImageWrapMode.Inline,
+            InlineAnchorOffset = "Text before".Length
+        };
+
+        harness.Coordinator.Clear(raiseChanged: false);
+        harness.Editor.Document.Blocks.Clear();
+        stream.Position = 0;
+        LoadIntoEditor(harness, stream, DataFormats.XamlPackage);
+        harness.Coordinator.Restore(new[] { attachment });
+        harness.Editor.UpdateLayout();
+
+        Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
+        Assert.Equal("Text before", GetRunsText(harness.Editor.Document));
+        var inline = FindInlineElement(harness.Editor.Document);
+        var floating = harness.Overlay.Children.OfType<NoteImageWidget>().Any();
+        Assert.True(inline is not null || floating, "the photo must not be lost");
+    }
+
+    private static void RunUnpairedMarkerSweepScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.Clear(raiseChanged: false);
+
+        // Build the marker content under suppression so the scenario genuinely exercises the
+        // prepare-time sweep (the app never builds markers outside the guarded windows).
+        harness.Coordinator.SuppressMarkerSweep = true;
+        try
+        {
+            // Save side: a stray marker (e.g. pasted RTF from a copied selection) with no image
+            // session must be swept before the flow is serialized - never persisted.
+            harness.Editor.Document.Blocks.Clear();
+            harness.Editor.Document.Blocks.Add(new Paragraph(new Run("before\uFFFCafter")));
+        }
+        finally
+        {
+            harness.Coordinator.SuppressMarkerSweep = false;
+        }
+        harness.Editor.UpdateLayout();
+
+        var range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+        using var stream = new MemoryStream();
+        harness.Coordinator.PrepareInlineImagesForSerialization();
+        range.Save(stream, DataFormats.XamlPackage);
+        harness.Coordinator.RestoreInlineImagesAfterSerialization();
+        harness.Editor.UpdateLayout();
+
+        Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
+        Assert.Equal("beforeafter", GetRunsText(harness.Editor.Document));
+
+        // Load side: a document with a stray marker and a session whose offset pairs with
+        // nothing must still end up with the marker swept (the session goes floating).
+        harness.Coordinator.SuppressMarkerSweep = true;
+        try
+        {
+            harness.Coordinator.Clear(raiseChanged: false);
+            harness.Editor.Document.Blocks.Clear();
+            harness.Editor.Document.Blocks.Add(new Paragraph(new Run("before\uFFFCafter")));
+        }
+        finally
+        {
+            harness.Coordinator.SuppressMarkerSweep = false;
+        }
+        harness.Editor.UpdateLayout();
+        range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+        using var strayStream = new MemoryStream();
+        range.Save(strayStream, DataFormats.XamlPackage);
+
+        var orphanAttachment = new NoteImageAttachment
+        {
+            Data = Convert.ToBase64String(File.ReadAllBytes(FixturePath)),
+            Width = 200,
+            Height = 150,
+            Left = 40,
+            Top = 300,
+            WrapMode = NoteImageWrapMode.Inline,
+            InlineAnchorOffset = 999 // matches nothing - goes floating, marker still swept
+        };
+
+        harness.Coordinator.Clear(raiseChanged: false);
+        harness.Editor.Document.Blocks.Clear();
+        strayStream.Position = 0;
+        LoadIntoEditor(harness, strayStream, DataFormats.XamlPackage);
+        harness.Coordinator.Restore(new[] { orphanAttachment });
+        harness.Editor.UpdateLayout();
+
+        Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
+        Assert.Equal("beforeafter", GetRunsText(harness.Editor.Document));
+        Assert.Single(harness.Overlay.Children.OfType<NoteImageWidget>());
+    }
+
+    private static void RunLoadFormattingGapScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.Clear(raiseChanged: false);
+
+        // Build the marker content under suppression (the app never builds markers outside
+        // the guarded save/load windows - only tests do).
+        harness.Coordinator.SuppressMarkerSweep = true;
+        try
+        {
+            harness.Editor.Document.Blocks.Clear();
+            harness.Editor.Document.Blocks.Add(new Paragraph(new Run("Text \uFFFCafter")));
+        }
+        finally
+        {
+            harness.Coordinator.SuppressMarkerSweep = false;
+        }
+        harness.Editor.UpdateLayout();
+
+        var range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+        using var stream = new MemoryStream();
+        range.Save(stream, DataFormats.XamlPackage);
+
+        var attachment = new NoteImageAttachment
+        {
+            Data = Convert.ToBase64String(File.ReadAllBytes(FixturePath)),
+            Width = 200,
+            Height = 150,
+            Left = 40,
+            Top = 300,
+            WrapMode = NoteImageWrapMode.Inline,
+            InlineAnchorOffset = "Text ".Length
+        };
+
+        harness.Coordinator.Clear(raiseChanged: false);
+        harness.Editor.Document.Blocks.Clear();
+        stream.Position = 0;
+
+        // Mirror LoadFromDocument: the sweep is suppressed from the content load through the
+        // font/theme application until Restore re-anchors - formatting changes fire
+        // TextChanged and must not delete the freshly loaded markers.
+        harness.Coordinator.SuppressMarkerSweep = true;
+        try
+        {
+            var loadRange = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+            loadRange.Load(stream, DataFormats.XamlPackage);
+            harness.Editor.FontFamily = new System.Windows.Media.FontFamily("Segoe UI");
+            harness.Editor.FontSize = 16;
+        }
+        finally
+        {
+            harness.Coordinator.SuppressMarkerSweep = false;
+        }
+
+        harness.Coordinator.Restore(new[] { attachment });
+        harness.Editor.UpdateLayout();
+
+        Assert.NotNull(FindInlineElement(harness.Editor.Document));
+        Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
+        Assert.Equal("Text after", GetRunsText(harness.Editor.Document));
+    }
+
+    private static void RunSaveUndoCycleScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            // A save cycle: markers in, flow serialized, markers out.
+            harness.Coordinator.PrepareInlineImagesForSerialization();
+            var range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+            using var stream = new MemoryStream();
+            range.Save(stream, DataFormats.XamlPackage);
+            harness.Coordinator.RestoreInlineImagesAfterSerialization();
+            harness.Editor.UpdateLayout();
+
+            Assert.NotNull(FindInlineElement(harness.Editor.Document));
+            Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
+
+            // Whatever the RichTextBox records in its undo stack, a single undo must never
+            // resurrect the marker char next to the picture.
+            if (harness.Editor.CanUndo)
+                harness.Editor.Undo();
+            harness.Editor.UpdateLayout();
+            Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
+        }
+    }
+
+    private static void RunPasteSanitizerScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        // Build clipboard data the way a copied selection from this editor looks: plain text
+        // plus RTF that carries the in-line photo marker char.
+        var dataObject = new DataObject();
+        dataObject.SetText("before after", TextDataFormat.UnicodeText);
+        var range = new TextRange(harness.Editor.Document.ContentStart, harness.Editor.Document.ContentEnd);
+        using var stream = new MemoryStream();
+        harness.Coordinator.PrepareInlineImagesForSerialization();
+        range.Save(stream, DataFormats.Rtf);
+        harness.Coordinator.RestoreInlineImagesAfterSerialization();
+        var rtf = Encoding.ASCII.GetString(stream.ToArray());
+        Assert.Contains("\\u-4", rtf, StringComparison.Ordinal);
+        dataObject.SetData(DataFormats.Rtf, rtf);
+
+        var containsMarkers = (bool)typeof(NoteEditorWindow).GetMethod(
+            "ContainsInlineMarkers",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { dataObject })!;
+        Assert.True(containsMarkers);
+
+        var sanitized = (DataObject)typeof(NoteEditorWindow).GetMethod(
+            "SanitizePasteDataObject",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { dataObject })!;
+
+        var sanitizedRtf = (string)sanitized.GetData(DataFormats.Rtf)!;
+        Assert.DoesNotContain("\\u-4", sanitizedRtf, StringComparison.Ordinal);
+
+        // Pasting the sanitized RTF into an editor must not produce the marker char.
+        harness.Coordinator.Clear(raiseChanged: false);
+        harness.Editor.Document.Blocks.Clear();
+        using var ms = new MemoryStream(Encoding.ASCII.GetBytes(sanitizedRtf));
+        LoadIntoEditor(harness, ms, DataFormats.Rtf);
+        harness.Editor.UpdateLayout();
+        Assert.DoesNotContain('\uFFFC', GetRunsText(harness.Editor.Document));
     }
 
     private static void RunEngineExclusionScenario()

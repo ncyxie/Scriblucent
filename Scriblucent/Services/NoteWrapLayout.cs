@@ -18,8 +18,10 @@ namespace Scriblucent.Services;
 /// </summary>
 public static class NoteWrapMath
 {
-    /// <summary>Default gap between a wrapped image and the text (DIPs).</summary>
-    public const double DefaultWrapGap = 10;
+    /// <summary>Default gap between a wrapped image and the text (DIPs). A generous gap keeps
+    /// the photo visually apart from the surrounding words - like the breathing room office
+    /// suites leave around an image.</summary>
+    public const double DefaultWrapGap = 16;
 
     /// <summary>
     /// Minimum lane width before a lane is considered usable, mirroring ONLYOFFICE's
@@ -92,8 +94,14 @@ public static class NoteWrapMath
 public sealed class NoteWrapLayoutEngine : IDisposable
 {
     private const int MaxConvergenceIterations = 16;
+    private const int LiveConvergenceIterations = 4;
     private const double RecomputeDebounceMs = 120;
     private const double LiveApplyIntervalMs = 50;
+
+    /// <summary>The other lane must beat the currently used lane by at least this ratio before
+    /// the paragraph's text flips sides around a photo - small moves must never make the text
+    /// jump left/right ("the text keeps running away").</summary>
+    private const double LaneHysteresisRatio = 1.25;
 
     private sealed class InlineSpacerState
     {
@@ -112,6 +120,19 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     private readonly DispatcherTimer _liveApplyThrottle;
     private readonly Dictionary<Paragraph, Thickness> _originalMargins = new();
     private readonly Dictionary<Paragraph, InlineSpacerState> _inlineSpacers = new();
+    /// <summary>Current text-lane side per (paragraph, image): 1 = text flows on the left of the
+    /// photo, 2 = text flows on the right. Drives the lane hysteresis so re-applies keep the
+    /// paragraph on its side until the other side is clearly better.</summary>
+    private readonly Dictionary<(Paragraph Paragraph, Guid ImageId), int> _laneSides = new();
+    /// <summary>Right-lane wrap bands per paragraph (paragraph -&gt; bands), produced by
+    /// <see cref="ComputeParagraphInsets"/> and consumed by <see cref="ReplaceSquareLineSpacers"/>:
+    /// each band is (band top, band bottom, photo right edge + gap).</summary>
+    private readonly Dictionary<Paragraph, List<(double Top, double Bottom, double PhotoLeft, double PhotoRight)>> _squareRightBands = new();
+    /// <summary>Transient leading spacers that indent ONLY the lines beside a Square-wrapped photo
+    /// (Word-style per-line lane) - lines above and below the photo stay full-width, instead of
+    /// the whole paragraph shoving to one side. Removed and re-placed on every pass.</summary>
+    private readonly Dictionary<Paragraph, List<InlineUIContainer>> _squareLineSpacers = new();
+    private string? _lastSquareSpacerSignature;
     private BlockUIContainer? _pushSpacer;
     private Paragraph? _pushSpacerTarget;
     private double _pushSpacerHeight;
@@ -165,7 +186,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
 
         if (!_liveApplyThrottle.IsEnabled)
         {
-            Apply();
+            Apply(live: true);
             _liveApplyThrottle.Start();
             return;
         }
@@ -181,7 +202,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             return;
         }
 
-        Apply();
+        Apply(live: true);
     }
 
     /// <summary>Restores every modified paragraph margin (before save/export).</summary>
@@ -194,8 +215,12 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         }
 
         _originalMargins.Clear();
+        _laneSides.Clear();
         RemovePushSpacer();
         RemoveInlineSpacers();
+        RemoveSquareLineSpacers();
+        _squareRightBands.Clear();
+        _lastSquareSpacerSignature = null;
     }
 
     /// <summary>Restores margins, then immediately recomputes them (after save/export).</summary>
@@ -206,7 +231,11 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     }
 
     /// <summary>Recomputes wrap insets and applies them as paragraph margins.</summary>
-    public void Apply()
+    /// <param name="live">True during an image drag/resize tick: the pass starts from the
+    /// current margins (no reset-to-zero snap) and runs fewer convergence iterations so the
+    /// text adjusts incrementally instead of "running away" from the cursor. The gesture end
+    /// runs the full clean pass through <see cref="ScheduleApply"/>.</param>
+    public void Apply(bool live = false)
     {
         if (_disposed || _isApplying || _editor.Document is null || _editor.Document.Blocks.Count == 0)
             return;
@@ -218,7 +247,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         var viewState = _images.CaptureViewState();
         try
         {
-            ApplyCore();
+            ApplyCore(live);
         }
         finally
         {
@@ -226,7 +255,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         }
     }
 
-    private void ApplyCore()
+    private void ApplyCore(bool live)
     {
         var sessions = _images.GetWrapSessions();
         if (sessions.Count == 0)
@@ -257,7 +286,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         _isApplying = true;
         try
         {
-            ApplyWithConvergence(sessions, paragraphs, contentWidth);
+            ApplyWithConvergence(sessions, paragraphs, contentWidth, live);
         }
         finally
         {
@@ -268,20 +297,23 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     private void ApplyWithConvergence(
         IReadOnlyList<NoteImageSession> sessions,
         IReadOnlyList<Paragraph> paragraphs,
-        double contentWidth)
+        double contentWidth,
+        bool live)
     {
         // Inline spacers are NOT wiped here - they are updated in place during Phase B so small
         // image adjustments (which keep the same split line) only change the reserved height
         // instead of reflowing the paragraph's text (visible flashing).
-        ResetTransientMargins();
+        if (!live)
+            ResetTransientMargins();
         _editor.UpdateLayout();
 
         var topPushes = new Dictionary<Paragraph, double>();
+        var maxIterations = live ? LiveConvergenceIterations : MaxConvergenceIterations;
 
         // Phase A: converge Square lanes only - no top pushes yet, so straddling paragraphs
         // keep their pre-push geometry and the between-lines split positions are measured
         // from a settled layout.
-        Converge(sessions, paragraphs, contentWidth, topPushes, allowTopPushes: false);
+        Converge(sessions, paragraphs, contentWidth, topPushes, allowTopPushes: false, maxIterations, live);
 
         // Phase B: for straddling paragraphs, reserve the band "between lines" with a transient
         // inline spacer (Word-style split inside the paragraph). Table cells are excluded -
@@ -294,7 +326,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         // Phase C: re-converge with top pushes (whole-paragraph pushes for paragraphs that start
         // inside a band; the ratchet) - the spacers shift the flow below their bands, Square
         // membership re-adapts.
-        Converge(sessions, paragraphs, contentWidth, topPushes, allowTopPushes: true);
+        Converge(sessions, paragraphs, contentWidth, topPushes, allowTopPushes: true, maxIterations, live);
     }
 
     /// <summary>Clears transient margins and the block spacer, keeping inline spacers intact so
@@ -316,12 +348,19 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         IReadOnlyList<Paragraph> paragraphs,
         double contentWidth,
         Dictionary<Paragraph, double> topPushes,
-        bool allowTopPushes)
+        bool allowTopPushes,
+        int maxIterations,
+        bool live)
     {
-        for (var iteration = 0; iteration < MaxConvergenceIterations; iteration++)
+        for (var iteration = 0; iteration < maxIterations; iteration++)
         {
-            var next = ComputeParagraphInsets(sessions, paragraphs, contentWidth, topPushes);
+            _squareRightBands.Clear(); // rebuilt by ComputeParagraphInsets below
+            var next = ComputeParagraphInsets(sessions, paragraphs, contentWidth, topPushes, live);
             var marginsChanged = ApplyParagraphInsets(next);
+            // Live ticks (image drag/resize) reflow the Square lanes too, so the words are
+            // pushed around the moving photo in real time - the same live feel TopAndBottom
+            // has. The re-apply is throttled and converges in a couple of passes.
+            var spacersChanged = ReplaceSquareLineSpacers();
             _editor.UpdateLayout();
 
             // WPF defers FlowDocument text layout: character rects stay stale after a paragraph
@@ -332,7 +371,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             _editor.UpdateLayout();
 
             var grew = allowTopPushes && GrowTopPushes(sessions, paragraphs, topPushes);
-            if (!marginsChanged && !grew)
+            if (!marginsChanged && !grew && !spacersChanged)
                 return;
         }
     }
@@ -396,9 +435,15 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         IReadOnlyList<NoteImageSession> sessions,
         IReadOnlyList<Paragraph> paragraphs,
         double contentWidth,
-        IReadOnlyDictionary<Paragraph, double> topPushes)
+        IReadOnlyDictionary<Paragraph, double> topPushes,
+        bool live)
     {
+        const int laneLeft = 1;
+        const int laneRight = 2;
+
         var insets = new Dictionary<Paragraph, (double Left, double Top, double Right)>();
+        var usedLaneKeys = new HashSet<(Paragraph, Guid)>();
+        var rightLaneParagraphs = new HashSet<Paragraph>();
         foreach (var paragraph in paragraphs)
         {
             if (GetParagraphDocumentExtent(paragraph) is not { } extent)
@@ -425,17 +470,58 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                 if (!NoteWrapMath.IntersectsVertical(pTop, pBottom, wrapTop, wrapBottom))
                     continue;
 
-                var (laneLeft, laneRight, applies) = NoteWrapMath.ComputeInsets(
-                    wrapLeft,
-                    wrapRight,
-                    contentWidth,
-                    NoteWrapMath.MinimumLaneWidth);
+                var leftLaneWidth = wrapLeft;
+                var rightLaneWidth = contentWidth - wrapRight;
+                var laneKey = (paragraph, session.Id);
 
-                if (!applies)
+                if (leftLaneWidth < NoteWrapMath.MinimumLaneWidth
+                    && rightLaneWidth < NoteWrapMath.MinimumLaneWidth)
+                {
+                    // No usable lane - the paragraph cannot wrap this image at all.
+                    _laneSides.Remove(laneKey);
                     continue;
+                }
 
-                left = Math.Max(left, laneLeft);
-                right = Math.Max(right, laneRight);
+                // Hysteresis: keep the paragraph on its current side unless the other lane is
+                // clearly better (or the current one became unusable). Prevents the text from
+                // jumping left/right on small photo moves - the "text keeps running away" feel.
+                int side;
+                var previous = _laneSides.GetValueOrDefault(laneKey);
+                if (previous == laneLeft
+                    && leftLaneWidth >= NoteWrapMath.MinimumLaneWidth
+                    && leftLaneWidth * LaneHysteresisRatio >= rightLaneWidth)
+                {
+                    side = laneLeft;
+                }
+                else if (previous == laneRight
+                    && rightLaneWidth >= NoteWrapMath.MinimumLaneWidth
+                    && rightLaneWidth * LaneHysteresisRatio >= leftLaneWidth)
+                {
+                    side = laneRight;
+                }
+                else
+                {
+                    side = rightLaneWidth >= leftLaneWidth ? laneRight : laneLeft;
+                }
+
+                _laneSides[laneKey] = side;
+                usedLaneKeys.Add(laneKey);
+
+                if (side == laneRight)
+                {
+                    // Right lane: the inset is applied PER LINE via transient leading spacers
+                    // (ReplaceSquareLineSpacers) - the paragraph itself is NOT indented, so the
+                    // lines above and below the photo keep full width. Only the lines inside
+                    // the band are shortened.
+                    if (!_squareRightBands.TryGetValue(paragraph, out var bands))
+                        _squareRightBands[paragraph] = bands = new List<(double, double, double, double)>();
+                    bands.Add((wrapTop, wrapBottom, wrapLeft, wrapRight));
+                    rightLaneParagraphs.Add(paragraph);
+                }
+                else
+                {
+                    right = Math.Max(right, contentWidth - wrapLeft);
+                }
             }
 
             if (topPushes.TryGetValue(paragraph, out var push))
@@ -445,10 +531,25 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                 insets[paragraph] = (left, top, right);
         }
 
+        // Forget sides and bands for paragraphs that no longer wrap any image.
+        foreach (var key in _laneSides.Keys.ToList())
+        {
+            if (!usedLaneKeys.Contains(key))
+                _laneSides.Remove(key);
+        }
+
+        foreach (var key in _squareRightBands.Keys.ToList())
+        {
+            if (!rightLaneParagraphs.Contains(key))
+                _squareRightBands.Remove(key);
+        }
+
         return insets;
     }
 
-    private bool ApplyParagraphInsets(Dictionary<Paragraph, (double Left, double Top, double Right)> insets)
+    private bool ApplyParagraphInsets(
+        Dictionary<Paragraph, (double Left, double Top, double Right)> insets,
+        bool includeSides = true)
     {
         var changed = false;
 
@@ -458,6 +559,9 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             // Block.Margin defaults to a NaN thickness ("unset"); NaN + inset stays NaN and would
             // render as no margin at all, so insets must be computed against the normalized value.
             var baseMargin = NormalizeMargin(original);
+            // Live ticks freeze the Square lanes - only the TopAndBottom top pushes apply.
+            var sideLeft = includeSides ? left : 0;
+            var sideRight = includeSides ? right : 0;
 
             double marginTop = top;
             if (top > 0
@@ -479,9 +583,9 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             }
 
             var margin = new Thickness(
-                baseMargin.Left + left,
+                baseMargin.Left + sideLeft,
                 baseMargin.Top + marginTop,
-                baseMargin.Right + right,
+                baseMargin.Right + sideRight,
                 baseMargin.Bottom);
             if (!MarginsCloseEnough(paragraph.Margin, margin))
                 changed = true;
@@ -490,14 +594,17 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             _originalMargins[paragraph] = original;
         }
 
-        foreach (var (paragraph, original) in _originalMargins.ToList())
+        if (includeSides)
         {
-            if (insets.ContainsKey(paragraph))
-                continue;
+            foreach (var (paragraph, original) in _originalMargins.ToList())
+            {
+                if (insets.ContainsKey(paragraph))
+                    continue;
 
-            paragraph.Margin = original;
-            _originalMargins.Remove(paragraph);
-            changed = true;
+                paragraph.Margin = original;
+                _originalMargins.Remove(paragraph);
+                changed = true;
+            }
         }
 
         return changed;
@@ -505,6 +612,276 @@ public sealed class NoteWrapLayoutEngine : IDisposable
 
     private Thickness GetOriginalMargin(Paragraph paragraph)
         => _originalMargins.TryGetValue(paragraph, out var original) ? original : paragraph.Margin;
+
+    // ------------------------------------------------------------ square per-line spacers
+
+    /// <summary>
+    /// Rebuilds the transient leading spacers that indent ONLY the lines of a paragraph that
+    /// fall inside a Square-wrapped photo's band (the Word-style per-line lane). Lines above and
+    /// below the band keep full width, so pushing a photo into a text block no longer shoves the
+    /// whole paragraph to one side. Returns whether the placement changed (convergence signal).
+    /// </summary>
+    private bool ReplaceSquareLineSpacers()
+    {
+        RemoveSquareLineSpacers();
+        // The removal above leaves the flow's character rects stale until a layout pass - the
+        // line-start measurements below would otherwise see the previous pass's geometry and
+        // re-place the spacers at the wrong lines every pass (slow oscillation instead of the
+        // 2-pass convergence).
+        _editor?.UpdateLayout();
+
+        if (_squareRightBands.Count > 0)
+        {
+            foreach (var (paragraph, bands) in _squareRightBands)
+            {
+                if (paragraph.Parent is null || bands.Count == 0)
+                    continue;
+
+                var bandTop = double.MaxValue;
+                var bandBottom = double.MinValue;
+                foreach (var (top, bottom, _, _) in bands)
+                {
+                    bandTop = Math.Min(bandTop, top);
+                    bandBottom = Math.Max(bandBottom, bottom);
+                }
+
+                var placements = new List<(TextPointer Position, double Width)>();
+                var lineStarts = FindLinesInRange(paragraph, bandTop, bandBottom);
+                for (var lineIndex = 0; lineIndex < lineStarts.Count; lineIndex++)
+                {
+                    var line = lineStarts[lineIndex];
+                    var lineEnd = lineIndex + 1 < lineStarts.Count
+                        ? lineStarts[lineIndex + 1].Position
+                        : paragraph.ContentEnd;
+
+                    // The photo span covering this line (the leftmost photo's left edge to the
+                    // rightmost photo's right edge, both + wrap gap).
+                    double photoLeft = double.MaxValue;
+                    double photoRight = double.MinValue;
+                    var intersects = false;
+                    foreach (var (lineBandTop, lineBandBottom, bandPhotoLeft, bandPhotoRight) in bands)
+                    {
+                        if (line.Bottom > lineBandTop && line.Top < lineBandBottom)
+                        {
+                            intersects = true;
+                            photoLeft = Math.Min(photoLeft, bandPhotoLeft);
+                            photoRight = Math.Max(photoRight, bandPhotoRight);
+                        }
+                    }
+
+                    if (!intersects)
+                        continue;
+
+                    // Word-style "word word [photo] word word": find the first character of the
+                    // line that starts at or after the photo's left edge. The words before it
+                    // stay in place on the left; the spacer fills the gap to the photo's right
+                    // edge, so the remaining words continue on the same line beside the photo.
+                    // When the photo starts before the line's first word, the spacer leads the
+                    // line (split lands on the line's first character); when it starts past the
+                    // line's last word, no character qualifies and the line stays full width.
+                    var split = FindSplitCharInLine(paragraph, line.Position, lineEnd, photoLeft);
+                    if (split is null)
+                        continue; // the photo is past this line's text - the line stays full width
+
+                    var splitRect = split.GetCharacterRect(LogicalDirection.Forward);
+                    if (splitRect.IsEmpty)
+                        continue;
+
+                    var width = photoRight - splitRect.Left;
+                    if (width < 1)
+                        continue;
+
+                    placements.Add((split, width));
+                }
+
+                foreach (var (position, width) in placements.OrderByDescending(p => p.Position.CompareTo(paragraph.ContentStart)))
+                {
+                    var spacer = new Border
+                    {
+                        Width = width,
+                        Height = 1,
+                        Background = Brushes.Transparent,
+                        IsHitTestVisible = false,
+                        Focusable = false
+                    };
+                    var container = new InlineUIContainer(spacer);
+                    InsertInlineStack(paragraph, position, new Inline[] { container });
+                    if (!_squareLineSpacers.TryGetValue(paragraph, out var list))
+                        _squareLineSpacers[paragraph] = list = new List<InlineUIContainer>();
+                    list.Add(container);
+                }
+            }
+        }
+
+        var signature = BuildSquareSpacerSignature();
+        if (string.Equals(signature, _lastSquareSpacerSignature, StringComparison.Ordinal))
+            return false;
+
+        _lastSquareSpacerSignature = signature;
+        return true;
+    }
+
+    private void RemoveSquareLineSpacers()
+    {
+        foreach (var (_, containers) in _squareLineSpacers)
+        {
+            foreach (var container in containers)
+            {
+                var host = container.Parent switch
+                {
+                    Span span => span.Inlines,
+                    Paragraph paragraph => paragraph.Inlines,
+                    _ => null
+                };
+                host?.Remove(container);
+            }
+        }
+
+        _squareLineSpacers.Clear();
+    }
+
+    /// <summary>Signature of the current spacer placement (paragraph offset, sorted spacer widths)
+    /// so the convergence loop can tell "placed the same things as last pass" without depending on
+    /// element-position offsets, which are not stable across transient re-insertions.</summary>
+    private string BuildSquareSpacerSignature()
+    {
+        if (_editor?.Document is null || _squareLineSpacers.Count == 0)
+            return string.Empty;
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var (paragraph, containers) in _squareLineSpacers
+            .OrderBy(kv => _editor.Document.ContentStart.GetOffsetToPosition(kv.Key.ContentStart)))
+        {
+            builder.Append(_editor.Document.ContentStart.GetOffsetToPosition(paragraph.ContentStart)).Append(':');
+            var widths = containers
+                .Select(c => c.Child is Border { Width: var width } ? width : 0d)
+                .OrderBy(width => width)
+                .Select(width => width.ToString("F1", System.Globalization.CultureInfo.InvariantCulture));
+            builder.Append(string.Join(",", widths)).Append(';');
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>First text position of every line of the paragraph that falls inside
+    /// [<paramref name="bandTop"/>, <paramref name="bandBottom"/>], with each line's document-space
+    /// vertical extent and its end bound (the next line's start, or the paragraph end). Found by
+    /// binary search on the monotonic line tops - a per-character rect walk is far too slow for
+    /// live drag ticks.</summary>
+    private List<(TextPointer Position, double Top, double Bottom)> FindLinesInRange(
+        Paragraph paragraph,
+        double bandTop,
+        double bandBottom)
+    {
+        var result = new List<(TextPointer, double, double)>();
+        if (paragraph.ContentStart.GetOffsetToPosition(paragraph.ContentEnd) == 0)
+            return result;
+
+        // A position on the band's first line, then that line's very first character.
+        var entry = FindSplitPoint(paragraph, bandTop);
+        if (entry is null)
+            return result;
+
+        var entryRect = entry.GetCharacterRect(LogicalDirection.Forward);
+        if (entryRect.IsEmpty)
+            return result;
+
+        var current = FindFirstPositionWithTopAtLeast(paragraph, entryRect.Top);
+        while (current is not null)
+        {
+            var rect = current.GetCharacterRect(LogicalDirection.Forward);
+            if (rect.IsEmpty || rect.Top > bandBottom + 0.5)
+                break;
+
+            result.Add((current, rect.Top, rect.Bottom));
+
+            var next = FindFirstPositionWithTopAtLeast(paragraph, rect.Top + 0.6);
+            if (next is null || ReferenceEquals(next, current))
+                break;
+
+            current = next;
+        }
+
+        return result;
+    }
+
+    /// <summary>First text position inside the line [<paramref name="lineStart"/>, <paramref name="lineEnd"/>)
+    /// whose character starts at or after <paramref name="xTarget"/> - the Word-style split point
+    /// where the photo sits between the words. Null when the whole line's text stays left of the
+    /// photo. Character x is monotonic within a line, so this is a binary search.</summary>
+    private static TextPointer? FindSplitCharInLine(
+        Paragraph paragraph,
+        TextPointer lineStart,
+        TextPointer lineEnd,
+        double xTarget)
+    {
+        var length = lineStart.GetOffsetToPosition(lineEnd);
+        if (length <= 0)
+            return null;
+
+        TextPointer? found = null;
+        var lo = 0;
+        var hi = length;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) / 2;
+            var position = lineStart.GetPositionAtOffset(mid, LogicalDirection.Forward);
+            if (position is null || position.CompareTo(paragraph.ContentEnd) >= 0)
+            {
+                hi = mid;
+                continue;
+            }
+
+            var rect = position.GetCharacterRect(LogicalDirection.Forward);
+            var left = rect.IsEmpty ? double.NegativeInfinity : rect.Left;
+            if (left >= xTarget)
+            {
+                found = position;
+                hi = mid;
+            }
+            else
+            {
+                lo = mid + 1;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>First text position whose line top reaches <paramref name="targetTop"/> (the
+    /// line tops are monotonic in position, so this is a binary search).</summary>
+    private static TextPointer? FindFirstPositionWithTopAtLeast(Paragraph paragraph, double targetTop)
+    {
+        var start = paragraph.ContentStart;
+        var length = start.GetOffsetToPosition(paragraph.ContentEnd);
+        TextPointer? found = null;
+        var lo = 0;
+        var hi = length;
+        while (lo < hi)
+        {
+            var mid = (lo + hi) / 2;
+            var position = start.GetPositionAtOffset(mid, LogicalDirection.Forward);
+            if (position is null)
+            {
+                hi = mid;
+                continue;
+            }
+
+            var rect = position.GetCharacterRect(LogicalDirection.Forward);
+            var top = rect.IsEmpty ? double.NegativeInfinity : rect.Top;
+            if (top >= targetTop - 0.5)
+            {
+                found = position;
+                hi = mid;
+            }
+            else
+            {
+                lo = mid + 1;
+            }
+        }
+
+        return found;
+    }
 
     /// <summary>
     /// Creates or resizes the transient spacer used when the push target is the document's first

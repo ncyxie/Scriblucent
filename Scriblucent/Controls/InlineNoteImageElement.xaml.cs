@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
 
@@ -130,6 +131,12 @@ public partial class InlineNoteImageElement : UserControl
     {
         InitializeComponent();
 
+        // A stable text cursor: the photo is part of the text flow, so it consistently shows
+        // the I-beam (never the RichTextBox's hit-test-dependent flicker between I-beam and
+        // arrow). The resize thumbs and action chips keep their own cursors.
+        Cursor = Cursors.IBeam;
+        UpdateLockAspectChrome();
+
         // The element is hosted inside an InlineUIContainer in a RichTextBox flow. WPF's
         // routed-event route from such flow-hosted children does not reliably pass through
         // the parent Border (both for programmatic raises and real input in some setups), so
@@ -138,6 +145,16 @@ public partial class InlineNoteImageElement : UserControl
             UIElement.MouseLeftButtonDownEvent,
             new MouseButtonEventHandler(Body_MouseLeftButtonDown),
             handledEventsToo: false);
+
+        // The action chips (aspect lock / delete) are ordinary Buttons inside the flow, and
+        // the RichTextBox's editing engine owns mouse input over flow content - a click can
+        // be swallowed for caret placement before the button ever sees it. Intercept the
+        // tunneling phase (even when the editor marked it handled) and act on the chip
+        // directly, so the chips always work with real input.
+        AddHandler(
+            UIElement.PreviewMouseLeftButtonDownEvent,
+            new MouseButtonEventHandler(OnChipPreviewMouseLeftButtonDown),
+            handledEventsToo: true);
 
         // The paragraph's LineHeight/LineStackingStrategy inherit into the context menu's
         // content through the logical tree (the element is part of the flow), stretching every
@@ -148,6 +165,34 @@ public partial class InlineNoteImageElement : UserControl
             ContextMenu.SetValue(Block.LineStackingStrategyProperty, LineStackingStrategy.MaxHeight);
             // Backup: re-sync the wrap-mode checkmarks whenever the menu actually opens.
             ContextMenu.Opened += (_, _) => SyncWrapMenuCheckStates();
+        }
+    }
+
+    private void OnChipPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
+            return;
+
+        for (DependencyObject? hit = source;
+             hit is not null && hit is not InlineNoteImageElement;
+             hit = hit is Visual visual
+                 ? VisualTreeHelper.GetParent(visual)
+                 : LogicalTreeHelper.GetParent(hit))
+        {
+            if (ReferenceEquals(hit, LockAspectButton))
+            {
+                e.Handled = true;
+                SelectionRequested?.Invoke(this, EventArgs.Empty);
+                LockAspectRatio = !LockAspectRatio;
+                return;
+            }
+
+            if (ReferenceEquals(hit, DeleteButton))
+            {
+                e.Handled = true;
+                DeleteRequested?.Invoke(this, EventArgs.Empty);
+                return;
+            }
         }
     }
 
@@ -209,7 +254,39 @@ public partial class InlineNoteImageElement : UserControl
         }
     }
 
-    private void OnLockAspectRatioChanged() => LockAspectRatioChanged?.Invoke(this, EventArgs.Empty);
+    private void OnLockAspectRatioChanged()
+    {
+        // The chip must show its state - otherwise toggling the lock looks like it does
+        // nothing (the "the button is not working" confusion).
+        UpdateLockAspectChrome();
+        LockAspectRatioChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Mirrors the floating widget's lock chip: active style while locked, neutral
+    /// otherwise, and the tooltip names the action the next click takes.</summary>
+    private void UpdateLockAspectChrome()
+    {
+        if (LockAspectButton is null)
+            return;
+
+        LockAspectButton.ToolTip = LocalizationService.GetString(
+            LockAspectRatio ? "UnlockAspectRatio" : "LockAspectRatio");
+
+        if (LockAspectRatio)
+        {
+            LockAspectButton.SetResourceReference(Control.BackgroundProperty, "EditorToolActiveBackground");
+            LockAspectButton.SetResourceReference(Control.BorderBrushProperty, "EditorToolActiveBorder");
+            LockAspectButton.SetResourceReference(Control.ForegroundProperty, "EditorToolActiveForeground");
+            LockAspectButton.BorderThickness = new Thickness(2);
+        }
+        else
+        {
+            LockAspectButton.SetResourceReference(Control.BackgroundProperty, "IconButtonBackground");
+            LockAspectButton.BorderBrush = Brushes.Transparent;
+            LockAspectButton.SetResourceReference(Control.ForegroundProperty, "IconButtonForeground");
+            LockAspectButton.BorderThickness = new Thickness(0);
+        }
+    }
 
     private void ApplyButtonPlacement()
     {
@@ -300,19 +377,6 @@ public partial class InlineNoteImageElement : UserControl
         SelectionRequested?.Invoke(this, EventArgs.Empty);
         LockAspectRatio = !LockAspectRatio; // the DP callback raises LockAspectRatioChanged
         LockAspectItem.IsChecked = LockAspectRatio;
-    }
-
-    private void DeleteButton_Click(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        DeleteRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void LockAspectButton_Click(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        SelectionRequested?.Invoke(this, EventArgs.Empty);
-        LockAspectRatio = !LockAspectRatio;
     }
 
     private void Body_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

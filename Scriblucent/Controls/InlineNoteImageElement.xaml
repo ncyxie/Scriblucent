@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
              xmlns:localization="clr-namespace:Scriblucent.Localization"
-             Focusable="True"
+             Focusable="False"
              Background="Transparent"
              ContextMenuOpening="ContextMenu_Opening">
     <!-- The element lives inside the paragraph's text flow, so TextElement properties like
@@ -204,7 +204,6 @@
                     IsTabStop="False"
                     Focusable="False"
                     Style="{DynamicResource EditorToolButtonBaseStyle}"
-                    Click="LockAspectButton_Click"
                     Content="{icons:Icon Kind=Lock, Size=12}"/>
             <Button x:Name="DeleteButton"
                     Width="26"
@@ -218,7 +217,6 @@
                     Focusable="False"
                     Style="{DynamicResource EditorDangerToolButtonStyle}"
                     ToolTip="{Binding [DeleteImage], Source={x:Static localization:LocalizationProvider.Instance}}"
-                    Click="DeleteButton_Click"
                     Content="{icons:Icon Kind=Delete, Size=12}"/>
         </Grid>
 
