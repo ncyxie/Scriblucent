@@ -106,6 +106,9 @@ public class AppSettings
     /// <summary>Most-recent color picker choices as #RRGGBB hex (newest first).</summary>
     public List<string> RecentColors { get; set; } = new();
 
+    /// <summary>User-created caption labels (OnlyOffice-style "Add label"), newest first.</summary>
+    public List<string> CustomCaptionLabels { get; set; } = new();
+
     public bool IsGroupsFirst { get; set; } = true;
 
     public string PreferredFontFamily { get; set; } = "Calibri";

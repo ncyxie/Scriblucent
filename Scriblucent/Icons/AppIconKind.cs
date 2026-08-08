@@ -58,6 +58,7 @@ public enum AppIconKind
     Download,
     Clear,
     WordWrap,
+    WrapSquare,
     Font,
     Plus,
     Minus,
@@ -96,5 +97,6 @@ public enum AppIconKind
     Lock,
     Bookmark,
     Ban,
+    Cut,
     GripVertical
 }

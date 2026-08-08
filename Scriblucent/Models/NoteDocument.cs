@@ -37,6 +37,23 @@ public class NoteImageAttachment
     public double Top { get; set; }
     /// <summary>When true, resize keeps aspect ratio. Missing on old notes → treated as true.</summary>
     public bool LockAspectRatio { get; set; } = true;
+    /// <summary>Text wrap mode. Missing on old notes → treated as None.</summary>
+    public NoteImageWrapMode WrapMode { get; set; } = NoteImageWrapMode.None;
+    /// <summary>
+    /// For <see cref="NoteImageWrapMode.Inline"/>: character offset of the image's anchor in
+    /// the document's plain text. Null for floating modes and old notes.
+    /// </summary>
+    public int? InlineAnchorOffset { get; set; }
+    /// <summary>Stacking position among the floating images (0 = bottom). Missing on old notes
+    /// → the saved attachment order is the order.</summary>
+    public int ZIndex { get; set; }
+    /// <summary>Caption label (category, e.g. "Figure"); null means the image has no caption.</summary>
+    public string? CaptionLabel { get; set; }
+    public string CaptionText { get; set; } = string.Empty;
+    public CaptionNumbering CaptionNumbering { get; set; } = CaptionNumbering.Arabic;
+    public string CaptionSeparator { get; set; } = ": ";
+    public CaptionPosition CaptionPosition { get; set; } = CaptionPosition.Below;
+    public bool CaptionExcludeLabel { get; set; }
 }
 
 public class NoteScheduleEntry

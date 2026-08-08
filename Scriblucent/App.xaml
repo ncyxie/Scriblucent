@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
-             xmlns:icons="clr-namespace:Scriblucent.Icons">
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:conv="clr-namespace:Scriblucent.Converters">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -20,6 +21,7 @@
 
             <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarWidthKey}">6</sys:Double>
             <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarHeightKey}">6</sys:Double>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <sys:Double x:Key="GlobalVerticalScrollBarWidth">6</sys:Double>
             <sys:Double x:Key="GlobalHorizontalScrollBarHeight">6</sys:Double>
 
@@ -307,13 +309,61 @@
                         Padding="12,8"
                         Margin="2,1"
                         SnapsToDevicePixels="True">
-                    <ContentPresenter ContentSource="Header"
-                                      RecognizesAccessKey="True"
-                                      VerticalAlignment="Center"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Icon/check gutter: checkable items and items with an icon reserve a
+                             fixed slot (checkmark and icons line up, Word-style); plain items
+                             get no slot at all - no stray indent. -->
+                        <Grid x:Name="IconGutter"
+                              Grid.Column="0"
+                              Width="Auto"
+                              VerticalAlignment="Center">
+                            <Grid.MinWidth>
+                                <MultiBinding Converter="{x:Static conv:MenuGutterGeometryConverter.Instance}">
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Icon"/>
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="IsCheckable"/>
+                                </MultiBinding>
+                            </Grid.MinWidth>
+                            <Grid.Margin>
+                                <MultiBinding Converter="{x:Static conv:MenuGutterGeometryConverter.Instance}">
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Icon"/>
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="IsCheckable"/>
+                                </MultiBinding>
+                            </Grid.Margin>
+                            <ContentPresenter x:Name="IconPresenter"
+                                              ContentSource="Icon"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                            <Path x:Name="CheckMark"
+                                  Width="10"
+                                  Height="8"
+                                  Data="M 1.5,5 L 4,7.5 L 8.5,1.5"
+                                  Stroke="{DynamicResource AccentPrimary}"
+                                  StrokeThickness="2"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsHitTestVisible="False"
+                                  Visibility="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        </Grid>
+                        <ContentPresenter Grid.Column="1"
+                                          ContentSource="Header"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Center"/>
+                    </Grid>
                 </Border>
                 <ControlTemplate.Triggers>
                     <Trigger Property="IsHighlighted" Value="True">
                         <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
+                    </Trigger>
+                    <Trigger Property="IsChecked" Value="True">
+                        <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                        <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/>
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
                         <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
@@ -330,13 +380,38 @@
                         SnapsToDevicePixels="True">
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <ContentPresenter ContentSource="Header"
+                        <!-- Same icon/check slot as leaf items, so submenu headers with an icon
+                             (e.g. the "Text wrap" header) line up with the other menu items. -->
+                        <Grid x:Name="IconGutter"
+                              Grid.Column="0"
+                              Width="Auto"
+                              VerticalAlignment="Center">
+                            <Grid.MinWidth>
+                                <MultiBinding Converter="{x:Static conv:MenuGutterGeometryConverter.Instance}">
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Icon"/>
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="IsCheckable"/>
+                                </MultiBinding>
+                            </Grid.MinWidth>
+                            <Grid.Margin>
+                                <MultiBinding Converter="{x:Static conv:MenuGutterGeometryConverter.Instance}">
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Icon"/>
+                                    <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="IsCheckable"/>
+                                </MultiBinding>
+                            </Grid.Margin>
+                            <ContentPresenter x:Name="IconPresenter"
+                                              ContentSource="Icon"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Grid>
+                        <ContentPresenter Grid.Column="1"
+                                          ContentSource="Header"
                                           RecognizesAccessKey="True"
                                           VerticalAlignment="Center"/>
-                        <Path Grid.Column="1"
+                        <Path Grid.Column="2"
                               Margin="12,0,0,0"
                               VerticalAlignment="Center"
                               Data="M0,0 L4,3.5 0,7 Z"

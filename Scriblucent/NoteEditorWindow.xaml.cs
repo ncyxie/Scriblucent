@@ -17,6 +17,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Scriblucent.Controls;
@@ -64,8 +65,10 @@ namespace Scriblucent
         private DateTime _lastAutoSaveTime = DateTime.MinValue;
         private string _lastSavedContent = string.Empty;
         private string _lastSavedSnapshot = string.Empty;
+        private DispatcherTimer? _postSaveSnapshotTimer;
         private NoteDocument? _currentDocument;
         private readonly FloatingImageCoordinator _floatingImages = new();
+        private NoteWrapLayoutEngine? _wrapLayout;
         private bool _isInsertingPicture;
         private bool _isInsertingSketch;
         private const int MaxEditHistoryEntries = 100;
@@ -281,7 +284,21 @@ namespace Scriblucent
             {
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
+                _wrapLayout?.ScheduleApply();
             };
+            // Live text reflow while an image is being dragged/resized (Word-style), throttled
+            // inside the engine; the gesture end re-runs through ImagesChanged above.
+            _floatingImages.ImagesGeometryChanging += (_, _) => _wrapLayout?.ScheduleApplyLive();
+
+            // Photo context-menu actions (the window owns the clipboard and the file dialog).
+            _floatingImages.CopyRequested += FloatingImages_CopyRequested;
+            _floatingImages.CutRequested += FloatingImages_CutRequested;
+            _floatingImages.ChangePictureRequested += FloatingImages_ChangePictureRequested;
+            _floatingImages.CaptionRequested += FloatingImages_CaptionRequested;
+
+            // Square text wrap around floating images (paragraph lane margins, recomputed on
+            // text/size changes and cleared before any content serialization).
+            _wrapLayout = new NoteWrapLayoutEngine(ContentTextBox, EditorSurface, _floatingImages);
 
             // Subscribe to theme changes to update RichTextBox foreground
             ThemeManager.ThemeChanged += ThemeManager_ThemeChanged;
@@ -462,6 +479,15 @@ namespace Scriblucent
             UpdateEditorToolButtonStates();
             UpdateEditorScrollbarCorner();
             Dispatcher.InvokeAsync(UpdateEditorScrollbarCorner);
+
+            // Zoom / word-wrap / scrollbar preference changes alter line extents and column
+            // width, so wrap lanes must be recomputed.
+            _wrapLayout?.ScheduleApply();
+
+            // Word-wrap toggling reflows the whole document (lines get far wider/shorter), so
+            // the images must be re-clamped against the new reachable area and the extent pad
+            // recomputed - otherwise deep or far-right images can end up misplaced.
+            _floatingImages.SyncAll();
         }
 
         private void ThemeManager_ThemeChanged(object? sender, EventArgs e)
@@ -763,8 +789,11 @@ namespace Scriblucent
         {
             StopAutoSaveTimer();
             _counterUpdateDebounceTimer?.Stop();
+            _postSaveSnapshotTimer?.Stop();
             DetachContentScrollViewer();
             _floatingImages.Detach();
+            _wrapLayout?.Dispose();
+            _wrapLayout = null;
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
             RootGrid.PreviewKeyDown -= RootGrid_PreviewKeyDown;
@@ -809,6 +838,8 @@ namespace Scriblucent
             _counterUpdateDebounceTimer?.Stop();
             DetachContentScrollViewer();
             _floatingImages.Detach();
+            _wrapLayout?.Dispose();
+            _wrapLayout = null;
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
             RootGrid.PreviewKeyDown -= RootGrid_PreviewKeyDown;
@@ -984,6 +1015,14 @@ namespace Scriblucent
             // that doesn't schedule another pass against itself forever.
             if (_isSpellCheckEnabled && !_isApplyingSpellCheckDecorations)
                 ScheduleSpellCheck();
+
+            // Text edits shift paragraph extents, so wrap lanes need a pass. The engine debounces
+            // and re-entrancy is harmless (paragraph margin changes reflow but the engine's own
+            // _isApplying guard plus this debounce keeps it stable).
+            _wrapLayout?.ScheduleApply();
+
+            // Text edits also shift in-line image anchors - keep the caption sequence order fresh.
+            _floatingImages.RenumberCaptions();
         }
 
         // UpdateCounter() walks the entire document text (TextRange extraction, multiple full-string
@@ -1054,6 +1093,22 @@ namespace Scriblucent
         }
 
         private void ApplySpellCheckDecorations(IReadOnlyList<SpellCheckService.WordSpan> spans)
+        {
+            // The decoration mutations fire TextChanged, which can trigger the RichTextBox's
+            // caret-following - the debounced re-decoration pass that runs after an auto-save
+            // would otherwise yank the view to the caret, away from a photo deep in the pad.
+            var viewState = _floatingImages.CaptureViewState();
+            try
+            {
+                ApplySpellCheckDecorationsCore(spans);
+            }
+            finally
+            {
+                _floatingImages.RestoreViewState(viewState);
+            }
+        }
+
+        private void ApplySpellCheckDecorationsCore(IReadOnlyList<SpellCheckService.WordSpan> spans)
         {
             _isApplyingSpellCheckDecorations = true;
             try
@@ -2385,6 +2440,9 @@ namespace Scriblucent
 
                     _floatingImages.Restore(document.Images);
 
+                    // Wrap lanes depend on image geometry + paragraph extents, both just loaded.
+                    _wrapLayout?.ScheduleApply();
+
                     // Clear any selection and move caret to start
                     ContentTextBox.CaretPosition = ContentTextBox.Document.ContentStart;
                     SyncFontSelectorsFromSelection();
@@ -2440,55 +2498,76 @@ namespace Scriblucent
         // Save data TO a NoteDocument
         public void SaveToDocument(NoteDocument document)
         {
-            if (document != null)
+            if (document == null)
+                return;
+
+            // The save path mutates the live flow: the spell-check/highlight decoration clears,
+            // the wrap engine's Clear+Reapply (its character-rect measurements force layouts
+            // while the flow is shrunk - the scroll offset gets clamped), and the serialization's
+            // pad/marker stripping. Preserve the view across all of it so the auto-save never
+            // teleports the editor.
+            var viewState = _floatingImages.CaptureViewState();
+            try
             {
-                var previousContent = document.Content ?? string.Empty;
-                var previousTitle = document.Title ?? string.Empty;
-                var previousTags = document.Tags ?? new List<string>();
-                var previousFontFamily = document.FontFamily ?? string.Empty;
-                var previousFontSize = document.FontSize;
-
-                var newTitle = TitleTextBox.Text;
-                var newTags = ParseTags(TagsTextBox.Text);
-                var newFontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source);
-                var newFontSize = ContentTextBox.FontSize;
-                ClearAllHighlights();
-                ClearSpellCheckDecorations();
-                var newContent = SerializeEditorContent();
-                var newImages = _floatingImages.BuildAttachments().ToList();
-                // Squiggles are real TextDecorations - must never end up saved/exported (stale on
-                // reload, and nobody wants spell-check marks baked into a shared PDF/RTF). Content
-                // is already captured into newContent above, so reapplying now doesn't affect what
-                // gets persisted; fire-and-forget since dictionaries are normally already cached
-                // from the previous scan, making this effectively instant.
-                _ = RunSpellCheckPassAsync();
-
-                var contentChanged = !string.Equals(previousContent, newContent, StringComparison.Ordinal);
-                var imagesChanged = !AreImageAttachmentsEqual(document.Images, newImages);
-                if (contentChanged)
-                {
-                    AppendEditHistoryVersion(document, previousContent);
-                }
-
-                var titleChanged = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
-                var tagsChanged = !AreTagListsEqual(previousTags, newTags);
-                var fontChanged = !string.Equals(previousFontFamily, newFontFamily, StringComparison.Ordinal)
-                    || !previousFontSize.Equals(newFontSize);
-
-                if (contentChanged || imagesChanged || titleChanged || tagsChanged || fontChanged)
-                {
-                    document.LastModified = DateTime.Now;
-                }
-
-                document.Title = newTitle;
-                document.Tags = newTags;
-                document.Content = newContent;
-                document.Images = newImages;
-                document.FontFamily = newFontFamily;
-                document.FontSize = newFontSize;
-                document.IsEditorFontPanelOpen = _isFontPanelOpen;
-                document.IsWordWrapEnabled = _isWordWrapEnabled;
+                SaveToDocumentCore(document);
             }
+            finally
+            {
+                _floatingImages.RestoreViewState(viewState);
+            }
+        }
+
+        private void SaveToDocumentCore(NoteDocument document)
+        {
+            var previousContent = document.Content ?? string.Empty;
+            var previousTitle = document.Title ?? string.Empty;
+            var previousTags = document.Tags ?? new List<string>();
+            var previousFontFamily = document.FontFamily ?? string.Empty;
+            var previousFontSize = document.FontSize;
+
+            var newTitle = TitleTextBox.Text;
+            var newTags = ParseTags(TagsTextBox.Text);
+            var newFontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source);
+            var newFontSize = ContentTextBox.FontSize;
+            ClearAllHighlights();
+            ClearSpellCheckDecorations();
+            // Wrap insets are transient layout margins - never persist them into saved content.
+            _wrapLayout?.Clear();
+            var newContent = SerializeEditorContent();
+            var newImages = _floatingImages.BuildAttachments().ToList();
+            // Squiggles are real TextDecorations - must never end up saved/exported (stale on
+            // reload, and nobody wants spell-check marks baked into a shared PDF/RTF). Content
+            // is already captured into newContent above, so reapplying now doesn't affect what
+            // gets persisted; fire-and-forget since dictionaries are normally already cached
+            // from the previous scan, making this effectively instant.
+            _ = RunSpellCheckPassAsync();
+            _wrapLayout?.Reapply();
+
+            var contentChanged = !string.Equals(previousContent, newContent, StringComparison.Ordinal);
+            var imagesChanged = !AreImageAttachmentsEqual(document.Images, newImages);
+            if (contentChanged)
+            {
+                AppendEditHistoryVersion(document, previousContent);
+            }
+
+            var titleChanged = !string.Equals(previousTitle, newTitle, StringComparison.Ordinal);
+            var tagsChanged = !AreTagListsEqual(previousTags, newTags);
+            var fontChanged = !string.Equals(previousFontFamily, newFontFamily, StringComparison.Ordinal)
+                || !previousFontSize.Equals(newFontSize);
+
+            if (contentChanged || imagesChanged || titleChanged || tagsChanged || fontChanged)
+            {
+                document.LastModified = DateTime.Now;
+            }
+
+            document.Title = newTitle;
+            document.Tags = newTags;
+            document.Content = newContent;
+            document.Images = newImages;
+            document.FontFamily = newFontFamily;
+            document.FontSize = newFontSize;
+            document.IsEditorFontPanelOpen = _isFontPanelOpen;
+            document.IsWordWrapEnabled = _isWordWrapEnabled;
         }
 
         private static bool AreImageAttachmentsEqual(
@@ -2510,7 +2589,10 @@ namespace Scriblucent
                     || !a.Height.Equals(b.Height)
                     || !a.Left.Equals(b.Left)
                     || !a.Top.Equals(b.Top)
-                    || a.LockAspectRatio != b.LockAspectRatio)
+                    || a.LockAspectRatio != b.LockAspectRatio
+                    || a.WrapMode != b.WrapMode
+                    || a.InlineAnchorOffset != b.InlineAnchorOffset
+                    || a.ZIndex != b.ZIndex)
                 {
                     return false;
                 }
@@ -2598,16 +2680,188 @@ namespace Scriblucent
 
         private void ContentTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
         {
+            // Image data on the clipboard (with or without text) becomes a new floating photo
+            // at the caret; plain text keeps the default paste. If the image insert fails, let
+            // the default paste run rather than swallowing the command.
+            if (e.DataObject is not { } data || !IsImageData(data))
+                return;
+
+            if (PasteImageFromDataObject(data))
+            {
+                e.CancelCommand();
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>True when the pasted data carries an image in any common clipboard format.
+        /// The legacy Bitmap check alone misses PNG/DIB-only clipboards (screenshots, many apps).</summary>
+        private static bool IsImageData(IDataObject data)
+        {
+            return data.GetDataPresent(DataFormats.Bitmap)
+                || data.GetDataPresent(DataFormats.Dib)
+                || data.GetDataPresent(DataFormats.Tiff)
+                || data.GetDataPresent("PNG");
+        }
+
+        /// <summary>Inserts an image from the pasted data as a new floating photo at the caret.
+        /// Returns false when no usable image could be extracted.</summary>
+        private bool PasteImageFromDataObject(IDataObject data)
+        {
+            try
+            {
+                var pngBytes = TryExtractPngBytes(data);
+                if (pngBytes is null)
+                    return false;
+
+                var dpi = ResolveEditorDpiScale();
+                if (!NoteImageLoader.TryLoadFromBytes(
+                        pngBytes,
+                        NoteImageLoader.DefaultInsertMaxWidthDip,
+                        dpi,
+                        out var load,
+                        out _)
+                    || load is null)
+                {
+                    return false;
+                }
+
+                var (width, height) = NoteImageLoader.FitWithinBox(
+                    load.NaturalPixelWidth,
+                    load.NaturalPixelHeight,
+                    NoteImageLoader.DefaultInsertMaxWidthDip,
+                    NoteImageLoader.DefaultInsertMaxHeightDip);
+
+                _floatingImages.Insert(load, width, height);
+                ContentTextBox.Focus();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static byte[]? TryExtractPngBytes(IDataObject data)
+        {
+            // 1. Raw PNG bytes first: browsers and screenshot tools put the PNG on the
+            // clipboard, and decoding those bytes preserves the pixels and alpha exactly
+            // (the legacy Bitmap/HBitmap conversion can render 32bpp alpha as transparent).
+            if (data.GetDataPresent("PNG"))
+            {
+                var png = data.GetData("PNG") switch
+                {
+                    byte[] bytes => bytes,
+                    MemoryStream memory => memory.ToArray(),
+                    Stream stream => CopyToArray(stream),
+                    _ => null
+                };
+                if (png is { Length: > 0 })
+                    return png;
+            }
+
+            // 2. Raw DIB bytes as a last-resort alpha-safe decode (synthesize a BMP header and
+            // let the BmpBitmapDecoder handle the pixel format instead of the HBitmap path).
+            if (data.GetDataPresent(DataFormats.Dib))
+            {
+                var dib = data.GetData(DataFormats.Dib) switch
+                {
+                    byte[] bytes => bytes,
+                    MemoryStream memory => memory.ToArray(),
+                    Stream stream => CopyToArray(stream),
+                    _ => null
+                };
+                if (dib is { Length: > 14 } && TryDecodeDibAsBmp(dib) is { } dibImage)
+                    return EncodePng(dibImage);
+            }
+
+            // 3. The WPF BitmapSource path - the app's own copy and most apps.
+            if (data.GetDataPresent(DataFormats.Bitmap) && data.GetData(DataFormats.Bitmap) is BitmapSource wpfBitmap)
+                return EncodePng(wpfBitmap);
+
+            // 4. The system clipboard's canonical image machinery (handles the HBitmap path).
+            if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } fallback)
+                return EncodePng(fallback);
+
+            return null;
+        }
+
+        /// <summary>
+        /// Decodes a raw DIB (device-independent bitmap, no file header) by wrapping it in a
+        /// BITMAPFILEHEADER and running it through the WPF BmpBitmapDecoder - the DIB's own
+        /// pixel format and alpha survive, unlike the clipboard HBitmap conversion.
+        /// </summary>
+        private static BitmapSource? TryDecodeDibAsBmp(byte[] dib)
+        {
+            try
+            {
+                if (dib.Length < 14)
+                    return null;
+
+                const int fileHeaderSize = 14;
+                var bmp = new byte[dib.Length + fileHeaderSize];
+                bmp[0] = (byte)'B';
+                bmp[1] = (byte)'M';
+                BitConverter.GetBytes(bmp.Length).CopyTo(bmp, 2);
+                BitConverter.GetBytes(fileHeaderSize).CopyTo(bmp, 10);
+                Array.Copy(dib, 0, bmp, fileHeaderSize, dib.Length);
+
+                using var stream = new MemoryStream(bmp);
+                var decoder = new BmpBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                return decoder.Frames.Count > 0 ? decoder.Frames[0] : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static byte[]? EncodePng(BitmapSource source)
+        {
+            // Convert to straight alpha (Pbgra32) before the PNG encode: a premultiplied source
+            // (Bgra32) can render as fully transparent in the resulting image.
+            BitmapSource encodeSource = source;
+            if (source.Format != PixelFormats.Pbgra32)
+            {
+                try
+                {
+                    encodeSource = new FormatConvertedBitmap(source, PixelFormats.Pbgra32, null, 0);
+                }
+                catch
+                {
+                    encodeSource = source;
+                }
+            }
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(encodeSource));
+            using var stream = new MemoryStream();
+            encoder.Save(stream);
+            return stream.ToArray();
+        }
+
+        private static byte[] CopyToArray(Stream stream)
+        {
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            return memory.ToArray();
         }
 
         private void ContentTextBox_CopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = ContentTextBox.Selection is { IsEmpty: false };
+            e.CanExecute = ContentTextBox.Selection is { IsEmpty: false } || _floatingImages.SelectedImageId is not null;
             e.Handled = true;
         }
 
         private void ContentTextBox_CopyExecuted(object sender, ExecutedRoutedEventArgs e)
         {
+            // A selected photo copies its image data; otherwise copy the text selection.
+            if (_floatingImages.SelectedImageId is { } imageId)
+            {
+                if (CopyPhotoToClipboard(imageId))
+                    e.Handled = true;
+                return;
+            }
+
             if (CopyEditorSelectionToClipboard())
                 e.Handled = true;
         }
@@ -2687,13 +2941,40 @@ namespace Scriblucent
         {
             try
             {
-                var range = new TextRange(selection.Start, selection.End);
-                using var stream = new MemoryStream();
-                range.Save(stream, DataFormats.Rtf);
-                dataObject.SetData(DataFormats.Rtf, Encoding.ASCII.GetString(stream.ToArray()));
+                SaveWithInlineMarkers(() =>
+                {
+                    var range = new TextRange(selection.Start, selection.End);
+                    using var stream = new MemoryStream();
+                    range.Save(stream, DataFormats.Rtf);
+                    dataObject.SetData(DataFormats.Rtf, Encoding.ASCII.GetString(stream.ToArray()));
+                });
             }
             catch (Exception)
             {
+            }
+        }
+
+        /// <summary>Runs a serialization action with in-line images temporarily replaced by text
+        /// markers (RTF/XAML cannot carry UI elements), restoring them afterwards.</summary>
+        private void SaveWithInlineMarkers(Action save)
+        {
+            _isSerializingEditorContent = true;
+            try
+            {
+                _floatingImages.PrepareInlineImagesForSerialization();
+                try
+                {
+                    save();
+                }
+                finally
+                {
+                    _floatingImages.RestoreInlineImagesAfterSerialization();
+                }
+            }
+            finally
+            {
+                _isSerializingEditorContent = false;
+                _floatingImages.EnsureImageExtentPad();
             }
         }
 
@@ -3459,6 +3740,26 @@ namespace Scriblucent
             UpdateEditedIndicator();
         }
 
+        // The post-save debounce passes (spell-check re-decoration, wrap re-apply) mutate the
+        // flow ~120-150ms after a save and bump _editorChangeVersion; snapshotting immediately
+        // would leave the note marked as edited and re-arm the auto-save every 30 seconds.
+        private void DeferMarkCurrentStateSaved()
+        {
+            if (_postSaveSnapshotTimer is null)
+            {
+                _postSaveSnapshotTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+                _postSaveSnapshotTimer.Tick += (_, _) =>
+                {
+                    _postSaveSnapshotTimer.Stop();
+                    if (_currentDocument is not null && !_isLoadingDocument)
+                        MarkCurrentStateSaved();
+                };
+            }
+
+            _postSaveSnapshotTimer.Stop();
+            _postSaveSnapshotTimer.Start();
+        }
+
         private bool _isFlashingTitleStatus;
 
         private void UpdateEditedIndicator()
@@ -3628,11 +3929,20 @@ namespace Scriblucent
             {
                 if (_currentDocument != null)
                 {
+                    // The save path strips the extent pad and the inline photo containers from
+                    // the live flow - never run it while an image is being dragged or resized
+                    // (the layout churn would fight the gesture). The timer re-checks next tick.
+                    if (_floatingImages.HasActiveGestures)
+                        return;
+
                     // Save to document
                     SaveToDocument(_currentDocument);
 
-                    // Update last saved content
-                    MarkCurrentStateSaved();
+                    // Update last saved content - deferred: the post-save debounce passes
+                    // (spell-check re-decoration, wrap re-apply) mutate the flow shortly after
+                    // the save; snapshotting now would leave the note looking edited (and the
+                    // auto-save re-firing every 30 seconds).
+                    DeferMarkCurrentStateSaved();
                     _lastAutoSaveTime = DateTime.Now;
 
                     // Show visual indicator
@@ -3757,8 +4067,11 @@ namespace Scriblucent
                 {
                     ClearAllHighlights();
                     ClearSpellCheckDecorations();
-                    NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.Rtf);
+                    _wrapLayout?.Clear();
+                    SaveWithInlineMarkers(() =>
+                        NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.Rtf));
                     _ = RunSpellCheckPassAsync();
+                    _wrapLayout?.Reapply();
                 });
         }
 
@@ -3771,8 +4084,11 @@ namespace Scriblucent
                 {
                     ClearAllHighlights();
                     ClearSpellCheckDecorations();
-                    NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.XamlPackage);
+                    _wrapLayout?.Clear();
+                    SaveWithInlineMarkers(() =>
+                        NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.XamlPackage));
                     _ = RunSpellCheckPassAsync();
+                    _wrapLayout?.Reapply();
                 });
         }
 
@@ -3784,7 +4100,9 @@ namespace Scriblucent
                 path =>
                 {
                     ClearAllHighlights();
+                    _wrapLayout?.Clear();
                     NoteFileService.SaveNotePackage(path, CreateExportNoteDocument());
+                    _wrapLayout?.Reapply();
                 });
         }
 
@@ -4430,6 +4748,7 @@ namespace Scriblucent
                 Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
                 SyncListMarkerAppearance(activeLists, size, markerForeground);
                 ApplyLineSpacingToInlineFormattingTargetIfNeeded(size);
+                _floatingImages.SyncInlineParagraphLineStrategies();
             }
             finally
             {
@@ -4645,6 +4964,9 @@ namespace Scriblucent
 
             foreach (var paragraph in paragraphs)
                 ApplyLineSpacingToParagraph(paragraph, _lineSpacingMultiplier);
+
+            // Paragraphs hosting in-line images need MaxHeight so the line grows to fit them.
+            _floatingImages.SyncInlineParagraphLineStrategies();
         }
 
         private void ApplyLineSpacingToParagraph(Paragraph paragraph, double spacingMultiplier, double? minimumFontSize = null)
@@ -7254,6 +7576,156 @@ namespace Scriblucent
             }
         }
 
+        private void FloatingImages_CaptionRequested(object? sender, Guid imageId)
+            => ShowCaptionDialog(imageId);
+
+        private void InsertCaptionButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_floatingImages.SelectedImageId is { } imageId)
+                ShowCaptionDialog(imageId);
+        }
+
+        private static readonly string[] DefaultCaptionLabels =
+        {
+            "Figure", "Illustration", "Table", "Equation", "Drawing", "Chart"
+        };
+
+        private void ShowCaptionDialog(Guid imageId)
+        {
+            var settings = AppSettingsService.Load();
+            var labels = DefaultCaptionLabels
+                .Concat(settings.CustomCaptionLabels.Where(label => !string.IsNullOrWhiteSpace(label)))
+                .Distinct()
+                .ToList();
+            var caption = _floatingImages.GetCaption(imageId);
+
+            var dialog = new InsertCaptionDialog(
+                caption?.Label,
+                caption?.Text ?? string.Empty,
+                caption?.Numbering ?? CaptionNumbering.Arabic,
+                caption?.Separator ?? ": ",
+                caption?.Position ?? CaptionPosition.Below,
+                caption?.ExcludeLabel ?? false,
+                labels,
+                DefaultCaptionLabels,
+                _floatingImages.GetNextCaptionNumber,
+                hasExistingCaption: caption is not null)
+            {
+                Owner = GetDialogOwnerWindow()
+            };
+
+            if (dialog.ShowDialog() != true)
+                return;
+
+            if (dialog.ResultRemoved)
+            {
+                _floatingImages.RemoveCaption(imageId);
+            }
+            else
+            {
+                _floatingImages.SetCaption(
+                    imageId,
+                    new FloatingImageCoordinator.CaptionSettings(
+                        dialog.ResultLabel,
+                        dialog.ResultText,
+                        dialog.ResultNumbering,
+                        dialog.ResultSeparator,
+                        dialog.ResultPosition,
+                        dialog.ResultExcludeLabel));
+            }
+
+            // Persist the custom labels (OnlyOffice "Add label" / "Delete label").
+            settings.CustomCaptionLabels = dialog.Labels
+                .Where(label => !DefaultCaptionLabels.Contains(label))
+                .ToList();
+            AppSettingsService.Save(settings);
+        }
+
+        private void FloatingImages_CopyRequested(object? sender, Guid imageId)
+            => CopyPhotoToClipboard(imageId);
+
+        private void FloatingImages_CutRequested(object? sender, Guid imageId)
+        {
+            // Copy first, then remove the original - same as Word's Cut.
+            if (CopyPhotoToClipboard(imageId))
+                _floatingImages.RemoveImage(imageId);
+        }
+
+        private async void FloatingImages_ChangePictureRequested(object? sender, Guid imageId)
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = LocalizationService.GetString("ChangePicture"),
+                    Filter = LocalizationService.GetString("ImageOpenFileDialogFilter"),
+                    Multiselect = false
+                };
+                if (dialog.ShowDialog(GetDialogOwnerWindow()) != true)
+                    return;
+
+                var dpi = ResolveEditorDpiScale();
+                var (ok, load, error) = await NoteImageLoader.TryLoadFromFileAsync(
+                    dialog.FileName,
+                    NoteImageLoader.DefaultInsertMaxWidthDip,
+                    dpi);
+                if (!ok || load is null)
+                {
+                    ModernMessageBox.Show(
+                        $"{LocalizationService.GetString("FailedToInsertPicture")}\n\n{error}",
+                        LocalizationService.GetString("ChangePicture"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    return;
+                }
+
+                _floatingImages.ReplaceImageBytes(imageId, load);
+            }
+            catch (Exception ex)
+            {
+                ModernMessageBox.Show(
+                    $"{LocalizationService.GetString("FailedToInsertPicture")}\n\n{ex.Message}",
+                    LocalizationService.GetString("ChangePicture"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>Puts the photo's image data on the clipboard (Bitmap + PNG formats).</summary>
+        private bool CopyPhotoToClipboard(Guid imageId)
+        {
+            if (_floatingImages.GetImageBytes(imageId) is not { } bytes)
+                return false;
+
+            try
+            {
+                using var stream = new MemoryStream(bytes);
+                var decoder = BitmapDecoder.Create(
+                    stream,
+                    BitmapCreateOptions.PreservePixelFormat,
+                    BitmapCacheOption.OnLoad);
+                if (decoder.Frames.Count == 0)
+                    return false;
+
+                Clipboard.SetImage(decoder.Frames[0]);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Inserts an image from the clipboard as a new floating photo at the caret.
+        /// Returns false when the clipboard image could not be loaded.</summary>
+        private double ResolveEditorDpiScale()
+        {
+            var dpi = 1.0;
+            if (PresentationSource.FromVisual(this)?.CompositionTarget is { } target)
+                dpi = target.TransformToDevice.M11;
+            return dpi;
+        }
+
         private async void InsertSketchButton_Click(object sender, RoutedEventArgs e)
         {
             if (_isInsertingSketch)
@@ -7326,6 +7798,10 @@ namespace Scriblucent
         private string SerializeEditorContent()
         {
             _isSerializingEditorContent = true;
+            // The serialization strips the extent pad and the inline photo containers out of
+            // the live flow; any layout pass in between clamps the scroll / snaps the caret,
+            // making the view jump (the auto-save "teleport to the start"). Preserve the view.
+            var viewState = _floatingImages.CaptureViewState();
             try
             {
                 _floatingImages.StripImageExtentPad();
@@ -7335,13 +7811,25 @@ namespace Scriblucent
                     ContentTextBox.Document.ContentEnd);
 
                 using var stream = new MemoryStream();
-                textRange.Save(stream, DataFormats.XamlPackage);
+                // In-line images become text markers for serialization (the flow must not
+                // embed UI elements); the containers are restored right after.
+                _floatingImages.PrepareInlineImagesForSerialization();
+                try
+                {
+                    textRange.Save(stream, DataFormats.XamlPackage);
+                }
+                finally
+                {
+                    _floatingImages.RestoreInlineImagesAfterSerialization();
+                }
+
                 return Convert.ToBase64String(stream.ToArray());
             }
             finally
             {
                 _isSerializingEditorContent = false;
                 _floatingImages.EnsureImageExtentPad();
+                _floatingImages.RestoreViewState(viewState);
             }
         }
 

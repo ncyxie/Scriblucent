@@ -525,7 +525,31 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FailedToInsertPicture" xml:space="preserve"><value>Nepavyko įterpti paveikslėlio:</value></data>
   <data name="DeleteImage" xml:space="preserve"><value>Ištrinti paveikslėlį</value></data>
   <data name="LockAspectRatio" xml:space="preserve"><value>Užrakinti kraštinių santykį</value></data>
+  <data name="CopyImage" xml:space="preserve"><value>Kopijuoti</value></data>
+  <data name="CutImage" xml:space="preserve"><value>Iškirpti</value></data>
+  <data name="ChangePicture" xml:space="preserve"><value>Keisti paveikslėlį…</value></data>
+  <data name="InsertCaption" xml:space="preserve"><value>Įterpti antraštę</value></data>
+  <data name="CaptionPreview" xml:space="preserve"><value>Peržiūra</value></data>
+  <data name="CaptionLabel" xml:space="preserve"><value>Etiketė</value></data>
+  <data name="CaptionText" xml:space="preserve"><value>Antraštė</value></data>
+  <data name="CaptionNumbering" xml:space="preserve"><value>Numeravimas</value></data>
+  <data name="CaptionNumberingNone" xml:space="preserve"><value>Nėra</value></data>
+  <data name="CaptionSeparator" xml:space="preserve"><value>Skirtukas</value></data>
+  <data name="CaptionPositionAbove" xml:space="preserve"><value>Viršuje</value></data>
+  <data name="CaptionPositionBelow" xml:space="preserve"><value>Žemiau</value></data>
+  <data name="CaptionExcludeLabel" xml:space="preserve"><value>Neįtraukti etiketės į antraštę</value></data>
+  <data name="CaptionDeleteLabel" xml:space="preserve"><value>Ištrinti etiketę</value></data>
+  <data name="CaptionRemove" xml:space="preserve"><value>Pašalinti antraštę</value></data>
+  <data name="CaptionLabelRequired" xml:space="preserve"><value>Įveskite antraštės etiketę.</value></data>
   <data name="UnlockAspectRatio" xml:space="preserve"><value>Atrakinti kraštinių santykį</value></data>
+  <data name="ImageWrapSquare" xml:space="preserve"><value>Apgaubti tekstą aplink paveikslėlį</value></data>
+  <data name="TextWrap" xml:space="preserve"><value>Teksto apgaubimas</value></data>
+  <data name="WrapNone" xml:space="preserve"><value>Prieš tekstą</value></data>
+  <data name="WrapSquare" xml:space="preserve"><value>Kvadratas</value></data>
+  <data name="WrapTopAndBottom" xml:space="preserve"><value>Viršuje ir apačioje</value></data>
+  <data name="WrapInline" xml:space="preserve"><value>Vienoje eilutėje su tekstu</value></data>
+  <data name="BringForward" xml:space="preserve"><value>Pakelti į priekį</value></data>
+  <data name="SendBackward" xml:space="preserve"><value>Nuleisti atgal</value></data>
   <data name="InsertSketch" xml:space="preserve"><value>Įterpti eskizą</value></data>
   <data name="Sketch" xml:space="preserve"><value>Eskizas</value></data>
   <data name="SketchDialogTitle" xml:space="preserve"><value>Greitas eskizas</value></data>

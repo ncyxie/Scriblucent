@@ -1,6 +1,7 @@
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
+using Scriblucent.Services;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -99,7 +100,10 @@ public partial class EditHistoryWindow : Window
                 range.Load(stream, bytes.Length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B
                     ? DataFormats.XamlPackage
                     : DataFormats.Rtf);
-                rawText = new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd).Text ?? string.Empty;
+                // In-line photo markers (object replacement chars) would read as "obj" - the
+                // photo is a picture, not text.
+                rawText = (new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd).Text ?? string.Empty)
+                    .Replace(FloatingImageCoordinator.InlineMarkerChar.ToString(), " ");
             }
             catch (FormatException)
             {

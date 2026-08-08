@@ -64,6 +64,7 @@ public static class AppIconKindMap
         AppIconKind.Download => PackIconLucideKind.Download,
         AppIconKind.Clear => PackIconLucideKind.Eraser,
         AppIconKind.WordWrap => PackIconLucideKind.TextWrap,
+        AppIconKind.WrapSquare => PackIconLucideKind.TextWrap,
         AppIconKind.Font => PackIconLucideKind.Type,
         AppIconKind.Plus => PackIconLucideKind.Plus,
         AppIconKind.Minus => PackIconLucideKind.Minus,
@@ -101,6 +102,7 @@ public static class AppIconKindMap
         AppIconKind.Lock => PackIconLucideKind.Lock,
         AppIconKind.Bookmark => PackIconLucideKind.Bookmark,
         AppIconKind.Ban => PackIconLucideKind.Ban,
+        AppIconKind.Cut => PackIconLucideKind.Scissors,
         AppIconKind.GripVertical => PackIconLucideKind.GripVertical,
         _ => PackIconLucideKind.CircleQuestionMark
     };

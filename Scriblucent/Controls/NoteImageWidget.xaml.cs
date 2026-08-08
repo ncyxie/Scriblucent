@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using Scriblucent.Localization;
+using Scriblucent.Models;
 using Scriblucent.Services;
 
 namespace Scriblucent.Controls;
@@ -49,12 +50,23 @@ public partial class NoteImageWidget : UserControl
     public event EventHandler? GestureCompleted;
     public event EventHandler? DeleteRequested;
     public event EventHandler? LockAspectRatioChanged;
+    public event EventHandler? WrapModeChanged;
+    /// <summary>Raised when the context menu's Bring forward / Send backward is clicked.</summary>
+    public event EventHandler<NoteImageArrangeDirection>? ArrangeRequested;
+    public event EventHandler? CopyRequested;
+    public event EventHandler? CutRequested;
+    public event EventHandler? ChangePictureRequested;
+    public event EventHandler? CaptionRequested;
     public bool IsBodyDragging => _isBodyDragging;
 
     public NoteImageWidget()
     {
         InitializeComponent();
         RenderOptions.SetBitmapScalingMode(DisplayImage, BitmapScalingMode.HighQuality);
+        // Backup: re-sync the wrap-mode checkmarks whenever the menu actually opens, in case
+        // the opening event's Source resolution ever differs.
+        if (ContextMenu is not null)
+            ContextMenu.Opened += (_, _) => SyncWrapMenuCheckStates();
         Loaded += (_, _) =>
         {
             _visualStatesReady = true;
@@ -113,6 +125,36 @@ public partial class NoteImageWidget : UserControl
     {
         get => (bool)GetValue(LockAspectRatioProperty);
         set => SetValue(LockAspectRatioProperty, value);
+    }
+
+    public static readonly DependencyProperty WrapModeProperty =
+        DependencyProperty.Register(
+            nameof(WrapMode),
+            typeof(NoteImageWrapMode),
+            typeof(NoteImageWidget),
+            new PropertyMetadata(NoteImageWrapMode.None));
+
+    /// <summary>
+    /// When the image is pressed against the editor's top edge, the action chips would clip
+    /// off-canvas - the coordinator flips them below the image instead.
+    /// </summary>
+    public static readonly DependencyProperty ButtonsFlippedProperty = DependencyProperty.Register(
+        nameof(ButtonsFlipped),
+        typeof(bool),
+        typeof(NoteImageWidget),
+        new PropertyMetadata(false, (d, _) => ((NoteImageWidget)d).ApplyButtonPlacement()));
+
+    public bool ButtonsFlipped
+    {
+        get => (bool)GetValue(ButtonsFlippedProperty);
+        set => SetValue(ButtonsFlippedProperty, value);
+    }
+
+    /// <summary>Text wrap mode; the coordinator mirrors it onto the image session.</summary>
+    public NoteImageWrapMode WrapMode
+    {
+        get => (NoteImageWrapMode)GetValue(WrapModeProperty);
+        set => SetValue(WrapModeProperty, value);
     }
 
     public static readonly DependencyProperty DocumentLeftProperty =
@@ -186,6 +228,21 @@ public partial class NoteImageWidget : UserControl
     {
         if (d is NoteImageWidget widget)
             widget.UpdateLockAspectChrome();
+    }
+
+    private void ApplyButtonPlacement()
+    {
+        if (LockAspectButton is null || DeleteButton is null)
+            return;
+
+        LockAspectButton.VerticalAlignment = ButtonsFlipped ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+        LockAspectButton.Margin = ButtonsFlipped
+            ? new Thickness(0, 0, 44, -34)
+            : new Thickness(0, -34, 44, 0);
+        DeleteButton.VerticalAlignment = ButtonsFlipped ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+        DeleteButton.Margin = ButtonsFlipped
+            ? new Thickness(0, 0, 12, -34)
+            : new Thickness(0, -34, 12, 0);
     }
 
     private void UpdateLockAspectChrome()
@@ -267,11 +324,95 @@ public partial class NoteImageWidget : UserControl
     private void ContextMenu_Opening(object sender, ContextMenuEventArgs e)
     {
         SelectionRequested?.Invoke(this, EventArgs.Empty);
+        // ContextMenuOpening is raised on THIS control, so the sender is the UserControl -
+        // the opening menu comes from the event args' Source (fall back to the sender or the
+        // control's own menu to stay null-tolerant).
+        var menu = e?.Source as ContextMenu ?? sender as ContextMenu ?? ContextMenu;
+        if (menu is not null)
+        {
+            menu.PlacementTarget = this;
+            SyncWrapMenuCheckStates();
+            LockAspectItem.IsChecked = LockAspectRatio;
+        }
+    }
+
+    private void SyncWrapMenuCheckStates()
+    {
+        WrapNoneItem.IsChecked = WrapMode == NoteImageWrapMode.None;
+        WrapSquareItem.IsChecked = WrapMode == NoteImageWrapMode.Square;
+        WrapTopBottomItem.IsChecked = WrapMode == NoteImageWrapMode.TopAndBottom;
+        WrapInlineItem.IsChecked = WrapMode == NoteImageWrapMode.Inline;
+    }
+
+    private void ContextMenuWrapMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag })
+            return;
+
+        WrapMode = tag switch
+        {
+            "Square" => NoteImageWrapMode.Square,
+            "TopAndBottom" => NoteImageWrapMode.TopAndBottom,
+            "Inline" => NoteImageWrapMode.Inline,
+            _ => NoteImageWrapMode.None
+        };
+
+        // Radio semantics: clicking the already-active item keeps it selected.
+        SyncWrapMenuCheckStates();
+        WrapModeChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void ContextMenuDelete_Click(object sender, RoutedEventArgs e)
     {
         DeleteRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuCopy_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        CopyRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuCut_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        CutRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuChangePicture_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        ChangePictureRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuCaption_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        CaptionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuArrange_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag })
+            return;
+
+        e.Handled = true;
+        ArrangeRequested?.Invoke(
+            this,
+            tag == "Forward"
+                ? NoteImageArrangeDirection.BringForward
+                : NoteImageArrangeDirection.SendBackward);
+    }
+
+    private void ContextMenuLockAspect_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        LockAspectRatio = !LockAspectRatio;
+        if (LockAspectRatio && Height > 0)
+            _aspectRatio = Width / Height;
+        LockAspectItem.IsChecked = LockAspectRatio;
+        LockAspectRatioChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void Body_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

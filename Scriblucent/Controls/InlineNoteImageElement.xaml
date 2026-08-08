@@ -1,0 +1,235 @@
+<UserControl x:Class="Scriblucent.Controls.InlineNoteImageElement"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:localization="clr-namespace:Scriblucent.Localization"
+             Focusable="True"
+             Background="Transparent"
+             ContextMenuOpening="ContextMenu_Opening">
+    <!-- The element lives inside the paragraph's text flow, so TextElement properties like
+         LineHeight/LineStackingStrategy inherit from the paragraph into the menu's content
+         (stretching every menu row). The constructor blocks the inheritance at the menu root. -->
+    <UserControl.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="{Binding [TextWrap], Source={x:Static localization:LocalizationProvider.Instance}}">
+                <MenuItem.Icon>
+                    <icons:AppIcon Kind="WrapSquare" Width="14" Height="14"/>
+                </MenuItem.Icon>
+                <MenuItem x:Name="WrapInlineItem"
+                          Header="{Binding [WrapInline], Source={x:Static localization:LocalizationProvider.Instance}}"
+                          IsCheckable="True"
+                          Tag="Inline"
+                          Click="ContextMenuWrapMode_Click"/>
+                <MenuItem x:Name="WrapSquareItem"
+                          Header="{Binding [WrapSquare], Source={x:Static localization:LocalizationProvider.Instance}}"
+                          IsCheckable="True"
+                          Tag="Square"
+                          Click="ContextMenuWrapMode_Click"/>
+                <MenuItem x:Name="WrapTopBottomItem"
+                          Header="{Binding [WrapTopAndBottom], Source={x:Static localization:LocalizationProvider.Instance}}"
+                          IsCheckable="True"
+                          Tag="TopAndBottom"
+                          Click="ContextMenuWrapMode_Click"/>
+                <MenuItem x:Name="WrapNoneItem"
+                          Header="{Binding [WrapNone], Source={x:Static localization:LocalizationProvider.Instance}}"
+                          IsCheckable="True"
+                          Tag="None"
+                          Click="ContextMenuWrapMode_Click"/>
+            </MenuItem>
+            <Separator/>
+            <MenuItem x:Name="LockAspectItem"
+                      Header="{Binding [LockAspectRatio], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      IsCheckable="True"
+                      Click="ContextMenuLockAspect_Click"/>
+            <Separator/>
+            <MenuItem Header="{Binding [CopyImage], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      Click="ContextMenuCopy_Click">
+                <MenuItem.Icon>
+                    <icons:AppIcon Kind="Duplicate" Width="14" Height="14"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="{Binding [CutImage], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      Click="ContextMenuCut_Click">
+                <MenuItem.Icon>
+                    <icons:AppIcon Kind="Cut" Width="14" Height="14"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="{Binding [ChangePicture], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      Click="ContextMenuChangePicture_Click">
+                <MenuItem.Icon>
+                    <icons:AppIcon Kind="Swap" Width="14" Height="14"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="{Binding [InsertCaption], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      Click="ContextMenuCaption_Click">
+                <MenuItem.Icon>
+                    <icons:AppIcon Kind="Tag" Width="14" Height="14"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="{Binding [DeleteImage], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      Click="ContextMenuDelete_Click">
+                <MenuItem.Icon>
+                    <icons:AppIcon Kind="Delete" Width="14" Height="14"/>
+                </MenuItem.Icon>
+            </MenuItem>
+        </ContextMenu>
+    </UserControl.ContextMenu>
+    <UserControl.Resources>
+        <Style x:Key="InlineImageHandleHitStyle" TargetType="Thumb">
+            <Setter Property="Width" Value="22"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+
+        <!-- Shared L-bracket stroke (elbow at local 11,11 = thumb center), same as the
+             floating widget's selection chrome. -->
+        <Style x:Key="InlineImageBracketPathStyle" TargetType="Path">
+            <Setter Property="Stroke" Value="{DynamicResource AccentPrimary}"/>
+            <Setter Property="StrokeThickness" Value="2.25"/>
+            <Setter Property="StrokeStartLineCap" Value="Round"/>
+            <Setter Property="StrokeEndLineCap" Value="Round"/>
+            <Setter Property="StrokeLineJoin" Value="Round"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+    </UserControl.Resources>
+    <Grid ClipToBounds="False">
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="ImageRow" Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Border x:Name="ImageClipHost"
+                Grid.Row="0"
+                CornerRadius="4"
+                ClipToBounds="True"
+                Background="Transparent"
+                MouseLeftButtonDown="Body_MouseLeftButtonDown">
+            <Grid>
+                <Image x:Name="DisplayImage"
+                       Stretch="Fill"
+                       SnapsToDevicePixels="True"/>
+                <Border x:Name="SelectionWash"
+                        Background="{DynamicResource AccentPrimary}"
+                        Opacity="0.12"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed"/>
+            </Grid>
+        </Border>
+
+        <!-- Flush with image; each 22x22 thumb center sits on a corner (same geometry as the
+             floating widget's corner handles). -->
+        <Grid x:Name="HandleLayer"
+              Grid.Row="0"
+              Visibility="Collapsed"
+              IsHitTestVisible="True"
+              ClipToBounds="False">
+            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
+                   Cursor="SizeNWSE"
+                   HorizontalAlignment="Left" VerticalAlignment="Top"
+                   Margin="-11,-11,0,0" Tag="TL"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragDelta="ResizeThumb_DragDelta"
+                   DragCompleted="ResizeThumb_DragCompleted">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent" Width="22" Height="22">
+                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
+                                  Data="M 3,11 L 11,11 L 11,3"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
+                   Cursor="SizeNESW"
+                   HorizontalAlignment="Right" VerticalAlignment="Top"
+                   Margin="0,-11,-11,0" Tag="TR"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragDelta="ResizeThumb_DragDelta"
+                   DragCompleted="ResizeThumb_DragCompleted">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent" Width="22" Height="22">
+                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
+                                  Data="M 19,11 L 11,11 L 11,3"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
+                   Cursor="SizeNWSE"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Margin="0,0,-11,-11" Tag="BR"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragDelta="ResizeThumb_DragDelta"
+                   DragCompleted="ResizeThumb_DragCompleted">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent" Width="22" Height="22">
+                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
+                                  Data="M 19,11 L 11,11 L 11,19"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
+                   Cursor="SizeNESW"
+                   HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                   Margin="-11,0,0,-11" Tag="BL"
+                   DragStarted="ResizeThumb_DragStarted"
+                   DragDelta="ResizeThumb_DragDelta"
+                   DragCompleted="ResizeThumb_DragCompleted">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Background="Transparent" Width="22" Height="22">
+                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
+                                  Data="M 3,11 L 11,11 L 11,19"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+
+            <!-- Aspect lock + delete chips — above the top edge, clear of the corner brackets
+                 (same chrome as the floating widget); flipped below when pressed against the
+                 editor's top. -->
+            <Button x:Name="LockAspectButton"
+                    Width="26"
+                    Height="26"
+                    Margin="0,-34,44,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Padding="0"
+                    Cursor="Hand"
+                    IsTabStop="False"
+                    Focusable="False"
+                    Style="{DynamicResource EditorToolButtonBaseStyle}"
+                    Click="LockAspectButton_Click"
+                    Content="{icons:Icon Kind=Lock, Size=12}"/>
+            <Button x:Name="DeleteButton"
+                    Width="26"
+                    Height="26"
+                    Margin="0,-34,12,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Padding="0"
+                    Cursor="Hand"
+                    IsTabStop="False"
+                    Focusable="False"
+                    Style="{DynamicResource EditorDangerToolButtonStyle}"
+                    ToolTip="{Binding [DeleteImage], Source={x:Static localization:LocalizationProvider.Instance}}"
+                    Click="DeleteButton_Click"
+                    Content="{icons:Icon Kind=Delete, Size=12}"/>
+        </Grid>
+
+        <!-- Caption row below the photo (LibreOffice/OnlyOffice-style); the element's box
+             grows to include it so the line-height sync keeps the flow correct. -->
+        <TextBlock x:Name="CaptionTextBlock"
+                   Grid.Row="1"
+                   Margin="0,6,0,0"
+                   TextWrapping="Wrap"
+                   FontSize="12"
+                   Foreground="{DynamicResource TextColorSecondary}"
+                   Visibility="Collapsed"/>
+    </Grid>
+</UserControl>

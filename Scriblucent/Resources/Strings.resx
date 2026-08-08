@@ -577,7 +577,31 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FailedToInsertPicture" xml:space="preserve"><value>Failed to insert picture:</value></data>
   <data name="DeleteImage" xml:space="preserve"><value>Delete image</value></data>
   <data name="LockAspectRatio" xml:space="preserve"><value>Lock aspect ratio</value></data>
+  <data name="CopyImage" xml:space="preserve"><value>Copy</value></data>
+  <data name="CutImage" xml:space="preserve"><value>Cut</value></data>
+  <data name="ChangePicture" xml:space="preserve"><value>Change picture…</value></data>
+  <data name="InsertCaption" xml:space="preserve"><value>Insert caption</value></data>
+  <data name="CaptionPreview" xml:space="preserve"><value>Preview</value></data>
+  <data name="CaptionLabel" xml:space="preserve"><value>Label</value></data>
+  <data name="CaptionText" xml:space="preserve"><value>Caption</value></data>
+  <data name="CaptionNumbering" xml:space="preserve"><value>Numbering</value></data>
+  <data name="CaptionNumberingNone" xml:space="preserve"><value>None</value></data>
+  <data name="CaptionSeparator" xml:space="preserve"><value>Separator</value></data>
+  <data name="CaptionPositionAbove" xml:space="preserve"><value>Above</value></data>
+  <data name="CaptionPositionBelow" xml:space="preserve"><value>Below</value></data>
+  <data name="CaptionExcludeLabel" xml:space="preserve"><value>Exclude label from caption</value></data>
+  <data name="CaptionDeleteLabel" xml:space="preserve"><value>Delete label</value></data>
+  <data name="CaptionRemove" xml:space="preserve"><value>Remove caption</value></data>
+  <data name="CaptionLabelRequired" xml:space="preserve"><value>Enter a label for the caption.</value></data>
   <data name="UnlockAspectRatio" xml:space="preserve"><value>Unlock aspect ratio</value></data>
+  <data name="ImageWrapSquare" xml:space="preserve"><value>Wrap text around image</value></data>
+  <data name="TextWrap" xml:space="preserve"><value>Text wrap</value></data>
+  <data name="WrapNone" xml:space="preserve"><value>In front of text</value></data>
+  <data name="WrapSquare" xml:space="preserve"><value>Square</value></data>
+  <data name="WrapTopAndBottom" xml:space="preserve"><value>Top and bottom</value></data>
+  <data name="WrapInline" xml:space="preserve"><value>In line with text</value></data>
+  <data name="BringForward" xml:space="preserve"><value>Bring forward</value></data>
+  <data name="SendBackward" xml:space="preserve"><value>Send backward</value></data>
   <data name="InsertSketch" xml:space="preserve"><value>Insert sketch</value></data>
   <data name="Sketch" xml:space="preserve"><value>Sketch</value></data>
   <data name="SketchDialogTitle" xml:space="preserve"><value>Quick sketch</value></data>

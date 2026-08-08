@@ -104,7 +104,8 @@ public static class NoteImageResizeMath
         double height,
         double boundsWidth,
         double boundsHeight,
-        bool lockAspectRatio = true)
+        bool lockAspectRatio = true,
+        bool resizeToFit = true)
     {
         if (boundsWidth <= 0 || boundsHeight <= 0
             || double.IsNaN(boundsWidth) || double.IsNaN(boundsHeight)
@@ -122,10 +123,9 @@ public static class NoteImageResizeMath
         width = clamped.Width;
         height = clamped.Height;
 
-        var shrunkToFit = false;
         if (width > boundsWidth || height > boundsHeight)
         {
-            if (lockAspectRatio)
+            if (lockAspectRatio && resizeToFit)
             {
                 var scale = Math.Min(boundsWidth / width, boundsHeight / height);
                 if (scale > 0 && !double.IsNaN(scale) && !double.IsInfinity(scale))
@@ -139,21 +139,21 @@ public static class NoteImageResizeMath
                     height = Math.Min(height, boundsHeight);
                 }
             }
-            else
+            else if (resizeToFit)
             {
                 width = Math.Min(width, boundsWidth);
                 height = Math.Min(height, boundsHeight);
             }
-
-            shrunkToFit = true;
         }
 
         var maxLeft = Math.Max(0, boundsWidth - width);
         var maxTop = Math.Max(0, boundsHeight - height);
 
-        if (shrunkToFit || double.IsNaN(left) || double.IsInfinity(left))
+        // NaN / infinity positions collapse to the origin; a size shrunk to fit keeps its
+        // intended position clamped to the nearest reachable spot - never a blind (0,0) reset.
+        if (double.IsNaN(left) || double.IsInfinity(left))
             left = 0;
-        if (shrunkToFit || double.IsNaN(top) || double.IsInfinity(top))
+        if (double.IsNaN(top) || double.IsInfinity(top))
             top = 0;
 
         left = Math.Clamp(left, 0, maxLeft);

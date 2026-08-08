@@ -1,5 +1,6 @@
 using Scriblucent.Localization;
 using Scriblucent.Models;
+using Scriblucent.Services;
 using Scriblucent;
 using System.IO;
 using System.Text;
@@ -99,6 +100,11 @@ public class NoteCardViewModel : ViewModelBase
         }
     }
 
+    /// <summary>True when the note contains any photo (floating or in-line, current or legacy),
+    /// so the card can show a picture indicator instead of looking like an empty note.</summary>
+    public bool HasPictures =>
+        (Document.Images is { Count: > 0 })
+        || (Document.Content?.Contains("[[ScriblucentImage:", StringComparison.Ordinal) ?? false);
     /// <summary>
     /// True once <see cref="Content"/> has decoded and cached its preview at least once. Lets
     /// layout-estimation code (<see cref="Controls.NoteCardItemSizeProvider"/>) avoid forcing that
@@ -123,7 +129,7 @@ public class NoteCardViewModel : ViewModelBase
     {
         var raw = Document.Content;
         if (string.IsNullOrEmpty(raw))
-            return string.Empty;
+            return AppendFloatingPhotoSentinels(string.Empty);
 
         try
         {
@@ -151,7 +157,8 @@ public class NoteCardViewModel : ViewModelBase
             var flowDoc = new FlowDocument();
             var tr = new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd);
             tr.Load(ms, dataFormat);
-            return CapPreviewLength(StripLegacyImageMarkers(BuildOrderedContentPreview(flowDoc)));
+            var preview = CapPreviewLength(StripLegacyImageMarkers(BuildOrderedContentPreview(flowDoc)));
+            return AppendFloatingPhotoSentinels(preview);
         }
         catch (FormatException)
         {
@@ -162,6 +169,38 @@ public class NoteCardViewModel : ViewModelBase
             Scriblucent.Services.CrashLog.Append("NoteCardViewModel.BuildContentPreview", ex);
             return CapPreviewLength(StripLegacyImageMarkers(raw));
         }
+    }
+
+    /// <summary>Floating photos have no text position. A sentinel trails the preview when the
+    /// photo actually sits near the note text - a photo deep in the empty pad region below the
+    /// text is far from the card's preview and would just add noise. A photo-only note (no
+    /// previewable text) still signals its photo: the photo IS the content there.</summary>
+    private string AppendFloatingPhotoSentinels(string preview)
+    {
+        if (Document.Images is null)
+            return preview;
+
+        var hasFloating = Document.Images.Any(image => image.WrapMode != NoteImageWrapMode.Inline);
+        if (!hasFloating)
+            return preview;
+
+        if (string.IsNullOrWhiteSpace(preview))
+            return FloatingImageCoordinator.InlineMarkerChar.ToString();
+
+        var previewHeight = EstimatePreviewHeight(preview.Length);
+        var hasNearPhoto = Document.Images.Any(image =>
+            image.WrapMode != NoteImageWrapMode.Inline && image.Top <= previewHeight);
+
+        return hasNearPhoto ? preview + FloatingImageCoordinator.InlineMarkerChar : preview;
+    }
+
+    /// <summary>Rough vertical extent of the card's preview text (the flow document is not laid
+    /// out here, so the estimate stands in for the character-rect measurements).</summary>
+    private static double EstimatePreviewHeight(int characterCount)
+    {
+        const double charactersPerLine = 95;
+        const double lineHeightDip = 22;
+        return Math.Ceiling(characterCount / charactersPerLine) * lineHeightDip;
     }
 
     public bool IsMenuVisible
@@ -200,6 +239,7 @@ public class NoteCardViewModel : ViewModelBase
         _cachedTagsSearchText = null;
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Content));
+        OnPropertyChanged(nameof(HasPictures));
         OnPropertyChanged(nameof(HasTags));
         OnPropertyChanged(nameof(HasSchedule));
         OnPropertyChanged(nameof(TagsDisplay));
@@ -240,6 +280,9 @@ public class NoteCardViewModel : ViewModelBase
             var context = navigator.GetPointerContext(LogicalDirection.Forward);
             if (context == TextPointerContext.Text)
             {
+                // In-line photo markers (\uFFFC) stay in the preview as position sentinels -
+                // the card renders a picture icon where each one sits (the photo's place in
+                // the text), instead of an "obj" glyph or a leading icon.
                 preview.Append(navigator.GetTextInRun(LogicalDirection.Forward));
             }
             else if (context == TextPointerContext.ElementEnd
@@ -259,10 +302,11 @@ public class NoteCardViewModel : ViewModelBase
         if (string.IsNullOrEmpty(text) || !text.Contains("[[ScriblucentImage:", StringComparison.Ordinal))
             return text;
 
+        // Legacy in-line photos also become position sentinels (the card renders the icon there).
         return System.Text.RegularExpressions.Regex.Replace(
             text,
             @"\[\[ScriblucentImage:[^\]]+\]\]",
-            string.Empty);
+            FloatingImageCoordinator.InlineMarkerChar.ToString());
     }
 
     private static void AppendSeparator(StringBuilder preview)

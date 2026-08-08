@@ -635,6 +635,14 @@
                             Style="{StaticResource EditorToolButtonBaseStyle}"
                             ToolTip="{Binding [InsertPicture], Source={StaticResource Loc}}"
                             Click="InsertPictureButton_Click"/>
+                    <Button x:Name="InsertCaptionButton"
+                            Content="{icons:Icon Kind=Tag, Size=15}"
+                            Width="32"
+                            Height="32"
+                            Margin="0,0,6,0"
+                            Style="{StaticResource EditorToolButtonBaseStyle}"
+                            ToolTip="{Binding [InsertCaption], Source={StaticResource Loc}}"
+                            Click="InsertCaptionButton_Click"/>
                     <Button x:Name="InsertLinkButton"
                             Content="{icons:Icon Kind=Link, Size=15}"
                             Width="32"

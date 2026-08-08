@@ -103,14 +103,37 @@ public class NoteImageResizeMathTests
     }
 
     [Fact]
-    public void ClampRectToBounds_Oversized_ShrinksToFitAndPinsOrigin()
+    public void ClampRectToBounds_Oversized_ShrinksToFitAndClampsPosition()
     {
+        // Shrink-to-fit preserves the intended position as much as the reachable area allows -
+        // never a blind (0,0) reset. 800x400 -> 200x100 in a 200x150 box: left pins to 0,
+        // top stays at 10 (there is 50px of vertical slack).
         var (left, top, w, h) = NoteImageResizeMath.ClampRectToBounds(10, 10, 800, 400, 200, 150);
         Assert.Equal(0, left, precision: 5);
-        Assert.Equal(0, top, precision: 5);
+        Assert.Equal(10, top, precision: 5);
         Assert.True(w <= 200 + 0.001);
         Assert.True(h <= 150 + 0.001);
         Assert.Equal(2.0, w / h, precision: 4);
+    }
+
+    [Fact]
+    public void ClampRectToBounds_RestoreMode_KeepsSizeAndClampsPosition()
+    {
+        // resizeToFit:false (the restore path) - a saved size is authoritative and is never
+        // shrunk; only the position is clamped to the nearest reachable spot.
+        var (left, top, w, h) = NoteImageResizeMath.ClampRectToBounds(950, 300, 400, 250, 1000, 800, lockAspectRatio: true, resizeToFit: false);
+        Assert.Equal(600, left, precision: 3); // clamped into the reachable width, NOT reset to 0
+        Assert.Equal(300, top, precision: 3);
+        Assert.Equal(400, w, precision: 3); // size untouched
+        Assert.Equal(250, h, precision: 3);
+
+        // Oversized in a small bounds: position clamps to the origin (nowhere else fits),
+        // but the size is still preserved instead of being shrunk into the box.
+        var (l2, t2, w2, h2) = NoteImageResizeMath.ClampRectToBounds(200, 300, 400, 250, 300, 200, lockAspectRatio: true, resizeToFit: false);
+        Assert.Equal(0, l2, precision: 3);
+        Assert.Equal(0, t2, precision: 3);
+        Assert.Equal(400, w2, precision: 3);
+        Assert.Equal(250, h2, precision: 3);
     }
 
     [Fact]
@@ -134,8 +157,8 @@ public class NoteImageResizeMathTests
     {
         var (left, top, w, h) = NoteImageResizeMath.ClampRectToBounds(
             10, 10, 40, 3000, 400, 500, lockAspectRatio: false);
-        Assert.Equal(0, left, precision: 5);
-        Assert.Equal(0, top, precision: 5);
+        Assert.Equal(10, left, precision: 5); // preserved - only the position is clamped
+        Assert.Equal(0, top, precision: 5);   // pins to the bottom of the reachable area
         Assert.Equal(NoteImageResizeMath.MinSideDip, w, precision: 5);
         Assert.Equal(500, h, precision: 5); // shrunk to fit bounds height, not aspect
     }

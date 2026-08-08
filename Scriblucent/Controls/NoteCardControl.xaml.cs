@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -33,20 +34,59 @@ public partial class NoteCardControl : UserControl
 
     private void OnCardLoaded(object sender, RoutedEventArgs e)
     {
-        if (ContentPreview is null || BindingOperations.GetBinding(ContentPreview, TextBlock.TextProperty) is not null)
+        if (ContentPreview is null)
             return;
 
-        ContentPreview.SetBinding(
-            TextBlock.TextProperty,
-            new Binding(nameof(NoteCardViewModel.Content))
-            {
-                FallbackValue = string.Empty
-            });
+        DataContextChanged += NoteCardControl_DataContextChanged;
+        RebuildContentPreview(DataContext as NoteCardViewModel);
+    }
+
+    private void NoteCardControl_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        => RebuildContentPreview(e.NewValue as NoteCardViewModel);
+
+    /// <summary>Builds the card preview as inlines: a vector picture icon wherever a photo
+    /// sentinel sits in the preview text (in-line photos at their text position, floating
+    /// photos trailing the text) - so a photo-only note never reads as an empty card and
+    /// text+photo notes show the photos where they belong.</summary>
+    private void RebuildContentPreview(NoteCardViewModel? viewModel)
+    {
+        ContentPreview.Inlines.Clear();
+        if (viewModel is null)
+            return;
+
+        var text = viewModel.Content ?? string.Empty;
+        var segments = text.Split(Scriblucent.Services.FloatingImageCoordinator.InlineMarkerChar);
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (segments[i].Length > 0)
+                ContentPreview.Inlines.Add(new Run(segments[i]));
+
+            if (i < segments.Length - 1)
+                ContentPreview.Inlines.Add(new InlineUIContainer(BuildPreviewPictureIcon())
+                {
+                    BaselineAlignment = BaselineAlignment.Center
+                });
+        }
+    }
+
+    private static UIElement BuildPreviewPictureIcon()
+    {
+        var icon = new Icons.AppIcon
+        {
+            Kind = Icons.AppIconKind.Image,
+            Width = 11,
+            Height = 11,
+            Margin = new Thickness(0, 0, 2, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        icon.SetResourceReference(TextElement.ForegroundProperty, "TextColorSecondary");
+        return icon;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        BindingOperations.ClearBinding(ContentPreview, TextBlock.TextProperty);
+        DataContextChanged -= NoteCardControl_DataContextChanged;
+        ContentPreview.Inlines.Clear();
         CardSurfaceMotionBehavior.Cleanup(this);
     }
 
