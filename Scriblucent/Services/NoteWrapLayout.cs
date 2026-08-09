@@ -94,9 +94,9 @@ public static class NoteWrapMath
 public sealed class NoteWrapLayoutEngine : IDisposable
 {
     private const int MaxConvergenceIterations = 16;
-    private const int LiveConvergenceIterations = 4;
+    private const int LiveConvergenceIterations = 1;
     private const double RecomputeDebounceMs = 120;
-    private const double LiveApplyIntervalMs = 50;
+    private const double LiveApplyIntervalMs = 66;
 
     /// <summary>The other lane must beat the currently used lane by at least this ratio before
     /// the paragraph's text flips sides around a photo - small moves must never make the text
@@ -108,6 +108,10 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         public required Paragraph Paragraph { get; init; }
         public required List<InlineUIContainer> Containers { get; init; }
         public required InlineCollection Host { get; init; }
+        /// <summary>Text position where the stack was inserted - stays valid across margin/element
+        /// changes (text positions are stable), so <see cref="CaptureWrapState"/> can restore the
+        /// stack verbatim after a serialization clear.</summary>
+        public required TextPointer Anchor { get; init; }
         public required double Top { get; init; }
         public required double LineHeight { get; init; }
         public double TotalHeight { get; set; }
@@ -132,7 +136,21 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     /// (Word-style per-line lane) - lines above and below the photo stay full-width, instead of
     /// the whole paragraph shoving to one side. Removed and re-placed on every pass.</summary>
     private readonly Dictionary<Paragraph, List<InlineUIContainer>> _squareLineSpacers = new();
-    private string? _lastSquareSpacerSignature;
+    /// <summary>Insertion positions of <see cref="_squareLineSpacers"/>' containers (parallel
+    /// lists per paragraph) - recorded so <see cref="CaptureWrapState"/> can restore them.</summary>
+    private readonly Dictionary<Paragraph, List<TextPointer>> _squareLineSpacerAnchors = new();
+    private long _lastSquareSpacerSignature;
+    /// <summary>Per-pass working sets, hoisted to fields (cleared per call) so the convergence
+    /// iterations and live drag ticks don't allocate fresh collections every pass.</summary>
+    private readonly HashSet<(Paragraph, Guid)> _usedLaneKeys = new();
+    private readonly HashSet<Paragraph> _rightLaneParagraphs = new();
+    private readonly Dictionary<Paragraph, (double Left, double Top, double Right)> _insets = new();
+    private readonly Dictionary<Paragraph, double> _topPushes = new();
+    private readonly HashSet<Paragraph> _neededSpacers = new();
+    private readonly List<(TextPointer Position, double Top, double Bottom)> _linesInRange = new();
+    private readonly List<double> _spacerWidths = new();
+    private readonly List<Paragraph> _workParagraphs = new();
+    private readonly List<(Paragraph Paragraph, Guid ImageId)> _workLaneKeys = new();
     private BlockUIContainer? _pushSpacer;
     private Paragraph? _pushSpacerTarget;
     private double _pushSpacerHeight;
@@ -220,14 +238,180 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         RemoveInlineSpacers();
         RemoveSquareLineSpacers();
         _squareRightBands.Clear();
-        _lastSquareSpacerSignature = null;
+        _lastSquareSpacerSignature = 0;
     }
 
-    /// <summary>Restores margins, then immediately recomputes them (after save/export).</summary>
-    public void Reapply()
+    /// <summary>Restores margins, then immediately recomputes them (after save/export).
+    /// With <paramref name="live"/> the recompute uses the fast live convergence (single pass
+    /// per phase, no render flush) - good enough to keep the wrap applied through a window
+    /// exit animation without the full pass's synchronous cost.</summary>
+    public void Reapply(bool live = false)
     {
         Clear();
-        Apply();
+        Apply(live);
+    }
+
+    /// <summary>
+    /// Point-in-time wrap state captured before a serialization <see cref="Clear"/> and restored
+    /// verbatim afterwards - the live view keeps its exact wrap (one layout, no convergence
+    /// recompute), so a save-and-close never shows the unwrapped reflow or a pre-animation stall.
+    /// </summary>
+    public sealed class WrapStateSnapshot
+    {
+        internal List<(Paragraph Paragraph, Thickness Applied, Thickness Original)> Margins { get; } = new();
+        internal List<KeyValuePair<(Paragraph Paragraph, Guid ImageId), int>> LaneSides { get; } = new();
+        internal List<InlinePlacement> InlineSpacers { get; } = new();
+        internal List<SquarePlacement> SquareSpacers { get; } = new();
+        internal Paragraph? PushTarget { get; set; }
+        internal double PushHeight { get; set; }
+        internal BlockUIContainer? PushContainer { get; set; }
+
+        internal sealed class InlinePlacement
+        {
+            public required Paragraph Paragraph { get; init; }
+            public required TextPointer Anchor { get; init; }
+            public required List<InlineUIContainer> Containers { get; init; }
+            public required double Top { get; init; }
+            public required double LineHeight { get; init; }
+            public required double TotalHeight { get; init; }
+        }
+
+        internal sealed class SquarePlacement
+        {
+            public required Paragraph Paragraph { get; init; }
+            public required TextPointer Anchor { get; init; }
+            public required InlineUIContainer Container { get; init; }
+        }
+    }
+
+    /// <summary>Captures the currently applied wrap (margins, lanes, spacers) so it can be
+    /// restored verbatim by <see cref="RestoreWrapState"/>. Returns null when nothing is applied.</summary>
+    public WrapStateSnapshot? CaptureWrapState()
+    {
+        if (_disposed || _editor.Document is null)
+            return null;
+
+        var snapshot = new WrapStateSnapshot();
+        foreach (var (paragraph, original) in _originalMargins)
+            snapshot.Margins.Add((paragraph, paragraph.Margin, original));
+        foreach (var kvp in _laneSides)
+            snapshot.LaneSides.Add(kvp);
+        foreach (var (paragraph, state) in _inlineSpacers)
+        {
+            snapshot.InlineSpacers.Add(new WrapStateSnapshot.InlinePlacement
+            {
+                Paragraph = paragraph,
+                Anchor = state.Anchor,
+                Containers = state.Containers,
+                Top = state.Top,
+                LineHeight = state.LineHeight,
+                TotalHeight = state.TotalHeight
+            });
+        }
+        foreach (var (paragraph, containers) in _squareLineSpacers)
+        {
+            if (!_squareLineSpacerAnchors.TryGetValue(paragraph, out var anchors) || anchors.Count != containers.Count)
+                continue;
+            for (var i = 0; i < containers.Count; i++)
+            {
+                snapshot.SquareSpacers.Add(new WrapStateSnapshot.SquarePlacement
+                {
+                    Paragraph = paragraph,
+                    Anchor = anchors[i],
+                    Container = containers[i]
+                });
+            }
+        }
+        if (_pushSpacer is not null && _pushSpacerTarget is not null)
+        {
+            snapshot.PushTarget = _pushSpacerTarget;
+            snapshot.PushHeight = _pushSpacerHeight;
+            snapshot.PushContainer = _pushSpacer;
+        }
+
+        if (snapshot.Margins.Count == 0
+            && snapshot.InlineSpacers.Count == 0
+            && snapshot.SquareSpacers.Count == 0
+            && snapshot.PushContainer is null)
+        {
+            return null;
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>
+    /// Restores a state captured by <see cref="CaptureWrapState"/>: re-applies the margins,
+    /// re-inserts the spacer stacks at their recorded anchors (text positions are stable across
+    /// the clear - only margins/elements changed), and lays out once. Returns whether anything
+    /// was restored. Requires the engine to be in the cleared state (e.g. after a serialization
+    /// <see cref="Clear"/>); calling it over an already-wrapped flow would duplicate spacers.
+    /// </summary>
+    public bool RestoreWrapState(WrapStateSnapshot? snapshot)
+    {
+        if (snapshot is null || _disposed || _editor.Document is null)
+            return false;
+
+        var restored = false;
+        foreach (var (paragraph, applied, original) in snapshot.Margins)
+        {
+            if (paragraph.Parent is null)
+                continue;
+            paragraph.Margin = applied;
+            _originalMargins[paragraph] = original;
+            restored = true;
+        }
+
+        foreach (var kvp in snapshot.LaneSides)
+            _laneSides[kvp.Key] = kvp.Value;
+
+        foreach (var placement in snapshot.SquareSpacers)
+        {
+            if (placement.Paragraph.Parent is null)
+                continue;
+            InsertInlineStack(placement.Paragraph, placement.Anchor, new Inline[] { placement.Container });
+            if (!_squareLineSpacers.TryGetValue(placement.Paragraph, out var list))
+                _squareLineSpacers[placement.Paragraph] = list = new List<InlineUIContainer>();
+            list.Add(placement.Container);
+            if (!_squareLineSpacerAnchors.TryGetValue(placement.Paragraph, out var anchors))
+                _squareLineSpacerAnchors[placement.Paragraph] = anchors = new List<TextPointer>();
+            anchors.Add(placement.Anchor);
+            restored = true;
+        }
+
+        foreach (var placement in snapshot.InlineSpacers)
+        {
+            if (placement.Paragraph.Parent is null || placement.Containers.Count == 0)
+                continue;
+            var host = InsertInlineStack(placement.Paragraph, placement.Anchor, placement.Containers);
+            _inlineSpacers[placement.Paragraph] = new InlineSpacerState
+            {
+                Paragraph = placement.Paragraph,
+                Containers = placement.Containers,
+                Host = host,
+                Anchor = placement.Anchor,
+                Top = placement.Top,
+                LineHeight = placement.LineHeight,
+                TotalHeight = placement.TotalHeight
+            };
+            restored = true;
+        }
+
+        if (snapshot.PushContainer is not null && snapshot.PushTarget is not null
+            && snapshot.PushTarget.Parent is not null
+            && _editor.Document.Blocks.Contains(snapshot.PushTarget))
+        {
+            _editor.Document.Blocks.InsertBefore(snapshot.PushTarget, snapshot.PushContainer);
+            _pushSpacer = snapshot.PushContainer;
+            _pushSpacerTarget = snapshot.PushTarget;
+            _pushSpacerHeight = snapshot.PushHeight;
+            restored = true;
+        }
+
+        if (restored)
+            _editor.UpdateLayout();
+
+        return restored;
     }
 
     /// <summary>Recomputes wrap insets and applies them as paragraph margins.</summary>
@@ -284,12 +468,20 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         }
 
         _isApplying = true;
+        // The wrap's spacer mutations fire the editor's TextChanged per event, and the
+        // coordinator's marker sweep walks the whole document on every one of them - while the
+        // wrap never produces the marker char the sweep hunts (it comes from the save/load/undo
+        // paths). Suppress the sweep across the pass; the prior value is restored so a host-side
+        // suppression (document load) is never clobbered.
+        var priorSweepSuppression = _images.SuppressMarkerSweep;
+        _images.SuppressMarkerSweep = true;
         try
         {
             ApplyWithConvergence(sessions, paragraphs, contentWidth, live);
         }
         finally
         {
+            _images.SuppressMarkerSweep = priorSweepSuppression;
             _isApplying = false;
         }
     }
@@ -302,18 +494,24 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     {
         // Inline spacers are NOT wiped here - they are updated in place during Phase B so small
         // image adjustments (which keep the same split line) only change the reserved height
-        // instead of reflowing the paragraph's text (visible flashing).
+        // instead of reflowing the paragraph's text (visible flashing). The pre-pass layout
+        // ensures the measurements below see the settled geometry. Live ticks skip both: they
+        // start from the current margins (no reset-to-zero snap), nothing changes the flow
+        // between drag ticks except our own writes, and every tick ends with the convergence
+        // loop's own layout - so the geometry is already current (one less full layout per tick).
         if (!live)
+        {
             ResetTransientMargins();
-        _editor.UpdateLayout();
+            _editor.UpdateLayout();
+        }
 
-        var topPushes = new Dictionary<Paragraph, double>();
+        _topPushes.Clear();
         var maxIterations = live ? LiveConvergenceIterations : MaxConvergenceIterations;
 
         // Phase A: converge Square lanes only - no top pushes yet, so straddling paragraphs
         // keep their pre-push geometry and the between-lines split positions are measured
         // from a settled layout.
-        Converge(sessions, paragraphs, contentWidth, topPushes, allowTopPushes: false, maxIterations, live);
+        Converge(sessions, paragraphs, contentWidth, _topPushes, allowTopPushes: false, maxIterations, live);
 
         // Phase B: for straddling paragraphs, reserve the band "between lines" with a transient
         // inline spacer (Word-style split inside the paragraph). Table cells are excluded -
@@ -325,8 +523,14 @@ public sealed class NoteWrapLayoutEngine : IDisposable
 
         // Phase C: re-converge with top pushes (whole-paragraph pushes for paragraphs that start
         // inside a band; the ratchet) - the spacers shift the flow below their bands, Square
-        // membership re-adapts.
-        Converge(sessions, paragraphs, contentWidth, topPushes, allowTopPushes: true, maxIterations, live);
+        // membership re-adapts. Only a TopAndBottom image can produce pushes or straddling
+        // splits, so a square-only note (the common drag case) skips this phase entirely - it
+        // would re-run the same computation with empty pushes: two full document layouts per
+        // pass for nothing (the drag CPU is dominated by these layouts).
+        if (sessions.Any(s => s.WrapMode == NoteImageWrapMode.TopAndBottom))
+        {
+            Converge(sessions, paragraphs, contentWidth, _topPushes, allowTopPushes: true, maxIterations, live);
+        }
     }
 
     /// <summary>Clears transient margins and the block spacer, keeping inline spacers intact so
@@ -354,21 +558,28 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     {
         for (var iteration = 0; iteration < maxIterations; iteration++)
         {
-            _squareRightBands.Clear(); // rebuilt by ComputeParagraphInsets below
-            var next = ComputeParagraphInsets(sessions, paragraphs, contentWidth, topPushes, live);
+            var next = ComputeParagraphInsets(sessions, paragraphs, contentWidth, topPushes);
             var marginsChanged = ApplyParagraphInsets(next);
+
             // Live ticks (image drag/resize) reflow the Square lanes too, so the words are
             // pushed around the moving photo in real time - the same live feel TopAndBottom
             // has. The re-apply is throttled and converges in a couple of passes.
-            var spacersChanged = ReplaceSquareLineSpacers();
+            var spacersChanged = ReplaceSquareLineSpacers(live);
+
             _editor.UpdateLayout();
 
-            // WPF defers FlowDocument text layout: character rects stay stale after a paragraph
-            // margin change until the queued layout work runs, which would make every re-measure
-            // see the pre-margin position and grow pushes forever. Flush the queue so the next
-            // measurement reflects the margins just applied.
-            _editor.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
-            _editor.UpdateLayout();
+            if (!live)
+            {
+                // WPF defers FlowDocument text layout: character rects stay stale after a paragraph
+                // margin change until the queued layout work runs, which would make every re-measure
+                // see the pre-margin position and grow pushes forever. Flush the queue so the next
+                // measurement reflects the margins just applied. Live ticks skip this: they are
+                // transient (the next tick and the gesture-end full pass re-settle the final state),
+                // so each tick runs a single layout pass instead of a layout + pump + layout - the
+                // drag smoothness win.
+                _editor.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                _editor.UpdateLayout();
+            }
 
             var grew = allowTopPushes && GrowTopPushes(sessions, paragraphs, topPushes);
             if (!marginsChanged && !grew && !spacersChanged)
@@ -435,15 +646,14 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         IReadOnlyList<NoteImageSession> sessions,
         IReadOnlyList<Paragraph> paragraphs,
         double contentWidth,
-        IReadOnlyDictionary<Paragraph, double> topPushes,
-        bool live)
+        IReadOnlyDictionary<Paragraph, double> topPushes)
     {
         const int laneLeft = 1;
         const int laneRight = 2;
 
-        var insets = new Dictionary<Paragraph, (double Left, double Top, double Right)>();
-        var usedLaneKeys = new HashSet<(Paragraph, Guid)>();
-        var rightLaneParagraphs = new HashSet<Paragraph>();
+        _insets.Clear();
+        _usedLaneKeys.Clear();
+        _rightLaneParagraphs.Clear();
         foreach (var paragraph in paragraphs)
         {
             if (GetParagraphDocumentExtent(paragraph) is not { } extent)
@@ -505,18 +715,21 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                 }
 
                 _laneSides[laneKey] = side;
-                usedLaneKeys.Add(laneKey);
+                _usedLaneKeys.Add(laneKey);
 
                 if (side == laneRight)
                 {
                     // Right lane: the inset is applied PER LINE via transient leading spacers
                     // (ReplaceSquareLineSpacers) - the paragraph itself is NOT indented, so the
                     // lines above and below the photo keep full width. Only the lines inside
-                    // the band are shortened.
+                    // the band are shortened. The per-paragraph band list is rebuilt in place
+                    // (reused across passes) to avoid per-iteration allocations.
                     if (!_squareRightBands.TryGetValue(paragraph, out var bands))
                         _squareRightBands[paragraph] = bands = new List<(double, double, double, double)>();
+                    else
+                        bands.Clear();
                     bands.Add((wrapTop, wrapBottom, wrapLeft, wrapRight));
-                    rightLaneParagraphs.Add(paragraph);
+                    _rightLaneParagraphs.Add(paragraph);
                 }
                 else
                 {
@@ -528,23 +741,29 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                 top = Math.Max(top, push);
 
             if (left > 0 || top > 0 || right > 0)
-                insets[paragraph] = (left, top, right);
+                _insets[paragraph] = (left, top, right);
         }
 
         // Forget sides and bands for paragraphs that no longer wrap any image.
-        foreach (var key in _laneSides.Keys.ToList())
+        _workLaneKeys.Clear();
+        foreach (var key in _laneSides.Keys)
         {
-            if (!usedLaneKeys.Contains(key))
-                _laneSides.Remove(key);
+            if (!_usedLaneKeys.Contains(key))
+                _workLaneKeys.Add(key);
         }
+        foreach (var key in _workLaneKeys)
+            _laneSides.Remove(key);
 
-        foreach (var key in _squareRightBands.Keys.ToList())
+        _workParagraphs.Clear();
+        foreach (var key in _squareRightBands.Keys)
         {
-            if (!rightLaneParagraphs.Contains(key))
-                _squareRightBands.Remove(key);
+            if (!_rightLaneParagraphs.Contains(key))
+                _workParagraphs.Add(key);
         }
+        foreach (var key in _workParagraphs)
+            _squareRightBands.Remove(key);
 
-        return insets;
+        return _insets;
     }
 
     private bool ApplyParagraphInsets(
@@ -596,13 +815,16 @@ public sealed class NoteWrapLayoutEngine : IDisposable
 
         if (includeSides)
         {
-            foreach (var (paragraph, original) in _originalMargins.ToList())
+            _workParagraphs.Clear();
+            foreach (var paragraph in _originalMargins.Keys)
             {
-                if (insets.ContainsKey(paragraph))
-                    continue;
-
+                if (!insets.ContainsKey(paragraph))
+                    _workParagraphs.Add(paragraph);
+            }
+            foreach (var paragraph in _workParagraphs)
+            {
+                _originalMargins.Remove(paragraph, out var original);
                 paragraph.Margin = original;
-                _originalMargins.Remove(paragraph);
                 changed = true;
             }
         }
@@ -620,15 +842,23 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     /// fall inside a Square-wrapped photo's band (the Word-style per-line lane). Lines above and
     /// below the band keep full width, so pushing a photo into a text block no longer shoves the
     /// whole paragraph to one side. Returns whether the placement changed (convergence signal).
+    /// With <paramref name="live"/> the post-removal layout is skipped: the measurements run
+    /// against the previous tick's geometry (a couple of px stale - the drag's transient state
+    /// and the gesture-end full pass settle exactly), which avoids re-formatting the wrapped
+    /// paragraphs' text on every tick - the dominant cost of a drag.
     /// </summary>
-    private bool ReplaceSquareLineSpacers()
+    private bool ReplaceSquareLineSpacers(bool live = false)
     {
         RemoveSquareLineSpacers();
-        // The removal above leaves the flow's character rects stale until a layout pass - the
-        // line-start measurements below would otherwise see the previous pass's geometry and
-        // re-place the spacers at the wrong lines every pass (slow oscillation instead of the
-        // 2-pass convergence).
-        _editor?.UpdateLayout();
+
+        if (!live)
+        {
+            // The removal above leaves the flow's character rects stale until a layout pass - the
+            // line-start measurements below would otherwise see the previous pass's geometry and
+            // re-place the spacers at the wrong lines every pass (slow oscillation instead of the
+            // 2-pass convergence).
+            _editor?.UpdateLayout();
+        }
 
         if (_squareRightBands.Count > 0)
         {
@@ -709,12 +939,15 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                     if (!_squareLineSpacers.TryGetValue(paragraph, out var list))
                         _squareLineSpacers[paragraph] = list = new List<InlineUIContainer>();
                     list.Add(container);
+                    if (!_squareLineSpacerAnchors.TryGetValue(paragraph, out var anchors))
+                        _squareLineSpacerAnchors[paragraph] = anchors = new List<TextPointer>();
+                    anchors.Add(position);
                 }
             }
         }
 
         var signature = BuildSquareSpacerSignature();
-        if (string.Equals(signature, _lastSquareSpacerSignature, StringComparison.Ordinal))
+        if (signature == _lastSquareSpacerSignature)
             return false;
 
         _lastSquareSpacerSignature = signature;
@@ -738,53 +971,60 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         }
 
         _squareLineSpacers.Clear();
+        _squareLineSpacerAnchors.Clear();
     }
 
     /// <summary>Signature of the current spacer placement (paragraph offset, sorted spacer widths)
     /// so the convergence loop can tell "placed the same things as last pass" without depending on
-    /// element-position offsets, which are not stable across transient re-insertions.</summary>
-    private string BuildSquareSpacerSignature()
+    /// element-position offsets, which are not stable across transient re-insertions. A numeric
+    /// hash (no string/formatting allocations) - a hash collision only means "treated as
+    /// unchanged", which costs one convergence iteration at most.</summary>
+    private long BuildSquareSpacerSignature()
     {
         if (_editor?.Document is null || _squareLineSpacers.Count == 0)
-            return string.Empty;
+            return 0;
 
-        var builder = new System.Text.StringBuilder();
+        var hash = 17L;
         foreach (var (paragraph, containers) in _squareLineSpacers
             .OrderBy(kv => _editor.Document.ContentStart.GetOffsetToPosition(kv.Key.ContentStart)))
         {
-            builder.Append(_editor.Document.ContentStart.GetOffsetToPosition(paragraph.ContentStart)).Append(':');
-            var widths = containers
-                .Select(c => c.Child is Border { Width: var width } ? width : 0d)
-                .OrderBy(width => width)
-                .Select(width => width.ToString("F1", System.Globalization.CultureInfo.InvariantCulture));
-            builder.Append(string.Join(",", widths)).Append(';');
+            hash = unchecked(hash * 31 + _editor.Document.ContentStart.GetOffsetToPosition(paragraph.ContentStart));
+
+            _spacerWidths.Clear();
+            foreach (var container in containers)
+                _spacerWidths.Add(container.Child is Border { Width: var width } ? width : 0d);
+            _spacerWidths.Sort();
+
+            foreach (var width in _spacerWidths)
+                hash = unchecked(hash * 31 + (long)Math.Round(width * 100));
         }
 
-        return builder.ToString();
+        return hash;
     }
 
     /// <summary>First text position of every line of the paragraph that falls inside
     /// [<paramref name="bandTop"/>, <paramref name="bandBottom"/>], with each line's document-space
-    /// vertical extent and its end bound (the next line's start, or the paragraph end). Found by
-    /// binary search on the monotonic line tops - a per-character rect walk is far too slow for
-    /// live drag ticks.</summary>
+    /// vertical extent and its end bound (the next line's start, or the paragraph end). The entry
+    /// line is found by binary search on the monotonic line tops, then lines are walked one by one
+    /// via the text container's line structure (<see cref="TextPointer.GetLineStartPosition"/>) -
+    /// the per-line binary searches they replace were the dominant rect-read cost of a drag tick.</summary>
     private List<(TextPointer Position, double Top, double Bottom)> FindLinesInRange(
         Paragraph paragraph,
         double bandTop,
         double bandBottom)
     {
-        var result = new List<(TextPointer, double, double)>();
+        _linesInRange.Clear();
         if (paragraph.ContentStart.GetOffsetToPosition(paragraph.ContentEnd) == 0)
-            return result;
+            return _linesInRange;
 
         // A position on the band's first line, then that line's very first character.
         var entry = FindSplitPoint(paragraph, bandTop);
         if (entry is null)
-            return result;
+            return _linesInRange;
 
         var entryRect = entry.GetCharacterRect(LogicalDirection.Forward);
         if (entryRect.IsEmpty)
-            return result;
+            return _linesInRange;
 
         var current = FindFirstPositionWithTopAtLeast(paragraph, entryRect.Top);
         while (current is not null)
@@ -793,16 +1033,16 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             if (rect.IsEmpty || rect.Top > bandBottom + 0.5)
                 break;
 
-            result.Add((current, rect.Top, rect.Bottom));
+            _linesInRange.Add((current, rect.Top, rect.Bottom));
 
-            var next = FindFirstPositionWithTopAtLeast(paragraph, rect.Top + 0.6);
-            if (next is null || ReferenceEquals(next, current))
+            var next = current.GetLineStartPosition(1);
+            if (next is null || next.CompareTo(paragraph.ContentEnd) >= 0)
                 break;
 
             current = next;
         }
 
-        return result;
+        return _linesInRange;
     }
 
     /// <summary>First text position inside the line [<paramref name="lineStart"/>, <paramref name="lineEnd"/>)
@@ -948,6 +1188,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         IReadOnlyList<Paragraph> paragraphs,
         double contentWidth)
     {
+        _neededSpacers.Clear();
         var bands = new List<(double Top, double Bottom)>();
         foreach (var session in sessions)
         {
@@ -962,6 +1203,12 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                 NoteWrapMath.DefaultWrapGap);
             bands.Add((wrapTop, wrapBottom));
         }
+
+        // No TopAndBottom image at all (the common square-only note): nothing can straddle a
+        // band - skip the per-paragraph extent reads entirely (a drag tick used to pay them
+        // every time, on top of the Square lane pass).
+        if (bands.Count == 0)
+            return _neededSpacers;
 
         var needed = new HashSet<Paragraph>();
         foreach (var paragraph in paragraphs)
@@ -983,22 +1230,25 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             if (bandTop is not null && extent.Top < bandTop.Value && !IsInsideTableCell(paragraph))
             {
                 EnsureInlineSpacer(paragraph, bandTop.Value, bandBottom!.Value, contentWidth);
-                needed.Add(paragraph);
+                _neededSpacers.Add(paragraph);
             }
         }
 
-        return needed;
+        return _neededSpacers;
     }
 
     private void RemoveObsoleteInlineSpacers(HashSet<Paragraph> needed)
     {
-        foreach (var paragraph in _inlineSpacers.Keys.ToList())
+        _workParagraphs.Clear();
+        foreach (var paragraph in _inlineSpacers.Keys)
         {
             if (!needed.Contains(paragraph))
-            {
-                RemoveInlineSpacer(_inlineSpacers[paragraph]);
-                _inlineSpacers.Remove(paragraph);
-            }
+                _workParagraphs.Add(paragraph);
+        }
+        foreach (var paragraph in _workParagraphs)
+        {
+            RemoveInlineSpacer(_inlineSpacers[paragraph]);
+            _inlineSpacers.Remove(paragraph);
         }
     }
 
@@ -1055,6 +1305,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             Paragraph = paragraph,
             Containers = containers,
             Host = host,
+            Anchor = newSplitPoint,
             Top = spacerTop,
             LineHeight = lineHeight,
             TotalHeight = height

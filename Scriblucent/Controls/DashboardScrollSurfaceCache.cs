@@ -18,6 +18,13 @@ internal static class DashboardScrollSurfaceCache
     private const int ReleasesPerFrame = 8;
     private const double LargeViewportHeightThreshold = 760;
     private const double LargeViewportWidthThreshold = 1160;
+    /// <summary>Hard bound on how many surfaces stay rasterized at once - the cache scales with
+    /// the realized (viewport) set, never the item count, and can never exceed this many.</summary>
+    private const int MaxAppliedSurfaces = 64;
+    /// <summary>How long prewarmed/hold caches may persist without any scroll activity before
+    /// they are released - memory returns during normal use; a scroll inside the window stays
+    /// smooth because the caches are still warm.</summary>
+    private const double IdleReleaseDelaySeconds = 10;
 
     private static readonly Queue<FrameworkElement> Pending = new();
     private static readonly Dictionary<FrameworkElement, CacheMode?> Applied = new();
@@ -26,6 +33,7 @@ internal static class DashboardScrollSurfaceCache
     private static bool _prewarmActive;
     private static bool _largeViewport;
     private static bool _flushScheduled;
+    private static DispatcherTimer? _idleReleaseTimer;
 
     public static int AppliedCount => Applied.Count;
     public static int PendingCount => Pending.Count;
@@ -37,6 +45,7 @@ internal static class DashboardScrollSurfaceCache
         _releaseQueue = null;
         _flushScheduled = false;
         _prewarmActive = false;
+        DisarmIdleRelease();
 
         _largeViewport = IsLargeViewport(scrollViewer);
         _sessionActive = _largeViewport;
@@ -50,6 +59,7 @@ internal static class DashboardScrollSurfaceCache
     {
         _releaseQueue = null;
         _prewarmActive = false;
+        DisarmIdleRelease();
         _largeViewport = IsLargeViewport(scrollViewer);
         _sessionActive = _largeViewport;
 
@@ -81,6 +91,7 @@ internal static class DashboardScrollSurfaceCache
         _releaseQueue = null;
         _largeViewport = true;
         _prewarmActive = true;
+        DisarmIdleRelease();
 
         foreach (var surface in surfaces)
             EnqueueSurface(surface);
@@ -94,6 +105,7 @@ internal static class DashboardScrollSurfaceCache
         _sessionActive = false;
         _prewarmActive = false;
         _largeViewport = false;
+        DisarmIdleRelease();
 
         foreach (var (surface, cacheMode) in Applied.ToList())
             surface.CacheMode = cacheMode;
@@ -112,6 +124,7 @@ internal static class DashboardScrollSurfaceCache
         _sessionActive = false;
         _prewarmActive = false;
         _largeViewport = false;
+        DisarmIdleRelease();
 
         if (Applied.Count == 0)
         {
@@ -126,6 +139,11 @@ internal static class DashboardScrollSurfaceCache
     private static void EnqueueSurface(FrameworkElement surface)
     {
         if (surface.CacheMode is BitmapCache || Applied.ContainsKey(surface))
+            return;
+
+        // The cache is bounded: once the realized-set budget is reached, further surfaces are
+        // simply left uncached (they repaint per frame) instead of growing the raster memory.
+        if (Applied.Count >= MaxAppliedSurfaces)
             return;
 
         Pending.Enqueue(surface);
@@ -207,7 +225,40 @@ internal static class DashboardScrollSurfaceCache
         if (Pending.Count > 0)
             ScheduleFlush();
         else if (_prewarmActive && !_sessionActive)
+        {
             _prewarmActive = false;
+            // The prewarmed caches stay for the interaction window, then release on idle so the
+            // memory returns during normal use (the next fling re-warms on demand).
+            ArmIdleRelease();
+        }
+    }
+
+    /// <summary>Arms a one-shot idle timer: with no scroll activity for <see cref="IdleReleaseDelaySeconds"/>,
+    /// held (prewarmed/hold) caches are released a few surfaces per frame at Background priority.</summary>
+    private static void ArmIdleRelease()
+    {
+        if (Applied.Count == 0 || _sessionActive)
+            return;
+
+        _idleReleaseTimer ??= new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(IdleReleaseDelaySeconds)
+        };
+        _idleReleaseTimer.Stop();
+        _idleReleaseTimer.Tick -= OnIdleRelease;
+        _idleReleaseTimer.Tick += OnIdleRelease;
+        _idleReleaseTimer.Start();
+    }
+
+    private static void DisarmIdleRelease()
+    {
+        _idleReleaseTimer?.Stop();
+    }
+
+    private static void OnIdleRelease(object? sender, EventArgs e)
+    {
+        if (!_sessionActive && !_prewarmActive && Applied.Count > 0)
+            EndSessionStaggered();
     }
 
     private static bool IsLargeViewport(ScrollViewer scrollViewer)

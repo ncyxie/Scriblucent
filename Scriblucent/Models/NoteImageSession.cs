@@ -1,5 +1,7 @@
 namespace Scriblucent.Models;
 
+using System.Windows.Media.Imaging;
+
 /// <summary>Numbering style for image captions (LibreOffice's Insert Caption numbering list).</summary>
 public enum CaptionNumbering
 {
@@ -60,6 +62,23 @@ public sealed class NoteImageSession
     public double NaturalPixelWidth { get; set; }
     public double NaturalPixelHeight { get; set; }
     public int DecodePixelWidth { get; set; }
+    /// <summary>
+    /// Cached frozen display source - the decode-width-optimized view of <see cref="Bytes"/>.
+    /// Null until first decoded; the coordinator reuses it (and re-decodes only when the
+    /// needed decode width exceeds <see cref="DecodePixelWidth"/>). Invalidate whenever the
+    /// picture data changes. Frozen sources are immutable and safe to share.
+    /// </summary>
+    public BitmapSource? DisplaySource { get; set; }
+    /// <summary>
+    /// Cached Base64 encoding of <see cref="Bytes"/> - the save path builds attachments on
+    /// every auto-save, and re-encoding the (immutable) bytes each time churns large strings.
+    /// Computed lazily by <see cref="Scriblucent.Services.FloatingImageCoordinator.BuildAttachments"/>
+    /// (used only when no media directory is available); invalidate whenever the picture data changes.
+    /// </summary>
+    public string? AttachmentData { get; set; }
+    /// <summary>Cached absolute path of the photo's media file (written once per session by the
+    /// coordinator) - subsequent attachment builds reference it instead of re-writing.</summary>
+    public string? MediaFilePath { get; set; }
     public double DocumentLeft { get; set; }
     public double DocumentTop { get; set; }
     public double Width { get; set; }
@@ -90,6 +109,13 @@ public sealed class NoteImageSession
     /// <summary>Current sequence number within the label (transient - assigned by the
     /// renumber pass, never persisted).</summary>
     public int CaptionNumber { get; set; }
+
+    /// <summary>
+    /// Cached rendered caption text - synced photos re-render their captions on every drag,
+    /// resize and scroll pass, so the (rarely changing) string is built once and invalidated
+    /// by the caption mutations and the renumber pass.
+    /// </summary>
+    public string? CaptionDisplayText { get; set; }
 
     public bool HasCaption => CaptionLabel is not null;
 

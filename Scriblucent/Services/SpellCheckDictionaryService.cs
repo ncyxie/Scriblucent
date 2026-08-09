@@ -403,7 +403,9 @@ internal static class SpellCheckDictionaryService
         if (!File.Exists(dicPath) || !File.Exists(affPath))
             return null;
 
-        var wordList = await WordList.CreateFromFilesAsync(dicPath, affPath, cancellationToken);
+        // The Hunspell parse of a full dictionary is heavy CPU (hundreds of ms) - run it fully
+        // off the UI thread so the first spell-check pass of a session never hitches the editor.
+        var wordList = await Task.Run(() => WordList.CreateFromFilesAsync(dicPath, affPath, cancellationToken));
         LoadedDictionaries[key] = wordList;
         return wordList;
     }

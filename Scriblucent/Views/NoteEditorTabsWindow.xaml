@@ -8,6 +8,7 @@
         Height="720"
         Width="1050"
         WindowStartupLocation="CenterOwner"
+        Icon="/logo.ico"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         Background="{DynamicResource FeatureFrameBackground}">

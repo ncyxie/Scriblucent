@@ -440,6 +440,187 @@ public class InlineImageTests
     public void InlineResize_LockOnLeftHandle_ScalesProportionally()
         => RunOnSta(RunLockOnLeftHandleProbe);
 
+    [Fact]
+    public void DecodeCache_ReusesFrozenSource()
+        => RunOnSta(RunDecodeCacheProbe);
+
+    [Fact]
+    public void RestoreAsync_ManyPhotos_AllMaterialize()
+        => RunOnSta(RunRestoreAsyncProbe);
+
+    private static void RunDecodeCacheProbe()
+    {
+        // The session caches its frozen display source: conversions and re-syncs must reuse
+        // the same instance (no re-decode), and only growing beyond the decode budget (the
+        // decode width headroom) re-decodes and updates the cache.
+        using var harness = CreateHarness();
+        var dpi = VisualTreeHelper.GetDpi(harness.Editor).DpiScaleX;
+        Assert.True(NoteImageLoader.TryLoadFromBytes(CreatePngBytes(1200, 900), 200, dpi, out var load, out var error), error);
+        var id = harness.Coordinator.Insert(load!, 200, 150, new Point(40, 40));
+        Assert.NotNull(id);
+        harness.Editor.UpdateLayout();
+
+        var widget = harness.Overlay.Children.OfType<NoteImageWidget>().First(w => w.ImageId == id);
+        var source1 = widget.Source;
+        Assert.NotNull(source1);
+
+        // Floating -> inline -> floating conversions must reuse the cached source.
+        harness.Coordinator.SetWrapMode(id!.Value, NoteImageWrapMode.Square);
+        harness.Coordinator.SetWrapMode(id.Value, NoteImageWrapMode.Inline);
+        harness.Coordinator.SetWrapMode(id.Value, NoteImageWrapMode.None);
+        harness.Editor.UpdateLayout();
+        var widget2 = harness.Overlay.Children.OfType<NoteImageWidget>().First(w => w.ImageId == id);
+        Assert.True(ReferenceEquals(source1, widget2.Source), "conversions must reuse the cached frozen source");
+
+        // 200px wide -> decode budget 600px. Growing to ~238px raises the budget above the
+        // cached width (the natural 1200px cap is far above), so a re-decode replaces it.
+        var widthBefore = widget2.Width;
+        var thumb = FindVisualChildren<Thumb>(widget2).First(t => Equals(t.Tag, "BR"));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(60, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        harness.Editor.UpdateLayout();
+
+        Assert.True(widget2.Width > widthBefore, $"the resize must have applied, got {widget2.Width:F1}");
+        Assert.False(ReferenceEquals(source1, widget2.Source), "growing beyond the decode budget must re-decode");
+    }
+
+    private static void RunRestoreAsyncProbe()
+    {
+        // The async restore decodes off the UI thread and materializes on it - every photo
+        // must appear, with the decoded sources seeded onto the sessions' caches.
+        using var harness = CreateHarness();
+        harness.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        var attachments = new List<NoteImageAttachment>();
+        for (var i = 0; i < 8; i++)
+            attachments.Add(BuildAttachment(40, 100 + i * 160));
+        harness.Coordinator.Clear(raiseChanged: false);
+
+        var task = harness.Coordinator.RestoreAsync(attachments);
+        PumpDispatcherUntil(() => task.IsCompleted);
+        task.GetAwaiter().GetResult();
+        harness.Editor.UpdateLayout();
+
+        Assert.Equal(8, harness.Overlay.Children.OfType<NoteImageWidget>().Count());
+        Assert.Equal(8, harness.Coordinator.BuildAttachments().Count());
+    }
+
+    [Fact]
+    public void BuildAttachments_CachesBase64Data()
+        => RunOnSta(RunBuildAttachmentsCacheProbe);
+
+    private static void RunBuildAttachmentsCacheProbe()
+    {
+        // The photo bytes are immutable between picture replacements - the save path must
+        // reuse the cached Base64 instead of re-encoding every photo on every auto-save.
+        using var harness = CreateHarness();
+        var first = harness.Coordinator.BuildAttachments().Single();
+        var second = harness.Coordinator.BuildAttachments().Single();
+        Assert.True(ReferenceEquals(first.Data, second.Data), "the Base64 encoding must be cached across saves");
+        Assert.Equal(Convert.ToBase64String(File.ReadAllBytes(FixturePath)), first.Data);
+
+        // Replacing the picture invalidates the cache and the next build encodes the new bytes.
+        Assert.True(NoteImageLoader.TryLoadFromBytes(CreatePngBytes(400, 300), 200, 1.0, out var load, out var error), error);
+        Assert.True(harness.Coordinator.ReplaceImageBytes(harness.ImageId, load!));
+        var replaced = harness.Coordinator.BuildAttachments().Single();
+        Assert.False(ReferenceEquals(first.Data, replaced.Data), "replacing the picture must invalidate the cached encoding");
+        Assert.Equal(Convert.ToBase64String(load!.Bytes), replaced.Data);
+    }
+
+    [Fact]
+    public void CaptionText_UpdatesOnChange_AndStaysCached()
+        => RunOnSta(RunCaptionCacheProbe);
+
+    private static void RunCaptionCacheProbe()
+    {
+        // Caption text is cached per session and rebuilt only when the settings or the
+        // renumbering change - the rendered caption must follow every mutation.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetCaption(
+            harness.ImageId,
+            new FloatingImageCoordinator.CaptionSettings("Figure", "A sample", CaptionNumbering.Arabic, ": ", CaptionPosition.Below, false));
+        harness.Editor.UpdateLayout();
+
+        var caption = harness.Overlay.Children.OfType<TextBlock>().First(t => !string.IsNullOrEmpty(t.Text));
+        Assert.Equal("Figure 1: A sample", caption.Text);
+
+        // Changing the label renumbers and refreshes the rendered caption.
+        harness.Coordinator.SetCaption(
+            harness.ImageId,
+            new FloatingImageCoordinator.CaptionSettings("Table", "A sample", CaptionNumbering.Arabic, ": ", CaptionPosition.Below, false));
+        harness.Editor.UpdateLayout();
+        Assert.Equal("Table 1: A sample", caption.Text);
+
+        // Removing the caption removes the element.
+        harness.Coordinator.RemoveCaption(harness.ImageId);
+        harness.Editor.UpdateLayout();
+        Assert.DoesNotContain(harness.Overlay.Children.OfType<TextBlock>(), t => !string.IsNullOrEmpty(t.Text));
+    }
+
+    [Fact]
+    public void WidgetResize_TogglesBitmapScalingMode()
+        => RunOnSta(RunWidgetScalingModeProbe);
+
+    private static void RunWidgetScalingModeProbe()
+    {
+        // The image re-scales on every drag frame - the widget renders it with the cheap
+        // Linear filter during a resize gesture and switches back to HighQuality at rest.
+        using var harness = CreateHarness();
+        harness.Editor.UpdateLayout();
+        var widget = harness.Overlay.Children.OfType<NoteImageWidget>().Single();
+        var image = FindVisualChildren<System.Windows.Controls.Image>(widget).First();
+        Assert.Equal(BitmapScalingMode.HighQuality, RenderOptions.GetBitmapScalingMode(image));
+
+        var thumb = FindVisualChildren<Thumb>(widget).First(t => Equals(t.Tag, "BR"));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        Assert.Equal(BitmapScalingMode.Linear, RenderOptions.GetBitmapScalingMode(image));
+
+        thumb.RaiseEvent(new DragDeltaEventArgs(10, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        Assert.Equal(BitmapScalingMode.Linear, RenderOptions.GetBitmapScalingMode(image));
+
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        Assert.Equal(BitmapScalingMode.HighQuality, RenderOptions.GetBitmapScalingMode(image));
+    }
+
+    [Fact]
+    public void InlineResize_TogglesBitmapScalingMode()
+        => RunOnSta(RunInlineScalingModeProbe);
+
+    private static void RunInlineScalingModeProbe()
+    {
+        // The in-line element's image re-scales on every resize frame - the chrome switches it
+        // to the cheap Linear filter for the gesture and back to full quality at the end.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        var chrome = SelectInlineAndGetChrome(harness);
+        var image = FindVisualChildren<System.Windows.Controls.Image>(element!).First();
+        Assert.Equal(BitmapScalingMode.HighQuality, RenderOptions.GetBitmapScalingMode(image));
+
+        var thumb = FindVisualChildren<Thumb>(chrome).First(t => Equals(t.Tag, "BR"));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        Assert.Equal(BitmapScalingMode.Linear, RenderOptions.GetBitmapScalingMode(image));
+
+        thumb.RaiseEvent(new DragDeltaEventArgs(10, 10) { RoutedEvent = Thumb.DragDeltaEvent });
+        Assert.Equal(BitmapScalingMode.Linear, RenderOptions.GetBitmapScalingMode(image));
+
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        Assert.Equal(BitmapScalingMode.HighQuality, RenderOptions.GetBitmapScalingMode(image));
+    }
+
+    private static void PumpDispatcherUntil(Func<bool> condition)
+    {
+        while (!condition())
+        {
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => frame.Continue = false);
+            Dispatcher.PushFrame(frame);
+        }
+    }
+
     private static void RunLockOnLeftHandleProbe()
     {
         // With the aspect lock on, a one-axis left-handle drag must SCALE the photo (ratio
@@ -630,6 +811,10 @@ public class InlineImageTests
     [Fact]
     public void SaveWrapCycle_PreservesView()
         => RunOnSta(RunSaveWrapPreserveProbe);
+
+    [Fact]
+    public void Attachments_FileBacked_WriteAndRestore()
+        => RunOnSta(RunFileBackedAttachmentScenario);
 
     [Fact]
     public void InlineImage_IsExcludedFromWrapEngineAndSurvivesApply()
@@ -1764,6 +1949,49 @@ public class InlineImageTests
 
         Assert.Equal(offsetBefore, sv.VerticalOffset, 1.0);
         Assert.Equal(0, state.Caret!.GetOffsetToPosition(harness.Editor.CaretPosition));
+    }
+
+    private static void RunFileBackedAttachmentScenario()
+    {
+        // The photo bytes live as files in the media directory (not as Base64 in the store
+        // JSON) - the save must write the file once, reference it by name, and the restore
+        // must read it back into the session.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.TopAndBottom);
+        var mediaDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "notecards-media-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            harness.Coordinator.MediaDirectory = mediaDir;
+
+            var attachments = harness.Coordinator.BuildAttachments().ToList();
+            Assert.Single(attachments);
+            var attachment = attachments[0];
+            Assert.Equal(harness.ImageId, attachment.Id);
+            Assert.False(string.IsNullOrEmpty(attachment.DataFilePath),
+                "file-backed attachments must carry a media file name");
+            Assert.True(string.IsNullOrEmpty(attachment.Data),
+                "file-backed attachments must not carry inline base64");
+            var filePath = System.IO.Path.Combine(mediaDir, attachment.DataFilePath);
+            Assert.True(System.IO.File.Exists(filePath), "the media file should have been written");
+
+            // Clear + restore from the file-backed attachments must reproduce the session.
+            harness.Coordinator.Clear();
+            harness.Coordinator.Restore(attachments);
+            harness.Editor.UpdateLayout();
+            var restored = harness.Coordinator.GetWrapSessions().ToList();
+            Assert.Single(restored);
+            Assert.Equal(harness.ImageId, restored[0].Id);
+        }
+        finally
+        {
+            try
+            {
+                System.IO.Directory.Delete(mediaDir, recursive: true);
+            }
+            catch
+            {
+            }
+        }
     }
 
     private static void RunSerializeViewPreserveProbe()

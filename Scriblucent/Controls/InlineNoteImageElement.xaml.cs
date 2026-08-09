@@ -96,6 +96,10 @@ public partial class InlineNoteImageElement : UserControl
         // arrow). The selection chrome lives on the overlay and has its own cursors.
         Cursor = Cursors.IBeam;
 
+        // Crisp at rest - a resize gesture drops this to Linear for smooth frames (see
+        // SetResizeScaling).
+        RenderOptions.SetBitmapScalingMode(DisplayImage, BitmapScalingMode.HighQuality);
+
         // The routed-event route from flow-hosted children does NOT pass through the parent
         // Border (the flow's island host takes over), so the click-to-select handler must
         // live ON the picture itself. Real OS clicks never reach this element (the coordinator
@@ -165,6 +169,12 @@ public partial class InlineNoteImageElement : UserControl
         _imageHeight = height;
         ApplyCaptionLayout();
     }
+
+    /// <summary>The image re-scales on every resize frame - the expensive Fant filter is the
+    /// jank behind sluggish resizing. The chrome switches the element to the cheap Linear
+    /// filter for the duration of a resize gesture and back to full quality at the end.</summary>
+    internal void SetResizeScaling(bool resizing)
+        => RenderOptions.SetBitmapScalingMode(DisplayImage, resizing ? BitmapScalingMode.Linear : BitmapScalingMode.HighQuality);
 
     private void ApplyCaptionLayout()
     {

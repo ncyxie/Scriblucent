@@ -24,13 +24,20 @@ public class NoteDocument
 }
 
 /// <summary>
-/// Floating image attachment stored with a note. Geometry is in document space (DIPs);
-/// <see cref="Data"/> holds the original image bytes as base64.
+/// Floating image attachment stored with a note. Geometry is in document space (DIPs).
+/// The image bytes live as a file in the notes media directory (see <see cref="DataFilePath"/>,
+/// resolved against the store's <c>notes-media</c> folder) - keeping the Base64 out of the JSON
+/// keeps the store small and saves fast. <see cref="Data"/> is the legacy inline Base64 form
+/// (old stores and self-contained exports/packages); new saves use the file path instead.
 /// </summary>
 public class NoteImageAttachment
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>Legacy inline Base64 of the image bytes. Empty for file-backed attachments.</summary>
     public string Data { get; set; } = string.Empty;
+    /// <summary>File name (e.g. <c>6f1c….png</c>) inside the notes media directory. Empty for
+    /// legacy inline-Base64 attachments.</summary>
+    public string DataFilePath { get; set; } = string.Empty;
     public double Width { get; set; }
     public double Height { get; set; }
     public double Left { get; set; }

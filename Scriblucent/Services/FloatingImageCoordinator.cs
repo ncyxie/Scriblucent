@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -30,9 +31,19 @@ public sealed class FloatingImageCoordinator
     private const double ButtonsFlipThresholdDip = 40;
     /// <summary>Minimum drag distance (DIPs) before an in-line photo's re-anchor drag engages.</summary>
     private const double InlineBodyDragThresholdDip = 4.0;
+    /// <summary>Full-document layouts during gestures are throttled - a synchronous layout on
+    /// every resize event or drag tick is the jank behind "resizing is very hard" / the drag
+    /// not being smooth. The extent lags at most one throttle window; the pad slack and the
+    /// natural next-frame layout keep everything correct.</summary>
+    private const double FullLayoutThrottleMs = 80;
 
     private Canvas? _overlay;
     private RichTextBox? _editor;
+
+    /// <summary>Directory where photo attachments are stored as files (the notes media folder).
+    /// Set by the host when a note loads; null falls back to inline Base64 attachments.</summary>
+    public string? MediaDirectory { get; set; }
+
     private FrameworkElement? _surface;
     private ScrollViewer? _scrollViewer;
     private NoteImageWidget? _selected;
@@ -47,6 +58,7 @@ public sealed class FloatingImageCoordinator
     private bool _isRestoring;
     private bool _isAdjustingExtentPad;
     private double _extentPadHeight;
+    private DateTime _lastFullLayoutAt = DateTime.MinValue;
     private int _activeGestures;
     private int _attachGeneration;
     private readonly Dictionary<Guid, NoteImageSession> _sessions = new();
@@ -288,6 +300,7 @@ public sealed class FloatingImageCoordinator
             NaturalPixelWidth = load.NaturalPixelWidth,
             NaturalPixelHeight = load.NaturalPixelHeight,
             DecodePixelWidth = load.DecodePixelWidth,
+            DisplaySource = load.DisplaySource,
             DocumentLeft = origin.X,
             DocumentTop = origin.Y,
             Width = displayWidth,
@@ -359,10 +372,27 @@ public sealed class FloatingImageCoordinator
             if (session.WrapMode != NoteImageWrapMode.Inline && FindWidget(session.Id) is { } widget)
                 SyncSessionFromWidget(session, widget);
 
+            // The photo bytes are immutable between picture replacements - write the media file
+            // once per session and reference it by name, keeping the Base64 out of the store
+            // JSON (the store shrinks and saves get cheap). Falls back to the inline Base64
+            // when no media directory is available (unusual hosts).
+            var dataFilePath = EnsureMediaFile(session);
+            string data;
+            if (dataFilePath is not null)
+            {
+                data = string.Empty;
+            }
+            else
+            {
+                session.AttachmentData ??= Convert.ToBase64String(session.Bytes);
+                data = session.AttachmentData;
+            }
+
             list.Add(new NoteImageAttachment
             {
                 Id = session.Id,
-                Data = Convert.ToBase64String(session.Bytes),
+                Data = data,
+                DataFilePath = dataFilePath ?? string.Empty,
                 Width = session.Width,
                 Height = session.Height,
                 Left = session.DocumentLeft,
@@ -383,23 +413,192 @@ public sealed class FloatingImageCoordinator
         return list;
     }
 
-    public void Restore(IEnumerable<NoteImageAttachment>? attachments)
+    /// <summary>
+    /// Like <see cref="BuildAttachments"/> but self-contained: the image bytes are embedded as
+    /// Base64 instead of referenced by file. Used for exports/packages, which must travel alone.
+    /// </summary>
+    public IReadOnlyList<NoteImageAttachment> BuildSelfContainedAttachments()
     {
-        Clear(raiseChanged: false);
-        if (_overlay is null || attachments is null)
-            return;
+        var attachments = BuildAttachments();
+        foreach (var attachment in attachments)
+        {
+            if (!string.IsNullOrEmpty(attachment.DataFilePath) && string.IsNullOrEmpty(attachment.Data))
+            {
+                var filePath = ResolveMediaFilePath(attachment.DataFilePath);
+                if (filePath is not null && File.Exists(filePath))
+                {
+                    try
+                    {
+                        attachment.Data = Convert.ToBase64String(File.ReadAllBytes(filePath));
+                        attachment.DataFilePath = string.Empty;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
 
-        _isRestoring = true;
+        return attachments;
+    }
+
+    /// <summary>Writes the session's bytes to the media directory once (cached on the session)
+    /// and returns the file name, or null when no media directory is available.</summary>
+    private string? EnsureMediaFile(NoteImageSession session)
+    {
+        if (string.IsNullOrEmpty(MediaDirectory))
+            return null;
+
+        if (session.MediaFilePath is { } cached && File.Exists(cached))
+            return Path.GetFileName(cached);
+
+        string directory;
         try
         {
-            var dpi = GetDpiScale();
-            var pendingInline = new List<NoteImageSession>();
-            foreach (var attachment in attachments)
+            directory = Directory.CreateDirectory(MediaDirectory!).FullName;
+        }
+        catch
+        {
+            return null;
+        }
+
+        var fileName = session.Id.ToString("N") + ResolveImageExtension(session.Bytes);
+        var filePath = Path.Combine(directory, fileName);
+        try
+        {
+            File.WriteAllBytes(filePath, session.Bytes);
+            session.MediaFilePath = filePath;
+            return fileName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string? ResolveMediaFilePath(string fileName)
+    {
+        if (string.IsNullOrEmpty(MediaDirectory) || string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        try
+        {
+            return Path.Combine(MediaDirectory!, fileName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ResolveImageExtension(byte[] bytes)
+    {
+        if (bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            return ".png";
+        if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            return ".jpg";
+        if (bytes.Length >= 6 && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38)
+            return ".gif";
+        if (bytes.Length >= 12 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46
+            && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50)
+            return ".webp";
+        if (bytes.Length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4D)
+            return ".bmp";
+        return ".img";
+    }
+
+    public void Restore(IEnumerable<NoteImageAttachment>? attachments)
+    {
+        RestoreCore(attachments is null ? null : PredecodeAttachments(attachments, GetDpiScale(), MediaDirectory));
+    }
+
+    /// <summary>
+    /// Restores attachments with the decode phase on a background thread: base64 parsing and
+    /// bitmap decoding are the dominant restore costs and can take hundreds of milliseconds
+    /// for photo-heavy notes - the UI stays responsive and the note's text remains usable
+    /// while the images materialize.
+    /// </summary>
+    public async Task RestoreAsync(IEnumerable<NoteImageAttachment>? attachments)
+    {
+        var dpi = GetDpiScale();
+        var mediaDirectory = MediaDirectory;
+        var items = attachments is null
+            ? null
+            : await DecodeAttachmentsOnStaThread(attachments, dpi, mediaDirectory).ConfigureAwait(false);
+
+        // The materialization touches WPF objects - marshal it to the editor's UI thread
+        // explicitly (the continuation context is not guaranteed in every hosting environment).
+        if (_editor is null)
+        {
+            RestoreCore(items);
+            return;
+        }
+
+        await _editor.Dispatcher.InvokeAsync(() => RestoreCore(items));
+    }
+
+    /// <summary>Runs the attachment decode on a dedicated STA thread - WPF Freezables (the
+    /// frozen BitmapSources) are thread-agnostic once frozen, so the decodes can run fully
+    /// off the UI thread without freezing the editor on photo-heavy notes.</summary>
+    private static Task<List<(NoteImageAttachment Attachment, NoteImageLoader.LoadResult? Load)>?> DecodeAttachmentsOnStaThread(
+        IEnumerable<NoteImageAttachment> attachments,
+        double dpi,
+        string? mediaDirectory)
+    {
+        var tcs = new TaskCompletionSource<List<(NoteImageAttachment, NoteImageLoader.LoadResult?)>?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                tcs.SetResult(PredecodeAttachments(attachments, dpi, mediaDirectory));
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        return tcs.Task;
+    }
+
+    /// <summary>Parses and decodes every attachment off the UI thread. The clamped display
+    /// sizes drive the decode budget (same math as <see cref="Restore"/>).</summary>
+    private static List<(NoteImageAttachment Attachment, NoteImageLoader.LoadResult? Load)> PredecodeAttachments(
+        IEnumerable<NoteImageAttachment> attachments,
+        double dpi,
+        string? mediaDirectory)
+    {
+        var items = new List<(NoteImageAttachment, NoteImageLoader.LoadResult?)>();
+        foreach (var attachment in attachments)
+        {
+            byte[] bytes;
+            if (!string.IsNullOrEmpty(attachment.DataFilePath))
+            {
+                // File-backed attachment: read the media file (missing/corrupt files skip the
+                // photo rather than failing the whole restore).
+                if (string.IsNullOrEmpty(mediaDirectory))
+                    continue;
+
+                try
+                {
+                    var filePath = Path.Combine(mediaDirectory, attachment.DataFilePath);
+                    if (!File.Exists(filePath))
+                        continue;
+                    bytes = File.ReadAllBytes(filePath);
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+            else
             {
                 if (string.IsNullOrWhiteSpace(attachment.Data))
                     continue;
 
-                byte[] bytes;
                 try
                 {
                     bytes = Convert.FromBase64String(attachment.Data);
@@ -408,15 +607,39 @@ public sealed class FloatingImageCoordinator
                 {
                     continue;
                 }
+            }
+
+            var clamped = attachment.LockAspectRatio
+                ? NoteImageResizeMath.ClampDisplaySize(attachment.Width, attachment.Height)
+                : NoteImageResizeMath.ClampFreeformSize(attachment.Width, attachment.Height);
+
+            if (NoteImageLoader.TryLoadFromBytes(bytes, clamped.Width, dpi, out var load, out _) && load is not null)
+                items.Add((attachment, load));
+        }
+
+        return items;
+    }
+
+    private void RestoreCore(List<(NoteImageAttachment Attachment, NoteImageLoader.LoadResult? Load)>? items)
+    {
+        Clear(raiseChanged: false);
+        if (_overlay is null || items is null)
+            return;
+
+        _isRestoring = true;
+        try
+        {
+            var pendingInline = new List<NoteImageSession>();
+            foreach (var (attachment, load) in items)
+            {
+                if (load is null)
+                    continue;
 
                 var clamped = attachment.LockAspectRatio
                     ? NoteImageResizeMath.ClampDisplaySize(attachment.Width, attachment.Height)
                     : NoteImageResizeMath.ClampFreeformSize(attachment.Width, attachment.Height);
                 var width = clamped.Width;
                 var height = clamped.Height;
-
-                if (!NoteImageLoader.TryLoadFromBytes(bytes, width, dpi, out var load, out _) || load is null)
-                    continue;
 
                 var id = attachment.Id == Guid.Empty ? Guid.NewGuid() : attachment.Id;
                 var session = new NoteImageSession
@@ -426,6 +649,7 @@ public sealed class FloatingImageCoordinator
                     NaturalPixelWidth = load.NaturalPixelWidth,
                     NaturalPixelHeight = load.NaturalPixelHeight,
                     DecodePixelWidth = load.DecodePixelWidth,
+                    DisplaySource = load.DisplaySource,
                     DocumentLeft = attachment.Left,
                     DocumentTop = attachment.Top,
                     Width = width,
@@ -472,17 +696,9 @@ public sealed class FloatingImageCoordinator
 
                 if (restoredSession is not null)
                 {
-                    var clamped = NoteImageResizeMath.ClampRectToBounds(
-                        restoredSession.DocumentLeft,
-                        restoredSession.DocumentTop,
-                        restoredSession.Width,
-                        restoredSession.Height,
-                        boundsW,
-                        boundsH,
-                        restoredSession.LockAspectRatio,
-                        resizeToFit: false);
-                    restoredSession.SetGeometry(clamped.Left, clamped.Top, clamped.Width, clamped.Height);
-                    ProjectSessionToWidget(restoredSession, widget);
+                    // Same clamp as everywhere else - including the flush-on-pin guard against
+                    // the pad-lagging extent.
+                    ClampSessionAndProject(restoredSession, widget);
                 }
                 else
                 {
@@ -700,6 +916,8 @@ public sealed class FloatingImageCoordinator
         {
             _chromeStartWidth = session.Width;
             _chromeStartHeight = session.Height;
+            if (_inlineContainers.TryGetValue(id, out var container) && container.Child is InlineNoteImageElement element)
+                element.SetResizeScaling(resizing: true);
         }
     }
 
@@ -771,6 +989,14 @@ public sealed class FloatingImageCoordinator
         _chromeDragAccumX = 0;
         _chromeDragAccumY = 0;
         _activeGestures = Math.Max(0, _activeGestures - 1);
+        if (_selectedInlineId is { } resizedId
+            && _inlineContainers.TryGetValue(resizedId, out var resizedContainer)
+            && resizedContainer.Child is InlineNoteImageElement resizedElement)
+        {
+            // The gesture is over - render the settled size at full quality again.
+            resizedElement.SetResizeScaling(resizing: false);
+        }
+
         if (_activeGestures == 0)
         {
             if (_selectedInlineId is { } id
@@ -989,6 +1215,27 @@ public sealed class FloatingImageCoordinator
         session.NaturalPixelWidth = load.NaturalPixelWidth;
         session.NaturalPixelHeight = load.NaturalPixelHeight;
         session.DecodePixelWidth = load.DecodePixelWidth;
+        session.DisplaySource = load.DisplaySource;
+        session.AttachmentData = null; // the bytes changed - the cached Base64 is stale
+
+        // The bytes changed - the media file must be re-written. A format change would produce
+        // a different file name and orphan the previous file - remove it now.
+        if (session.MediaFilePath is { } oldPath && File.Exists(oldPath))
+        {
+            var newName = session.Id.ToString("N") + ResolveImageExtension(load.Bytes);
+            if (!string.Equals(Path.GetFileName(oldPath), newName, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    File.Delete(oldPath);
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        session.MediaFilePath = null;
         session.Width = fitted.Width;
         session.Height = fitted.Height;
 
@@ -1068,6 +1315,7 @@ public sealed class FloatingImageCoordinator
         session.CaptionLabel = null;
         session.CaptionText = string.Empty;
         session.CaptionNumber = 0;
+        session.CaptionDisplayText = null;
         RefreshCaptionVisuals();
         RenumberCaptions();
         RaiseImagesChanged();
@@ -1089,6 +1337,7 @@ public sealed class FloatingImageCoordinator
             var label = session.CaptionLabel ?? string.Empty;
             counts[label] = counts.GetValueOrDefault(label) + 1;
             session.CaptionNumber = counts[label];
+            session.CaptionDisplayText = null; // the number changed - the rendered text is stale
         }
 
         RefreshCaptionVisuals();
@@ -1408,9 +1657,11 @@ public sealed class FloatingImageCoordinator
             _extentPadHeight = neededPad;
 
             // Synchronous UpdateLayout mid-drag steals capture; let the next layout pass settle.
+            // The layout itself is throttled - a full document layout on every resize event is
+            // the jank behind sluggish resizing.
             if (!bodyDragging)
             {
-                _editor.UpdateLayout();
+                TryRunThrottledFullLayout();
                 _scrollViewer ??= FindScrollViewer(_editor);
             }
         }
@@ -1886,10 +2137,19 @@ public sealed class FloatingImageCoordinator
     private ImageSource? DecodeDisplaySource(NoteImageSession session)
     {
         var dpi = GetDpiScale();
+        var needed = NoteImageLoader.ResolveDecodePixelWidth(session.Width, dpi, session.NaturalPixelWidth);
+
+        // The session caches its frozen display source - re-decoding from bytes on every sync
+        // or conversion is the dominant image cost. The cache is valid while the needed decode
+        // width does not exceed what was decoded.
+        if (session.DisplaySource is not null && needed <= session.DecodePixelWidth)
+            return session.DisplaySource;
+
         if (NoteImageLoader.TryCreateDisplaySource(session.Bytes, session.Width, dpi, out var display, out var decodeWidth, out _)
             && display is not null)
         {
             session.DecodePixelWidth = decodeWidth;
+            session.DisplaySource = display;
             return display;
         }
 
@@ -1911,6 +2171,7 @@ public sealed class FloatingImageCoordinator
         {
             element.Source = display;
             session.DecodePixelWidth = decodeWidth;
+            session.DisplaySource = display;
         }
     }
 
@@ -2121,6 +2382,12 @@ public sealed class FloatingImageCoordinator
     public void SyncInlineParagraphLineStrategies()
     {
         if (_editor?.Document is null)
+            return;
+
+        // The scan is per-keystroke (via Editor_TextChanged) - early out for the common
+        // photo-free note instead of enumerating every paragraph. Pending overrides must
+        // still be restored when the last photo leaves its paragraph.
+        if (_inlineContainers.Count == 0 && _inlineStrategyOverrides.Count == 0)
             return;
 
         foreach (var paragraph in EnumerateParagraphs(_editor.Document))
@@ -2509,7 +2776,8 @@ public sealed class FloatingImageCoordinator
         if (_scrollViewer is not null
             && _scrollViewer.ScrollableHeight - _scrollViewer.VerticalOffset < _scrollViewer.ViewportHeight)
         {
-            _editor?.UpdateLayout();
+            // Throttled together with the pad updates - the extent lags at most one window.
+            TryRunThrottledFullLayout();
         }
 
         if (_scrollViewer is not null
@@ -2703,6 +2971,7 @@ public sealed class FloatingImageCoordinator
 
         widget.Source = display;
         session.DecodePixelWidth = decodeWidth;
+        session.DisplaySource = display;
     }
 
     private static void CommitWidgetGeometryToSession(NoteImageSession session, NoteImageWidget widget)
@@ -2777,10 +3046,18 @@ public sealed class FloatingImageCoordinator
             return;
 
         var caption = EnsureCaptionElement(session, widget);
-        caption.Text = BuildCaptionText(session);
+        var text = session.CaptionDisplayText ??= BuildCaptionText(session);
         var maxWidth = Math.Max(40, session.Width);
-        caption.MaxWidth = maxWidth;
-        caption.Measure(new Size(maxWidth, double.PositiveInfinity));
+
+        // Syncing runs on every drag/resize/scroll event; the caption only needs re-measuring
+        // when its text or wrap width changed - otherwise the previous measure stays valid.
+        if (!Equals(caption.Text, text) || Math.Abs(caption.MaxWidth - maxWidth) >= 0.01)
+        {
+            caption.Text = text;
+            caption.MaxWidth = maxWidth;
+            caption.Measure(new Size(maxWidth, double.PositiveInfinity));
+        }
+
         var captionHeight = caption.DesiredSize.Height;
         var top = session.CaptionPosition == CaptionPosition.Below
             ? widgetTop + widget.Height + 4
@@ -2826,6 +3103,27 @@ public sealed class FloatingImageCoordinator
             boundsH,
             session.LockAspectRatio,
             resizeToFit: false);
+
+        // The ScrollViewer extent can lag the pad by up to the throttle window - if the clamp
+        // would displace the photo during that window, the extent is probably stale (the pad
+        // was just re-sized). Flush the layout once and re-clamp against the settled extent,
+        // so deep photos are never pinned to a lagging content bottom.
+        if ((Math.Abs(clamped.Left - session.DocumentLeft) > 0.5 || Math.Abs(clamped.Top - session.DocumentTop) > 0.5)
+            && (DateTime.UtcNow - _lastFullLayoutAt).TotalMilliseconds < FullLayoutThrottleMs)
+        {
+            _lastFullLayoutAt = DateTime.UtcNow;
+            _editor?.UpdateLayout();
+            (boundsW, boundsH) = GetDocumentBounds();
+            clamped = NoteImageResizeMath.ClampRectToBounds(
+                session.DocumentLeft,
+                session.DocumentTop,
+                session.Width,
+                session.Height,
+                boundsW,
+                boundsH,
+                session.LockAspectRatio,
+                resizeToFit: false);
+        }
 
         session.SetGeometry(clamped.Left, clamped.Top, clamped.Width, clamped.Height);
         ProjectSessionToWidget(session, widget);
@@ -2964,6 +3262,20 @@ public sealed class FloatingImageCoordinator
         if (source?.CompositionTarget is null)
             return 1.0;
         return source.CompositionTarget.TransformToDevice.M11;
+    }
+
+    /// <summary>Runs a synchronous full-document layout at most once per throttle window
+    /// (gesture layouts are the jank behind "resizing is very hard" / the drag not being
+    /// smooth). Returns true when the layout ran.</summary>
+    private bool TryRunThrottledFullLayout()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastFullLayoutAt).TotalMilliseconds < FullLayoutThrottleMs)
+            return false;
+
+        _lastFullLayoutAt = now;
+        _editor?.UpdateLayout();
+        return true;
     }
 
     private void ScheduleSync()

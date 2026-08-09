@@ -12,4 +12,15 @@ internal static class AtomicFileWriter
         File.WriteAllText(tempPath, content);
         File.Move(tempPath, path, overwrite: true);
     }
+
+    /// <summary>Writes <paramref name="write"/>'s stream content to <paramref name="path"/> via the
+    /// same temp-file-then-rename, streaming - no full-content string or byte array in memory
+    /// (the notes store can be tens of MB of photo Base64).</summary>
+    public static void Write(string path, Action<Stream> write)
+    {
+        var tempPath = path + ".tmp";
+        using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            write(stream);
+        File.Move(tempPath, path, overwrite: true);
+    }
 }

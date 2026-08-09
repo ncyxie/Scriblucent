@@ -868,12 +868,22 @@ namespace Scriblucent
                 primaryStyle: ModernDialogButtonStyle.Danger,
                 secondaryStyle: ModernDialogButtonStyle.Primary);
 
-            return result switch
+            switch (result)
             {
-                ModernDialogResult.Primary => true,
-                ModernDialogResult.Secondary => SaveCurrentDocument(),
-                _ => false
-            };
+                case ModernDialogResult.Primary:
+                    return true;
+                case ModernDialogResult.Secondary:
+                    // Closing after this save: mark it BEFORE the save so the save uses the fast
+                    // exact wrap restore (no full convergence pass - the wrap engine is disposed
+                    // moments later anyway). Reset if the save fails and the close is cancelled.
+                    _allowCloseWithoutPrompt = true;
+                    var saved = SaveCurrentDocument();
+                    if (!saved)
+                        _allowCloseWithoutPrompt = false;
+                    return saved;
+                default:
+                    return false;
+            }
         }
 
         private string ResolveEditorTitleForPrompt()
@@ -1083,7 +1093,13 @@ namespace Scriblucent
                 var text = GetDocumentSearchText();
                 var customWords = new HashSet<string>(settings.SpellCheckCustomWords, StringComparer.OrdinalIgnoreCase);
                 customWords.UnionWith(_sessionIgnoredWords);
-                var spans = SpellCheckService.FindMisspelledWordSpans(text, dictionary, customWords);
+
+                // The scan is pure CPU over the extracted text (and the dictionary is
+                // read-only once loaded) - run it off the UI thread so a long note's save
+                // does not hitch the editor. The decorations are applied back on the UI
+                // thread by the continuation.
+                var spans = await Task.Run(
+                    () => SpellCheckService.FindMisspelledWordSpans(text, dictionary, customWords));
                 ApplySpellCheckDecorations(spans);
             }
             finally
@@ -2444,10 +2460,13 @@ namespace Scriblucent
                     ApplyEditorTextLayout();
                     ApplyCurrentLineSpacingToDocument();
 
-                    _floatingImages.Restore(document.Images);
+                    _floatingImages.MediaDirectory = MainViewModel.NotesMediaDirectory;
+                    // Decode the photos off the UI thread (the STA decode thread) so the note's
+                    // text and window appear immediately; the wrap applies once the photos land.
+                    _ = RestorePhotosAsync(document.Images);
 
-                    // Wrap lanes depend on image geometry + paragraph extents, both just loaded.
-                    _wrapLayout?.ScheduleApply();
+                    // Wrap lanes depend on image geometry + paragraph extents; the async restore
+                    // re-schedules the apply after the photos materialize.
 
                     // Clear any selection and move caret to start
                     ContentTextBox.CaretPosition = ContentTextBox.Document.ContentStart;
@@ -2469,6 +2488,25 @@ namespace Scriblucent
                 _floatingImages.SuppressMarkerSweep = false;
                 UpdateEditedIndicator();
             }
+        }
+
+        /// <summary>Restores the note's photos off the UI thread (the coordinator's dedicated
+        /// STA decode thread) so opening a photo-heavy note shows the text immediately. The
+        /// marker sweep stays suppressed across the restore, and the wrap is re-applied once
+        /// the photo geometry is available.</summary>
+        private async Task RestorePhotosAsync(IReadOnlyList<NoteImageAttachment>? attachments)
+        {
+            _floatingImages.SuppressMarkerSweep = true;
+            try
+            {
+                await _floatingImages.RestoreAsync(attachments);
+            }
+            finally
+            {
+                _floatingImages.SuppressMarkerSweep = false;
+            }
+
+            _wrapLayout?.ScheduleApply();
         }
 
         // Print functionality
@@ -2539,6 +2577,9 @@ namespace Scriblucent
             ClearAllHighlights();
             ClearSpellCheckDecorations();
             // Wrap insets are transient layout margins - never persist them into saved content.
+            // When the editor is closing, capture the wrap first so it can be restored verbatim
+            // after serialization (exact wrap through the exit animation, no recompute).
+            var wrapState = _allowCloseWithoutPrompt ? _wrapLayout?.CaptureWrapState() : null;
             _wrapLayout?.Clear();
             var newContent = SerializeEditorContent();
             var newImages = _floatingImages.BuildAttachments().ToList();
@@ -2548,7 +2589,16 @@ namespace Scriblucent
             // gets persisted; fire-and-forget since dictionaries are normally already cached
             // from the previous scan, making this effectively instant.
             _ = RunSpellCheckPassAsync();
-            _wrapLayout?.Reapply();
+
+            // Reapply the wrap after the transient margins were cleared for serialization. The
+            // cleared flow is re-rendered with the wrap restored within this same UI turn, so the
+            // user never sees the unwrapped state. When the editor is closing (save-and-exit) the
+            // wrap is restored verbatim from the captured snapshot - exact, one layout, no
+            // convergence pass - so the exit animation runs over the wrapped text immediately.
+            if (!_allowCloseWithoutPrompt)
+                _wrapLayout?.Reapply();
+            else
+                _wrapLayout?.RestoreWrapState(wrapState);
 
             var contentChanged = !string.Equals(previousContent, newContent, StringComparison.Ordinal);
             var imagesChanged = !AreImageAttachmentsEqual(document.Images, newImages);
@@ -2591,6 +2641,7 @@ namespace Scriblucent
                 var a = left[i];
                 var b = right[i];
                 if (a.Id != b.Id
+                    || !string.Equals(a.DataFilePath, b.DataFilePath, StringComparison.Ordinal)
                     || !string.Equals(a.Data, b.Data, StringComparison.Ordinal)
                     || !a.Width.Equals(b.Width)
                     || !a.Height.Equals(b.Height)
@@ -4303,7 +4354,9 @@ namespace Scriblucent
             {
                 Title = TitleTextBox.Text,
                 Content = SerializeEditorContent(),
-                Images = _floatingImages.BuildAttachments().ToList(),
+                // Exports/packages must be self-contained - embed the image bytes as Base64
+                // instead of the file references the regular save uses.
+                Images = _floatingImages.BuildSelfContainedAttachments().ToList(),
                 Tags = ParseTags(TagsTextBox.Text),
                 FontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source),
                 FontSize = ContentTextBox.FontSize,
@@ -4593,10 +4646,13 @@ namespace Scriblucent
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
+            // Mark the close FIRST: the save below skips the wrap engine's transient re-apply
+            // (it would be disposed moments later anyway) so the exit animation isn't preceded
+            // by a synchronous full convergence pass (tens of ms with photos).
+            _allowCloseWithoutPrompt = true;
             SaveCurrentDocument();
 
             // Close the window after saving
-            _allowCloseWithoutPrompt = true;
             if (_isHostedInTab)
                 CloseRequested?.Invoke(this);
             else

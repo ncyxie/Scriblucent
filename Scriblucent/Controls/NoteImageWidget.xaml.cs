@@ -531,6 +531,11 @@ public partial class NoteImageWidget : UserControl
         if (_resizeStartHeight > 0)
             _aspectRatio = _resizeStartWidth / _resizeStartHeight;
 
+        // The image re-scales on every drag frame - the expensive Fant filter (HighQuality)
+        // is the jank behind sluggish resizing; the cheap Linear filter keeps the drag smooth
+        // and the final frame re-renders sharp when the gesture ends.
+        RenderOptions.SetBitmapScalingMode(DisplayImage, BitmapScalingMode.Linear);
+
         BeginGesture();
     }
 
@@ -555,6 +560,9 @@ public partial class NoteImageWidget : UserControl
             return;
 
         _activeHandle = ResizeHandle.None;
+
+        // The gesture is over - render the settled size at full quality again.
+        RenderOptions.SetBitmapScalingMode(DisplayImage, BitmapScalingMode.HighQuality);
 
         var resized = !Width.Equals(_resizeStartWidth)
             || !Height.Equals(_resizeStartHeight)

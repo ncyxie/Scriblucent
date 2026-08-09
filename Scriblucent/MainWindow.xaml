@@ -12,6 +12,7 @@
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         xmlns:svgc="http://sharpvectors.codeplex.com/svgc/"
 		Title="Scriblucent" Height="755" Width="1145"
+        Icon="/logo.ico"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource SidebarBackground}"
 		UseLayoutRounding="True"

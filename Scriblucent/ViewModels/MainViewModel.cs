@@ -95,6 +95,10 @@ public class MainViewModel : ViewModelBase
     private const int NotesLoadBatchSize = 48;
     private const int NotesSingleCommitMax = 120;
     private const int TrashRetentionDays = 30;
+    /// <summary>How many card content previews are decoded at idle - the initial viewport plus a
+    /// buffer. Cards beyond it decode lazily on scroll, so a large library never decodes its
+    /// whole content at startup.</summary>
+    private const int PreviewWarmBudget = 48;
 
     public event EventHandler? NotesDashboardReady;
 
@@ -856,14 +860,14 @@ public class MainViewModel : ViewModelBase
     {
         if (File.Exists(setsPath))
         {
-            var json = File.ReadAllText(setsPath);
             List<FlashcardSetDocument> sets;
             List<FlashcardSetDocument> trashedSets = new();
             List<FlashcardSetGroupData> groups = new();
             GroupMetadataSyncAction metadataAction;
+            using var stream = File.OpenRead(setsPath);
             try
             {
-                var store = JsonSerializer.Deserialize<FlashcardSetStoreData>(json);
+                var store = JsonSerializer.Deserialize<FlashcardSetStoreData>(stream);
                 if (store?.Sets != null)
                 {
                     var rawSets = store.Sets;
@@ -876,7 +880,8 @@ public class MainViewModel : ViewModelBase
                 }
                 else
                 {
-                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(json) ?? new();
+                    stream.Position = 0;
+                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream) ?? new();
                     metadataAction = GroupMetadataSyncAction.Leave;
                 }
             }
@@ -884,7 +889,8 @@ public class MainViewModel : ViewModelBase
             {
                 try
                 {
-                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(json) ?? new();
+                    stream.Position = 0;
+                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream) ?? new();
                     metadataAction = GroupMetadataSyncAction.Leave;
                 }
                 catch
@@ -899,8 +905,8 @@ public class MainViewModel : ViewModelBase
 
         if (File.Exists(legacyPath))
         {
-            var json = File.ReadAllText(legacyPath);
-            var data = JsonSerializer.Deserialize<List<FlashcardItem>>(json) ?? new();
+            using var stream = File.OpenRead(legacyPath);
+            var data = JsonSerializer.Deserialize<List<FlashcardItem>>(stream) ?? new();
             return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, data);
         }
 
@@ -1098,6 +1104,20 @@ public class MainViewModel : ViewModelBase
     {
         try
         {
+            // Skip the whole write when nothing changed since the last one - the auto-save
+            // tick would otherwise rewrite the store every interval even when untouched.
+            string signature;
+            try
+            {
+                signature = BuildFlashcardSetsSignature();
+                if (string.Equals(signature, _lastSavedFlashcardSetsSignature, StringComparison.Ordinal))
+                    return;
+            }
+            catch
+            {
+                signature = string.Empty;
+            }
+
             var path = GetFlashcardSetsFilePath();
             var documents = FlashcardSets
                 .Select(set => set.Document)
@@ -1118,13 +1138,50 @@ public class MainViewModel : ViewModelBase
                     .ToList()
             };
 
-            var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = false });
-            AtomicFileWriter.WriteAllText(path, json);
+            AtomicFileWriter.Write(path, stream =>
+                JsonSerializer.Serialize(stream, store, StoreJsonOptions));
+            // Only a completed write may be remembered as "saved".
+            _lastSavedFlashcardSetsSignature = signature;
         }
         catch
         {
             // Persistence errors are non-fatal; ignored.
         }
+    }
+
+    /// <summary>Cheap fingerprint of everything <see cref="SaveFlashcardSets"/> persists (mirrors
+    /// <see cref="BuildNotesStoreSignature"/>).</summary>
+    private string BuildFlashcardSetsSignature()
+    {
+        var builder = new System.Text.StringBuilder();
+        foreach (var set in FlashcardSets
+            .OrderByDescending(s => s.Document.IsPinned)
+            .ThenByDescending(s => s.Document.LastModified)
+            .ThenBy(s => s.Title, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var doc = set.Document;
+            builder.Append(doc.Id).Append('|');
+            builder.Append(doc.LastModified.Ticks).Append('|');
+            builder.Append(doc.Cards?.Count ?? 0).Append('|');
+            builder.Append(doc.IsPinned).Append('|');
+            builder.Append(doc.GroupId).Append(';');
+        }
+
+        builder.Append("T").Append(TrashedFlashcardSets.Count).Append(';');
+        foreach (var set in TrashedFlashcardSets)
+            builder.Append(set.Document.Id).Append('|').Append(set.Document.LastModified.Ticks).Append(';');
+
+        foreach (var group in _flashcardSetGroupMetadata.Values
+            .OrderBy(g => g.SortOrder ?? int.MaxValue)
+            .ThenBy(g => g.Name))
+        {
+            builder.Append(group.GroupId).Append('|');
+            builder.Append(group.Name).Append('|');
+            builder.Append(group.BackgroundColor).Append('|');
+            builder.Append(group.SortOrder).Append(';');
+        }
+
+        return builder.ToString();
     }
 
     private void ReorderFlashcardSets()
@@ -1609,16 +1666,15 @@ public class MainViewModel : ViewModelBase
         if (!File.Exists(path))
             return new MindMapsLoadResult(false, new List<MindMapDocument>(), new List<MindMapDocument>(), new List<MindMapGroupData>(), GroupMetadataSyncAction.Leave);
 
-        var json = File.ReadAllText(path);
-
         // Try new format first, fall back to legacy list format
         List<MindMapDocument> maps;
         List<MindMapDocument> trashedMaps = new();
         List<MindMapGroupData> groups = new();
         GroupMetadataSyncAction metadataAction;
+        using var stream = File.OpenRead(path);
         try
         {
-            var store = JsonSerializer.Deserialize<MindMapStoreData>(json);
+            var store = JsonSerializer.Deserialize<MindMapStoreData>(stream);
             if (store?.Maps != null)
             {
                 var rawMaps = store.Maps;
@@ -1630,7 +1686,8 @@ public class MainViewModel : ViewModelBase
             }
             else
             {
-                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(json) ?? new();
+                stream.Position = 0;
+                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream) ?? new();
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
         }
@@ -1638,7 +1695,8 @@ public class MainViewModel : ViewModelBase
         {
             try
             {
-                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(json) ?? new();
+                stream.Position = 0;
+                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream) ?? new();
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
             catch
@@ -1723,8 +1781,9 @@ public class MainViewModel : ViewModelBase
     private void WarmMindMapPreviewsAtIdle()
     {
         // Same reasoning as WarmNoteContentPreviewsAtIdle: warm in MindMapsView's actual
-        // display order, not raw MindMaps load order.
-        var pending = new Queue<MindMapViewModel>(MindMapsView.Cast<MindMapViewModel>());
+        // display order, not raw MindMaps load order. Capped to the initial viewport - the
+        // rest decode lazily on scroll.
+        var pending = new Queue<MindMapViewModel>(MindMapsView.Cast<MindMapViewModel>().Take(PreviewWarmBudget));
         if (pending.Count == 0)
             return;
 
@@ -2121,6 +2180,19 @@ public class MainViewModel : ViewModelBase
     {
         try
         {
+            // Skip the whole write when nothing changed since the last one (mirrors SaveNotes).
+            string signature;
+            try
+            {
+                signature = BuildMindMapsSignature();
+                if (string.Equals(signature, _lastSavedMindMapsSignature, StringComparison.Ordinal))
+                    return;
+            }
+            catch
+            {
+                signature = string.Empty;
+            }
+
             var path = GetMindMapsFilePath();
             var documents = MindMaps
                 .Select(map => map.Document)
@@ -2141,13 +2213,49 @@ public class MainViewModel : ViewModelBase
                     .ToList()
             };
 
-            var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = false });
-            AtomicFileWriter.WriteAllText(path, json);
+            AtomicFileWriter.Write(path, stream =>
+                JsonSerializer.Serialize(stream, store, StoreJsonOptions));
+            // Only a completed write may be remembered as "saved".
+            _lastSavedMindMapsSignature = signature;
         }
         catch
         {
             // Persistence errors are non-fatal; ignored.
         }
+    }
+
+    /// <summary>Cheap fingerprint of everything <see cref="SaveMindMaps"/> persists (mirrors
+    /// <see cref="BuildNotesStoreSignature"/>).</summary>
+    private string BuildMindMapsSignature()
+    {
+        var builder = new System.Text.StringBuilder();
+        foreach (var map in MindMaps
+            .OrderByDescending(m => m.Document.IsPinned)
+            .ThenByDescending(m => m.Document.LastModified)
+            .ThenBy(m => m.Title, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var doc = map.Document;
+            builder.Append(doc.Id).Append('|');
+            builder.Append(doc.LastModified.Ticks).Append('|');
+            builder.Append(doc.IsPinned).Append('|');
+            builder.Append(doc.GroupId).Append(';');
+        }
+
+        builder.Append("T").Append(TrashedMindMaps.Count).Append(';');
+        foreach (var map in TrashedMindMaps)
+            builder.Append(map.Document.Id).Append('|').Append(map.Document.LastModified.Ticks).Append(';');
+
+        foreach (var group in _mindMapGroupMetadata.Values
+            .OrderBy(g => g.SortOrder ?? int.MaxValue)
+            .ThenBy(g => g.Name))
+        {
+            builder.Append(group.GroupId).Append('|');
+            builder.Append(group.Name).Append('|');
+            builder.Append(group.BackgroundColor).Append('|');
+            builder.Append(group.SortOrder).Append(';');
+        }
+
+        return builder.ToString();
     }
 
     private void ReorderMindMaps()
@@ -2309,14 +2417,15 @@ public class MainViewModel : ViewModelBase
         if (!File.Exists(path))
             return new QuizzesLoadResult(false, new List<QuizDocument>(), new List<QuizDocument>(), new List<QuizGroupData>(), GroupMetadataSyncAction.Leave);
 
-        var json = File.ReadAllText(path);
+        // Try new format first, fall back to legacy list format
         List<QuizDocument> documents;
         List<QuizDocument> trashedDocuments = new();
         List<QuizGroupData> groups = new();
         GroupMetadataSyncAction metadataAction;
+        using var stream = File.OpenRead(path);
         try
         {
-            var store = JsonSerializer.Deserialize<QuizStoreData>(json);
+            var store = JsonSerializer.Deserialize<QuizStoreData>(stream);
             if (store?.Quizzes != null)
             {
                 var rawQuizzes = store.Quizzes;
@@ -2328,13 +2437,15 @@ public class MainViewModel : ViewModelBase
             }
             else
             {
-                documents = JsonSerializer.Deserialize<List<QuizDocument>>(json) ?? new();
+                stream.Position = 0;
+                documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream) ?? new();
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
         }
         catch
         {
-            documents = JsonSerializer.Deserialize<List<QuizDocument>>(json) ?? new();
+            stream.Position = 0;
+            documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream) ?? new();
             metadataAction = GroupMetadataSyncAction.Leave;
         }
 
@@ -2495,6 +2606,19 @@ public class MainViewModel : ViewModelBase
     {
         try
         {
+            // Skip the whole write when nothing changed since the last one (mirrors SaveNotes).
+            string signature;
+            try
+            {
+                signature = BuildQuizzesSignature();
+                if (string.Equals(signature, _lastSavedQuizzesSignature, StringComparison.Ordinal))
+                    return;
+            }
+            catch
+            {
+                signature = string.Empty;
+            }
+
             var path = GetQuizzesFilePath();
             var documents = Quizzes
                 .Select(quiz => quiz.Document)
@@ -2515,13 +2639,50 @@ public class MainViewModel : ViewModelBase
                     .ToList()
             };
 
-            var json = JsonSerializer.Serialize(store, new JsonSerializerOptions { WriteIndented = false });
-            AtomicFileWriter.WriteAllText(path, json);
+            AtomicFileWriter.Write(path, stream =>
+                JsonSerializer.Serialize(stream, store, StoreJsonOptions));
+            // Only a completed write may be remembered as "saved".
+            _lastSavedQuizzesSignature = signature;
         }
         catch
         {
             // Persistence errors are non-fatal; ignored.
         }
+    }
+
+    /// <summary>Cheap fingerprint of everything <see cref="SaveQuizzes"/> persists (mirrors
+    /// <see cref="BuildNotesStoreSignature"/>).</summary>
+    private string BuildQuizzesSignature()
+    {
+        var builder = new System.Text.StringBuilder();
+        foreach (var quiz in Quizzes
+            .OrderByDescending(q => q.Document.IsPinned)
+            .ThenByDescending(q => q.Document.LastModified)
+            .ThenBy(q => q.Title, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var doc = quiz.Document;
+            builder.Append(doc.Id).Append('|');
+            builder.Append(doc.LastModified.Ticks).Append('|');
+            builder.Append(doc.Questions?.Count ?? 0).Append('|');
+            builder.Append(doc.IsPinned).Append('|');
+            builder.Append(doc.GroupId).Append(';');
+        }
+
+        builder.Append("T").Append(TrashedQuizzes.Count).Append(';');
+        foreach (var quiz in TrashedQuizzes)
+            builder.Append(quiz.Document.Id).Append('|').Append(quiz.Document.LastModified.Ticks).Append(';');
+
+        foreach (var group in _quizGroupMetadata.Values
+            .OrderBy(g => g.SortOrder ?? int.MaxValue)
+            .ThenBy(g => g.Name))
+        {
+            builder.Append(group.GroupId).Append('|');
+            builder.Append(group.Name).Append('|');
+            builder.Append(group.BackgroundColor).Append('|');
+            builder.Append(group.SortOrder).Append(';');
+        }
+
+        return builder.ToString();
     }
 
     public NoteCardViewModel? FindNoteById(Guid noteId)
@@ -4062,6 +4223,7 @@ public class MainViewModel : ViewModelBase
         {
             Id = Guid.NewGuid(),
             Data = image.Data,
+            DataFilePath = image.DataFilePath,
             Width = image.Width,
             Height = image.Height,
             Left = image.Left,
@@ -4691,10 +4853,90 @@ public class MainViewModel : ViewModelBase
             return;
 
         foreach (var note in expired)
+        {
+            DeleteNoteMediaFiles(note.Document);
             TrashedNotes.Remove(note);
+        }
 
         QueueSaveNotes();
         NotifyTrashChanged();
+    }
+
+    /// <summary>Deletes photo files in the media directory that no attachment references
+    /// (orphans from crashed saves, cancelled operations, or failed migrations). Runs once at
+    /// startup, off the UI thread, failure-safe.</summary>
+    private void SweepOrphanMediaFiles()
+    {
+        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var vm in Notes)
+        {
+            foreach (var image in vm.Document.Images)
+            {
+                if (!string.IsNullOrEmpty(image.DataFilePath))
+                    referenced.Add(image.DataFilePath);
+            }
+        }
+
+        foreach (var vm in TrashedNotes)
+        {
+            foreach (var image in vm.Document.Images)
+            {
+                if (!string.IsNullOrEmpty(image.DataFilePath))
+                    referenced.Add(image.DataFilePath);
+            }
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var mediaDir = NotesMediaDirectory;
+                if (!Directory.Exists(mediaDir))
+                    return;
+
+                foreach (var file in Directory.EnumerateFiles(mediaDir))
+                {
+                    var name = Path.GetFileName(file);
+                    if (referenced.Contains(name))
+                        continue;
+
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+        });
+    }
+
+    /// <summary>Removes the photo files of a note that is being permanently deleted (trash
+    /// purge), so the file-per-photo media folder does not accumulate orphans.</summary>
+    private static void DeleteNoteMediaFiles(NoteDocument document)
+    {
+        if (document.Images is not { Count: > 0 })
+            return;
+
+        foreach (var image in document.Images)
+        {
+            if (string.IsNullOrEmpty(image.DataFilePath))
+                continue;
+
+            try
+            {
+                var filePath = Path.Combine(NotesMediaDirectory, image.DataFilePath);
+                if (File.Exists(filePath))
+                    File.Delete(filePath);
+            }
+            catch
+            {
+            }
+        }
     }
 
     private void PurgeExpiredTrashedFlashcardSets()
@@ -8068,36 +8310,186 @@ public class MainViewModel : ViewModelBase
         return Path.Combine(dir, "notes.json");
     }
 
-    public void SaveNotes()
+    /// <summary>Folder holding the notes' photo files (file-per-photo attachments, mirroring the
+    /// flashcard media pattern) - keeps the Base64 out of the store JSON. The coordinator is
+    /// pointed here when a note loads.</summary>
+    public static string NotesMediaDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "notes-media");
+
+    private bool _notesWriteInFlight;
+    private bool _notesWritePending;
+    private string? _lastSavedNotesSignature;
+    private string? _lastSavedFlashcardSetsSignature;
+    private string? _lastSavedMindMapsSignature;
+    private string? _lastSavedQuizzesSignature;
+    /// <summary>Shared serializer options - the metadata cache is per-instance, so reusing one
+    /// instance avoids re-discovering the whole store object graph on every save.</summary>
+    private static readonly JsonSerializerOptions StoreJsonOptions = new() { WriteIndented = false };
+
+    /// <summary>
+    /// Returns recently-freed pages to the OS so Task Manager reflects the app's real footprint
+    /// instead of the OS's page-retention history. Call off-thread after a collection: the pages
+    /// move to the standby list (fast to re-fault) and the committed memory becomes available to
+    /// the system. No-op on failure.
+    /// </summary>
+    public static void TrimWorkingSet()
     {
         try
         {
-            var docs = new List<NoteDocument>();
-            foreach (var vm in Notes)
-                docs.Add(vm.Document);
+            SetProcessWorkingSetSize((IntPtr)(-1), (IntPtr)(-1), (IntPtr)(-1));
+        }
+        catch
+        {
+        }
+    }
 
-            var trashedDocs = new List<NoteDocument>();
-            foreach (var vm in TrashedNotes)
-                trashedDocs.Add(vm.Document);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessWorkingSetSize(
+        IntPtr process,
+        IntPtr minimumWorkingSetSize,
+        IntPtr maximumWorkingSetSize);
 
-            var store = new NotesStoreData
-            {
-                Notes = docs,
-                TrashedNotes = trashedDocs,
-                Groups = _groupMetadata.Values
-                    .OrderBy(g => g.SortOrder ?? int.MaxValue)
-                    .ThenBy(g => g.Name)
-                    .ToList()
-            };
+    /// <summary>
+    /// Persists the notes store. The JSON payload carries every photo's Base64 data (a photo
+    /// note can push the store past 50MB), so the serialize + atomic write run on a background
+    /// thread - the UI thread only captures the snapshot. Concurrent saves coalesce: a save that
+    /// arrives while a write is mid-flight marks the state dirty and re-runs when the write
+    /// finishes, so the latest edits are never dropped and two writers can never race the same
+    /// temp file.
+    /// </summary>
+    public void SaveNotes()
+    {
+        // Skip the write entirely when nothing changed since the last one - the auto-save tick
+        // would otherwise rewrite the whole (tens of MB) store every interval even when the
+        // library is untouched. The signature covers every persisted field (see
+        // BuildNotesStoreSignature); any failure falls through to a full save.
+        string signature;
+        try
+        {
+            signature = BuildNotesStoreSignature();
+            if (string.Equals(signature, _lastSavedNotesSignature, StringComparison.Ordinal))
+                return;
+        }
+        catch
+        {
+            signature = string.Empty;
+        }
 
-            var opts = new JsonSerializerOptions { WriteIndented = false };
-            var json = JsonSerializer.Serialize(store, opts);
-            AtomicFileWriter.WriteAllText(GetNotesFilePath(), json);
+        if (_notesWriteInFlight)
+        {
+            _notesWritePending = true;
+            return;
+        }
+
+        _notesWriteInFlight = true;
+        NotesStoreData snapshot;
+        string filePath;
+        var uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
+        try
+        {
+            snapshot = BuildNotesStoreSnapshot();
+            filePath = GetNotesFilePath();
         }
         catch
         {
             // Persistence errors are non-fatal; ignored.
+            _notesWriteInFlight = false;
+            return;
         }
+
+        Task.Run(() =>
+        {
+            try
+            {
+                AtomicFileWriter.Write(filePath, stream =>
+                    JsonSerializer.Serialize(stream, snapshot, StoreJsonOptions));
+                // Only a completed write may be remembered as "saved" - otherwise a failed
+                // write would make the next save skip and the changes would never persist.
+                _lastSavedNotesSignature = signature;
+
+                // Serializing a photo-heavy store allocates ~2-3x its payload as short-lived
+                // garbage that otherwise sits uncollected until the next incidental gen2 pass
+                // (the heap visibly climbed ~150MB per auto-save, then collapsed at the next
+                // window open). Collect deterministically right here, off the UI thread - the
+                // Optimized/non-blocking variant proved unreliable (skipped passes let the
+                // post-collection baseline climb ~150MB per save).
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                GC.WaitForPendingFinalizers();
+            }
+            catch
+            {
+                // Persistence errors are non-fatal; ignored.
+            }
+        }).ContinueWith(_ =>
+        {
+            _notesWriteInFlight = false;
+            if (_notesWritePending)
+            {
+                _notesWritePending = false;
+                SaveNotes();
+            }
+        }, uiScheduler);
+    }
+
+    private NotesStoreData BuildNotesStoreSnapshot()
+    {
+        var docs = new List<NoteDocument>();
+        foreach (var vm in Notes)
+            docs.Add(vm.Document);
+
+        var trashedDocs = new List<NoteDocument>();
+        foreach (var vm in TrashedNotes)
+            trashedDocs.Add(vm.Document);
+
+        return new NotesStoreData
+        {
+            Notes = docs,
+            TrashedNotes = trashedDocs,
+            Groups = _groupMetadata.Values
+                .OrderBy(g => g.SortOrder ?? int.MaxValue)
+                .ThenBy(g => g.Name)
+                .ToList()
+        };
+    }
+
+    /// <summary>
+    /// Cheap fingerprint of everything <see cref="SaveNotes"/> persists, so an unchanged
+    /// library skips the whole write. Note edits are covered by <see cref="NoteDocument.LastModified"/>
+    /// (set on every content/title/tags/font/image change); structural changes (group moves,
+    /// renames, pinning, ordering, trash) are covered field-by-field. The note sequence order
+    /// matters - a reorder must look like a change.
+    /// </summary>
+    private string BuildNotesStoreSignature()
+    {
+        var builder = new System.Text.StringBuilder();
+        foreach (var vm in Notes)
+        {
+            var doc = vm.Document;
+            builder.Append(doc.Id).Append('|');
+            builder.Append(doc.LastModified.Ticks).Append('|');
+            builder.Append(doc.Content?.Length ?? 0).Append('|');
+            builder.Append(doc.Images?.Count ?? 0).Append('|');
+            builder.Append(doc.GroupId).Append('|');
+            builder.Append(doc.IsPinned).Append('|');
+            builder.Append(doc.IsEditorFontPanelOpen).Append('|');
+            builder.Append(doc.IsWordWrapEnabled).Append(';');
+        }
+
+        builder.Append("T").Append(TrashedNotes.Count).Append(';');
+        foreach (var vm in TrashedNotes)
+            builder.Append(vm.Document.Id).Append('|').Append(vm.Document.LastModified.Ticks).Append(';');
+
+        foreach (var group in _groupMetadata.Values
+            .OrderBy(g => g.SortOrder ?? int.MaxValue)
+            .ThenBy(g => g.Name))
+        {
+            builder.Append(group.GroupId).Append('|');
+            builder.Append(group.Name).Append('|');
+            builder.Append(group.BackgroundColor).Append('|');
+            builder.Append(group.SortOrder).Append(';');
+        }
+
+        return builder.ToString();
     }
 
     private void ApplyAppSettings(AppSettings settings, bool applyThemeAndCulture)
@@ -8309,11 +8701,13 @@ public class MainViewModel : ViewModelBase
 
         try
         {
-            var json = File.ReadAllText(path);
+            // Stream the deserialize - the store can be tens of MB of photo Base64, and
+            // reading it into a string first doubles the launch allocation for nothing.
+            using var stream = File.OpenRead(path);
             var docs = new List<NoteDocument>();
             var groups = new List<NoteGroupData>();
             var trashedDocs = new List<NoteDocument>();
-            var store = JsonSerializer.Deserialize<NotesStoreData>(json);
+            var store = JsonSerializer.Deserialize<NotesStoreData>(stream);
             if (store?.Notes != null && store.Notes.Count > 0)
             {
                 docs = store.Notes;
@@ -8322,7 +8716,8 @@ public class MainViewModel : ViewModelBase
             }
             else
             {
-                var legacyDocs = JsonSerializer.Deserialize<List<NoteDocument>>(json);
+                stream.Position = 0;
+                var legacyDocs = JsonSerializer.Deserialize<List<NoteDocument>>(stream);
                 if (legacyDocs != null)
                     docs = legacyDocs;
             }
@@ -8450,6 +8845,18 @@ public class MainViewModel : ViewModelBase
         RefreshCalendarScheduledNotes();
         MarkNotesDashboardReady();
         WarmNoteContentPreviewsAtIdle();
+        SweepOrphanMediaFiles();
+
+        // The launch phase (store parse, card preview warming, dashboard realization) leaves
+        // hundreds of MB of short-lived garbage that would otherwise sit until the first
+        // incidental gen2 pass. Reclaim it off-thread right after the load and return the
+        // pages, so the app's footprint right after launch matches its real usage.
+        _ = Task.Run(() =>
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            TrimWorkingSet();
+        });
     }
 
     /// <summary>
@@ -8461,8 +8868,10 @@ public class MainViewModel : ViewModelBase
         // Warm in the order notes are actually scrolled to (NotesView's pinned/sorted order),
         // not raw load order (Notes) — the two diverge until a pin toggle physically reorders
         // Notes to match, so warming raw Notes can spend the idle window on cards far from what
-        // the user sees first.
-        var pending = new Queue<NoteCardViewModel>(NotesView.Cast<NoteCardViewModel>());
+        // the user sees first. Only the initial viewport is warmed (the visible window + a
+        // buffer); cards beyond it decode lazily on scroll - for large libraries warming every
+        // card would decode the full content of the whole library at startup.
+        var pending = new Queue<NoteCardViewModel>(NotesView.Cast<NoteCardViewModel>().Take(PreviewWarmBudget));
         if (pending.Count == 0)
             return;
 

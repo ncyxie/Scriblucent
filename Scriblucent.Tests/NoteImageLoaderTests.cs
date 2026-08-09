@@ -30,10 +30,14 @@ public class NoteImageLoaderTests
             targetDisplayWidthDip: 100,
             dpiScale: 1,
             naturalPixelWidth: 200);
-        Assert.Equal(200, budget); // 100 * 3 headroom = 300, capped to natural 200
+        Assert.Equal(150, budget); // 100 * 1.5 headroom = 150, below the natural cap
 
         var smallNatural = NoteImageLoader.ResolveDecodePixelWidth(100, 1, 50);
         Assert.Equal(50, smallNatural);
+
+        // The headroom is kept low: 1.5x display width, so a photo note never holds ~9x its
+        // rendered pixels (the old 3.0 headroom) - the zoom re-decodes at the new size instead.
+        Assert.Equal(150, NoteImageLoader.ResolveDecodePixelWidth(100, 1, 1000));
     }
 
     [Fact]

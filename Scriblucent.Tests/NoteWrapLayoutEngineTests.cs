@@ -84,6 +84,10 @@ public class NoteWrapLayoutEngineTests
         => RunOnSta(RunLiveApplyScenario);
 
     [Fact]
+    public void Engine_CaptureRestore_ReappliesExactWrapState()
+        => RunOnSta(RunCaptureRestoreScenario);
+
+    [Fact]
     public void InlineSpacer_ReservesBandInsidePlainParagraph()
         => RunOnSta(() => RunInlineSpacerProbe(BuildPlainParagraph));
 
@@ -1032,9 +1036,110 @@ public class NoteWrapLayoutEngineTests
         PumpDispatcher(harness.Editor, 150);
         harness.Editor.UpdateLayout();
         var stackEnd = FindSpacers(tall);
+        var stackEndHeight = stackEnd.Sum(c => ((Border)c.Child).Height);
         Assert.True(
-            Math.Abs(stackEnd.Sum(c => ((Border)c.Child).Height) - heightBefore) < 2,
-            $"final layout should match the original band, got {stackEnd.Sum(c => ((Border)c.Child).Height):F1} vs {heightBefore:F1}");
+            Math.Abs(stackEndHeight - heightBefore) < 2,
+            $"final layout should match the original band, got {stackEndHeight:F1} vs {heightBefore:F1}");
+
+        // The live path (throttled ticks) settles toward the moved band over a couple of
+        // convergence passes without the full render flush - drive it directly and verify
+        // it still moves the wrap. (stackEndHeight is captured before the move: the live
+        // resize mutates the same container objects in place.)
+        session.DocumentTop += 5;
+        harness.Engine.Apply(live: true);
+        harness.Engine.Apply(live: true);
+        PumpDispatcher(harness.Editor, 60);
+        harness.Editor.UpdateLayout();
+        var stackLive = FindSpacers(tall);
+        Assert.True(
+            stackLive.Sum(c => ((Border)c.Child).Height) > stackEndHeight + 3,
+            $"the live path should move the wrap toward the moved band, got {stackLive.Sum(c => ((Border)c.Child).Height):F1} vs {stackEndHeight:F1}");
+
+        // The gesture end settles the final state exactly.
+        session.DocumentTop -= 5;
+        harness.Engine.ScheduleApply();
+        PumpDispatcher(harness.Editor, 150);
+        harness.Editor.UpdateLayout();
+        var stackRestored = FindSpacers(tall);
+        Assert.True(
+            Math.Abs(stackRestored.Sum(c => ((Border)c.Child).Height) - stackEndHeight) < 2,
+            $"the final full pass should restore the band, got {stackRestored.Sum(c => ((Border)c.Child).Height):F1} vs {stackEndHeight:F1}");
+    }
+
+    private static void RunCaptureRestoreScenario()
+    {
+        // Square per-line spacers: capture -> Clear -> restore must reproduce the exact wrap
+        // (spacer counts and widths) without a recompute.
+        using var harness = CreateHarness(paragraphCount: 14);
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+
+        var paragraphs = EnumerateAllParagraphs(harness.Editor.Document.Blocks).ToList();
+        var marginsBefore = AllMargins(harness.Editor.Document);
+        var spacersBefore = paragraphs.ToDictionary(
+            p => p,
+            p => FindSquareSpacers(p).Select(c => ((Border)c.Child).Width).ToList());
+        Assert.True(spacersBefore.Values.Any(l => l.Count > 0), "square wrap should place line spacers");
+
+        var snapshot = harness.Engine.CaptureWrapState();
+        Assert.NotNull(snapshot);
+
+        harness.Engine.Clear();
+        var marginsCleared = AllMargins(harness.Editor.Document);
+        Assert.All(marginsCleared.Values, m => Assert.Equal(0, m.Left, precision: 3));
+        Assert.All(marginsCleared.Values, m => Assert.Equal(0, m.Right, precision: 3));
+        Assert.All(paragraphs, p => Assert.Empty(FindSquareSpacers(p)));
+
+        Assert.True(harness.Engine.RestoreWrapState(snapshot), "restore should report restored state");
+        harness.Editor.UpdateLayout();
+
+        foreach (var paragraph in paragraphs)
+        {
+            var beforeWidths = spacersBefore[paragraph];
+            var afterWidths = FindSquareSpacers(paragraph).Select(c => ((Border)c.Child).Width).ToList();
+            Assert.Equal(beforeWidths.Count, afterWidths.Count);
+            for (var i = 0; i < beforeWidths.Count; i++)
+            {
+                Assert.True(Math.Abs(beforeWidths[i] - afterWidths[i]) < 0.5,
+                    $"spacer {i} width {afterWidths[i]:F1} should match captured {beforeWidths[i]:F1}");
+            }
+        }
+
+        var marginsAfter = AllMargins(harness.Editor.Document);
+        foreach (var (paragraph, before) in marginsBefore)
+        {
+            Assert.True(
+                Math.Abs(Normalize(before).Left - Normalize(marginsAfter[paragraph]).Left) < 0.5
+                && Math.Abs(Normalize(before).Right - Normalize(marginsAfter[paragraph]).Right) < 0.5,
+                $"margin of a wrapped paragraph should match the captured state");
+        }
+
+        // TopAndBottom straddling inline stacks restore the same way (anchor re-insertion).
+        using var straddleHarness = CreateHarness(paragraphCount: 0, tallParagraph: true);
+        straddleHarness.Coordinator.SetWrapMode(straddleHarness.ImageId, NoteImageWrapMode.TopAndBottom);
+        straddleHarness.Editor.UpdateLayout();
+        straddleHarness.Engine.Apply();
+        straddleHarness.Editor.UpdateLayout();
+
+        var straddler = EnumerateAllParagraphs(straddleHarness.Editor.Document.Blocks).First();
+        var stack = FindSpacers(straddler);
+        Assert.NotEmpty(stack);
+        var stackBefore = stack.Sum(c => ((Border)c.Child).Height);
+
+        var straddleSnapshot = straddleHarness.Engine.CaptureWrapState();
+        Assert.NotNull(straddleSnapshot);
+
+        straddleHarness.Engine.Clear();
+        straddleHarness.Editor.UpdateLayout();
+        Assert.Empty(FindSpacers(straddler));
+
+        Assert.True(straddleHarness.Engine.RestoreWrapState(straddleSnapshot), "inline stack restore should report restored");
+        straddleHarness.Editor.UpdateLayout();
+        var stackAfter = FindSpacers(straddler).Sum(c => ((Border)c.Child).Height);
+        Assert.True(Math.Abs(stackBefore - stackAfter) < 2,
+            $"inline stack {stackAfter:F1} should match captured {stackBefore:F1}");
     }
 
     private static void PumpDispatcher(RichTextBox editor, double milliseconds)

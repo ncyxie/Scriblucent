@@ -11,7 +11,11 @@ namespace Scriblucent.Services;
 /// </summary>
 public static class NoteImageLoader
 {
-    public const double DefaultDecodeHeadroom = 3.0;
+    /// <summary>Decode budget headroom over the display width: photos are decoded at up to
+    /// display x DPI x this factor so a modest zoom keeps sharpness. Kept low (1.5) because
+    /// every extra factor squares the decoded pixel memory - a 3x headroom made a photo-heavy
+    /// note hold ~9x its rendered bitmap size. The zoom already re-decodes at the new size.</summary>
+    public const double DefaultDecodeHeadroom = 1.5;
     public const double DefaultInsertMaxWidthDip = 400;
     public const double DefaultInsertMaxHeightDip = 300;
 

@@ -48,6 +48,18 @@ public partial class NoteEditorTabsWindow : Window
         PreviewKeyDown += NoteEditorTabsWindow_PreviewKeyDown;
         EditorTabs.SelectionChanged += EditorTabs_SelectionChanged;
         Loaded += (_, _) => UiMotion.ConfigurePopupsForWindow(this);
+        Closed += (_, _) =>
+        {
+            // The editor teardown (document, coordinator, wrap engine) leaves sizeable transient
+            // garbage that otherwise waits for the next incidental gen2 pass; collect off-thread
+            // and return the freed pages (the app is idle at this moment).
+            _ = Task.Run(() =>
+            {
+                GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                GC.WaitForPendingFinalizers();
+                Scriblucent.ViewModels.MainViewModel.TrimWorkingSet();
+            });
+        };
         Closing += Window_Closing;
         WindowContentEnterHelper.AnimateOnLoaded(this, "EditorTabs", FinalizeWindowClose);
     }
