@@ -132,6 +132,10 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     /// <see cref="ComputeParagraphInsets"/> and consumed by <see cref="ReplaceSquareLineSpacers"/>:
     /// each band is (band top, band bottom, photo right edge + gap).</summary>
     private readonly Dictionary<Paragraph, List<(double Top, double Bottom, double PhotoLeft, double PhotoRight)>> _squareRightBands = new();
+    /// <summary>Snapshot of the last pass's square bands - <see cref="SquareBandsChanged"/>
+    /// compares against it so an unchanged wrap skips the spacer rebuild entirely (the rebuild's
+    /// insertions fire TextChanged, which would re-trigger the pass forever).</summary>
+    private readonly Dictionary<Paragraph, List<(double Top, double Bottom, double PhotoLeft, double PhotoRight)>> _lastSquareBands = new();
     /// <summary>Transient leading spacers that indent ONLY the lines beside a Square-wrapped photo
     /// (Word-style per-line lane) - lines above and below the photo stay full-width, instead of
     /// the whole paragraph shoving to one side. Removed and re-placed on every pass.</summary>
@@ -156,6 +160,15 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     private double _pushSpacerHeight;
     private ScrollViewer? _scrollViewer;
     private bool _isApplying;
+    /// <summary>TextChanged events from outside the engine's own passes - a settled re-apply is
+    /// one where <see cref="_externalTextChangeVersion"/> matches <see cref="_lastAppliedTextChangeVersion"/>
+    /// (see <see cref="OnEditorTextChangedExternal"/>).</summary>
+    private long _externalTextChangeVersion;
+    private long _lastAppliedTextChangeVersion;
+    /// <summary>Photo geometry snapshot of the last full pass - a drag/resize/mode change makes
+    /// <see cref="SessionsChangedSinceLastApply"/> true so the gesture-end full pass still runs
+    /// (the live passes are approximate and must settle exactly).</summary>
+    private readonly List<(Guid Id, NoteImageWrapMode Mode, double Left, double Top, double Width, double Height)> _lastAppliedSessions = new();
     private bool _layoutRetryPending;
     private bool _disposed;
 
@@ -166,6 +179,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         _images = images;
 
         _surface.SizeChanged += OnSurfaceSizeChanged;
+        _editor.TextChanged += OnEditorTextChangedExternal;
 
         _recomputeDebounce = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -178,6 +192,18 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             Interval = TimeSpan.FromMilliseconds(LiveApplyIntervalMs)
         };
         _liveApplyThrottle.Tick += OnLiveApplyThrottleTick;
+    }
+
+    /// <summary>Counts the editor's TextChanged events that fire OUTSIDE the engine's own passes
+    /// (the engine sets <see cref="_isApplying"/> during them). A settled re-apply is then
+    /// detectable: if no external text change happened since the last pass, the wrap state must
+    /// still match it, so the pass (and its spacer/push mutations - the perpetual re-apply loop
+    /// that kept notes marked "edited") can be skipped entirely. Real text edits bump the
+    /// counter and do re-trigger the wrap.</summary>
+    private void OnEditorTextChangedExternal(object? sender, EventArgs e)
+    {
+        if (!_isApplying)
+            _externalTextChangeVersion++;
     }
 
     /// <summary>Queues a debounced recompute (text edits, image moves, resize, zoom...).</summary>
@@ -238,6 +264,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         RemoveInlineSpacers();
         RemoveSquareLineSpacers();
         _squareRightBands.Clear();
+        _lastSquareBands.Clear();
         _lastSquareSpacerSignature = 0;
     }
 
@@ -467,6 +494,27 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             return;
         }
 
+        if (!live && _originalMargins.Count > 0
+            && _externalTextChangeVersion == _lastAppliedTextChangeVersion)
+        {
+            // Nothing external changed the flow since the last pass and the wrap is still
+            // applied - re-running would reset the margins and remove/re-insert the push
+            // spacer (block mutations firing TextChanged per event), which re-schedules this
+            // pass forever: the perpetual re-apply loop that kept notes marked "edited" and
+            // churned CPU at rest. The settled state is a true no-op.
+            return;
+        }
+
+        if (!live && IsWrapSettled(sessions))
+        {
+            // Nothing external changed the flow or the photo geometry since the last full pass
+            // and the wrap is still applied - re-running would reset the margins and
+            // remove/re-insert the push spacer (block mutations firing TextChanged per event),
+            // which re-schedules this pass forever: the perpetual re-apply loop that kept
+            // notes marked "edited" and churned CPU at rest. The settled state is a true no-op.
+            return;
+        }
+
         _isApplying = true;
         // The wrap's spacer mutations fire the editor's TextChanged per event, and the
         // coordinator's marker sweep walks the whole document on every one of them - while the
@@ -478,12 +526,71 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         try
         {
             ApplyWithConvergence(sessions, paragraphs, contentWidth, live);
+            if (!live)
+            {
+                _lastAppliedTextChangeVersion = _externalTextChangeVersion;
+                _lastAppliedSessions.Clear();
+                foreach (var s in sessions)
+                {
+                    _lastAppliedSessions.Add((
+                        s.Id,
+                        s.WrapMode,
+                        s.DocumentLeft,
+                        s.DocumentTop,
+                        s.Width,
+                        s.Height));
+                }
+            }
         }
         finally
         {
             _images.SuppressMarkerSweep = priorSweepSuppression;
             _isApplying = false;
         }
+    }
+
+    /// <summary>True when the wrap is fully applied and nothing (text or photo geometry) changed
+    /// since the last full pass - a re-apply would be a pure no-op whose transient mutations are
+    /// the source of the perpetual re-apply loop. Text edits, photo drags/resizes, and wrap-mode
+    /// changes all register as "not settled" and do re-trigger the wrap.</summary>
+    private bool IsWrapSettled(IReadOnlyList<NoteImageSession> sessions)
+    {
+        if (_originalMargins.Count == 0)
+            return false;
+
+        foreach (var (paragraph, original) in _originalMargins)
+        {
+            if (paragraph.Parent is null || MarginsCloseEnough(paragraph.Margin, original))
+                return false;
+        }
+
+        if (_externalTextChangeVersion != _lastAppliedTextChangeVersion)
+            return false;
+
+        return !SessionsChangedSinceLastApply(sessions);
+    }
+
+    private bool SessionsChangedSinceLastApply(IReadOnlyList<NoteImageSession> sessions)
+    {
+        if (sessions.Count != _lastAppliedSessions.Count)
+            return true;
+
+        for (var i = 0; i < sessions.Count; i++)
+        {
+            var s = sessions[i];
+            var last = _lastAppliedSessions[i];
+            if (s.Id != last.Id
+                || s.WrapMode != last.Mode
+                || Math.Abs(s.DocumentLeft - last.Left) > 0.5
+                || Math.Abs(s.DocumentTop - last.Top) > 0.5
+                || Math.Abs(s.Width - last.Width) > 0.5
+                || Math.Abs(s.Height - last.Height) > 0.5)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ApplyWithConvergence(
@@ -560,6 +667,18 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         {
             var next = ComputeParagraphInsets(sessions, paragraphs, contentWidth, topPushes);
             var marginsChanged = ApplyParagraphInsets(next);
+            var bandsChanged = SquareBandsChanged();
+            if (!marginsChanged && !bandsChanged && !(allowTopPushes && topPushes.Count == 0))
+            {
+                // Neither the margins nor the square wrap bands changed since the last pass -
+                // the spacers would be identical, so skip the rebuild and the layouts entirely.
+                // The rebuild re-inserts every spacer, firing TextChanged per event, which
+                // re-schedules this pass - without this the engine re-wraps forever, keeping
+                // the note perpetually marked "edited" and burning CPU at rest.
+                return;
+            }
+
+            RememberSquareBands();
 
             // Live ticks (image drag/resize) reflow the Square lanes too, so the words are
             // pushed around the moving photo in real time - the same live feel TopAndBottom
@@ -585,6 +704,43 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             if (!marginsChanged && !grew && !spacersChanged)
                 return;
         }
+    }
+
+    /// <summary>True when the freshly computed square bands differ from the last pass's within a
+    /// small tolerance (the layout reads can jitter sub-pixel). An unchanged wrap needs no spacer
+    /// rebuild - skipping it is what breaks the perpetual re-apply loop.</summary>
+    private bool SquareBandsChanged()
+    {
+        if (_squareRightBands.Count != _lastSquareBands.Count)
+            return true;
+
+        foreach (var (paragraph, bands) in _squareRightBands)
+        {
+            if (!_lastSquareBands.TryGetValue(paragraph, out var last) || last.Count != bands.Count)
+                return true;
+
+            for (var i = 0; i < bands.Count; i++)
+            {
+                var a = bands[i];
+                var b = last[i];
+                if (Math.Abs(a.Top - b.Top) > 0.5
+                    || Math.Abs(a.Bottom - b.Bottom) > 0.5
+                    || Math.Abs(a.PhotoLeft - b.PhotoLeft) > 0.5
+                    || Math.Abs(a.PhotoRight - b.PhotoRight) > 0.5)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private void RememberSquareBands()
+    {
+        _lastSquareBands.Clear();
+        foreach (var (paragraph, bands) in _squareRightBands)
+            _lastSquareBands[paragraph] = new List<(double, double, double, double)>(bands);
     }
 
     /// <summary>
@@ -1026,14 +1182,19 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         if (entryRect.IsEmpty)
             return _linesInRange;
 
+        // The band is in document space - the character rects are layout space (scroll
+        // independent), so the line extents and the walk's exit bound are corrected by the
+        // scroll offset. Without it, a scrolled-down document compares layout tops against
+        // document band bottoms and the wrap silently dies below the fold.
+        var scrollY = GetScrollOffset().Y;
         var current = FindFirstPositionWithTopAtLeast(paragraph, entryRect.Top);
         while (current is not null)
         {
             var rect = current.GetCharacterRect(LogicalDirection.Forward);
-            if (rect.IsEmpty || rect.Top > bandBottom + 0.5)
+            if (rect.IsEmpty || rect.Top + scrollY > bandBottom + 0.5)
                 break;
 
-            _linesInRange.Add((current, rect.Top, rect.Bottom));
+            _linesInRange.Add((current, rect.Top + scrollY, rect.Bottom + scrollY));
 
             var next = current.GetLineStartPosition(1);
             if (next is null || next.CompareTo(paragraph.ContentEnd) >= 0)
@@ -1785,6 +1946,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         _liveApplyThrottle.Stop();
         _liveApplyThrottle.Tick -= OnLiveApplyThrottleTick;
         _surface.SizeChanged -= OnSurfaceSizeChanged;
+        _editor.TextChanged -= OnEditorTextChangedExternal;
         if (_layoutRetryPending)
         {
             _editor.LayoutUpdated -= OnLayoutUpdatedRetry;

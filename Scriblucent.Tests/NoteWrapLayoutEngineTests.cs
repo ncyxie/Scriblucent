@@ -56,6 +56,10 @@ public class NoteWrapLayoutEngineTests
         => RunOnSta(() => RunTallParagraphScenario(scrollY: 300));
 
     [Fact]
+    public void Engine_Square_TallSingleParagraph_Scrolled()
+        => RunOnSta(RunSquareTallScrolledScenario);
+
+    [Fact]
     public void Engine_TopAndBottom_TallSingleParagraph_WithSurfaceLayoutTransform()
         => RunOnSta(() => RunTallParagraphScenario(surfaceTransform: true));
 
@@ -86,6 +90,18 @@ public class NoteWrapLayoutEngineTests
     [Fact]
     public void Engine_CaptureRestore_ReappliesExactWrapState()
         => RunOnSta(RunCaptureRestoreScenario);
+
+    [Fact]
+    public void Engine_Square_IdleReapply_FiresNoEvents()
+        => RunOnSta(() => RunIdleReapplyStabilityScenario(NoteImageWrapMode.Square));
+
+    [Fact]
+    public void Engine_TopAndBottom_IdleReapply_FiresNoEvents()
+        => RunOnSta(() => RunIdleReapplyStabilityScenario(NoteImageWrapMode.TopAndBottom));
+
+    [Fact]
+    public void Engine_TopAndBottom_FirstBlockPush_IdleReapply_FiresNoEvents()
+        => RunOnSta(RunFirstBlockPushIdleReapplyScenario);
 
     [Fact]
     public void InlineSpacer_ReservesBandInsidePlainParagraph()
@@ -751,6 +767,49 @@ public class NoteWrapLayoutEngineTests
         Assert.All(AllMargins(harness.Editor.Document).Values, m => Assert.Equal(0, m.Top, precision: 3));
     }
 
+    private static void RunSquareTallScrolledScenario()
+    {
+        // Regression: the square per-line spacer enumeration compared layout-space line rects
+        // against the document-space band - scrolled down, the band's own lines failed the
+        // intersection check and the wrap silently stopped below the fold. TopAndBottom was
+        // immune (its split search is scroll-corrected), which is why only Square broke at
+        // depth. The tall paragraph's band sits well below the initial viewport here.
+        using var harness = CreateHarness(paragraphCount: 0, tallParagraph: true);
+        // The harness's tall paragraph is only ~500px - extend it so a real scroll is possible
+        // (the bug only bites below the fold).
+        var tallParagraph = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
+        tallParagraph.Inlines.Add(new Run(
+            string.Join(
+                " ",
+                Enumerable.Repeat(
+                    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+                    80))));
+        harness.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        harness.Editor.UpdateLayout();
+        ScrollEditorTo(harness.Editor, 300);
+        harness.Editor.UpdateLayout();
+
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+
+        var tall = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
+        var spacers = FindSquareSpacers(tall);
+        Assert.NotEmpty(spacers);
+        // The spacers must sit on the band's own lines. The band is [290, 460] in document
+        // space; with the 300px scroll the band's lines sit at layout tops roughly -10..160.
+        // The pre-fix coordinate mismatch placed the spacers on the lines BELOW the band
+        // (layout tops 290+), leaving the photo's own text unwrapped.
+        foreach (var container in spacers)
+        {
+            var top = container.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
+            Assert.True(
+                top >= -25 && top <= 175,
+                $"spacer at layout top {top:F1} should sit on the band's lines (band 290-460 scrolled by 300)");
+        }
+    }
+
     private static void RunTallParagraphScenario(
         bool documentEnabled = false,
         double scrollY = 0,
@@ -788,7 +847,21 @@ public class NoteWrapLayoutEngineTests
             }
         }
         if (scrollY > 0)
+        {
+            // The harness editor starts with scrolling disabled and the tall paragraph is only
+            // ~500px - neither can actually scroll, so the scrolled variants used to run at
+            // scroll 0 without exercising the offset math. Make the scroll real.
+            harness.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            var scrollTall = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
+            scrollTall.Inlines.Add(new Run(
+                string.Join(
+                    " ",
+                    Enumerable.Repeat(
+                        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+                        80))));
+            harness.Editor.UpdateLayout();
             ScrollEditorTo(harness.Editor, scrollY);
+        }
 
         harness.Editor.UpdateLayout();
 
@@ -813,17 +886,18 @@ public class NoteWrapLayoutEngineTests
         if (stack.Count > 0)
         {
             // Between lines: the head stays at the top and the tail continues below the band.
+            // Character rects are layout space - add the scroll back for the document-space band.
             Assert.True(top < 100, $"head should stay at the top, got {top:F1}");
             var tailTop = GetInlineAfterStack(tall.Inlines, stack).ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
             Assert.True(
-                tailTop >= expectedBandBottom - 2,
+                tailTop + scrollY >= expectedBandBottom - 2,
                 $"tail top {tailTop:F1} should be at/after band bottom {expectedBandBottom}");
         }
         else
         {
             // Whole-paragraph fallback: the paragraph itself starts below the band.
             Assert.True(
-                top >= expectedBandBottom - 2,
+                top + scrollY >= expectedBandBottom - 2,
                 $"paragraph top {top:F1} should be at/after band bottom {expectedBandBottom}");
         }
 
@@ -1064,6 +1138,47 @@ public class NoteWrapLayoutEngineTests
         Assert.True(
             Math.Abs(stackRestored.Sum(c => ((Border)c.Child).Height) - stackEndHeight) < 2,
             $"the final full pass should restore the band, got {stackRestored.Sum(c => ((Border)c.Child).Height):F1} vs {stackEndHeight:F1}");
+    }
+
+    private static void RunFirstBlockPushIdleReapplyScenario()
+    {
+        // The push-spacer geometry: the band covers the document's first block start, so the
+        // wrap reserves the push with a transient block spacer. Every full pass used to remove
+        // and re-insert that spacer (block mutations firing TextChanged), keeping the note
+        // perpetually "edited" - the settled re-apply must be a no-op.
+        using var harness = CreateHarness(paragraphCount: 14);
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.TopAndBottom);
+        harness.Coordinator.GetWrapSessions().First().DocumentTop = 0;
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+
+        var eventCount = 0;
+        harness.Editor.TextChanged += (_, _) => eventCount++;
+
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+        Assert.Equal(0, eventCount);
+    }
+
+    private static void RunIdleReapplyStabilityScenario(NoteImageWrapMode mode)
+    {
+        // Regression: with the wrap settled, a re-apply must be a no-op. Before the fix the
+        // spacer rebuild (Square) or the push-spacer reset cycle (TopAndBottom) fired TextChanged
+        // per event on every pass - which re-scheduled the pass forever, keeping the note
+        // perpetually marked "edited" and churning CPU at rest.
+        using var harness = CreateHarness(paragraphCount: 14);
+        harness.Coordinator.SetWrapMode(harness.ImageId, mode);
+        harness.Editor.UpdateLayout();
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+
+        var eventCount = 0;
+        harness.Editor.TextChanged += (_, _) => eventCount++;
+
+        harness.Engine.Apply();
+        harness.Editor.UpdateLayout();
+        Assert.Equal(0, eventCount);
     }
 
     private static void RunCaptureRestoreScenario()

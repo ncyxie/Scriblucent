@@ -157,6 +157,16 @@ namespace Scriblucent
         private bool _isApplyingHyperlinkCtrlHints;
         private bool _hyperlinkCtrlHintsVisible;
         private bool _isLoadingDocument;
+        /// <summary>Suppresses the edited-marking while the async photo restore + the wrap pass
+        /// materialize after a document load - their flow mutations fire TextChanged, which
+        /// would otherwise mark the freshly-opened note "edited". Dedicated flag (NOT the load's
+        /// <see cref="_isLoadingDocument"/>): the restore's continuation runs after the load
+        /// finishes, and reusing the load's flag would leave it stuck true, silencing every
+        /// legitimate edit afterwards.</summary>
+        private bool _suppressEditedMarking;
+        /// <summary>One-shot settle timer: keeps <see cref="_suppressEditedMarking"/> active
+        /// through the post-load mutation fallout, then captures the baseline once quiet.</summary>
+        private DispatcherTimer? _restoreSettleTimer;
         private bool _isSerializingEditorContent;
         private bool _allowCloseWithoutPrompt;
         private bool _isFontPanelOpen;
@@ -1314,7 +1324,10 @@ namespace Scriblucent
 
         private void MarkEditorContentChanged()
         {
-            if (_isLoadingDocument || _isSerializingEditorContent)
+            // Spell-check squiggle application is a real TextDecoration mutation but cosmetic
+            // (cleared before every save) - it must not mark the note as edited.
+            if (_isLoadingDocument || _isSerializingEditorContent || _suppressEditedMarking
+                || _isApplyingSpellCheckDecorations)
                 return;
 
             _editorChangeVersion++;
@@ -2492,21 +2505,46 @@ namespace Scriblucent
 
         /// <summary>Restores the note's photos off the UI thread (the coordinator's dedicated
         /// STA decode thread) so opening a photo-heavy note shows the text immediately. The
-        /// marker sweep stays suppressed across the restore, and the wrap is re-applied once
-        /// the photo geometry is available.</summary>
+        /// marker sweep stays suppressed and the edited-marking stays disabled across the
+        /// materialization, the wrap pass, and the short settle window afterwards (the apply's
+        /// tail events and the debounced re-apply fire TextChanged a few hundred ms after the
+        /// load - the "edited" flash); the baseline is re-captured once the flow is quiet so
+        /// the note opens clean.</summary>
         private async Task RestorePhotosAsync(IReadOnlyList<NoteImageAttachment>? attachments)
         {
+            _suppressEditedMarking = true;
             _floatingImages.SuppressMarkerSweep = true;
             try
             {
                 await _floatingImages.RestoreAsync(attachments);
+
+                // The wrap lanes depend on the photo geometry - apply them now, synchronously
+                // inside the suppression window, so the wrap is correct immediately and its
+                // spacer insertions stay suppressed (the idle re-applies are no-ops - see the
+                // engine's band-equality early exit).
+                _wrapLayout?.Apply();
             }
             finally
             {
                 _floatingImages.SuppressMarkerSweep = false;
             }
 
-            _wrapLayout?.ScheduleApply();
+            // The apply's mutations settle over the next few hundred ms (tail TextChanged
+            // events, the debounced re-apply). Keep the edited-marking suppressed through the
+            // settle, then capture the baseline once the flow is quiet - the post-settle bumps
+            // would otherwise flash the freshly-opened note as "edited".
+            _restoreSettleTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _restoreSettleTimer.Tick -= OnRestoreSettleTick;
+            _restoreSettleTimer.Tick += OnRestoreSettleTick;
+            _restoreSettleTimer.Start();
+        }
+
+        private void OnRestoreSettleTick(object? sender, EventArgs e)
+        {
+            _restoreSettleTimer.Stop();
+            _suppressEditedMarking = false;
+            MarkCurrentStateSaved();
+            UpdateEditedIndicator();
         }
 
         // Print functionality
