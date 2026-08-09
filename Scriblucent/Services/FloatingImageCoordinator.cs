@@ -28,6 +28,8 @@ public sealed class FloatingImageCoordinator
     private const double DragScrollExitMarginDip = 32;
     private const double ExtentPadSlackDip = 24;
     private const double ButtonsFlipThresholdDip = 40;
+    /// <summary>Minimum drag distance (DIPs) before an in-line photo's re-anchor drag engages.</summary>
+    private const double InlineBodyDragThresholdDip = 4.0;
 
     private Canvas? _overlay;
     private RichTextBox? _editor;
@@ -52,6 +54,29 @@ public sealed class FloatingImageCoordinator
     private readonly Dictionary<Paragraph, LineStackingStrategy> _inlineStrategyOverrides = new();
     private readonly Dictionary<Guid, TextBlock> _captionElements = new();
     private List<Guid>? _pendingInlineRestoreOrder;
+    /// <summary>Selection chrome of the selected in-line photo (resize handles + chips),
+    /// hosted on the overlay canvas so it is never clipped by the text content box - the
+    /// handles always meet the photo's corners (the floating widget's pattern).</summary>
+    private InlineImageChrome? _inlineChrome;
+    private string _chromeResizeTag = string.Empty;
+    /// <summary>Photo size captured when an in-line resize gesture starts - the chrome reports
+    /// the ACCUMULATED drag delta, so the size must not re-base on every event.</summary>
+    private double _chromeStartWidth;
+    private double _chromeStartHeight;
+    /// <summary>Per-axis accumulation for the in-line resize. WPF's Thumb reports deltas
+    /// relative to the thumb's OWN position: on the axes where the handle tracks the growth
+    /// (right/bottom edges) the reports are incremental; on the axes the flow pins (left/top
+    /// edges - the thumb never moves there) they are TOTALS since drag start. Accumulating
+    /// only the incremental axes keeps the totals true for every handle.</summary>
+    private double _chromeDragAccumX;
+    private double _chromeDragAccumY;
+    /// <summary>Body-drag state of the selected in-line photo. The photo lives in the text
+    /// flow, where the surrounding text visuals cover the line - OS clicks over it land on the
+    /// text (or the editor), so the element itself never receives real input. The re-anchor
+    /// drag is therefore driven here, at the editor, like the floating widget's drag.</summary>
+    private InlineNoteImageElement? _inlineDragElement;
+    private bool _inlineDragging;
+    private Point _inlineDragStart;
 
     /// <summary>True while the host window is loading document content into the flow (before
     /// <see cref="Restore"/> runs). The freshly loaded in-line markers are legitimate there -
@@ -191,6 +216,11 @@ public sealed class FloatingImageCoordinator
         _surface.SizeChanged += Host_SizeChanged;
         _editor.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Editor_ScrollChanged), true);
         _editor.PreviewMouseDown += Editor_PreviewMouseDown;
+        _editor.PreviewMouseLeftButtonDown += Editor_PreviewMouseLeftButtonDown;
+        _editor.PreviewMouseMove += Editor_PreviewMouseMove;
+        _editor.PreviewMouseLeftButtonUp += Editor_PreviewMouseLeftButtonUp;
+        _editor.PreviewMouseRightButtonUp += Editor_PreviewMouseRightButtonUp;
+        _editor.LostMouseCapture += Editor_LostMouseCapture;
         _editor.TextChanged += Editor_TextChanged;
 
         _scrollViewer = FindScrollViewer(_editor);
@@ -209,6 +239,11 @@ public sealed class FloatingImageCoordinator
             _editor.SizeChanged -= Host_SizeChanged;
             _editor.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Editor_ScrollChanged));
             _editor.PreviewMouseDown -= Editor_PreviewMouseDown;
+            _editor.PreviewMouseLeftButtonDown -= Editor_PreviewMouseLeftButtonDown;
+            _editor.PreviewMouseMove -= Editor_PreviewMouseMove;
+            _editor.PreviewMouseLeftButtonUp -= Editor_PreviewMouseLeftButtonUp;
+            _editor.PreviewMouseRightButtonUp -= Editor_PreviewMouseRightButtonUp;
+            _editor.LostMouseCapture -= Editor_LostMouseCapture;
             _editor.TextChanged -= Editor_TextChanged;
         }
 
@@ -216,6 +251,9 @@ public sealed class FloatingImageCoordinator
             _surface.SizeChanged -= Host_SizeChanged;
 
         Clear(raiseChanged: false);
+        if (_inlineChrome is not null && _overlay is not null)
+            _overlay.Children.Remove(_inlineChrome);
+        _inlineChrome = null;
         _sessions.Clear();
         _overlay = null;
         _editor = null;
@@ -286,6 +324,7 @@ public sealed class FloatingImageCoordinator
         _inlineContainers.Clear();
         _sessions.Clear();
         _captionElements.Clear();
+        _inlineChrome = null; // the overlay cleared it; re-created lazily on the next selection
         _selected = null;
         _selectedInlineId = null;
         _pendingInlineRestoreOrder = null;
@@ -294,6 +333,9 @@ public sealed class FloatingImageCoordinator
         _activeGestures = 0;
         _gestureWidget = null;
         _hasDragGrab = false;
+        _inlineDragElement = null;
+        _inlineDragging = false;
+        _inlineDropIndicator = null; // the overlay cleared it; re-created lazily on the next drag
         StopDragScrollTimer();
         SyncInlineParagraphLineStrategies(); // restores line strategies before the overrides are dropped
         _inlineStrategyOverrides.Clear();
@@ -537,6 +579,11 @@ public sealed class FloatingImageCoordinator
             if (container.Child is InlineNoteImageElement element)
                 element.IsSelected = true;
 
+            // The selection chrome (resize handles + chips) lives on the overlay - it is not
+            // clipped by the text content box, so the handles always meet the photo's corners,
+            // even on the editor's first row (the floating widget's pattern).
+            SyncInlineChrome();
+
             // Park the editor's caret right AFTER the photo. Clicks on the element are swallowed
             // (e.Handled) so the caret never moves, yet WPF scrolls the caret into view when
             // the editor gains focus - with a stale caret at the top of the note that would
@@ -561,6 +608,7 @@ public sealed class FloatingImageCoordinator
             }
 
             _selectedInlineId = null;
+            HideInlineChrome();
         }
 
         if (ReferenceEquals(_selected, widget))
@@ -575,6 +623,193 @@ public sealed class FloatingImageCoordinator
             _selected.IsSelected = true;
 
         SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ------------------------------------------------------------- in-line selection chrome
+
+    private InlineImageChrome EnsureInlineChrome()
+    {
+        if (_inlineChrome is not null)
+            return _inlineChrome;
+
+        _inlineChrome = new InlineImageChrome();
+        _inlineChrome.ResizeStarted += InlineChrome_ResizeStarted;
+        _inlineChrome.ResizeDelta += InlineChrome_ResizeDelta;
+        _inlineChrome.ResizeCompleted += InlineChrome_ResizeCompleted;
+        _inlineChrome.LockToggled += InlineChrome_LockToggled;
+        _inlineChrome.DeleteRequested += InlineChrome_DeleteRequested;
+        _overlay?.Children.Add(_inlineChrome);
+        return _inlineChrome;
+    }
+
+    /// <summary>Positions the chrome over the selected in-line photo and shows it; hides it
+    /// when nothing is selected. The chrome is a view-layer object on the overlay, so its
+    /// handles are never clipped by the text content box.</summary>
+    private void SyncInlineChrome()
+    {
+        EnsureInlineChrome();
+        if (_overlay is null
+            || _editor is null
+            || _selectedInlineId is not { } id
+            || !_inlineContainers.TryGetValue(id, out var container)
+            || container.Child is not InlineNoteImageElement element)
+        {
+            _inlineChrome!.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        try
+        {
+            // The element's position in the editor equals its position in the overlay (both
+            // siblings at the same origin in the editor surface).
+            var origin = element.TransformToAncestor(_editor).Transform(new Point(0, 0));
+            Canvas.SetLeft(_inlineChrome, origin.X);
+            Canvas.SetTop(_inlineChrome, origin.Y);
+            _inlineChrome.Width = element.Width;
+            _inlineChrome.Height = element.Height - element.CaptionHeight;
+            _inlineChrome.Visibility = Visibility.Visible;
+
+            // The chips normally sit above the photo; when it is pressed against the editor's
+            // top edge, flip them below (same rule as the floating widget).
+            var rect = container.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            var top = rect.IsEmpty ? 0 : rect.Top + _editor.Padding.Top;
+            _inlineChrome.ButtonsFlipped = top < ButtonsFlipThresholdDip;
+        }
+        catch
+        {
+            _inlineChrome.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void HideInlineChrome()
+    {
+        if (_inlineChrome is not null)
+            _inlineChrome.Visibility = Visibility.Collapsed;
+    }
+
+    private void InlineChrome_ResizeStarted(object? sender, string tag)
+    {
+        _chromeResizeTag = tag;
+        _activeGestures++;
+        _chromeDragAccumX = 0;
+        _chromeDragAccumY = 0;
+        // Capture the size at gesture START: the chrome reports the ACCUMULATED drag delta,
+        // so applying it against the size mutated by every event would compound (a tiny drag
+        // balloons the photo - the "shaky, way too fast" resize).
+        if (_selectedInlineId is { } id && _sessions.TryGetValue(id, out var session))
+        {
+            _chromeStartWidth = session.Width;
+            _chromeStartHeight = session.Height;
+        }
+    }
+
+    private void InlineChrome_ResizeDelta(object? sender, (double X, double Y) delta)
+    {
+        if (_selectedInlineId is not { } id
+            || !_sessions.TryGetValue(id, out var session)
+            || !_inlineContainers.TryGetValue(id, out var container)
+            || container.Child is not InlineNoteImageElement element)
+        {
+            return;
+        }
+
+        // WPF's Thumb reports deltas relative to its own position: on the axes the flow pins
+        // (the flipped ones - left/top edges) the reports are TOTALS since drag start; on the
+        // tracking axes (right/bottom) they are increments. Accumulate only the tracking axes
+        // so the resulting totals are the true drag distance for every handle.
+        var flipX = _chromeResizeTag is "TL" or "BL";
+        var flipY = _chromeResizeTag is "TL" or "TR";
+        if (!flipX)
+            _chromeDragAccumX += delta.X;
+        if (!flipY)
+            _chromeDragAccumY += delta.Y;
+        var totalX = flipX ? delta.X : _chromeDragAccumX;
+        var totalY = flipY ? delta.Y : _chromeDragAccumY;
+
+        // The photo's top-left edge is flow-pinned; the size tracks the pointer 1:1 from there.
+        var (freeWidth, freeHeight) = NoteImageResizeMath.ResizeFromCorner(
+            _chromeStartWidth,
+            _chromeStartHeight,
+            totalX,
+            totalY,
+            flipX,
+            flipY,
+            keepRatio: false);
+
+        double width;
+        double height;
+        if (session.LockAspectRatio)
+        {
+            // The floating widget's proven lock: project the freeform size onto the aspect ray,
+            // so a one-axis drag (the left handles with lock on) scales the photo instead of
+            // freezing it (the LO smaller-factor rule).
+            var projected = NoteImageResizeMath.ProjectCornerScale(
+                _chromeStartWidth,
+                _chromeStartHeight,
+                freeWidth,
+                freeHeight);
+            width = Math.Clamp(projected.Width, NoteImageResizeMath.MinInlineSideDip, NoteImageResizeMath.MaxSideDip);
+            height = Math.Clamp(projected.Height, NoteImageResizeMath.MinInlineSideDip, NoteImageResizeMath.MaxSideDip);
+        }
+        else
+        {
+            width = freeWidth;
+            height = freeHeight;
+        }
+
+        session.Width = width;
+        session.Height = height;
+        element.SetImageBox(width, height);
+        SyncInlineChrome();
+    }
+
+    private void InlineChrome_ResizeCompleted(object? sender, EventArgs e)
+    {
+        _chromeResizeTag = string.Empty;
+        _chromeStartWidth = 0;
+        _chromeStartHeight = 0;
+        _chromeDragAccumX = 0;
+        _chromeDragAccumY = 0;
+        _activeGestures = Math.Max(0, _activeGestures - 1);
+        if (_activeGestures == 0)
+        {
+            if (_selectedInlineId is { } id
+                && _sessions.TryGetValue(id, out var session)
+                && _inlineContainers.TryGetValue(id, out var container)
+                && container.Child is InlineNoteImageElement element)
+            {
+                MaybeRedeocodeInlineIfNeeded(element, session);
+            }
+
+            EnsureImageExtentPad();
+            RenumberCaptions();
+        }
+
+        if (!_isRestoring)
+            RaiseImagesChanged();
+    }
+
+    private void InlineChrome_LockToggled(object? sender, EventArgs e)
+    {
+        if (_selectedInlineId is not { } id || !_sessions.TryGetValue(id, out var session))
+            return;
+
+        session.LockAspectRatio = !session.LockAspectRatio;
+        if (_inlineChrome is not null)
+            _inlineChrome.LockAspectRatio = session.LockAspectRatio;
+
+        // The element's DP change raises ImagesChanged through Inline_LockAspectRatioChanged -
+        // only fall back to raising here when no element was updated.
+        if (_inlineContainers.TryGetValue(id, out var container) && container.Child is InlineNoteImageElement element)
+            element.LockAspectRatio = session.LockAspectRatio;
+        else if (!_isRestoring)
+            RaiseImagesChanged();
+    }
+
+    private void InlineChrome_DeleteRequested(object? sender, EventArgs e)
+    {
+        if (_selectedInlineId is { } id)
+            RemoveInlineImage(id);
     }
 
     /// <summary>
@@ -628,13 +863,18 @@ public sealed class FloatingImageCoordinator
         if (_overlay is null)
             return;
 
-        var index = _overlay.Children.IndexOf(widget);
+        // The overlay also hosts view-layer objects (the in-line photo's selection chrome,
+        // caption blocks), so the neighbor lookup must run over WIDGETS only - a raw
+        // children-index swap would trade a widget against the chrome instead of its neighbor.
+        var widgets = EnumerateWidgets().ToList();
+        var index = widgets.IndexOf(widget);
         var target = index + delta;
-        if (index < 0 || target < 0 || target >= _overlay.Children.Count)
+        if (index < 0 || target < 0 || target >= widgets.Count)
             return;
 
         _overlay.Children.Remove(widget);
-        _overlay.Children.Insert(target, widget);
+        var insertAt = _overlay.Children.IndexOf(widgets[target]);
+        _overlay.Children.Insert(insertAt + (delta > 0 ? 1 : 0), widget);
         RenumberStackingOrder();
         if (!_isRestoring)
             RaiseImagesChanged();
@@ -703,6 +943,7 @@ public sealed class FloatingImageCoordinator
         if (_selectedInlineId == imageId)
         {
             _selectedInlineId = null;
+            HideInlineChrome();
             SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -1501,15 +1742,9 @@ public sealed class FloatingImageCoordinator
     private void HookInlineElement(InlineNoteImageElement element)
     {
         element.SelectionRequested += Inline_SelectionRequested;
-        element.BoundsChanging += Inline_BoundsChanging;
-        element.BoundsChanged += Inline_BoundsChanged;
-        element.GestureStarted += Inline_GestureStarted;
-        element.GestureCompleted += Inline_GestureCompleted;
         element.DeleteRequested += Inline_DeleteRequested;
         element.LockAspectRatioChanged += Inline_LockAspectRatioChanged;
         element.WrapModeChanged += Inline_WrapModeChanged;
-        element.ReanchorPreview += Inline_ReanchorPreview;
-        element.ReanchorRequested += Inline_ReanchorRequested;
         element.CopyRequested += Inline_CopyRequested;
         element.CutRequested += Inline_CutRequested;
         element.ChangePictureRequested += Inline_ChangePictureRequested;
@@ -1519,15 +1754,9 @@ public sealed class FloatingImageCoordinator
     private void UnhookInlineElement(InlineNoteImageElement element)
     {
         element.SelectionRequested -= Inline_SelectionRequested;
-        element.BoundsChanging -= Inline_BoundsChanging;
-        element.BoundsChanged -= Inline_BoundsChanged;
-        element.GestureStarted -= Inline_GestureStarted;
-        element.GestureCompleted -= Inline_GestureCompleted;
         element.DeleteRequested -= Inline_DeleteRequested;
         element.LockAspectRatioChanged -= Inline_LockAspectRatioChanged;
         element.WrapModeChanged -= Inline_WrapModeChanged;
-        element.ReanchorPreview -= Inline_ReanchorPreview;
-        element.ReanchorRequested -= Inline_ReanchorRequested;
         element.CopyRequested -= Inline_CopyRequested;
         element.CutRequested -= Inline_CutRequested;
         element.ChangePictureRequested -= Inline_ChangePictureRequested;
@@ -1564,40 +1793,6 @@ public sealed class FloatingImageCoordinator
             SelectInline(element.ImageId);
     }
 
-    private void Inline_BoundsChanging(object? sender, EventArgs e)
-    {
-        if (sender is InlineNoteImageElement element && _sessions.TryGetValue(element.ImageId, out var session))
-        {
-            session.Width = element.Width;
-            session.Height = element.Height - element.CaptionHeight;
-        }
-    }
-
-    private void Inline_BoundsChanged(object? sender, EventArgs e)
-    {
-        if (sender is InlineNoteImageElement element && _sessions.TryGetValue(element.ImageId, out var session))
-        {
-            session.Width = element.Width;
-            session.Height = element.Height - element.CaptionHeight;
-            MaybeRedeocodeInlineIfNeeded(element, session);
-        }
-
-        if (!_isRestoring)
-            RaiseImagesChanged();
-    }
-
-    private void Inline_GestureStarted(object? sender, EventArgs e) => _activeGestures++;
-
-    private void Inline_GestureCompleted(object? sender, EventArgs e)
-    {
-        _activeGestures = Math.Max(0, _activeGestures - 1);
-        if (_activeGestures == 0)
-        {
-            EnsureImageExtentPad();
-            RenumberCaptions();
-        }
-    }
-
     private void Inline_DeleteRequested(object? sender, EventArgs e)
     {
         if (sender is InlineNoteImageElement element)
@@ -1618,45 +1813,6 @@ public sealed class FloatingImageCoordinator
     {
         if (sender is InlineNoteImageElement element)
             SetWrapMode(element.ImageId, element.WrapMode);
-    }
-
-    private void Inline_ReanchorPreview(object? sender, InlineNoteImageElement.InlineReanchorEventArgs e)
-    {
-        // Word-style caret preview at the drop position while dragging.
-        if (sender is not InlineNoteImageElement element || _editor is null)
-            return;
-
-        var position = ResolveEditorPosition(element, e.ElementPoint);
-        if (position is not null)
-            _editor.CaretPosition = position.GetInsertionPosition(LogicalDirection.Forward) ?? position;
-    }
-
-    private void Inline_ReanchorRequested(object? sender, InlineNoteImageElement.InlineReanchorEventArgs e)
-    {
-        if (sender is not InlineNoteImageElement element)
-            return;
-
-        MoveInlineAnchor(element.ImageId, ResolveEditorPosition(element, e.ElementPoint));
-    }
-
-    /// <summary>Converts a point relative to an inline element into a text position in the
-    /// editor (the element itself holds no editor reference - see the control's note).</summary>
-    private TextPointer? ResolveEditorPosition(InlineNoteImageElement element, Point elementPoint)
-    {
-        if (_editor is null)
-            return null;
-
-        Point editorPoint;
-        try
-        {
-            editorPoint = element.TransformToAncestor(_editor).Transform(elementPoint);
-        }
-        catch (InvalidOperationException)
-        {
-            editorPoint = elementPoint;
-        }
-
-        return _editor.GetPositionFromPoint(editorPoint, snapToText: true);
     }
 
     /// <summary>The nearest text position to a document-space point (editor coordinate
@@ -1996,24 +2152,11 @@ public sealed class FloatingImageCoordinator
         return false;
     }
 
-    /// <summary>Flips the inline images' action chips below the image when they would clip
-    /// against the editor's top edge (same rule as the floating widgets).</summary>
+    /// <summary>Keeps the selected in-line photo's selection chrome in sync after the flow
+    /// re-lays out (the chrome itself lives on the overlay - see <see cref="SyncInlineChrome"/>).</summary>
     private void SyncInlineButtonPlacement()
     {
-        if (_editor is null)
-            return;
-
-        foreach (var (_, container) in _inlineContainers)
-        {
-            if (container.Child is not InlineNoteImageElement element)
-                continue;
-
-            var rect = container.ContentStart.GetCharacterRect(LogicalDirection.Forward);
-            if (rect.IsEmpty)
-                continue;
-
-            element.ButtonsFlipped = rect.Top + _editor.Padding.Top < ButtonsFlipThresholdDip;
-        }
+        SyncInlineChrome();
     }
 
     private static IEnumerable<Inline> EnumerateInlines(InlineCollection inlines)
@@ -2327,13 +2470,26 @@ public sealed class FloatingImageCoordinator
 
     private void DragScrollTimer_Tick(object? sender, EventArgs e)
     {
-        if (_activeGestures <= 0 || _gestureWidget is null || !_gestureWidget.IsBodyDragging)
+        if (_activeGestures <= 0)
         {
             StopDragScrollTimer();
             return;
         }
 
-        TryEdgeAutoScroll(_gestureWidget);
+        if (_inlineDragElement is not null && _inlineDragging)
+        {
+            DragScrollInlineTick();
+            return;
+        }
+
+        if (_gestureWidget is null || !_gestureWidget.IsBodyDragging)
+        {
+            StopDragScrollTimer();
+            return;
+        }
+
+        if (_scrollViewer is not null)
+            TryEdgeAutoScroll(Mouse.GetPosition(_scrollViewer));
         // The edge auto-scroll is the only intended view movement during a drag. The caret
         // parked at the photo's text position makes the RichTextBox scroll it into view on
         // every layout (MakeCaretVisible) - with wrap off nothing else masks it, so the text
@@ -2371,17 +2527,43 @@ public sealed class FloatingImageCoordinator
         SyncWidget(_gestureWidget);
     }
 
+    /// <summary>Auto-scroll tick for the in-line photo's re-anchor drag: scrolls the view when
+    /// the pointer nears a viewport edge, pins it against the parked caret's MakeCaretVisible,
+    /// and re-resolves the drop position under the (stationary) mouse so the drop indicator
+    /// keeps tracking while the view rolls.</summary>
+    private void DragScrollInlineTick()
+    {
+        if (_scrollViewer is not null)
+            TryEdgeAutoScroll(Mouse.GetPosition(_scrollViewer));
+
+        // The caret parked after the photo makes the RichTextBox scroll it into view on every
+        // layout; pin the view to the post-edge-scroll offsets (same as the widget drag).
+        var pinX = _scrollViewer?.HorizontalOffset ?? 0;
+        var pinY = _scrollViewer?.VerticalOffset ?? 0;
+
+        if (_scrollViewer is not null
+            && (Math.Abs(_scrollViewer.HorizontalOffset - pinX) >= 0.01
+                || Math.Abs(_scrollViewer.VerticalOffset - pinY) >= 0.01))
+        {
+            _scrollViewer.ScrollToHorizontalOffset(pinX);
+            _scrollViewer.ScrollToVerticalOffset(pinY);
+        }
+
+        if (_editor is not null)
+            UpdateInlineDropIndicatorAt(Mouse.GetPosition(_editor));
+    }
+
     /// <summary>
     /// Scrolls the editor when the pointer is near a viewport edge during an image gesture.
     /// Placement under the cursor is handled by <see cref="FollowPointer"/> after this returns.
     /// </summary>
-    private bool TryEdgeAutoScroll(NoteImageWidget widget)
+    public bool TryEdgeAutoScroll(Point pointerInViewer)
     {
         _scrollViewer ??= _editor is null ? null : FindScrollViewer(_editor);
         if (_scrollViewer is null || _editor is null)
             return false;
 
-        var pointer = Mouse.GetPosition(_scrollViewer);
+        var pointer = pointerInViewer;
         var viewportW = _scrollViewer.ViewportWidth;
         var viewportH = _scrollViewer.ViewportHeight;
         if (viewportW <= 0 || viewportH <= 0)
@@ -2816,12 +2998,254 @@ public sealed class FloatingImageCoordinator
         if (_activeGestures > 0)
             return;
 
+        // Clicks over the photo resolve to the surrounding text visuals (the flow element is
+        // never hit directly), so exclude them here - the inline drag/select handlers below
+        // own that territory.
         if (e.OriginalSource is DependencyObject source
             && FindAncestor<NoteImageWidget>(source) is null
-            && FindAncestor<InlineNoteImageElement>(source) is null)
+            && FindAncestor<InlineNoteImageElement>(source) is null
+            && FindAncestor<InlineImageChrome>(source) is null
+            && FindInlineElementAt(Mouse.GetPosition(_editor)) is null)
         {
             Select(null);
         }
+    }
+
+    /// <summary>Starts the in-line photo's re-anchor drag. The photo's element never receives
+    /// real mouse input (the surrounding text visuals cover the line), so the gesture is
+    /// driven at the editor: capture the editor, track the mouse, and re-anchor on release.</summary>
+    private void Editor_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_activeGestures > 0 || _editor is null || _editor.IsReadOnly)
+            return;
+
+        if (FindInlineElementAt(e.GetPosition(_editor)) is not { } element)
+            return;
+
+        _inlineDragElement = element;
+        _inlineDragging = false;
+        _inlineDragStart = e.GetPosition(_editor);
+        HideInlineDropIndicator();
+        SelectInline(element.ImageId);
+        e.Handled = true;
+        _editor.CaptureMouse();
+    }
+
+    private void Editor_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_inlineDragElement is null || _editor is null)
+            return;
+
+        var point = e.GetPosition(_editor);
+        if (!_inlineDragging)
+        {
+            var delta = point - _inlineDragStart;
+            if (Math.Abs(delta.X) < InlineBodyDragThresholdDip && Math.Abs(delta.Y) < InlineBodyDragThresholdDip)
+                return;
+
+            _inlineDragging = true;
+            _activeGestures++;
+            StartDragScrollTimer();
+        }
+
+        // The overlay drop indicator is the drop feedback - the native caret is left alone
+        // (it only draws while the editor has focus, and would mix with the indicator).
+        UpdateInlineDropIndicatorAt(point);
+        e.Handled = true;
+    }
+
+    private void Editor_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_inlineDragElement is null || _editor is null)
+            return;
+
+        var element = _inlineDragElement;
+        var wasDragging = _inlineDragging;
+        var position = ResolveEditorPositionAt(e.GetPosition(_editor));
+        _inlineDragElement = null;
+        _inlineDragging = false;
+        StopDragScrollTimer();
+        HideInlineDropIndicator();
+        if (_editor.IsMouseCaptured)
+            _editor.ReleaseMouseCapture();
+
+        if (wasDragging)
+        {
+            _activeGestures = Math.Max(0, _activeGestures - 1);
+            CompleteInlineDrag(element.ImageId, position);
+            if (_activeGestures == 0)
+            {
+                EnsureImageExtentPad();
+                RenumberCaptions();
+            }
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Finishes an in-line photo's re-anchor drag: moves the anchor to the drop
+    /// position and re-parks the caret right after the moved photo, so typing continues
+    /// predictably after the photo (the same convention as photo selection).</summary>
+    public void CompleteInlineDrag(Guid imageId, TextPointer? dropPosition)
+    {
+        MoveInlineAnchor(imageId, dropPosition);
+        if (_editor is null || !_inlineContainers.TryGetValue(imageId, out var container))
+            return;
+
+        ParkCaretPreservingView(container.ContentEnd);
+    }
+
+    /// <summary>Converts an editor-space point to a text position in the document.</summary>
+    private TextPointer? ResolveEditorPositionAt(Point editorPoint)
+    {
+        if (_editor is null)
+            return null;
+
+        return _editor.GetPositionFromPoint(editorPoint, snapToText: true);
+    }
+
+    /// <summary>Resolves the drop position under an editor-space point and updates the drop
+    /// indicator (the drag's move handler and the auto-scroll tick both use this - the tick
+    /// re-resolves while the mouse stays put and the view scrolls underneath it).</summary>
+    private void UpdateInlineDropIndicatorAt(Point editorPoint)
+    {
+        var position = ResolveEditorPositionAt(editorPoint);
+        if (position is not null)
+            ShowInlineDropIndicator(position);
+        else
+            HideInlineDropIndicator();
+    }
+
+    /// <summary>Aborts an in-progress inline drag if the editor loses mouse capture
+    /// mid-gesture (dialog, Alt-Tab, ...). Without this, <see cref="_activeGestures"/> would
+    /// stay inflated and silently disable the deselect guard and future inline drags. The
+    /// caret is re-parked too, so an aborted drag leaves it in a deterministic spot.</summary>
+    private void Editor_LostMouseCapture(object? sender, MouseEventArgs e)
+    {
+        if (_inlineDragElement is null)
+            return;
+
+        var element = _inlineDragElement;
+        _inlineDragElement = null;
+        if (_inlineDragging)
+            _activeGestures = Math.Max(0, _activeGestures - 1);
+        _inlineDragging = false;
+        StopDragScrollTimer();
+        HideInlineDropIndicator();
+        CompleteInlineDrag(element.ImageId, dropPosition: null);
+    }
+
+    // ------------------------------------------------------------- in-line drop indicator
+
+    private Border? _inlineDropIndicator;
+
+    /// <summary>Lazily creates the drag drop indicator - a caret-like accent bar on the
+    /// overlay that shows where the dragged in-line photo will land. It lives on the overlay
+    /// (like the selection chrome), so it is never clipped by the text box and never depends
+    /// on the editor's focus or its native caret.</summary>
+    private Border EnsureInlineDropIndicator()
+    {
+        if (_inlineDropIndicator is not null)
+            return _inlineDropIndicator;
+
+        _inlineDropIndicator = new Border
+        {
+            Name = "InlineDropIndicator",
+            Width = 2,
+            CornerRadius = new CornerRadius(1),
+            Focusable = false,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed
+        };
+        _inlineDropIndicator.SetResourceReference(Border.BackgroundProperty, "AccentPrimary");
+        _overlay?.Children.Add(_inlineDropIndicator);
+        return _inlineDropIndicator;
+    }
+
+    /// <summary>Shows the drop indicator at a text position (where the dragged photo will
+    /// land). The indicator is a 2px accent bar at the position's character rect - the same
+    /// spot the native caret would draw, minus the focus requirement. The character rect is
+    /// already in the editor's coordinate space (padding included), and the overlay shares
+    /// the editor's origin.</summary>
+    public void ShowInlineDropIndicator(TextPointer position)
+    {
+        var indicator = EnsureInlineDropIndicator();
+        if (_editor is null)
+        {
+            indicator.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        // The forward character rect always exists in a live document (the trailing paragraph
+        // mark guarantees one), so the indicator lands exactly where the photo will insert.
+        var rect = position.GetCharacterRect(LogicalDirection.Forward);
+        if (rect.IsEmpty || rect.Height <= 0)
+        {
+            indicator.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        Canvas.SetLeft(indicator, rect.Left);
+        Canvas.SetTop(indicator, rect.Top);
+        indicator.Height = rect.Height;
+        indicator.Visibility = Visibility.Visible;
+    }
+
+    public void HideInlineDropIndicator()
+    {
+        if (_inlineDropIndicator is not null)
+            _inlineDropIndicator.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The photo lives in the text flow, so a right-click over it lands on the editor's
+    /// surface (the flow element is not directly hit-testable there - the editor's template
+    /// intercepts) and the editor would open its own menu. Route the right-click to the
+    /// photo instead: suppress the editor's processing and open the photo's menu directly.
+    /// </summary>
+    private void Editor_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_editor is null || FindInlineElementAt(Mouse.GetPosition(_editor)) is not { } element)
+            return;
+
+        e.Handled = true;
+        SelectInline(element.ImageId);
+        var menu = element.ContextMenu;
+        if (menu is null)
+            return;
+
+        menu.PlacementTarget = element;
+        menu.HorizontalOffset = 0;
+        menu.VerticalOffset = 0;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Finds the in-line photo whose on-screen box contains the given editor-space
+    /// point (the box includes the caption row).</summary>
+    public InlineNoteImageElement? FindInlineElementAt(Point editorPoint)
+    {
+        if (_editor is null)
+            return null;
+
+        foreach (var (_, container) in _inlineContainers)
+        {
+            if (container.Child is not InlineNoteImageElement element)
+                continue;
+
+            try
+            {
+                var bounds = element.TransformToAncestor(_editor)
+                    .TransformBounds(new Rect(0, 0, element.Width, element.Height));
+                if (bounds.Contains(editorPoint))
+                    return element;
+            }
+            catch
+            {
+                // Element not connected to the visual tree yet (restore) - skip it.
+            }
+        }
+
+        return null;
     }
 
     private void RaiseImagesChanged() => ImagesChanged?.Invoke(this, EventArgs.Empty);

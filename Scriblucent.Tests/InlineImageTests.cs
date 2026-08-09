@@ -107,6 +107,451 @@ public class InlineImageTests
     }
 
     [Fact]
+    public void InlineInput_PhotoBodyHit_ReachesElementNotChrome()
+        => RunOnSta(RunPhotoBodyHitProbe);
+
+    [Fact]
+    public void InlineInput_RightClickTarget_ResolvesToPhoto()
+        => RunOnSta(RunRightClickTargetProbe);
+
+    [Fact]
+    public void InlineDrag_ReanchorParksCaretVisiblyAfterPhoto()
+        => RunOnSta(RunInlineDragCaretParkProbe);
+
+    private static void RunInlineDragCaretParkProbe()
+    {
+        // After a re-anchor drag the caret is re-parked right after the moved photo, so
+        // typing continues deterministically after it (the same convention as photo
+        // selection) - never stranded at the pre-move drop position.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var container = FindInlineContainer(harness.Editor.Document);
+        Assert.NotNull(container);
+        var element = container.Child as InlineNoteImageElement;
+        Assert.NotNull(element);
+        var originalParagraph = GetContainerParagraph(container!);
+
+        // Drop the photo into the snippet paragraph.
+        var target = FindParagraphs(harness.Editor.Document)
+            .First(p => !ReferenceEquals(p, originalParagraph));
+        var dropPosition = target.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+        harness.Coordinator.CompleteInlineDrag(harness.ImageId, dropPosition);
+        harness.Editor.UpdateLayout();
+
+        var movedContainer = FindInlineContainer(harness.Editor.Document);
+        Assert.NotNull(movedContainer);
+        Assert.True(
+            ReferenceEquals(GetContainerParagraph(movedContainer!), target),
+            "the container should move into the target paragraph");
+
+        // The photo stays selected and the caret is parked right after it.
+        Assert.True(harness.Coordinator.HasSelection);
+        Assert.Equal(harness.ImageId, harness.Coordinator.SelectedImageId);
+        var caret = harness.Editor.CaretPosition;
+        Assert.True(
+            caret.CompareTo(movedContainer!.ContentEnd) >= 0,
+            "the caret must sit at or after the moved photo");
+        var caretRect = caret.GetCharacterRect(LogicalDirection.Forward);
+        Assert.False(caretRect.IsEmpty, "the parked caret must have a renderable position (visible)");
+    }
+
+    [Fact]
+    public void InlineDrag_DropIndicator_PositionsAtDropRect()
+        => RunOnSta(RunDropIndicatorPositionProbe);
+
+    [Fact]
+    public void InlineDrag_DropIndicator_EndOfDocument_LandsAtParagraphMark()
+        => RunOnSta(RunDropIndicatorEndOfDocumentProbe);
+
+    [Fact]
+    public void InlineDrag_EdgeAutoScroll_ScrollsTowardPointer()
+        => RunOnSta(RunEdgeAutoScrollProbe);
+
+    [Fact]
+    public void InlineDrag_EdgeAutoScroll_IndicatorTracksPointer()
+        => RunOnSta(RunEdgeScrollIndicatorProbe);
+
+    private static void RunEdgeAutoScrollProbe()
+    {
+        // The re-anchor drag auto-scrolls when the pointer nears a viewport edge (it no longer
+        // depends on the native caret's scroll-follow, which needs editor focus).
+        using var harness = CreateHarness();
+        harness.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        for (var i = 0; i < 40; i++)
+            harness.Editor.Document.Blocks.Add(new Paragraph(new Run("Filler paragraph to make the document tall enough to scroll.")));
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var sv = FindEditorScrollViewer(harness.Editor);
+        Assert.True(sv.ScrollableHeight > 200, $"the document must be scrollable, got {sv.ScrollableHeight:F0}");
+        sv.ScrollToVerticalOffset(sv.ScrollableHeight / 2);
+        harness.Editor.UpdateLayout();
+        var midOffset = sv.VerticalOffset;
+        Assert.True(midOffset > 0, "the view must sit mid-scroll");
+
+        // Pointer deep in the bottom edge band: the view must scroll downward.
+        var bottomPoint = new Point(sv.ViewportWidth / 2, sv.ViewportHeight - 3);
+        harness.Coordinator.TryEdgeAutoScroll(bottomPoint);
+        harness.Editor.UpdateLayout();
+        var afterBottom = sv.VerticalOffset;
+        Assert.True(
+            afterBottom > midOffset,
+            $"the view must scroll down near the bottom edge, got {afterBottom:F0} (was {midOffset:F0})");
+
+        // Pointer deep in the top edge band: the view scrolls back up.
+        var topPoint = new Point(sv.ViewportWidth / 2, 3);
+        harness.Coordinator.TryEdgeAutoScroll(topPoint);
+        harness.Editor.UpdateLayout();
+        Assert.True(
+            sv.VerticalOffset < afterBottom,
+            $"the view must scroll up near the top edge, got {sv.VerticalOffset:F0} (was {afterBottom:F0})");
+    }
+
+    private static void RunEdgeScrollIndicatorProbe()
+    {
+        // After an edge auto-scroll the drop position is re-resolved under the (stationary)
+        // pointer - the drop indicator must sit on the pointer's row.
+        using var harness = CreateHarness();
+        harness.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        for (var i = 0; i < 40; i++)
+            harness.Editor.Document.Blocks.Add(new Paragraph(new Run("Filler paragraph to make the document tall enough to scroll.")));
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var sv = FindEditorScrollViewer(harness.Editor);
+        sv.ScrollToVerticalOffset(sv.ScrollableHeight / 2);
+        harness.Editor.UpdateLayout();
+
+        var point = new Point(sv.ViewportWidth / 2, sv.ViewportHeight - 3);
+        harness.Coordinator.TryEdgeAutoScroll(point);
+        harness.Editor.UpdateLayout();
+
+        var position = harness.Editor.GetPositionFromPoint(point, snapToText: true);
+        Assert.NotNull(position);
+        harness.Coordinator.ShowInlineDropIndicator(position!);
+        harness.Editor.UpdateLayout();
+
+        var indicator = FindVisualChildren<Border>(harness.Overlay)
+            .FirstOrDefault(b => b.Name == "InlineDropIndicator");
+        Assert.NotNull(indicator);
+        Assert.Equal(Visibility.Visible, indicator!.Visibility);
+        var indicatorTop = Canvas.GetTop(indicator);
+        Assert.True(
+            Math.Abs(indicatorTop - point.Y) < 40,
+            $"the indicator must sit on the pointer's row, got {indicatorTop:F0} vs pointer {point.Y:F0}");
+    }
+
+    private static void RunDropIndicatorPositionProbe()
+    {
+        // The drag's drop indicator is a caret-like accent bar on the OVERLAY - it must sit
+        // exactly where the photo will land (its character slot), never depend on the editor's
+        // focus or native caret, and never intercept clicks.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        var container = FindInlineContainer(harness.Editor.Document);
+        Assert.NotNull(container);
+
+        // The slot BEFORE the photo: the indicator must land at the photo's left edge.
+        var position = container!.ContentStart;
+        harness.Coordinator.ShowInlineDropIndicator(position);
+        harness.Editor.UpdateLayout();
+
+        var indicator = FindVisualChildren<Border>(harness.Overlay)
+            .FirstOrDefault(b => b.Name == "InlineDropIndicator");
+        Assert.NotNull(indicator);
+        Assert.Equal(Visibility.Visible, indicator!.Visibility);
+        Assert.False(indicator.IsHitTestVisible, "the indicator must never intercept clicks");
+
+        // The character rect is already in the editor's coordinate space (padding included),
+        // and the overlay shares the editor's origin - the indicator lands on the rect.
+        var rect = position.GetCharacterRect(LogicalDirection.Forward);
+        Assert.False(rect.IsEmpty, "the photo's slot must have a character rect");
+        Assert.Equal(rect.Left, Canvas.GetLeft(indicator), precision: 1);
+        Assert.Equal(rect.Top, Canvas.GetTop(indicator), precision: 1);
+        Assert.Equal(rect.Height, indicator.Height, precision: 1);
+
+        // Cross-check the coordinate space against a known on-screen anchor: the photo's own
+        // box in the editor.
+        var photoOrigin = element.TransformToAncestor(harness.Editor).Transform(new Point(0, 0));
+        Assert.Equal(photoOrigin.X, Canvas.GetLeft(indicator), precision: 1);
+        Assert.Equal(photoOrigin.Y, Canvas.GetTop(indicator), precision: 1);
+
+        harness.Coordinator.HideInlineDropIndicator();
+        Assert.Equal(Visibility.Collapsed, indicator.Visibility);
+    }
+
+    private static void RunDropIndicatorEndOfDocumentProbe()
+    {
+        // Dragging to the very end of the note: the trailing paragraph mark still provides a
+        // forward character rect, so the indicator lands exactly where the photo would drop.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var position = harness.Editor.Document.ContentEnd;
+        harness.Coordinator.ShowInlineDropIndicator(position);
+        harness.Editor.UpdateLayout();
+
+        var indicator = FindVisualChildren<Border>(harness.Overlay)
+            .FirstOrDefault(b => b.Name == "InlineDropIndicator");
+        Assert.NotNull(indicator);
+        Assert.Equal(Visibility.Visible, indicator!.Visibility);
+
+        var forward = position.GetCharacterRect(LogicalDirection.Forward);
+        Assert.False(forward.IsEmpty, "the document end must still render the paragraph mark");
+        Assert.Equal(forward.Left, Canvas.GetLeft(indicator), precision: 1);
+        Assert.Equal(forward.Top, Canvas.GetTop(indicator), precision: 1);
+
+        harness.Coordinator.HideInlineDropIndicator();
+        Assert.Equal(Visibility.Collapsed, indicator.Visibility);
+    }
+
+    private static void RunRightClickTargetProbe()
+    {
+        // A right-click over the photo must resolve to the photo's element (the coordinator
+        // redirects the editor's context-menu event to it); clicks on plain text resolve to
+        // nothing.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        _ = SelectInlineAndGetChrome(harness);
+
+        var center = element.TransformToAncestor(harness.Editor)
+            .Transform(new Point(element.Width / 2, element.Height / 2));
+        var resolved = harness.Coordinator.FindInlineElementAt(center);
+        Assert.True(ReferenceEquals(element, resolved), "a right-click over the photo must resolve to the photo");
+
+        Assert.Null(harness.Coordinator.FindInlineElementAt(new Point(5, 5)));
+    }
+
+    private static void RunPhotoBodyHitProbe()
+    {
+        // The overlay selection chrome sits ABOVE the photo while it is selected (auto-selected
+        // on conversion). Its surface must be click-through: a click on the photo body must
+        // reach the editor below (the editor routes it into the flow), NOT the chrome - while
+        // the corner resize handles stay interactive. The probe walks the real hit-test path
+        // from the window (the editor and the overlay are siblings).
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        var chrome = SelectInlineAndGetChrome(harness);
+        Assert.Equal(Visibility.Visible, chrome.Visibility);
+
+        // A grid across the photo: the clicks must pass through the chrome, and NOT ONE point
+        // may resolve to the flow element itself - the surrounding text visuals cover the line,
+        // so the element can never receive real OS input (the coordinator drives its
+        // interaction at the editor instead).
+        for (var gy = 0; gy <= 3; gy++)
+        {
+            for (var gx = 0; gx <= 3; gx++)
+            {
+                var px = 8 + gx * ((element.Width - 16) / 3);
+                var py = 8 + gy * ((element.Height - 16) / 3);
+                var pointInWindow = element.TransformToAncestor(harness.Window)
+                    .Transform(new Point(px, py));
+                var gridHit = harness.Window.InputHitTest(pointInWindow) as DependencyObject;
+                Assert.NotNull(gridHit);
+                Assert.False(
+                    gridHit is InlineImageChrome,
+                    $"photo point ({px:F0},{py:F0}) must not be swallowed by the selection chrome");
+                Assert.True(
+                    FindAncestor<InlineNoteImageElement>(gridHit) is null,
+                    $"photo point ({px:F0},{py:F0}) must not resolve to the flow element (got {gridHit.GetType().Name})");
+            }
+        }
+
+        // The corner resize handles must stay interactive THROUGH the chrome (their templates
+        // carry their own transparent hit areas, so they work without the app's theme resources).
+        var cornerInWindow = element.TransformToAncestor(harness.Window)
+            .Transform(new Point(element.Width - 6, element.Height - 6));
+        var handleHit = harness.Window.InputHitTest(cornerInWindow) as DependencyObject;
+        Assert.NotNull(handleHit);
+        Assert.NotNull(FindAncestor<InlineImageChrome>(handleHit));
+    }
+
+    [Fact]
+    public void InlineResize_MultipleDeltaEvents_NoAmplification()
+        => RunOnSta(RunMultiEventResizeProbe);
+
+    private static void RunMultiEventResizeProbe()
+    {
+        // A real drag emits MANY DragDelta events. WPF's Thumb reports deltas relative to its
+        // own position: axes where the handle tracks the growth (right/bottom) report
+        // INCREMENTS, axes the flow pins (left/top - the thumb never moves) report TOTALS
+        // since drag start. Both must end up 1:1 with the true mouse movement.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        element.LockAspectRatio = false;
+        var chrome = SelectInlineAndGetChrome(harness);
+
+        // BR: both axes track -> incremental reports (2, 3, 5 = 10px total).
+        var thumb = FindVisualChildren<Thumb>(chrome).First(t => Equals(t.Tag, "BR"));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(2, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(3, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(5, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+
+        // 10px total drag -> exactly 10px growth, never more.
+        Assert.Equal(210, element.Width, precision: 3);
+        Assert.Equal(150, element.Height, precision: 3);
+
+        // BL: the X axis is flow-pinned, so the reports are TOTALS (-3, -5, -10 for a 10px
+        // leftward drag) - accumulating them would compound ("resizes like crazy").
+        var leftThumb = FindVisualChildren<Thumb>(chrome).First(t => Equals(t.Tag, "BL"));
+        leftThumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        leftThumb.RaiseEvent(new DragDeltaEventArgs(-3, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        leftThumb.RaiseEvent(new DragDeltaEventArgs(-5, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        leftThumb.RaiseEvent(new DragDeltaEventArgs(-10, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        leftThumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+
+        Assert.Equal(220, element.Width, precision: 3);
+        Assert.Equal(150, element.Height, precision: 3);
+
+        // TL: both axes pinned -> totals on both (mouse moved 4 left, 3 up in total).
+        var topLeftThumb = FindVisualChildren<Thumb>(chrome).First(t => Equals(t.Tag, "TL"));
+        topLeftThumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        topLeftThumb.RaiseEvent(new DragDeltaEventArgs(-2, -1) { RoutedEvent = Thumb.DragDeltaEvent });
+        topLeftThumb.RaiseEvent(new DragDeltaEventArgs(-4, -2) { RoutedEvent = Thumb.DragDeltaEvent });
+        topLeftThumb.RaiseEvent(new DragDeltaEventArgs(-4, -3) { RoutedEvent = Thumb.DragDeltaEvent });
+        topLeftThumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+
+        Assert.Equal(224, element.Width, precision: 3);
+        Assert.Equal(153, element.Height, precision: 3);
+    }
+
+    [Fact]
+    public void InlineResize_LockOnLeftHandle_ScalesProportionally()
+        => RunOnSta(RunLockOnLeftHandleProbe);
+
+    private static void RunLockOnLeftHandleProbe()
+    {
+        // With the aspect lock on, a one-axis left-handle drag must SCALE the photo (ratio
+        // preserved) instead of freezing it - the LO smaller-factor rule freezes, the widget's
+        // projection scales.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        Assert.True(element.LockAspectRatio, "inline lock should default on");
+        var chrome = SelectInlineAndGetChrome(harness);
+
+        var thumb = FindVisualChildren<Thumb>(chrome).First(t => Equals(t.Tag, "BL"));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(-10, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+
+        Assert.True(element.Width > 200, $"the locked left-handle drag must respond, got {element.Width:F1}");
+        Assert.Equal(200.0 / 150.0, element.Width / element.Height, precision: 4);
+    }
+
+    [Fact]
+    public void InlineResize_GainIsOneToOne_AllHandlesCorrect()
+        => RunOnSta(RunInlineGainProbe);
+
+    private static void RunInlineGainProbe()
+    {
+        // The amplification regression: a 1px drag must change the size by exactly 1px, and
+        // EVERY corner handle must map its axes correctly (the TR/BL handles were inverted -
+        // dragging the top-right corner right actually shrank the photo). The drags drive the
+        // overlay selection chrome (the photo's resize handles live there, not in the flow).
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        element.LockAspectRatio = false;
+        var chrome = SelectInlineAndGetChrome(harness);
+
+        void Drag(string tag, double dx, double dy)
+            => DragChromeHandle(chrome, tag, dx, dy);
+
+        // BR: dragging right/down grows both axes 1:1.
+        Drag("BR", 10, 0);
+        Assert.Equal(210, element.Width, precision: 3);
+        Assert.Equal(150, element.Height, precision: 3);
+
+        // TR: dragging right grows the width (NOT inverted), dragging down shrinks the height.
+        Drag("TR", 10, 0);
+        Assert.Equal(220, element.Width, precision: 3);
+        Assert.Equal(150, element.Height, precision: 3);
+        Drag("TR", 0, 10);
+        Assert.Equal(220, element.Width, precision: 3);
+        Assert.Equal(140, element.Height, precision: 3);
+
+        // BL: dragging right shrinks the width, dragging down grows the height.
+        Drag("BL", 10, 0);
+        Assert.Equal(210, element.Width, precision: 3);
+        Assert.Equal(140, element.Height, precision: 3);
+        Drag("BL", 0, 10);
+        Assert.Equal(210, element.Width, precision: 3);
+        Assert.Equal(150, element.Height, precision: 3);
+
+        // TL: dragging right/down shrinks both axes 1:1.
+        Drag("TL", 10, 10);
+        Assert.Equal(200, element.Width, precision: 3);
+        Assert.Equal(140, element.Height, precision: 3);
+
+        var attachment = harness.Coordinator.BuildAttachments().Single();
+        Assert.Equal(element.Width, attachment.Width, precision: 3);
+        Assert.Equal(element.Height, attachment.Height, precision: 3);
+    }
+
+    [Fact]
+    public void InlineResize_CaptionDoesNotEnterTheMath()
+        => RunOnSta(RunInlineCaptionIsolationProbe);
+
+    private static void RunInlineCaptionIsolationProbe()
+    {
+        // The resize operates on the pure image box - a caption row must never distort the
+        // math or the ratio.
+        using var harness = CreateHarness();
+        harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+        harness.Editor.UpdateLayout();
+
+        var element = FindInlineElement(harness.Editor.Document);
+        Assert.NotNull(element);
+        // Set the caption through the coordinator (the session is the caption owner -
+        // setting it on the element alone is reset by the gesture-end renumbering).
+        harness.Coordinator.SetCaption(
+            harness.ImageId,
+            new FloatingImageCoordinator.CaptionSettings("Figure", "Figure 1", CaptionNumbering.Arabic, ": ", CaptionPosition.Below, false));
+        harness.Editor.UpdateLayout();
+        element.LockAspectRatio = false;
+
+        var captionHeight = element.CaptionHeight;
+        Assert.True(captionHeight > 0, "the probe needs an actual caption row");
+
+        var chrome = SelectInlineAndGetChrome(harness);
+        DragChromeHandle(chrome, "BR", 10, 10);
+
+        // The image box grew exactly 1:1; the caption row is untouched.
+        Assert.Equal(210, element.Width, precision: 3);
+        Assert.Equal(160, element.Height - element.CaptionHeight, precision: 3);
+        Assert.Equal(160 + captionHeight, element.Height, precision: 3);
+        Assert.Equal(captionHeight, element.CaptionHeight, precision: 3);
+    }
+
+    [Fact]
     public void InlineResize_LockMaintainsAspect_FreeformWithout()
         => RunOnSta(RunInlineLockResizeScenario);
 
@@ -456,7 +901,10 @@ public class InlineImageTests
             Padding = new Thickness(18, 16, 18, 16),
             FontSize = 14,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            // The real editor paints its surface with a transparent background (a null
+            // background would make the whole surface invisible to hit-testing).
+            Background = Brushes.Transparent
         };
         editor.Document.Blocks.Clear();
         editor.Document.Blocks.Add(new Paragraph(new Run(
@@ -626,19 +1074,21 @@ public class InlineImageTests
         Assert.Equal(VerticalAlignment.Bottom, topDelete.VerticalAlignment);
         Assert.Equal(-34, topDelete.Margin.Bottom, precision: 2);
 
-        // Inline elements flip the same way when their anchor is at the very top.
+        // Inline photos flip the same way when their anchor is at the very top - the flip
+        // lives on the OVERLAY chrome (the flow element itself carries no chrome anymore).
         harness.Coordinator.SetWrapMode(topId!.Value, NoteImageWrapMode.Inline);
         harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
         harness.Editor.UpdateLayout();
-        var topElement = FindAllInlineContainers(harness.Editor.Document)
-            .Select(c => (InlineNoteImageElement)c.Child)
-            .First(e => e.ImageId == topId);
-        Assert.True(topElement.ButtonsFlipped);
 
-        var midElement = FindAllInlineContainers(harness.Editor.Document)
-            .Select(c => (InlineNoteImageElement)c.Child)
-            .First(e => e.ImageId == harness.ImageId);
-        Assert.False(midElement.ButtonsFlipped);
+        harness.Coordinator.SelectImage(topId.Value);
+        harness.Editor.UpdateLayout();
+        var topChrome = FindVisualChildren<InlineImageChrome>(harness.Overlay).Single();
+        Assert.True(topChrome.ButtonsFlipped);
+
+        // The mid-document photo's chrome stays above.
+        harness.Coordinator.SelectImage(harness.ImageId);
+        harness.Editor.UpdateLayout();
+        Assert.False(topChrome.ButtonsFlipped);
     }
 
     private static void RunStackReorderScenario()
@@ -858,8 +1308,9 @@ public class InlineImageTests
         var menu = element.ContextMenu;
         Assert.NotNull(menu);
 
-        // Opening the menu syncs the checkmarks from the current wrap mode.
-        InvokeMenuOpening(element, menu);
+        // Opening the menu syncs the checkmarks from the current wrap mode (the coordinator
+        // opens the menu directly, so the sync runs on the menu's Opened event).
+        menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
         Assert.True(GetItem(menu, "Inline").IsChecked, "Inline should be checked when the menu opens");
         Assert.False(GetItem(menu, "Square").IsChecked);
         Assert.False(GetItem(menu, "TopAndBottom").IsChecked);
@@ -868,12 +1319,12 @@ public class InlineImageTests
         // Clicking "Square" converts to floating and moves the checkmark.
         GetItem(menu, "Square").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(NoteImageWrapMode.Square, element.WrapMode);
-        Assert.Single(harness.Overlay.Children); // converted to a floating widget
+        Assert.Single(harness.Overlay.Children.OfType<NoteImageWidget>()); // converted to a floating widget
         Assert.True(GetItem(menu, "Square").IsChecked, "Square should be checked after the click");
         Assert.False(GetItem(menu, "Inline").IsChecked);
 
         // Reopening keeps the checkmark on the active mode (via the menu's Opened backup too).
-        InvokeMenuOpening(element, menu);
+        menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
         Assert.True(GetItem(menu, "Square").IsChecked, "Square should stay checked on reopen");
         Assert.False(GetItem(menu, "Inline").IsChecked);
 
@@ -883,7 +1334,7 @@ public class InlineImageTests
 
         // Radio semantics: clicking the already-active item keeps its checkmark.
         GetItem(menu, "Square").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-        InvokeMenuOpening(element, menu);
+        menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
         Assert.True(GetItem(menu, "Square").IsChecked, "clicking the active item must keep the checkmark");
 
         // The lock-aspect-ratio item mirrors the control state and toggles the session lock.
@@ -904,15 +1355,6 @@ public class InlineImageTests
         }
 
         throw new Xunit.Sdk.XunitException($"root menu item '{name}' not found");
-    }
-
-    private static void InvokeMenuOpening(InlineNoteImageElement element, ContextMenu menu)
-    {
-        var method = typeof(InlineNoteImageElement).GetMethod(
-            "ContextMenu_Opening",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(method);
-        method.Invoke(element, new object[] { menu, null! });
     }
 
     private static MenuItem GetItem(ContextMenu menu, string tag)
@@ -963,7 +1405,7 @@ public class InlineImageTests
             // Exactly one representation per session - no duplication, no leftover markers.
             var inlineCount = attachments.Count(a => a.WrapMode == NoteImageWrapMode.Inline);
             Assert.Equal(inlineCount, FindAllInlineContainers(harness.Editor.Document).Count);
-            Assert.Equal(attachments.Count - inlineCount, harness.Overlay.Children.Count);
+            Assert.Equal(attachments.Count - inlineCount, harness.Overlay.Children.OfType<NoteImageWidget>().Count());
             Assert.DoesNotContain('\uFFFC', new TextRange(
                 harness.Editor.Document.ContentStart,
                 harness.Editor.Document.ContentEnd).Text);
@@ -973,14 +1415,14 @@ public class InlineImageTests
             harness.Coordinator.SetWrapMode(anyId, NoteImageWrapMode.Square);
             harness.Editor.UpdateLayout();
             Assert.Equal(inlineCount - 1, FindAllInlineContainers(harness.Editor.Document).Count);
-            Assert.Equal(attachments.Count - inlineCount + 1, harness.Overlay.Children.Count);
+            Assert.Equal(attachments.Count - inlineCount + 1, harness.Overlay.Children.OfType<NoteImageWidget>().Count());
 
             var floatingId = harness.Coordinator.BuildAttachments()
                 .First(a => a.WrapMode != NoteImageWrapMode.Inline).Id;
             harness.Coordinator.SetWrapMode(floatingId, NoteImageWrapMode.Inline);
             harness.Editor.UpdateLayout();
             Assert.Equal(inlineCount, FindAllInlineContainers(harness.Editor.Document).Count);
-            Assert.Equal(attachments.Count - inlineCount, harness.Overlay.Children.Count);
+            Assert.Equal(attachments.Count - inlineCount, harness.Overlay.Children.OfType<NoteImageWidget>().Count());
         }
     }
 
@@ -1003,8 +1445,9 @@ public class InlineImageTests
     private static void RunMenuAndChipsScenario()
     {
         // The element lives inside the flow: the paragraph's LineHeight/BlockLineHeight must
-        // NOT leak into the context menu (it would stretch every menu row), and the selection
-        // chrome keeps the lock/delete chips of the floating widget.
+        // NOT leak into the context menu (it would stretch every menu row). The selection
+        // chrome - which lives on the OVERLAY, not in the flow - keeps the lock/delete chips
+        // of the floating widget.
         using var harness = CreateHarness();
         foreach (var paragraph in FindParagraphs(harness.Editor.Document))
         {
@@ -1025,25 +1468,41 @@ public class InlineImageTests
             "the menu must not inherit the paragraph line height");
         Assert.Equal(LineStackingStrategy.MaxHeight, Block.GetLineStackingStrategy(menu));
 
-        Assert.Contains(FindVisualChildren<Button>(element!), b => b.Name == "LockAspectButton");
-        Assert.Contains(FindVisualChildren<Button>(element!), b => b.Name == "DeleteButton");
+        // The photo is part of the text flow; it is auto-selected on conversion, so it shows
+        // the move cursor (and the text cursor when unselected).
+        Assert.Equal(Cursors.SizeAll, element.Cursor);
 
-        // The photo is part of the text flow, so it consistently shows the text cursor.
-        Assert.Equal(Cursors.IBeam, element.Cursor);
+        // The chrome is on the overlay: its handles always meet the photo's corners. The photo
+        // sits on the editor's FIRST row here - exactly the case where flow-hosted handles were
+        // clipped away. The chrome keeps ALL FOUR handles visible (hiding the top ones was
+        // rejected: it removed usable corners); the chips flip rule itself is covered by the
+        // chip-placement scenario (this photo's anchor is mid-text, so it stays above).
+        var chrome = SelectInlineAndGetChrome(harness);
+        Assert.Equal(Visibility.Visible, chrome.Visibility);
+        foreach (var thumb in FindVisualChildren<Thumb>(chrome))
+            Assert.Equal(Visibility.Visible, thumb.Visibility);
 
-        // The lock chip toggles the session's aspect lock - through the real input path (a
-        // mouse-down routed via the editor with the chip as the source), because the chip
-        // lives inside the flow and ordinary Button clicks can be swallowed for caret input.
+        var lockButton = FindVisualChildren<Button>(chrome).First(b => b.Name == "LockAspectButton");
+        var deleteButton = FindVisualChildren<Button>(chrome).First(b => b.Name == "DeleteButton");
+        Assert.Equal(VerticalAlignment.Top, lockButton.VerticalAlignment);
+        Assert.Equal(VerticalAlignment.Top, deleteButton.VerticalAlignment);
+
+        // The lock chip toggles the session's aspect lock through its real click path (the
+        // chrome's own Button - a plain click, which works because the chrome is not part of
+        // the caret-ingesting text flow).
         Assert.True(harness.Coordinator.BuildAttachments().Single().LockAspectRatio);
-        var lockButton = FindVisualChildren<Button>(element!).First(b => b.Name == "LockAspectButton");
-        var chipDown = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
-        {
-            RoutedEvent = UIElement.PreviewMouseLeftButtonDownEvent,
-            Source = lockButton
-        };
-        element.RaiseEvent(chipDown);
+        lockButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.False(chrome.LockAspectRatio);
         Assert.False(element.LockAspectRatio);
         Assert.False(harness.Coordinator.BuildAttachments().Single().LockAspectRatio);
+
+        // Flipping the chrome moves the chips below the photo (and back).
+        chrome.ButtonsFlipped = true;
+        Assert.Equal(VerticalAlignment.Bottom, lockButton.VerticalAlignment);
+        Assert.Equal(VerticalAlignment.Bottom, deleteButton.VerticalAlignment);
+        chrome.ButtonsFlipped = false;
+        Assert.Equal(VerticalAlignment.Top, lockButton.VerticalAlignment);
+        Assert.Equal(VerticalAlignment.Top, deleteButton.VerticalAlignment);
     }
 
     private static void RunLineGrowthScenario()
@@ -1168,7 +1627,8 @@ public class InlineImageTests
 
         var element = FindInlineElement(harness.Editor.Document);
         Assert.NotNull(element);
-        Assert.Empty(harness.Overlay.Children); // no canvas widget anymore
+        // No canvas widget anymore - only the view-layer selection chrome of the in-line photo.
+        Assert.DoesNotContain(harness.Overlay.Children.Cast<object>(), c => c is NoteImageWidget);
         Assert.DoesNotContain(harness.Coordinator.GetWrapSessions(), s => s.WrapMode == NoteImageWrapMode.Inline);
 
         Assert.True(harness.Coordinator.SelectImage(harness.ImageId));
@@ -1186,7 +1646,7 @@ public class InlineImageTests
         harness.Editor.UpdateLayout();
 
         Assert.Null(FindInlineElement(harness.Editor.Document));
-        Assert.Single(harness.Overlay.Children);
+        Assert.Single(harness.Overlay.Children.OfType<NoteImageWidget>());
         var sessions = harness.Coordinator.GetWrapSessions();
         Assert.Contains(sessions, s => s.WrapMode == NoteImageWrapMode.Square);
     }
@@ -1223,22 +1683,25 @@ public class InlineImageTests
         var element = FindInlineElement(harness.Editor.Document);
         Assert.NotNull(element);
         Assert.True(element.LockAspectRatio, "inline lock should default on");
+
+        // The photo is auto-selected on conversion: the move cursor (it is draggable).
+        Assert.Equal(Cursors.SizeAll, element.Cursor);
+        element.IsSelected = false;
         Assert.Equal(Cursors.IBeam, element.Cursor);
+        element.IsSelected = true;
+        Assert.Equal(Cursors.SizeAll, element.Cursor);
+
+        var chrome = SelectInlineAndGetChrome(harness);
 
         // Locked: a diagonal BR drag must keep the 200:150 ratio.
-        var thumb = FindVisualChildren<Thumb>(element!).First(t => Equals(t.Tag, "BR"));
-        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
-        thumb.RaiseEvent(new DragDeltaEventArgs(80, 100) { RoutedEvent = Thumb.DragDeltaEvent });
-        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        DragChromeHandle(chrome, "BR", 80, 100);
         Assert.Equal(200.0 / 150.0, element.Width / element.Height, precision: 4);
 
         // Unlocked: the same drag becomes freeform (the ratio changes with the deltas).
         element.LockAspectRatio = false;
         var wBefore = element.Width;
         var hBefore = element.Height;
-        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
-        thumb.RaiseEvent(new DragDeltaEventArgs(40, 10) { RoutedEvent = Thumb.DragDeltaEvent });
-        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        DragChromeHandle(chrome, "BR", 40, 10);
         Assert.Equal(wBefore + 40, element.Width, precision: 3);
         Assert.Equal(hBefore + 10, element.Height, precision: 3);
         Assert.NotEqual(wBefore / hBefore, element.Width / element.Height, precision: 4);
@@ -1253,11 +1716,9 @@ public class InlineImageTests
         var element = FindInlineElement(harness.Editor.Document);
         Assert.NotNull(element);
 
-        // Grab the bottom-right resize thumb and simulate a drag.
-        var thumb = FindVisualChildren<Thumb>(element!).First(t => Equals(t.Tag, "BR"));
-        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
-        thumb.RaiseEvent(new DragDeltaEventArgs(40, 30) { RoutedEvent = Thumb.DragDeltaEvent });
-        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+        // Grab the bottom-right resize handle of the overlay chrome and simulate a drag.
+        var chrome = SelectInlineAndGetChrome(harness);
+        DragChromeHandle(chrome, "BR", 40, 30);
 
         Assert.True(element.Width > 200, $"image should have grown, got {element.Width:F1}");
         Assert.True(element.Height > 150, $"image should have grown, got {element.Height:F1}");
@@ -2065,7 +2526,10 @@ public class InlineImageTests
             Padding = new Thickness(18, 16, 18, 16),
             FontSize = 14,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            // The real editor paints its surface with a transparent background (a null
+            // background would make the whole surface invisible to hit-testing).
+            Background = Brushes.Transparent
         };
         editor.Document.Blocks.Clear();
         var longText = string.Join(
@@ -2239,6 +2703,24 @@ public class InlineImageTests
 
     private static InlineNoteImageElement? FindInlineElement(FlowDocument document)
         => FindInlineContainer(document)?.Child as InlineNoteImageElement;
+
+    /// <summary>Selects the inline photo and returns its overlay selection chrome (the resize
+    /// handles + chips live on the overlay, not in the text flow).</summary>
+    private static InlineImageChrome SelectInlineAndGetChrome(EditorHarness harness)
+    {
+        harness.Coordinator.SelectImage(harness.ImageId);
+        harness.Editor.UpdateLayout();
+        return FindVisualChildren<InlineImageChrome>(harness.Overlay).Single();
+    }
+
+    /// <summary>Simulates a corner-handle drag on the overlay chrome.</summary>
+    private static void DragChromeHandle(InlineImageChrome chrome, string tag, double dx, double dy)
+    {
+        var thumb = FindVisualChildren<Thumb>(chrome).First(t => Equals(t.Tag, tag));
+        thumb.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+        thumb.RaiseEvent(new DragDeltaEventArgs(dx, dy) { RoutedEvent = Thumb.DragDeltaEvent });
+        thumb.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+    }
 
     private static Paragraph? GetContainerParagraph(InlineUIContainer container)
     {
@@ -2434,6 +2916,22 @@ public class InlineImageTests
         }
 
         return result;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? current)
+        where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+                return match;
+
+            current = current is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 
     private static void RunOnSta(Action scenario)

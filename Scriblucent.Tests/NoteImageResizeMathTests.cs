@@ -5,6 +5,105 @@ namespace Scriblucent.Tests;
 public class NoteImageResizeMathTests
 {
     [Fact]
+    public void ResizeFromCorner_Free_GainIsExactlyOneToOne()
+    {
+        // The amplification regression: a 1px drag must change the size by exactly 1px.
+        var (w1, h1) = NoteImageResizeMath.ResizeFromCorner(200, 150, 10, 0, flipX: false, flipY: false, keepRatio: false);
+        Assert.Equal(210, w1, precision: 5);
+        Assert.Equal(150, h1, precision: 5);
+
+        var (w2, h2) = NoteImageResizeMath.ResizeFromCorner(200, 150, 0, 7, flipX: false, flipY: false, keepRatio: false);
+        Assert.Equal(200, w2, precision: 5);
+        Assert.Equal(157, h2, precision: 5);
+
+        var (w3, h3) = NoteImageResizeMath.ResizeFromCorner(200, 150, 23, 11, flipX: false, flipY: false, keepRatio: false);
+        Assert.Equal(223, w3, precision: 5);
+        Assert.Equal(161, h3, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_Free_NegativeDragShrinksOneToOne()
+    {
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(200, 150, -40, -30, flipX: false, flipY: false, keepRatio: false);
+        Assert.Equal(160, w, precision: 5);
+        Assert.Equal(120, h, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_Locked_UsesSmallerFactor_AndKeepsRatio()
+    {
+        // BR drag (80, 100) on 200x150: xFact = 1.4, yFact = 1.667 -> both 1.4 (the smaller).
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(200, 150, 80, 100, flipX: false, flipY: false, keepRatio: true);
+        Assert.Equal(280, w, precision: 5);
+        Assert.Equal(210, h, precision: 5);
+        Assert.Equal(200.0 / 150.0, w / h, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_Locked_HorizontalOnlyDragDoesNotBalloon()
+    {
+        // A mostly-horizontal drag: the Y factor (1.0) is the smaller -> the size stays at
+        // the start instead of ballooning from a tiny Y movement (the LO "smaller factor" rule).
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(200, 150, 100, 5, flipX: false, flipY: false, keepRatio: true);
+        var yFact = 155.0 / 150.0;
+        Assert.Equal(200 * yFact, w, precision: 5);
+        Assert.Equal(150 * yFact, h, precision: 5);
+        Assert.Equal(200.0 / 150.0, w / h, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_HandleFlips_MapAxes()
+    {
+        // TL handle: both axes flip (the anchor is the bottom-right corner).
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(200, 150, 10, 10, flipX: true, flipY: true, keepRatio: false);
+        Assert.Equal(190, w, precision: 5);
+        Assert.Equal(140, h, precision: 5);
+
+        // TR handle: only Y flips.
+        var (w2, h2) = NoteImageResizeMath.ResizeFromCorner(200, 150, 10, 10, flipX: false, flipY: true, keepRatio: false);
+        Assert.Equal(210, w2, precision: 5);
+        Assert.Equal(140, h2, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_CrossingAnchor_FreezesAtStart()
+    {
+        // The pointer crossed the anchor (the factor went negative) -> the size freezes
+        // at the start (LibreOffice clamps a non-positive factor to 1.0).
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(200, 150, -300, 20, flipX: false, flipY: false, keepRatio: false);
+        Assert.Equal(200, w, precision: 5);
+        Assert.Equal(170, h, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_ClampIsStrict_NeverBounces()
+    {
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(200, 150, 100, 100, flipX: false, flipY: false, keepRatio: false, minSide: 16, maxSide: 2000);
+        Assert.Equal(300, w, precision: 5);
+        Assert.Equal(250, h, precision: 5);
+
+        // Shrink to near the floor: the result sits AT the floor, never bounces above it.
+        // (A drag past the anchor itself freezes at the start - the LO factor<=0 rule - so
+        // the floor is reached by dragging almost back to the anchor, not beyond it.)
+        var (w2, h2) = NoteImageResizeMath.ResizeFromCorner(200, 150, -185, -135, flipX: false, flipY: false, keepRatio: false, minSide: 16, maxSide: 2000);
+        Assert.Equal(16, w2, precision: 5);
+        Assert.Equal(16, h2, precision: 5);
+
+        // A tiny sub-floor result sticks at the floor exactly (no min-side jump to 80).
+        var (w3, h3) = NoteImageResizeMath.ResizeFromCorner(30, 30, -18, -18, flipX: false, flipY: false, keepRatio: false, minSide: 16, maxSide: 2000);
+        Assert.Equal(16, w3, precision: 5);
+        Assert.Equal(16, h3, precision: 5);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_InvalidStart_UsesMinimum()
+    {
+        var (w, h) = NoteImageResizeMath.ResizeFromCorner(0, 0, 10, 10, flipX: false, flipY: false, keepRatio: false);
+        Assert.Equal(NoteImageResizeMath.MinInlineSideDip, w);
+        Assert.Equal(NoteImageResizeMath.MinInlineSideDip, h);
+    }
+
+    [Fact]
     public void ProjectCornerScale_PreservesAspect()
     {
         var (w, h) = NoteImageResizeMath.ProjectCornerScale(200, 100, 300, 200);

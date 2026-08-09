@@ -8,6 +8,64 @@ public static class NoteImageResizeMath
     public const double MinSideDip = 80;
     public const double MaxSideDip = 2000;
 
+    /// <summary>Smallest side of an in-line photo (DIPs). In-line photos are small text elements,
+    /// so the floor is far below the floating widget's.</summary>
+    public const double MinInlineSideDip = 16;
+
+    /// <summary>
+    /// Resizes from a corner handle, replicating LibreOffice's <c>SdrDragResize::MoveSdrDrag</c>:
+    /// the size is anchored at the FIXED opposite corner and the per-axis scale factor is the
+    /// pointer's distance from that anchor divided by the start distance (so a 1px drag changes
+    /// the size by exactly 1px). With <paramref name="keepRatio"/>, both axes take the SMALLER
+    /// factor (the axis that moved less limits the scale - the LO "IsBigOrtho=false" rule), so a
+    /// tiny movement can never balloon the photo. A factor &lt;= 0 (the pointer crossed the
+    /// anchor) freezes the size, and the result is strictly clamped - never bounced.
+    /// </summary>
+    public static (double Width, double Height) ResizeFromCorner(
+        double startWidth,
+        double startHeight,
+        double deltaX,
+        double deltaY,
+        bool flipX,
+        bool flipY,
+        bool keepRatio,
+        double minSide = MinInlineSideDip,
+        double maxSide = MaxSideDip)
+    {
+        if (startWidth <= 0 || startHeight <= 0
+            || double.IsNaN(startWidth) || double.IsNaN(startHeight)
+            || double.IsInfinity(startWidth) || double.IsInfinity(startHeight))
+        {
+            return (minSide, minSide);
+        }
+
+        // The pointer's distance from the fixed opposite corner, as fractions of the start
+        // distances (LibreOffice: nXMul/nXDiv and nYMul/nYDiv).
+        var xMul = startWidth + (flipX ? -deltaX : deltaX);
+        var yMul = startHeight + (flipY ? -deltaY : deltaY);
+        var xFact = xMul / startWidth;
+        var yFact = yMul / startHeight;
+
+        if (keepRatio)
+        {
+            // LO: both axes take the smaller factor - the axis that moved less limits the
+            // scale, so the photo follows the pointer predictably instead of ballooning.
+            xFact = Math.Min(xFact, yFact);
+            yFact = xFact;
+        }
+
+        // LO: a factor <= 0 (the pointer crossed the anchor) freezes that axis at the start.
+        xFact = xFact > 0 ? xFact : 1.0;
+        yFact = yFact > 0 ? yFact : 1.0;
+
+        var width = startWidth * xFact;
+        var height = startHeight * yFact;
+
+        width = Math.Clamp(width, minSide, maxSide);
+        height = Math.Clamp(height, minSide, maxSide);
+        return (width, height);
+    }
+
     /// <summary>
     /// Projects a free-form corner size onto the aspect-preserving ray from the opposite corner.
     /// </summary>

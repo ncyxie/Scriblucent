@@ -4,8 +4,7 @@
              xmlns:icons="clr-namespace:Scriblucent.Icons"
              xmlns:localization="clr-namespace:Scriblucent.Localization"
              Focusable="False"
-             Background="Transparent"
-             ContextMenuOpening="ContextMenu_Opening">
+             Background="Transparent">
     <!-- The element lives inside the paragraph's text flow, so TextElement properties like
          LineHeight/LineStackingStrategy inherit from the paragraph into the menu's content
          (stretching every menu row). The constructor blocks the inheritance at the menu root. -->
@@ -74,27 +73,6 @@
             </MenuItem>
         </ContextMenu>
     </UserControl.ContextMenu>
-    <UserControl.Resources>
-        <Style x:Key="InlineImageHandleHitStyle" TargetType="Thumb">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Height" Value="22"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="IsTabStop" Value="False"/>
-        </Style>
-
-        <!-- Shared L-bracket stroke (elbow at local 11,11 = thumb center), same as the
-             floating widget's selection chrome. -->
-        <Style x:Key="InlineImageBracketPathStyle" TargetType="Path">
-            <Setter Property="Stroke" Value="{DynamicResource AccentPrimary}"/>
-            <Setter Property="StrokeThickness" Value="2.25"/>
-            <Setter Property="StrokeStartLineCap" Value="Round"/>
-            <Setter Property="StrokeEndLineCap" Value="Round"/>
-            <Setter Property="StrokeLineJoin" Value="Round"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="IsHitTestVisible" Value="False"/>
-        </Style>
-    </UserControl.Resources>
     <Grid ClipToBounds="False">
         <Grid.RowDefinitions>
             <RowDefinition x:Name="ImageRow" Height="Auto"/>
@@ -104,8 +82,7 @@
                 Grid.Row="0"
                 CornerRadius="4"
                 ClipToBounds="True"
-                Background="Transparent"
-                MouseLeftButtonDown="Body_MouseLeftButtonDown">
+                Background="Transparent">
             <Grid>
                 <Image x:Name="DisplayImage"
                        Stretch="Fill"
@@ -117,108 +94,6 @@
                         Visibility="Collapsed"/>
             </Grid>
         </Border>
-
-        <!-- Flush with image; each 22x22 thumb center sits on a corner (same geometry as the
-             floating widget's corner handles). -->
-        <Grid x:Name="HandleLayer"
-              Grid.Row="0"
-              Visibility="Collapsed"
-              IsHitTestVisible="True"
-              ClipToBounds="False">
-            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
-                   Cursor="SizeNWSE"
-                   HorizontalAlignment="Left" VerticalAlignment="Top"
-                   Margin="-11,-11,0,0" Tag="TL"
-                   DragStarted="ResizeThumb_DragStarted"
-                   DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
-                                  Data="M 3,11 L 11,11 L 11,3"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
-            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
-                   Cursor="SizeNESW"
-                   HorizontalAlignment="Right" VerticalAlignment="Top"
-                   Margin="0,-11,-11,0" Tag="TR"
-                   DragStarted="ResizeThumb_DragStarted"
-                   DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
-                                  Data="M 19,11 L 11,11 L 11,3"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
-            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
-                   Cursor="SizeNWSE"
-                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                   Margin="0,0,-11,-11" Tag="BR"
-                   DragStarted="ResizeThumb_DragStarted"
-                   DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
-                                  Data="M 19,11 L 11,11 L 11,19"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
-            <Thumb Style="{StaticResource InlineImageHandleHitStyle}"
-                   Cursor="SizeNESW"
-                   HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                   Margin="-11,0,0,-11" Tag="BL"
-                   DragStarted="ResizeThumb_DragStarted"
-                   DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource InlineImageBracketPathStyle}"
-                                  Data="M 3,11 L 11,11 L 11,19"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
-
-            <!-- Aspect lock + delete chips — above the top edge, clear of the corner brackets
-                 (same chrome as the floating widget); flipped below when pressed against the
-                 editor's top. -->
-            <Button x:Name="LockAspectButton"
-                    Width="26"
-                    Height="26"
-                    Margin="0,-34,44,0"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Padding="0"
-                    Cursor="Hand"
-                    IsTabStop="False"
-                    Focusable="False"
-                    Style="{DynamicResource EditorToolButtonBaseStyle}"
-                    Content="{icons:Icon Kind=Lock, Size=12}"/>
-            <Button x:Name="DeleteButton"
-                    Width="26"
-                    Height="26"
-                    Margin="0,-34,12,0"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Padding="0"
-                    Cursor="Hand"
-                    IsTabStop="False"
-                    Focusable="False"
-                    Style="{DynamicResource EditorDangerToolButtonStyle}"
-                    ToolTip="{Binding [DeleteImage], Source={x:Static localization:LocalizationProvider.Instance}}"
-                    Content="{icons:Icon Kind=Delete, Size=12}"/>
-        </Grid>
 
         <!-- Caption row below the photo (LibreOffice/OnlyOffice-style); the element's box
              grows to include it so the line-height sync keeps the flow correct. -->
