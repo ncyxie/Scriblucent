@@ -21,15 +21,115 @@ public partial class NoteCardControl : UserControl
     private Point _dragStart;
     private bool _suppressOpenOnMouseUp;
 
+    /// <summary>
+    /// Bitmap mode: the card shows only its cached per-note bitmap (see NoteCardBitmapCache)
+    /// instead of the live template. During smooth-scroll sessions every container switches to
+    /// bitmap mode, so rebinding a recycled container becomes a single Image source swap instead
+    /// of re-rasterizing the live card drawing.
+    /// </summary>
+    public static readonly DependencyProperty IsBitmapModeProperty = DependencyProperty.Register(
+        nameof(IsBitmapMode),
+        typeof(bool),
+        typeof(NoteCardControl),
+        new PropertyMetadata(false, OnIsBitmapModeChanged));
+
+    public bool IsBitmapMode
+    {
+        get => (bool)GetValue(IsBitmapModeProperty);
+        set => SetValue(IsBitmapModeProperty, value);
+    }
+
+    private static void OnIsBitmapModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var card = (NoteCardControl)d;
+        card.ApplyBitmapMode();
+        // Returning to live needs the preview built (it was skipped while in bitmap mode).
+        if (!card.IsBitmapMode && e.OldValue is true)
+            card.RebuildContentPreview(card.DataContext as NoteCardViewModel);
+    }
+
     public NoteCardControl()
     {
         InitializeComponent();
+
+        // Card text renders in grayscale (not ClearType): grayscale glyph rasterization is
+        // several times faster than the LCD-filtered ClearType pass, and the scroll measurements
+        // showed the ClearType first-draw rasterization of newly-realized cards was a major
+        // render-thread stall source during flings. Grayscale is visually close to ClearType at
+        // high DPI (the editor keeps ClearType).
+        TextOptions.SetTextRenderingMode(this, System.Windows.Media.TextRenderingMode.Grayscale);
 
         // Use PreviewMouseLeftButtonUp so clicks inside child controls still trigger opening the editor
         PreviewMouseLeftButtonUp += NoteCardControl_PreviewMouseLeftButtonUp;
         Loaded += OnCardLoaded;
         Unloaded += OnUnloaded;
         Cursor = Cursors.Hand;
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        if (IsBitmapMode && BitmapLayer?.Source is System.Windows.Media.Imaging.BitmapSource bitmap)
+        {
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            return new Size(bitmap.PixelWidth / dpi, bitmap.PixelHeight / dpi);
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = base.MeasureOverride(availableSize);
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled && sw.Elapsed.TotalMilliseconds > 3)
+        {
+            var vm = DataContext as NoteCardViewModel;
+            var preview = vm?.Document?.Content;
+            Scriblucent.Services.ScrollPerfDiag.Log(
+                $"cardMeasure\t{sw.Elapsed.TotalMilliseconds:F2}\tpreviewLen={preview?.Length ?? 0}\tpreviewHead={(preview is null ? "" : preview.Substring(0, Math.Min(60, preview.Length))).Replace("\t", " ").Replace("\n", " ")}");
+        }
+
+        return result;
+    }
+
+    private void ApplyBitmapMode()
+    {
+        if (BitmapLayer is null || CardBorder is null || CardShadow is null)
+            return;
+
+        var bitmapMode = IsBitmapMode;
+        BitmapLayer.Visibility = bitmapMode ? Visibility.Visible : Visibility.Collapsed;
+        CardBorder.Visibility = bitmapMode ? Visibility.Collapsed : Visibility.Visible;
+        CardShadow.Visibility = bitmapMode ? Visibility.Collapsed : Visibility.Visible;
+
+        if (bitmapMode && DataContext is NoteCardViewModel vm)
+        {
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            var requestedVm = vm;
+            BitmapLayer.Source = Scriblucent.Rendering.SkiaCardTileCache.GetOrRequest(vm, dpi, source =>
+            {
+                // The render landed on the thread pool and marshaled back; only apply if this
+                // container still shows the same note in bitmap mode.
+                if (!IsBitmapMode || !ReferenceEquals(DataContext, requestedVm))
+                    return;
+
+                BitmapLayer.Source = source;
+                InvalidateMeasure();
+            });
+        }
+        else if (!bitmapMode)
+        {
+            BitmapLayer.Source = null;
+        }
+    }
+
+    /// <summary>
+    /// Hides the nine-slice shadow layer while a smooth-scroll session is active (see
+    /// DashboardScrollRenderGate.SetRealizedCardShadowVisibility) - the shadow is a notable
+    /// part of each card's scroll-time draw cost, and flat cards during motion read the same
+    /// once the elevation returns at rest.
+    /// </summary>
+    internal void SetScrollShadowVisible(bool visible)
+    {
+        if (CardShadow is null || IsBitmapMode)
+            return;
+
+        CardShadow.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnCardLoaded(object sender, RoutedEventArgs e)
@@ -42,7 +142,16 @@ public partial class NoteCardControl : UserControl
     }
 
     private void NoteCardControl_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-        => RebuildContentPreview(e.NewValue as NoteCardViewModel);
+    {
+        ApplyBitmapMode();
+        // Defer the hidden inline preview while bitmap mode displays the cached tile.
+        // Rebuild the preview when the card returns to live rendering.
+        if (!IsBitmapMode)
+            RebuildContentPreview(e.NewValue as NoteCardViewModel);
+    }
+
+    private NoteCardViewModel? _previewViewModel;
+    private string? _previewContent;
 
     /// <summary>Builds the card preview as inlines: a vector picture icon wherever a photo
     /// sentinel sits in the preview text (in-line photos at their text position, floating
@@ -50,22 +159,43 @@ public partial class NoteCardControl : UserControl
     /// text+photo notes show the photos where they belong.</summary>
     private void RebuildContentPreview(NoteCardViewModel? viewModel)
     {
+        // Recycled containers can revisit the same card. Reuse its inline preview when
+        // both the view model and content are unchanged.
+        var content = viewModel?.Content ?? string.Empty;
+        if (ReferenceEquals(_previewViewModel, viewModel) && _previewContent == content)
+            return;
+
+        _previewViewModel = viewModel;
+        _previewContent = content;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         ContentPreview.Inlines.Clear();
         if (viewModel is null)
             return;
 
         var text = viewModel.Content ?? string.Empty;
         var segments = text.Split(Scriblucent.Services.FloatingImageCoordinator.InlineMarkerChar);
+        var previewIconCount = 0;
+        const int maxPreviewIcons = 4;
         for (var i = 0; i < segments.Length; i++)
         {
             if (segments[i].Length > 0)
                 ContentPreview.Inlines.Add(new Run(segments[i]));
 
-            if (i < segments.Length - 1)
+            if (i < segments.Length - 1 && previewIconCount < maxPreviewIcons)
+            {
+                previewIconCount++;
                 ContentPreview.Inlines.Add(new InlineUIContainer(BuildPreviewPictureIcon())
                 {
                     BaselineAlignment = BaselineAlignment.Center
                 });
+            }
+        }
+
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled && sw.Elapsed.TotalMilliseconds > 1)
+        {
+            Scriblucent.Services.ScrollPerfDiag.Log(
+                $"previewRebuild\t{sw.Elapsed.TotalMilliseconds:F2}\ttextLen={text.Length}\tsegments={segments.Length}\ticons={previewIconCount}");
         }
     }
 
@@ -104,6 +234,7 @@ public partial class NoteCardControl : UserControl
         if (MenuButton.IsMouseOver)
             return;
 
+        // Don't open the editor when the mass-select checkbox was clicked
         if (DashboardMassSelectCheckBoxBehavior.IsMassSelectCheckBox(e.OriginalSource as DependencyObject))
             return;
 
@@ -438,6 +569,9 @@ public partial class NoteCardControl : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        if (IsBitmapMode)
+            return;
+
         ClearDragVisualState();
         MassSelectHighlightBehavior.SyncContainer(this);
         DashboardMassSelectCheckBoxBehavior.SyncContainer(this);
@@ -459,17 +593,6 @@ public partial class NoteCardControl : UserControl
             vm.IsMenuVisible = false;
     }
 
-    private void OnStartMassSelectMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not NoteCardViewModel note)
-            return;
-
-        if (Window.GetWindow(this) is not MainWindow { DataContext: MainViewModel mainVm })
-            return;
-
-        mainVm.EnterMassSelect(note);
-    }
-
     private void OnMenuButtonClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button button)
@@ -478,115 +601,10 @@ public partial class NoteCardControl : UserControl
 
     private void OpenContextMenu(UIElement placementTarget, PlacementMode placement)
     {
-        if (MenuButton.ContextMenu == null)
+        if (ContextMenu == null)
             return;
 
-        MenuButton.ContextMenu.DataContext = DataContext;
-        UiMotion.OpenContextMenu(MenuButton.ContextMenu, placementTarget, placement);
-    }
-
-    private void OnOpenMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is NoteCardViewModel viewModel)
-        {
-            var mainWindow = Window.GetWindow(this) as MainWindow;
-            mainWindow?.OpenNoteEditor(viewModel);
-        }
-    }
-
-    private void OnOpenFromFileClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not NoteCardViewModel viewModel)
-            return;
-
-        var dlg = new Microsoft.Win32.OpenFileDialog();
-        dlg.Filter = LocalizationService.GetString("OpenFileDialogFilter");
-        if (dlg.ShowDialog() == true)
-        {
-            try
-            {
-                var path = dlg.FileName;
-                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-
-                if (ext == ".rtf")
-                {
-                    // Read raw bytes from the RTF file and store as Base64 so we don't corrupt encoding
-                    var bytes = System.IO.File.ReadAllBytes(path);
-                    viewModel.Document.Content = Convert.ToBase64String(bytes);
-                }
-                else
-                {
-                    // Read raw bytes first
-                    var rawBytes = System.IO.File.ReadAllBytes(path);
-
-                    string? content = null;
-
-                    // 1) Try strict UTF-8 (throws on invalid sequences)
-                    try
-                    {
-                        content = new System.Text.UTF8Encoding(false, true).GetString(rawBytes);
-                    }
-                    catch
-                    {
-                        // 2) Try BOM detection / StreamReader fallback
-                        try
-                        {
-                            using var ms = new System.IO.MemoryStream(rawBytes);
-                            using var sr = new System.IO.StreamReader(ms, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-                            content = sr.ReadToEnd();
-                        }
-                        catch
-                        {
-                            // 3) Try system ANSI
-                            try { content = System.Text.Encoding.Default.GetString(rawBytes); }
-                            catch
-                            {
-                                // 4) Try Lithuanian code page
-                                try { content = System.Text.Encoding.GetEncoding(1257).GetString(rawBytes); }
-                                catch (Exception ex)
-                                {
-                                    content = string.Empty;
-                                    Scriblucent.Services.CrashLog.Append("NoteCardControl.ImportTextFile", ex);
-                                }
-                            }
-                        }
-                    }
-
-                    viewModel.Document.Content = content ?? string.Empty;
-                    // Set note title to file name (without extension) if empty
-                    if (string.IsNullOrWhiteSpace(viewModel.Document.Title))
-                        viewModel.Document.Title = System.IO.Path.GetFileNameWithoutExtension(path);
-                }
-
-                var mainWindow = Window.GetWindow(this) as MainWindow;
-                mainWindow?.OpenNoteEditor(viewModel);
-            }
-            catch
-            {
-                ModernMessageBox.Show(LocalizationService.GetString("FailedToOpenFile"), LocalizationService.GetString("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-    }
-
-    private void OnAssignScheduleMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not NoteCardViewModel noteVm)
-            return;
-
-        if (Window.GetWindow(this) is not MainWindow mainWindow)
-            return;
-
-        mainWindow.OpenNoteSchedule(noteVm);
-    }
-
-    private void OnInfoMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not NoteCardViewModel noteVm)
-            return;
-
-        if (Window.GetWindow(this) is not MainWindow mainWindow)
-            return;
-
-        mainWindow.ShowNoteInfo(noteVm);
+        ContextMenu.DataContext = DataContext;
+        UiMotion.OpenContextMenu(ContextMenu, placementTarget, placement);
     }
 }

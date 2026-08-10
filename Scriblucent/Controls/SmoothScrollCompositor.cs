@@ -54,6 +54,8 @@ internal static class SmoothScrollCompositor
         public bool WrappedExistingTransform;
         public bool HitTestSuppressed;
         public bool OriginalContentHitTestVisible = true;
+        public double DpiScale = 1.0;
+        public IReadOnlyList<DashboardVirtualizationHost>? Hosts;
     }
 
     public static void Begin(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost> hosts)
@@ -76,6 +78,8 @@ internal static class SmoothScrollCompositor
         session.LastCommitUtc = DateTime.UtcNow;
         session.ContentElement = ResolveContentElement(scrollViewer);
         session.Translate = null;
+        session.DpiScale = System.Windows.Media.VisualTreeHelper.GetDpi(scrollViewer).PixelsPerDip;
+        session.Hosts = hosts;
 
         if (session.ContentElement is { } content)
         {
@@ -111,6 +115,8 @@ internal static class SmoothScrollCompositor
             DashboardShadowSuspender.TrySuspend(DashboardShadowSuspender.AnimatedScrollShadowScope, shadowRoot);
 
         DashboardScrollRenderGate.StripRealizedCardShadows(hosts);
+        DashboardScrollRenderGate.SetRealizedCardShadowVisibility(hosts, visible: false);
+        DashboardScrollRenderGate.SetRealizedCardBitmapMode(hosts, bitmapMode: true);
     }
 
     public static void End(ScrollViewer scrollViewer, double finalX, double finalY)
@@ -151,8 +157,14 @@ internal static class SmoothScrollCompositor
             RestoreContentTransform(teardown);
             teardown.Translate = null;
             teardown.ContentElement = null;
+            var endHosts = teardown.Hosts;
+            teardown.Hosts = null;
 
-            BeginSurfaceHold(scrollViewer);
+            // Cards STAY in tile mode after the session ends: flipping back to the live template
+            // per burst re-flowed the grid (live card heights vary; tiles are fixed-cell) - the
+            // visible readjusting during scroll. The flip happens once, at the true settle (the
+            // surface hold release).
+            BeginSurfaceHold(scrollViewer, endHosts);
         }, DispatcherPriority.Loaded);
     }
 
@@ -177,9 +189,12 @@ internal static class SmoothScrollCompositor
         return false;
     }
 
-    private static void BeginSurfaceHold(ScrollViewer scrollViewer)
+    private static IReadOnlyList<DashboardVirtualizationHost>? _surfaceHoldHosts;
+
+    private static void BeginSurfaceHold(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost>? hosts)
     {
         _surfaceHoldScrollViewer = scrollViewer;
+        _surfaceHoldHosts = hosts;
 
         if (_surfaceHoldTimer is null)
         {
@@ -201,6 +216,15 @@ internal static class SmoothScrollCompositor
             return;
 
         _surfaceHoldScrollViewer = null;
+        if (_surfaceHoldHosts is { } holdHosts)
+        {
+            // The true settle: cards flip back to the live template (hover/menu/drag/mass-select)
+            // and the shadows return - once, not per scroll burst.
+            DashboardScrollRenderGate.SetRealizedCardBitmapMode(holdHosts, bitmapMode: false);
+            DashboardScrollRenderGate.SetRealizedCardShadowVisibility(holdHosts, visible: true);
+            _surfaceHoldHosts = null;
+        }
+
         DashboardScrollSurfaceCache.EndSessionStaggered();
         DashboardShadowSuspender.TryResumeStaggered(DashboardShadowSuspender.AnimatedScrollShadowScope);
     }
@@ -303,12 +327,18 @@ internal static class SmoothScrollCompositor
 
     private static void Commit(ScrollViewer scrollViewer, Session session, double visualX, double visualY)
     {
+        // Snap the committed offset to whole device pixels: the ScrollViewer content is what the
+        // glyphs anchor to once the drift translate clears; committing to fractional offsets
+        // re-rasterizes the glyph cache at each commit.
+        var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
         var clampedX = scrollViewer.ScrollableWidth > 0
             ? Math.Clamp(visualX, 0, scrollViewer.ScrollableWidth)
             : 0;
         var clampedY = scrollViewer.ScrollableHeight > 0
             ? Math.Clamp(visualY, 0, scrollViewer.ScrollableHeight)
             : 0;
+        clampedX = Snap(clampedX, scale);
+        clampedY = Snap(clampedY, scale);
 
         session.CommittedX = clampedX;
         session.CommittedY = clampedY;
@@ -331,9 +361,16 @@ internal static class SmoothScrollCompositor
         if (session.Translate is not { } translate)
             return;
 
-        translate.X = session.BaselineTranslateX - (session.VisualX - session.CommittedX);
-        translate.Y = session.BaselineTranslateY - (session.VisualY - session.CommittedY);
+        // Snap the translate to whole device pixels: under a fractional translate, Display-mode
+        // text whose glyph origins snap to whole pixels re-rasterizes every frame - a major
+        // scroll frame-spike source.
+        var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
+        translate.X = Snap(session.BaselineTranslateX - (session.VisualX - session.CommittedX), scale);
+        translate.Y = Snap(session.BaselineTranslateY - (session.VisualY - session.CommittedY), scale);
     }
+
+    private static double Snap(double value, double scale)
+        => Math.Round(value * scale) / scale;
 
     private static TranslateTransform AcquireSmoothTranslate(FrameworkElement content, Session session)
     {

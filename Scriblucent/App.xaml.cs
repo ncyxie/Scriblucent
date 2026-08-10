@@ -1,6 +1,7 @@
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Services;
+using Scriblucent.ViewModels;
 using System.Windows;
 
 namespace Scriblucent;
@@ -121,6 +122,112 @@ public partial class App : Application
 
         WindowThemeService.ApplyThemeWhenReady(window, ThemeManager.CurrentTheme);
         UiMotion.ConfigurePopupsForWindow(window);
+    }
+
+    private static NoteCardViewModel? ResolveCard(object sender)
+        => (sender as FrameworkElement)?.DataContext as NoteCardViewModel;
+
+    private static MainWindow? CurrentMainWindow
+        => Application.Current.MainWindow as MainWindow;
+
+    private void OnNoteCardMenuOpen(object sender, RoutedEventArgs e)
+    {
+        if (ResolveCard(sender) is { } note)
+            CurrentMainWindow?.OpenNoteEditor(note);
+    }
+
+    private void OnNoteCardMenuSelectMultiple(object sender, RoutedEventArgs e)
+    {
+        if (ResolveCard(sender) is { } note
+            && Application.Current.MainWindow is MainWindow { DataContext: MainViewModel mainVm })
+        {
+            mainVm.EnterMassSelect(note);
+        }
+    }
+
+    private void OnNoteCardMenuInfo(object sender, RoutedEventArgs e)
+    {
+        if (ResolveCard(sender) is { } note)
+            CurrentMainWindow?.ShowNoteInfo(note);
+    }
+
+    private void OnNoteCardMenuAssignSchedule(object sender, RoutedEventArgs e)
+    {
+        if (ResolveCard(sender) is { } note)
+            CurrentMainWindow?.OpenNoteSchedule(note);
+    }
+
+    private void OnNoteCardMenuReplaceFromFile(object sender, RoutedEventArgs e)
+    {
+        if (ResolveCard(sender) is not { } viewModel)
+            return;
+
+        var dlg = new Microsoft.Win32.OpenFileDialog();
+        dlg.Filter = LocalizationService.GetString("OpenFileDialogFilter");
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                var path = dlg.FileName;
+                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+
+                if (ext == ".rtf")
+                {
+                    // Read raw bytes from the RTF file and store as Base64 so we don't corrupt encoding
+                    var bytes = System.IO.File.ReadAllBytes(path);
+                    viewModel.Document.Content = Convert.ToBase64String(bytes);
+                }
+                else
+                {
+                    // Read raw bytes first
+                    var rawBytes = System.IO.File.ReadAllBytes(path);
+
+                    string? content = null;
+
+                    // 1) Try strict UTF-8 (throws on invalid sequences)
+                    try
+                    {
+                        content = new System.Text.UTF8Encoding(false, true).GetString(rawBytes);
+                    }
+                    catch
+                    {
+                        // 2) Try BOM detection / StreamReader fallback
+                        try
+                        {
+                            using var ms = new System.IO.MemoryStream(rawBytes);
+                            using var sr = new System.IO.StreamReader(ms, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                            content = sr.ReadToEnd();
+                        }
+                        catch
+                        {
+                            // 3) Try system ANSI
+                            try { content = System.Text.Encoding.Default.GetString(rawBytes); }
+                            catch
+                            {
+                                // 4) Try Lithuanian code page
+                                try { content = System.Text.Encoding.GetEncoding(1257).GetString(rawBytes); }
+                                catch (Exception ex)
+                                {
+                                    content = string.Empty;
+                                    CrashLog.Append("NoteCardControl.ImportTextFile", ex);
+                                }
+                            }
+                        }
+                    }
+
+                    viewModel.Document.Content = content ?? string.Empty;
+                    // Set note title to file name (without extension) if empty
+                    if (string.IsNullOrWhiteSpace(viewModel.Document.Title))
+                        viewModel.Document.Title = System.IO.Path.GetFileNameWithoutExtension(path);
+                }
+
+                CurrentMainWindow?.OpenNoteEditor(viewModel);
+            }
+            catch
+            {
+                ModernMessageBox.Show(LocalizationService.GetString("FailedToOpenFile"), LocalizationService.GetString("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

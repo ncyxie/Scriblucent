@@ -524,8 +524,20 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     {
         AttachMainViewModel();
 
-        if (!ItemCellSize.IsEmpty && ResolveItemsPanel() is VirtualizingWrapPanel wrapPanel)
-            wrapPanel.ItemSize = ItemCellSize;
+        if (ResolveItemsPanel() is VirtualizingWrapPanel wrapPanel)
+        {
+            if (!ItemCellSize.IsEmpty)
+                wrapPanel.ItemSize = ItemCellSize;
+
+            // Set the virtualization attached properties on the PANEL itself (not just the
+            // ItemsControl, which the toolkit panel does not consult): the panel then reuses
+            // containers instead of regenerating them, so scroll passes only rebind and
+            // re-measure existing containers instead of paying a full container load per item.
+            VirtualizingPanel.SetIsVirtualizing(wrapPanel, true);
+            VirtualizingPanel.SetVirtualizationMode(wrapPanel, VirtualizationMode.Recycling);
+            VirtualizingPanel.SetScrollUnit(wrapPanel, ScrollUnit.Pixel);
+            VirtualizingPanel.SetCacheLengthUnit(wrapPanel, VirtualizationCacheLengthUnit.Pixel);
+        }
 
         EnsureRealizedCardsInteractive();
         if (IsMassSelectModeActive())
@@ -542,7 +554,8 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         PrepareContainerForItemCore(element, item);
-        ScrollPerfDiag.Log($"containerPrepare\t{stopwatch.Elapsed.TotalMilliseconds:F2}\tscope={ResolveHostingMotionScope()}");
+        if (ScrollPerfDiag.Enabled)
+            ScrollPerfDiag.LogContainerPrepare(stopwatch.Elapsed.TotalMilliseconds);
     }
 
     private void PrepareContainerForItemCore(DependencyObject element, object item)

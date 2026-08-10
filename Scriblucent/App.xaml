@@ -25,6 +25,36 @@
             <sys:Double x:Key="GlobalVerticalScrollBarWidth">6</sys:Double>
             <sys:Double x:Key="GlobalHorizontalScrollBarHeight">6</sys:Double>
 
+            <!-- One shared ContextMenu for every dashboard card. Cards are virtualized and can
+                 number in the hundreds; an 11-item menu + 2 separators + 13 bindings per card
+                 adds up fast (virtualized or not, WPF constructs the menu tree with the
+                 control). The open path (NoteCardControl.OpenContextMenu) assigns the card's
+                 DataContext on each open, and the binding below is the fallback for any other
+                 opener. -->
+            <ContextMenu x:Key="NoteCardContextMenu"
+                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                <MenuItem Header="{Binding [Open], Source={StaticResource Loc}}" Click="OnNoteCardMenuOpen"/>
+                <MenuItem Header="{Binding [SelectMultiple], Source={StaticResource Loc}}" Click="OnNoteCardMenuSelectMultiple"/>
+                <MenuItem Header="{Binding [Info], Source={StaticResource Loc}}" Click="OnNoteCardMenuInfo"/>
+                <Separator/>
+                <MenuItem Header="{Binding [Pin], Source={StaticResource Loc}}"
+                          Command="{Binding TogglePinCommand}"
+                          Visibility="{Binding Document.IsPinned, Converter={StaticResource InverseBoolToVis}}"/>
+                <MenuItem Header="{Binding [Unpin], Source={StaticResource Loc}}"
+                          Command="{Binding TogglePinCommand}"
+                          Visibility="{Binding Document.IsPinned, Converter={StaticResource BoolToVis}}"/>
+                <MenuItem Header="{Binding [CalendarAssignMenu], Source={StaticResource Loc}}" Click="OnNoteCardMenuAssignSchedule"/>
+                <MenuItem Header="{Binding [RemoveFromGroup], Source={StaticResource Loc}}"
+                          Command="{Binding RemoveFromGroupCommand}"
+                          Visibility="{Binding IsGrouped, Converter={StaticResource BoolToVis}}"/>
+                <Separator/>
+                <MenuItem Header="{Binding [Duplicate], Source={StaticResource Loc}}"
+                          Command="{Binding DuplicateCommand}"/>
+                <MenuItem Header="{Binding [ReplaceFromFile], Source={StaticResource Loc}}" Click="OnNoteCardMenuReplaceFromFile"/>
+                <Separator/>
+                <MenuItem Header="{Binding [Delete], Source={StaticResource Loc}}" Command="{Binding DeleteCommand}"/>
+            </ContextMenu>
+
             <Style TargetType="{x:Type CheckBox}">
                 <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
                 <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>

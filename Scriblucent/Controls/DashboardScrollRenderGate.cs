@@ -65,6 +65,55 @@ internal static class DashboardScrollRenderGate
             Scriblucent.Services.ScrollPerfDiag.Log($"shadowResweep\t{reactivated}");
     }
 
+    /// <summary>
+    /// Switches every realized dashboard card into or out of bitmap mode (see
+    /// NoteCardControl.IsBitmapMode / NoteCardBitmapCache). While a smooth-scroll session is
+    /// active the containers show only their cached per-note bitmap, so recycling them costs a
+    /// source swap instead of a full re-rasterization; when the session ends the live template
+    /// returns so hover/menu/drag/mass-select behave normally.
+    /// </summary>
+    public static void SetRealizedCardBitmapMode(IReadOnlyList<DashboardVirtualizationHost> hosts, bool bitmapMode)
+    {
+        foreach (var host in hosts)
+        {
+            if (host.Child is not DashboardVirtualizedCardGrid grid)
+                continue;
+
+            if (grid.ResolveItemsPanel() is not Panel panel)
+                continue;
+
+            foreach (var child in panel.Children)
+            {
+                if (child is ContentPresenter { Content: NoteCardControl card })
+                    card.IsBitmapMode = bitmapMode;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Collapses the nine-slice CardShadowLayer of every realized card during a smooth-scroll
+    /// session and restores it afterwards. The shadow layer (8 stretched images + grid + per-card
+    /// BitmapCache) is not a DropShadowEffect, so StripRealizedCardShadows never touched it -
+    /// yet it is a significant part of each card's scroll-time draw cost.
+    /// </summary>
+    public static void SetRealizedCardShadowVisibility(IReadOnlyList<DashboardVirtualizationHost> hosts, bool visible)
+    {
+        foreach (var host in hosts)
+        {
+            if (host.Child is not DashboardVirtualizedCardGrid grid)
+                continue;
+
+            if (grid.ResolveItemsPanel() is not Panel panel)
+                continue;
+
+            foreach (var child in panel.Children)
+            {
+                if (child is ContentPresenter { Content: NoteCardControl card })
+                    card.SetScrollShadowVisible(visible);
+            }
+        }
+    }
+
     private static readonly DependencyProperty CachedMotionCardProperty = DependencyProperty.RegisterAttached(
         "CachedMotionCard", typeof(FrameworkElement), typeof(DashboardScrollRenderGate), new PropertyMetadata(null));
 

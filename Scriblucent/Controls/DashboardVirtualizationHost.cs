@@ -842,6 +842,20 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         grid.ApplyPageViewport(sliceOffset, measureHeight);
 
+        // The realization budget (fork addition): during scroll the panel realizes at most a
+        // bounded number of new containers per measure pass (deferring the rest to background
+        // re-measures), so a burst's realization spreads across frames instead of freezing the
+        // UI thread. At rest the budget is unlimited so the window fills in one pass (the
+        // startup's cards must not trickle in at the scroll budget). Scaling the budget with
+        // speed keeps the fling's leading edge from lagging the viewport.
+        if (IsSmoothScrollActive && grid.ResolveItemsPanel() is WpfToolkit.Controls.VirtualizingWrapPanel budgetPanel)
+        {
+            var speed = Math.Abs(_smoothScrollVelocityPxPerMs);
+            budgetPanel.RealizeMaxContainersPerPass = speed < 0.5
+                ? int.MaxValue
+                : (int)Math.Clamp(2 + (speed - 0.5) * 3, 2, 8);
+        }
+
         if (!IsSmoothScrollActive || heightChanged || requiresHostMeasure)
             grid.InvalidateMeasure();
 

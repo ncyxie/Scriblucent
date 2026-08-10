@@ -4,7 +4,7 @@
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
-        xmlns:wpftoolkit="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
+        xmlns:wpftoolkit="clr-namespace:WpfToolkit.Controls"
         x:Name="FlashcardsWindow"
         Title="{Binding [FlashcardsPreviewTitle], Source={StaticResource Loc}}"
         Height="780"

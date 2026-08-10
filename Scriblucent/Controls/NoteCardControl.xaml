@@ -12,10 +12,11 @@
              RenderTransformOrigin="0.5,0.5"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
-             TextOptions.TextFormattingMode="Ideal"
+             TextOptions.TextFormattingMode="Display"
              TextOptions.TextRenderingMode="ClearType"
              Opacity="1"
              AllowDrop="True"
+             ContextMenu="{StaticResource NoteCardContextMenu}"
              DataContextChanged="OnDataContextChanged"
              PreviewMouseLeftButtonDown="OnPreviewMouseLeftButtonDown"
              PreviewMouseRightButtonUp="OnPreviewMouseRightButtonUp"
@@ -76,7 +77,12 @@
         <ScaleTransform x:Name="CardScale" ScaleX="1" ScaleY="1"/>
     </UserControl.RenderTransform>
     <Grid>
-        <controls:CardShadowLayer/>
+        <Image x:Name="BitmapLayer"
+               Stretch="Fill"
+               Visibility="Collapsed"
+               IsHitTestVisible="False"
+               SnapsToDevicePixels="True"/>
+        <controls:CardShadowLayer x:Name="CardShadow"/>
         <Border x:Name="CardBorder"
             behaviors:MassSelectHighlightBehavior.IsEnabled="True"
             behaviors:RoundedClipBehavior.IsEnabled="True"
@@ -90,7 +96,7 @@
                 <Setter Property="BorderThickness" Value="1"/>
             </Style>
         </Border.Style>
-        <Grid>
+        <Grid x:Name="CardContent">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -139,31 +145,8 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Style="{StaticResource NoteDashboardListingMenuButtonStyle}"
+                        ContextMenu="{StaticResource NoteCardContextMenu}"
                         Click="OnMenuButtonClick">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="{Binding [Open], Source={StaticResource Loc}}" Click="OnOpenMenuClick"/>
-                            <MenuItem Header="{Binding [SelectMultiple], Source={StaticResource Loc}}" Click="OnStartMassSelectMenuClick"/>
-                            <MenuItem Header="{Binding [Info], Source={StaticResource Loc}}" Click="OnInfoMenuClick"/>
-                            <Separator/>
-                            <MenuItem Header="{Binding [Pin], Source={StaticResource Loc}}"
-                                      Command="{Binding TogglePinCommand}"
-                                      Visibility="{Binding Document.IsPinned, Converter={StaticResource InverseBoolToVis}}"/>
-                            <MenuItem Header="{Binding [Unpin], Source={StaticResource Loc}}"
-                                      Command="{Binding TogglePinCommand}"
-                                      Visibility="{Binding Document.IsPinned, Converter={StaticResource BoolToVis}}"/>
-                            <MenuItem Header="{Binding [CalendarAssignMenu], Source={StaticResource Loc}}" Click="OnAssignScheduleMenuClick"/>
-                            <MenuItem Header="{Binding [RemoveFromGroup], Source={StaticResource Loc}}"
-                                      Command="{Binding RemoveFromGroupCommand}"
-                                      Visibility="{Binding IsGrouped, Converter={StaticResource BoolToVis}}"/>
-                            <Separator/>
-                            <MenuItem Header="{Binding [Duplicate], Source={StaticResource Loc}}"
-                                      Command="{Binding DuplicateCommand}"/>
-                            <MenuItem Header="{Binding [ReplaceFromFile], Source={StaticResource Loc}}" Click="OnOpenFromFileClick"/>
-                            <Separator/>
-                            <MenuItem Header="{Binding [Delete], Source={StaticResource Loc}}" Command="{Binding DeleteCommand}"/>
-                        </ContextMenu>
-                    </Button.ContextMenu>
                 </Button>
 
                 <CheckBox Grid.Column="1"

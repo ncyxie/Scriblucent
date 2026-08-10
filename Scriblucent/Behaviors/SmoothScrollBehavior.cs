@@ -542,7 +542,10 @@ public static class SmoothScrollBehavior
         {
             CompositionTarget.Rendering -= _renderingHandler;
             _renderingHandler = null;
-            _lastGlobalRenderingTime = TimeSpan.MinValue;
+            // Deliberately NOT resetting _lastGlobalRenderingTime here: the frame-diag log
+            // must stay continuous across sessions (a reset makes every session's first
+            // callback skip the frame sample, which blanked the whole diag frame stream for
+            // the scripted wheel probes).
         }
     }
 
@@ -557,8 +560,13 @@ public static class SmoothScrollBehavior
             if (Scriblucent.Services.ScrollPerfDiag.Enabled && _lastGlobalRenderingTime != TimeSpan.MinValue)
             {
                 var frameMs = (re.RenderingTime - _lastGlobalRenderingTime).TotalMilliseconds;
-                Scriblucent.Services.ScrollPerfDiag.Log(
-                    $"frame\t{frameMs:F2}\tgc={GC.CollectionCount(0)},{GC.CollectionCount(1)},{GC.CollectionCount(2)}\tcache={Scriblucent.Controls.DashboardScrollSurfaceCache.AppliedCount},{Scriblucent.Controls.DashboardScrollSurfaceCache.PendingCount}");
+                Scriblucent.Services.ScrollPerfDiag.LogFrame(
+                    frameMs,
+                    GC.CollectionCount(0),
+                    GC.CollectionCount(1),
+                    GC.CollectionCount(2),
+                    Scriblucent.Controls.DashboardScrollSurfaceCache.AppliedCount,
+                    Scriblucent.Controls.DashboardScrollSurfaceCache.PendingCount);
             }
 
             _lastGlobalRenderingTime = re.RenderingTime;
@@ -582,7 +590,8 @@ public static class SmoothScrollBehavior
         {
             CompositionTarget.Rendering -= _renderingHandler;
             _renderingHandler = null;
-            _lastGlobalRenderingTime = TimeSpan.MinValue;
+            // Also no reset here (see the StopAnimating comment): the frame-diag stream must
+            // stay continuous across sessions, or per-tick wheel sessions never log a frame.
         }
     }
 
@@ -632,7 +641,7 @@ public static class SmoothScrollBehavior
         }
 
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
-            Scriblucent.Services.ScrollPerfDiag.Log($"posY\t{state.CurrentY:F3}");
+            Scriblucent.Services.ScrollPerfDiag.LogPosY(state.CurrentY);
     }
 
     private static void CompleteImpulse(State state)
