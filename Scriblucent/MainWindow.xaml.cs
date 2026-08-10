@@ -164,7 +164,9 @@ namespace Scriblucent
         public MainWindow(Models.AppSettings? startupSettings = null)
         {
             _startupSettings = startupSettings;
+            Scriblucent.Services.StartupProbe.Mark("windowCtorStart");
             InitializeComponent();
+            Scriblucent.Services.StartupProbe.Mark("windowInit");
             Scriblucent.Services.WindowThemeService.Register(this);
             ApplyCurrentLanguage();
             LocalizationService.CultureChanged += LocalizationService_CultureChanged;
@@ -175,6 +177,16 @@ namespace Scriblucent
             StateChanged += MainWindow_StateChanged;
             DataContextChanged += MainWindow_DataContextChanged;
             InitializeShellViewModel();
+            Scriblucent.Services.StartupProbe.Mark("windowShellVm");
+
+            // Startup probe: the first rendered frame marks the dashboard's first layout.
+            CompositionTarget.Rendering += StartupProbeFirstFrame;
+        }
+
+        private static void StartupProbeFirstFrame(object? sender, EventArgs e)
+        {
+            CompositionTarget.Rendering -= StartupProbeFirstFrame;
+            Scriblucent.Services.StartupProbe.Mark("firstLayout");
         }
 
         private void InitializeShellViewModel()

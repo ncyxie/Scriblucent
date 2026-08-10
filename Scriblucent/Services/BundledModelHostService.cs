@@ -135,6 +135,7 @@ public sealed class BundledModelHostService
     static BundledModelHostService()
     {
         DownloadClient.DefaultRequestHeaders.UserAgent.ParseAdd("Scriblucent/1.0 (+https://github.com/ncyxie/Scriblucent)");
+        Scriblucent.Services.StartupProbe.Mark("modelType");
     }
 
     public void Stop() { }

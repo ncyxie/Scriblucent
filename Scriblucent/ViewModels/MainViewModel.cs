@@ -678,6 +678,7 @@ public class MainViewModel : ViewModelBase
         var path = GetNotesFilePath();
         Task.Run(() => ReadNotesFromDisk(path)).ContinueWith(task =>
         {
+            Scriblucent.Services.StartupProbe.Mark("library");
             Application.Current?.Dispatcher.BeginInvoke(() => ApplyLoadedNotes(task.Result), DispatcherPriority.Background);
         }, TaskScheduler.Default);
     }
@@ -737,6 +738,7 @@ public class MainViewModel : ViewModelBase
         Notes.Clear();
         _notesLoadComplete = false;
         LoadNotesInBatches(result.Docs);
+        Scriblucent.Services.StartupProbe.Mark("viewModels");
     }
 
     private void LoadFlashcardsPersistedContent()
@@ -5356,6 +5358,8 @@ public class MainViewModel : ViewModelBase
         RecentNotes.Clear();
         foreach (var note in recent)
             RecentNotes.Add(note);
+
+        Scriblucent.Services.StartupProbe.MarkOnce("recentStrip");
     }
 
     public void RefreshRecentFlashcardSets()
@@ -8796,6 +8800,8 @@ public class MainViewModel : ViewModelBase
     /// <summary>Applies prebuilt view models on the UI thread with one collection reset.</summary>
     private void CommitBulkNotes(NoteCardViewModel[] vms)
     {
+        Scriblucent.Services.StartupProbe.Mark("bulkVmsReady");
+
         Notes.Clear();
         if (Notes is BulkObservableCollection<NoteCardViewModel> bulk)
         {
@@ -8807,6 +8813,7 @@ public class MainViewModel : ViewModelBase
                 Notes.Add(vm);
         }
 
+        Scriblucent.Services.StartupProbe.Mark("bulkReset");
         Application.Current?.Dispatcher.BeginInvoke(
             () => CompleteNotesStartupPresentation(),
             DispatcherPriority.Background);
@@ -8844,7 +8851,9 @@ public class MainViewModel : ViewModelBase
 
     private void CompleteNotesStartupPresentation(bool markLoadComplete = true)
     {
+        Scriblucent.Services.StartupProbe.Mark("completeStart");
         RefreshAvailableTags();
+        Scriblucent.Services.StartupProbe.Mark("completeTags");
         NormalizeGroups();
         RebuildGroups();
         RecalculateUngroupedVisibleCount();
@@ -8852,8 +8861,10 @@ public class MainViewModel : ViewModelBase
         if (markLoadComplete)
             _notesLoadComplete = true;
         NotifyNotesChanged();
+        Scriblucent.Services.StartupProbe.Mark("completeGroups");
         RefreshRecentNotes();
         RefreshCalendarScheduledNotes();
+        Scriblucent.Services.StartupProbe.Mark("completeRecent");
         MarkNotesDashboardReady();
         WarmNoteContentPreviewsAtIdle();
         SweepOrphanMediaFiles();

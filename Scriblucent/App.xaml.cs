@@ -15,6 +15,8 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        Scriblucent.Services.StartupProbe.Mark("onStartup");
+
         // Multi-Core JIT: records which methods get JIT'd this run, then on every later run
         // background-JITs those same methods on idle cores while startup proceeds — so by the
         // time the user starts scrolling, the hot paths are more likely already past the slow
@@ -66,11 +68,13 @@ public partial class App : Application
         AppSettingsService.MigrateLegacyDataFolder();
 
         var settings = AppSettingsService.Load();
+        Scriblucent.Services.StartupProbe.Mark("settings");
         ReducedMotionPreferences.Configure(settings.ReduceAnimations);
         ReducedMotionPreferences.Refresh();
         LocalizationService.SetCulture(settings.Language);
         ThemeManager.SetTheme(settings.Theme);
         ThemeManager.FreezeCurrentThemeDictionary();
+        Scriblucent.Services.StartupProbe.Mark("theme");
         GlobalScrollBarSettingsService.Apply(settings);
         EventManager.RegisterClassHandler(
             typeof(Window),
@@ -81,9 +85,33 @@ public partial class App : Application
 
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         var window = new MainWindow(settings);
+        Scriblucent.Services.StartupProbe.Mark("mainWindow");
         MainWindow = window;
         WindowThemeService.ApplyThemeWhenReady(window, ThemeManager.CurrentTheme);
+        window.ContentRendered += (_, _) => Scriblucent.Services.StartupProbe.Mark("shown");
         window.Show();
+
+        // Startup probe: the first true idle after the library applied marks the moment the UI's
+        // work (realization, animations, binds) has drained - the number the eyes measure.
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+            new Action(ProbeDashboardSettled));
+    }
+
+    private static void ProbeDashboardSettled()
+    {
+        // Gate on the bulk load's completion (bulkReset) - an idle between the library applying
+        // and the worker finishing is a false settle.
+        if (Scriblucent.Services.StartupProbe.HasMarked("bulkReset")
+            && Scriblucent.Services.StartupProbe.HasMarked("recentStrip"))
+        {
+            Scriblucent.Services.StartupProbe.Mark("dashboardSettled");
+            return;
+        }
+
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+            new Action(ProbeDashboardSettled));
     }
 
     private static void OnWindowLoaded(object sender, RoutedEventArgs e)

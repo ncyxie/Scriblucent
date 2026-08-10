@@ -923,6 +923,11 @@ public sealed class DashboardVirtualizationHost : Decorator
             return new Size(width: ResolveMeasureWidth(availableSize), height: 0);
         }
 
+        // Startup probe: the first pass that realizes actual cards marks the dashboard's
+        // real first layout (the empty-shell first frame is captured separately as firstLayout).
+        if (grid.HasRealizedContainers())
+            Scriblucent.Services.StartupProbe.MarkOnce("cardsRealized");
+
         if (itemCountChanged)
         {
             var addedItems = grid.Items.Count > previousItemCount;
