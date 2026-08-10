@@ -527,7 +527,7 @@ public class MainViewModel : ViewModelBase
     {
         ApplyAppSettings(startupSettings ?? AppSettingsService.Load(), applyThemeAndCulture);
 
-        Notes = new ObservableCollection<NoteCardViewModel>();
+        Notes = new BulkObservableCollection<NoteCardViewModel>();
         NoteGroups = new ObservableCollection<NoteGroupViewModel>();
         TagFilters = new ObservableCollection<TagFilterItemViewModel>();
         FlashcardTagFilters = new ObservableCollection<TagFilterItemViewModel>();
@@ -8088,7 +8088,7 @@ public class MainViewModel : ViewModelBase
     private void RebuildGroups()
     {
         Scriblucent.Services.ScrollPerfDiag.Log($"rebuildGroups\tnotesCount={Notes.Count}\tnoteGroupsCountBefore={NoteGroups.Count}");
-        _notesView.Refresh();
+        // The collection's bulk Reset refreshes the view. Avoid a second full-library sort.
 
         var groupedByRecent = Notes
             .Where(n => n.Document.GroupId.HasValue)
@@ -8771,34 +8771,45 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        void AddBatch(int startIndex)
+        // Build view models off-thread, then apply collection notifications on the UI thread.
+        // The constructor chain does not access WPF state; RelayCommand subscribes to
+        // CommandManager.RequerySuggested when the UI binding is attached.
+        var docsArray = docs as NoteDocument[] ?? docs.ToArray();
+        var task = Task.Run(() =>
         {
-            var endIndex = Math.Min(startIndex + NotesLoadBatchSize, docs.Count);
-            for (var i = startIndex; i < endIndex; i++)
-            {
-                Notes.Add(CreateNoteCard(docs[i]));
-            }
+            var vms = new NoteCardViewModel[docsArray.Length];
+            for (var i = 0; i < docsArray.Length; i++)
+                vms[i] = CreateNoteCard(docsArray[i]);
 
-            if (endIndex < docs.Count)
-            {
-                Application.Current?.Dispatcher.BeginInvoke(
-                    () => AddBatch(endIndex),
-                    DispatcherPriority.Background);
-                return;
-            }
+            return vms;
+        });
 
-            // Must be an explicit lambda, not a bare method-group reference: CompleteNotesStartupPresentation
-            // has an optional parameter, and Dispatcher.BeginInvoke(Delegate, DispatcherPriority) falls back to
-            // reflection-based DynamicInvoke for delegates it doesn't recognize as a plain zero-arg Action -
-            // that throws TargetParameterCountException at the optional parameter, only reachable once a
-            // library is large enough to take this batched path (> NotesSingleCommitMax notes).
+        task.ContinueWith(completed =>
+        {
+            var vms = completed.Result;
             Application.Current?.Dispatcher.BeginInvoke(
-                () => CompleteNotesStartupPresentation(),
+                () => CommitBulkNotes(vms),
                 DispatcherPriority.Background);
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>Applies prebuilt view models on the UI thread with one collection reset.</summary>
+    private void CommitBulkNotes(NoteCardViewModel[] vms)
+    {
+        Notes.Clear();
+        if (Notes is BulkObservableCollection<NoteCardViewModel> bulk)
+        {
+            bulk.AddRange(vms);
+        }
+        else
+        {
+            foreach (var vm in vms)
+                Notes.Add(vm);
         }
 
-        Notes.Clear();
-        AddBatch(0);
+        Application.Current?.Dispatcher.BeginInvoke(
+            () => CompleteNotesStartupPresentation(),
+            DispatcherPriority.Background);
     }
 
     private void CommitLoadedNotes(IReadOnlyList<NoteDocument> docs)
