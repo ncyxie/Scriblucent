@@ -1034,6 +1034,30 @@ public class VirtualizingWrapPanel : VirtualizingPanelBase
 
             Size upfrontKnownItemSize = GetUpfrontKnownItemSizeOrEmpty(index);
 
+            // Mid-recycle race: a container can be recycled out from under the arranged
+            // range while a re-slice is in flight, leaving a null here. Never arrange a null;
+            // skip the slot (the item re-appears when its container is realized next pass).
+            if (child is null)
+            {
+                if (upfrontKnownItemSize.IsEmpty)
+                    continue;
+
+                var missingSize = upfrontKnownItemSize;
+                if (lineChilds.Count > 0 && offsetMainAxis + GetSizeOnMainAxis(missingSize) > finalSizeMainAxis)
+                {
+                    ArrangeLine(finalSizeMainAxis, lineChilds, childSizes, offsetCrossAxis, hierarchical);
+                    offsetMainAxis = 0;
+                    offsetCrossAxis += lineSizeCrossAxis;
+                    lineSizeCrossAxis = 0;
+                    lineChilds.Clear();
+                    childSizes.Clear();
+                }
+
+                offsetMainAxis += GetSizeOnMainAxis(missingSize);
+                lineSizeCrossAxis = Math.Max(lineSizeCrossAxis, GetSizeOnCrossAxis(missingSize));
+                continue;
+            }
+
             Size childSize = !upfrontKnownItemSize.IsEmpty ? upfrontKnownItemSize : child.DesiredSize;
 
             if (lineChilds.Count > 0 && offsetMainAxis + GetSizeOnMainAxis(childSize) > finalSizeMainAxis)

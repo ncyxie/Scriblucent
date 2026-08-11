@@ -846,14 +846,22 @@ public sealed class DashboardVirtualizationHost : Decorator
         // bounded number of new containers per measure pass (deferring the rest to background
         // re-measures), so a burst's realization spreads across frames instead of freezing the
         // UI thread. At rest the budget is unlimited so the window fills in one pass (the
-        // startup's cards must not trickle in at the scroll budget). Scaling the budget with
-        // speed keeps the fling's leading edge from lagging the viewport.
+        // startup's cards must not trickle in at the scroll budget). The scroll budget scales
+        // with both speed AND the viewport's row count so a maximized window (more rows per
+        // sync) fills faster than the old fixed 2-4.
         if (IsSmoothScrollActive && grid.ResolveItemsPanel() is WpfToolkit.Controls.VirtualizingWrapPanel budgetPanel)
         {
             var speed = Math.Abs(_smoothScrollVelocityPxPerMs);
-            budgetPanel.RealizeMaxContainersPerPass = speed < 0.5
-                ? int.MaxValue
-                : (int)Math.Clamp(2 + (speed - 0.5) * 3, 2, 8);
+            if (speed < 0.5)
+            {
+                budgetPanel.RealizeMaxContainersPerPass = int.MaxValue;
+            }
+            else
+            {
+                var viewportRows = Math.Max(2, (int)Math.Ceiling((_pageScrollViewer?.ViewportHeight ?? 763) / 164.0));
+                var baseBudget = Math.Clamp(viewportRows / 2, 2, 6);
+                budgetPanel.RealizeMaxContainersPerPass = (int)Math.Clamp(baseBudget + (speed - 0.5) * 4, baseBudget, baseBudget * 3);
+            }
         }
 
         if (!IsSmoothScrollActive || heightChanged || requiresHostMeasure)
@@ -911,8 +919,10 @@ public sealed class DashboardVirtualizationHost : Decorator
             var viewportViable = !owningWindowMinimized
                 && (_pageScrollViewer is null || viewportHeight >= MinViableViewportHeight);
             var preservesSnapshot = !viewportViable && _extentHeight > ExtentBottomPadding;
+            var scrollActual = _pageScrollViewer?.ActualHeight ?? -1;
+            var hostActual = ActualHeight;
             ScrollPerfDiag.Log(
-                $"hostMeasureState\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\tmode={HostMode}\titems={grid.Items.Count}\textent={_extentHeight:F0}\tviewportHeight={viewportHeight:F0}\tminimized={owningWindowMinimized}\tviable={viewportViable}\tpreserve={preservesSnapshot}\tmotionFrozen={_motionViewportFrozen}");
+                $"hostMeasureState\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}\tscope={MotionScope}\tmode={HostMode}\titems={grid.Items.Count}\textent={_extentHeight:F0}\tviewportHeight={viewportHeight:F0}\tscrollActual={scrollActual:F0}\thostActual={hostActual:F0}\tminimized={owningWindowMinimized}\tviable={viewportViable}\tpreserve={preservesSnapshot}\tmotionFrozen={_motionViewportFrozen}");
 
             var hadRealizedBefore = grid.HasRealizedContainers();
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1014,8 +1024,9 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (ScrollPerfDiag.Enabled)
         {
             var diagChildCount = grid.ResolveItemsPanel()?.Children.Count ?? -1;
+            var diagViewport = _pageScrollViewer?.ViewportHeight ?? -1;
             ScrollPerfDiag.Log(
-                $"measureSlice\tsliceOffset={sliceOffset:F0}\theight={measureHeight:F0}\textent={_extentHeight:F0}\tcontentExtent={contentExtent:F0}\tchildren={diagPrevChildCount}->{diagChildCount}\tsectionTop={_sectionTop:F0}\tviewportTop={ResolveEffectiveVerticalOffset():F0}\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}");
+                $"measureSlice\tsliceOffset={sliceOffset:F0}\theight={measureHeight:F0}\tviewport={diagViewport:F0}\textent={_extentHeight:F0}\tcontentExtent={contentExtent:F0}\tchildren={diagPrevChildCount}->{diagChildCount}\tsectionTop={_sectionTop:F0}\tviewportTop={ResolveEffectiveVerticalOffset():F0}\tid={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)}");
         }
 
         if (grid.HasItems && measureHeight > 0 && !grid.HasRealizedContainers())
