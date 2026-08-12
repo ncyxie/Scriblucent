@@ -619,14 +619,22 @@
                           Background="Transparent"
                           SizeChanged="MapScrollViewer_SizeChanged"
                           PreviewMouseWheel="MapScrollViewer_PreviewMouseWheel">
-                <Canvas x:Name="MapCanvas"
-                        MinWidth="960"
-                        MinHeight="420"
-                        Background="Transparent">
-                    <Canvas.LayoutTransform>
+                <!-- The zoom transform wraps BOTH the live canvas and the tile layer so cached
+                     zoom-level tiles map 1:1 onto the device grid during zoom/pan sessions. -->
+                <Grid x:Name="MapViewport">
+                    <Grid.LayoutTransform>
                         <ScaleTransform x:Name="MapScaleTransform" ScaleX="1" ScaleY="1"/>
-                    </Canvas.LayoutTransform>
-                </Canvas>
+                    </Grid.LayoutTransform>
+                    <Canvas x:Name="MapCanvas"
+                            MinWidth="960"
+                            MinHeight="420"
+                            Background="Transparent"
+                            SizeChanged="MapCanvas_SizeChanged"/>
+                    <Image x:Name="MapSnapshotLayer"
+                           IsHitTestVisible="False"
+                           Visibility="Collapsed"
+                           Stretch="Fill"/>
+                </Grid>
             </ScrollViewer>
             </Border>
         </Grid>

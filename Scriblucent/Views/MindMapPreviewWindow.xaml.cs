@@ -1,9 +1,10 @@
-using Scriblucent.Animations;
+﻿using Scriblucent.Animations;
 using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent;
 using Scriblucent.Services;
+using MahApps.Metro.IconPacks;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -110,6 +111,15 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private bool _isManualPositioningMode;
     private bool _suppressManualPositionCapture;
     private bool _isViewPanning;
+
+    // Zoom-session Skia tiles: during zoom gestures the live canvas collapses behind a cached
+    // tile layer rendered off-thread (see SkiaMindMapTileCache), masking the LayoutTransform
+    // re-raster cost on large maps. The canvas returns ~350ms after the last zoom change.
+    private int _tileRevision;
+    private Scriblucent.Rendering.MindMapTileSnapshot? _tileSnapshot;
+    private DispatcherTimer? _tileSettleTimer;
+    private bool _tileSessionActive;
+    
     private Point _viewPanLastPos;
     private readonly Dictionary<MindMapNode, Point> _manualPositions = new();
     private string _lastSavedSnapshot = string.Empty;
@@ -630,6 +640,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _layouts.Clear();
         MapCanvas.Children.Clear();
+        _tileRevision++;
+        _tileSnapshot = null;
         LayoutRoot = _root;
         NodeWidth = ComputeEffectiveNodeWidth(_root);
 
@@ -686,6 +698,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         QueueInitialCenterOnRoot();
         UpdateEditedIndicator();
         RefreshFontPanelFromSelection();
+
+        // The visuals were rebuilt above - warm the zoom-tile cache for the visible region so
+        // the next zoom session starts with tiles ready (deferred past the layout pass).
+        Dispatcher.BeginInvoke(new Action(WarmSnapshot), DispatcherPriority.Loaded);
     }
 
     /// <summary>
@@ -1237,7 +1253,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (_layouts.Count == 0 || MapScrollViewer is null || MapCanvas is null)
             return;
 
-        var zoom = Math.Max(ZoomSlider?.Value ?? 1, 0.1);
+        // Zoom-independent canvas: fitted to the viewport at the MINIMUM zoom so the scrollable
+        // extent (and the scrollbars, and the clamping window) never change during a zoom
+        // gesture. Pointer-anchored zoom math is then exact on every step - the content under
+        // the cursor stays pinned, no cumulative clamp drift from a shifting extent.
+        const double minZoom = 0.45;
         var maxRight = _layouts.Values.Max(layout => layout.X + layout.Width);
         var maxBottom = _layouts.Values.Max(layout => layout.Y + layout.Height);
 
@@ -1249,8 +1269,18 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             viewportHeight = MapScrollViewer.ActualHeight;
         }
 
-        MapCanvas.Width = Math.Max(viewportWidth / zoom, maxRight + CanvasPadding);
-        MapCanvas.Height = Math.Max(viewportHeight / zoom, maxBottom + CanvasPadding);
+        MapCanvas.Width = Math.Max(viewportWidth / minZoom, maxRight + CanvasPadding);
+        MapCanvas.Height = Math.Max(viewportHeight / minZoom, maxBottom + CanvasPadding);
+
+        // Keep the transformed wrapper at the canvas size directly: during a tile session the
+        // canvas is collapsed, so its SizeChanged never fires and the wrapper (hence the
+        // scrollable extent) would go stale - which made every zoom ScrollTo land wrong and
+        // the viewport "reshift" once the canvas returned.
+        if (MapViewport is not null)
+        {
+            MapViewport.MinWidth = MapCanvas.Width;
+            MapViewport.MinHeight = MapCanvas.Height;
+        }
     }
 
     private void QueueInitialCenterOnRoot()
@@ -3600,6 +3630,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         MapCanvas.InvalidateMeasure();
         MapScrollViewer.InvalidateScrollInfo();
 
+        BeginTileSession();
+
         if (!preserveViewportCenter)
             return;
 
@@ -3710,6 +3742,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         {
             if (current is Border { Tag: MindMapNode })
                 return false;
+            // Scrollbar template parts (thumb / track / repeat buttons) must keep their own
+            // drag behavior - never treat them as map background, or grabbing a scrollbar
+            // would start a map pan instead.
+            if (current is System.Windows.Controls.Primitives.ScrollBar)
+                return false;
             if (ReferenceEquals(current, MapCanvas) || ReferenceEquals(current, MapScrollViewer))
                 return true;
         }
@@ -3739,6 +3776,14 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         var contentX = (MapScrollViewer.HorizontalOffset + pointer.X) / oldZoom;
         var contentY = (MapScrollViewer.VerticalOffset + pointer.Y) / oldZoom;
 
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+        {
+            var sv = MapScrollViewer;
+            Scriblucent.Services.ScrollPerfDiag.Log(
+                $"mmWheel\treq\t{oldZoom:F3}\t{newZoom:F3}\t{sv.HorizontalOffset:F2}\t{sv.VerticalOffset:F2}\t" +
+                $"{contentX:F2}\t{contentY:F2}\t{pointer.X:F2}\t{pointer.Y:F2}\t{sv.ScrollableWidth:F2}\t{sv.ScrollableHeight:F2}");
+        }
+
         _suppressZoomSliderViewportRecenter = true;
         try
         {
@@ -3760,6 +3805,15 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             var targetY = contentY * newZoom - pointer.Y;
             MapScrollViewer.ScrollToHorizontalOffset(Math.Clamp(targetX, 0, Math.Max(0, MapScrollViewer.ScrollableWidth)));
             MapScrollViewer.ScrollToVerticalOffset(Math.Clamp(targetY, 0, Math.Max(0, MapScrollViewer.ScrollableHeight)));
+
+            if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+            {
+                var sv = MapScrollViewer;
+                Scriblucent.Services.ScrollPerfDiag.Log(
+                    $"mmWheel\tdone\t{newZoom:F3}\t{sv.HorizontalOffset:F2}\t{sv.VerticalOffset:F2}\t" +
+                    $"{Math.Clamp(targetX, 0, Math.Max(0, sv.ScrollableWidth)):F2}\t{Math.Clamp(targetY, 0, Math.Max(0, sv.ScrollableHeight)):F2}\t" +
+                    $"{sv.ScrollableWidth:F2}\t{sv.ScrollableHeight:F2}");
+            }
         }), DispatcherPriority.Loaded);
 
         e.Handled = true;
@@ -4341,4 +4395,318 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     }
 
     private sealed record NodeLayout(double X, double Y, double Width, double Height, int Direction, int Depth);
+
+    // ---------------------------------------------------------------------------------------------
+    // Zoom-session tile layer: the live canvas collapses during zoom gestures and cached off-thread
+    // tiles (SkiaMindMapTileCache) cover the viewport, so zooming never blocks on the
+    // LayoutTransform re-raster of the whole map. The canvas returns after the settle delay.
+    // ---------------------------------------------------------------------------------------------
+
+    private void MapCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // The wrapper (MapViewport) carries the zoom transform and must keep the canvas extent
+        // even while the canvas is collapsed during a tile session, or the scrollable area
+        // would collapse mid-zoom.
+        if (MapViewport is null || MapCanvas is null || MapCanvas.ActualWidth <= 0 || MapCanvas.ActualHeight <= 0)
+            return;
+
+        MapViewport.MinWidth = MapCanvas.ActualWidth;
+        MapViewport.MinHeight = MapCanvas.ActualHeight;
+    }
+
+    /// <summary>Pre-renders the whole-canvas snapshot at the current zoom so zoom sessions
+    /// start with a snapshot ready instead of a blank flash.</summary>
+    private void WarmSnapshot()
+    {
+        if (MapScaleTransform is null)
+            return;
+
+        // Always rebuild: the canvas extent changes with the zoom (viewport fit), and a stale
+        // extent would size the snapshot image wrong and shift the scrollable area.
+        var snapshot = BuildTileSnapshot();
+        _tileSnapshot = snapshot;
+        if (snapshot is null)
+            return;
+
+        var zoom = (float)Math.Max(0.1, MapScaleTransform.ScaleX);
+        var dpi = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        Scriblucent.Rendering.SkiaMindMapSnapshotCache.Request(snapshot, zoom, dpi, result =>
+        {
+            if (_tileSessionActive)
+                return;
+            ApplySnapshot(result, dpi);
+        });
+    }
+
+    private void BeginTileSession()
+    {
+        if (MapSnapshotLayer is null || MapCanvas is null || MapViewport is null)
+            return;
+
+        if (!_tileSessionActive)
+        {
+            if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+            {
+                var sv = MapScrollViewer;
+                Scriblucent.Services.ScrollPerfDiag.Log(
+                    $"mmTile\tbegin\t{MapScaleTransform.ScaleX:F3}\t{sv.HorizontalOffset:F2}\t{sv.VerticalOffset:F2}\t" +
+                    $"{sv.ScrollableWidth:F2}\t{sv.ScrollableHeight:F2}");
+            }
+
+            _tileSessionActive = true;
+            if (MapSnapshotLayer.Source is not null)
+            {
+                MapCanvas.Visibility = Visibility.Collapsed;
+                MapSnapshotLayer.Visibility = Visibility.Visible;
+            }
+            // Else: no snapshot yet (first session before the warm landed) - keep the live
+            // canvas; the session becomes a no-op until the warm applies.
+        }
+
+        _tileSettleTimer?.Stop();
+        _tileSettleTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(350)
+        };
+        _tileSettleTimer.Tick += (_, _) => EndTileSession();
+        _tileSettleTimer.Start();
+    }
+
+    private void EndTileSession()
+    {
+        _tileSettleTimer?.Stop();
+        _tileSettleTimer = null;
+
+        if (!_tileSessionActive)
+            return;
+
+        _tileSessionActive = false;
+
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+        {
+            var sv = MapScrollViewer;
+            Scriblucent.Services.ScrollPerfDiag.Log(
+                $"mmTile\tend\t{MapScaleTransform.ScaleX:F3}\t{sv.HorizontalOffset:F2}\t{sv.VerticalOffset:F2}\t" +
+                $"{sv.ScrollableWidth:F2}\t{sv.ScrollableHeight:F2}");
+        }
+
+        // Render the fresh snapshot at the settled zoom off-thread; when it lands, swap it in,
+        // force the live canvas's re-render underneath, then lift the snapshot - both show the
+        // same content at the same zoom, so the transition is seamless. The snapshot is rebuilt
+        // because the canvas extent changed with the zoom.
+        var snapshot = BuildTileSnapshot();
+        _tileSnapshot = snapshot;
+        if (snapshot is null || MapScaleTransform is null)
+        {
+            RestoreCanvas();
+            return;
+        }
+
+        var zoom = (float)Math.Max(0.1, MapScaleTransform.ScaleX);
+        var dpi = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        Scriblucent.Rendering.SkiaMindMapSnapshotCache.Request(snapshot, zoom, dpi, result =>
+        {
+            if (_tileSessionActive)
+                return; // a new session started - the render still warms the cache
+
+            ApplySnapshot(result, dpi);
+            RestoreCanvas();
+        });
+    }
+
+    private void ApplySnapshot(Scriblucent.Rendering.SkiaMindMapSnapshotCache.SnapshotResult result, float dpi)
+    {
+        if (MapSnapshotLayer is null || _tileSnapshot is null)
+            return;
+
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+        {
+            var sv = MapScrollViewer;
+            Scriblucent.Services.ScrollPerfDiag.Log(
+                $"mmTile\tapply\t{MapScaleTransform.ScaleX:F3}\t{sv.HorizontalOffset:F2}\t{sv.VerticalOffset:F2}\t" +
+                $"{sv.ScrollableWidth:F2}\t{sv.ScrollableHeight:F2}");
+        }
+
+        MapSnapshotLayer.Source = Scriblucent.Rendering.SkiaMindMapSnapshotCache.ToBitmapSource(result.Bitmap, dpi);
+        // The image represents the full canvas extent; the wrapper's zoom transform scales it
+        // continuously during gestures (no per-level swaps).
+        MapSnapshotLayer.Width = _tileSnapshot.CanvasWidthDip;
+        MapSnapshotLayer.Height = _tileSnapshot.CanvasHeightDip;
+        Canvas.SetLeft(MapSnapshotLayer, 0);
+        Canvas.SetTop(MapSnapshotLayer, 0);
+    }
+
+    private void RestoreCanvas()
+    {
+        if (MapCanvas is not null)
+        {
+            MapCanvas.Visibility = Visibility.Visible;
+            // Force the re-render at the final zoom before lifting the snapshot - the canvas
+            // paints underneath the (sharp, settled-zoom) snapshot, so the swap is seamless.
+            MapCanvas.UpdateLayout();
+        }
+
+        if (MapSnapshotLayer is not null)
+            MapSnapshotLayer.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Snapshots the already-built live visuals (node borders + connector paths) into the
+    /// off-thread renderable model — extracts the fitted titles/colors/icons from the visual
+    /// tree instead of re-measuring text, so a session enter adds no layout cost.
+    /// </summary>
+    private Scriblucent.Rendering.MindMapTileSnapshot? BuildTileSnapshot()
+    {
+        if (MapCanvas is null || _root is null)
+            return null;
+
+        var nodes = new List<Scriblucent.Rendering.MindMapTileNode>();
+        var edges = new List<Scriblucent.Rendering.MindMapTileEdge>();
+
+        foreach (var child in MapCanvas.Children)
+        {
+            if (child is Border { Tag: MindMapNode node } border)
+            {
+                nodes.Add(BuildNodeSnapshot(node, border));
+            }
+            else if (child is ShapePath { Data: PathGeometry geometry, Stroke: SolidColorBrush stroke })
+            {
+                foreach (var figure in geometry.Figures)
+                {
+                    if (figure.Segments.Count > 0 && figure.Segments[0] is BezierSegment bezier)
+                    {
+                        edges.Add(new Scriblucent.Rendering.MindMapTileEdge
+                        {
+                            SX = figure.StartPoint.X,
+                            SY = figure.StartPoint.Y,
+                            C1X = bezier.Point1.X,
+                            C1Y = bezier.Point1.Y,
+                            C2X = bezier.Point2.X,
+                            C2Y = bezier.Point2.Y,
+                            EX = bezier.Point3.X,
+                            EY = bezier.Point3.Y,
+                            Color = ToArgb(stroke.Color),
+                        });
+                    }
+                }
+            }
+        }
+
+        return new Scriblucent.Rendering.MindMapTileSnapshot
+        {
+            Revision = _tileRevision,
+            // Width/Height (not ActualWidth) stay current even while the canvas is collapsed
+            // during a session - ActualWidth would lag behind the zoom-dependent canvas size.
+            CanvasWidthDip = Math.Max(1, double.IsNaN(MapCanvas.Width) ? MapCanvas.ActualWidth : MapCanvas.Width),
+            CanvasHeightDip = Math.Max(1, double.IsNaN(MapCanvas.Height) ? MapCanvas.ActualHeight : MapCanvas.Height),
+            Nodes = nodes,
+            Edges = edges,
+        };
+    }
+
+    private Scriblucent.Rendering.MindMapTileNode BuildNodeSnapshot(MindMapNode node, Border border)
+    {
+        var background = (border.Background as SolidColorBrush)?.Color ?? Colors.White;
+        var borderColor = (border.BorderBrush as SolidColorBrush)?.Color ?? Colors.Transparent;
+
+        var title = string.Empty;
+        var fontFamily = "Segoe UI Variable Text";
+        var fontSize = 14f;
+        var fontWeight = 400;
+        var italic = false;
+        var titleColor = Colors.Black;
+        var hasChevron = false;
+        var iconPaths = new List<string>();
+        var iconOverflow = 0;
+        var iconColor = Colors.Gray;
+
+        if (border.Child is Grid content)
+        {
+            foreach (UIElement contentChild in content.Children)
+            {
+                var row = Grid.GetRow(contentChild);
+                if (row == 0 && contentChild is Border titleHost && titleHost.Child is DockPanel titleRow)
+                {
+                    foreach (UIElement rowChild in titleRow.Children)
+                    {
+                        if (rowChild is Border && DockPanel.GetDock(rowChild) == Dock.Left)
+                        {
+                            hasChevron = true;
+                        }
+                        else if (rowChild is TextBlock text)
+                        {
+                            title = text.Text;
+                            fontFamily = text.FontFamily.Source;
+                            fontSize = (float)text.FontSize;
+                            fontWeight = text.FontWeight.ToOpenTypeWeight();
+                            italic = text.FontStyle == FontStyles.Italic;
+                            titleColor = (text.Foreground as SolidColorBrush)?.Color ?? Colors.Black;
+                        }
+                    }
+                }
+                else if (row == 1 && contentChild is StackPanel metaRow)
+                {
+                    foreach (UIElement metaChild in metaRow.Children)
+                    {
+                        if (metaChild is StackPanel iconsHost)
+                        {
+                            foreach (UIElement iconChild in iconsHost.Children)
+                            {
+                                if (iconChild is AppIcon appIcon)
+                                {
+                                    iconColor = (appIcon.Foreground as SolidColorBrush)?.Color ?? Colors.Gray;
+                                    var iconPath = GetNodeIconPath(appIcon.Kind);
+                                    if (iconPath is not null)
+                                        iconPaths.Add(iconPath);
+                                }
+                                else if (iconChild is TextBlock overflowText
+                                         && int.TryParse(overflowText.Text.TrimStart('+'), NumberStyles.Integer, CultureInfo.InvariantCulture, out var overflowCount))
+                                {
+                                    iconOverflow = overflowCount;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return new Scriblucent.Rendering.MindMapTileNode
+        {
+            X = Canvas.GetLeft(border),
+            Y = Canvas.GetTop(border),
+            Width = border.Width,
+            Height = border.Height,
+            IsRoot = ReferenceEquals(node, _root),
+            Shape = node.NodeShape ?? string.Empty,
+            Background = ToArgb(background),
+            Border = ToArgb(borderColor),
+            BorderThickness = border.BorderThickness.Left,
+            Title = title,
+            FontFamily = fontFamily,
+            FontSizeDip = fontSize,
+            FontWeight = fontWeight,
+            Italic = italic,
+            TitleColor = ToArgb(titleColor),
+            HasChevron = hasChevron,
+            Folded = !node.IsExpanded,
+            IconPaths = iconPaths,
+            IconColor = ToArgb(iconColor),
+            IconOverflow = iconOverflow,
+        };
+    }
+
+    private static string? GetNodeIconPath(AppIconKind kind)
+    {
+        var lucideKind = AppIconKindMap.ToLucide(kind);
+        if (lucideKind == PackIconLucideKind.None)
+            return null;
+
+        return new PackIconLucide { Kind = lucideKind }.Data;
+    }
+
+    private static uint ToArgb(Color color)
+        => ((uint)color.A << 24) | ((uint)color.R << 16) | ((uint)color.G << 8) | color.B;
 }
+
+
