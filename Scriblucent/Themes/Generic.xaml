@@ -4,9 +4,26 @@
                     xmlns:controls="clr-namespace:Scriblucent.Controls"
                     xmlns:icons="clr-namespace:Scriblucent.Icons"
                     xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks">
+    <!-- Scroll-tile host for dashboard listing cards: the Skia tile covers the live template
+         during smooth-scroll sessions (see DashboardTileHost / SkiaCardTileCache). -->
+    <Style TargetType="{x:Type controls:DashboardTileHost}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:DashboardTileHost}">
+                    <Grid>
+                        <Image x:Name="BitmapLayer"
+                               Visibility="Collapsed"
+                               Stretch="Fill"
+                               SnapsToDevicePixels="True"/>
+                        <ContentPresenter x:Name="LiveContent"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Feature windows: outer FeatureFrameBackground ring + FeatureStageBackground plate (not main dashboard). -->
-    <Style TargetType="{x:Type controls:FeatureWindowShell}">
-        <Setter Property="Background" Value="{DynamicResource FeatureFrameBackground}"/>
+    <Style TargetType="{x:Type controls:FeatureWindowShell}">        <Setter Property="Background" Value="{DynamicResource FeatureFrameBackground}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type controls:FeatureWindowShell}">
@@ -108,19 +125,6 @@
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="IsHitTestVisible" Value="False"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="{x:Type icons:AppIcon}">
-                    <iconPacks:PackIconLucide Kind="{TemplateBinding LucideKind}"
-                                              Width="{TemplateBinding Width}"
-                                              Height="{TemplateBinding Height}"
-                                              Foreground="{TemplateBinding Foreground}"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              SnapsToDevicePixels="True"/>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <!-- Quieter nav glyphs so labels stay primary in the sidebar -->

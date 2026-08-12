@@ -349,8 +349,8 @@ public partial class SketchDialog : Window
         var width = Math.Max(1, (int)Math.Ceiling(SketchCanvas.ActualWidth));
         var height = Math.Max(1, (int)Math.Ceiling(SketchCanvas.ActualHeight));
 
-        // Draw strokes directly. Capturing InkCanvas via VisualBrush fills transparent
-        // pixels opaque, so alpha backgrounds would never survive export.
+        // Draw WPF strokes directly to preserve pressure, curve fitting, and transparency.
+        // Capturing InkCanvas through VisualBrush would make transparent pixels opaque.
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen())
         {

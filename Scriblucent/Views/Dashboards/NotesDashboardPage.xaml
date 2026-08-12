@@ -1,4 +1,4 @@
-<UserControl x:Class="Scriblucent.Views.Dashboards.NotesDashboardPage"
+﻿<UserControl x:Class="Scriblucent.Views.Dashboards.NotesDashboardPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Scriblucent.Controls"
@@ -63,6 +63,7 @@
                                                   ItemsSource="{Binding RecentNotes}" ItemsPanel="{StaticResource RecentItemsStripPanelTemplate}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:NoteCardViewModel}">
+                                                <controls:DashboardTileHost RendererKey="RecentNotes">
                                                 <Button Style="{StaticResource RecentNoteCardStyle}"
 													Tag="{Binding}"
 													Click="RecentNoteButton_Click">
@@ -78,6 +79,7 @@
 															   Margin="0,3,0,0"/>
                                                     </StackPanel>
                                                 </Button>
+                                                </controls:DashboardTileHost>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -198,10 +200,11 @@
 														   Foreground="{DynamicResource TextColor}"
                                                       Margin="2,2,2,8"/>
                                                     <Grid Grid.Row="1">
-                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178">
+                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178" behaviors:ScrollTileBehavior.IsEnabled="True">
                                                             <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type vm:CalendarScheduledItemViewModel}">
+                                                                        <controls:DashboardTileHost RendererKey="CalendarItem">
                                                                         <Border Style="{StaticResource CalendarScheduledItemCardStyle}"
 												Tag="{Binding}"
 												MouseLeftButtonUp="CalendarScheduledItemCard_MouseLeftButtonUp">
@@ -265,6 +268,7 @@
                                                                                 </StackPanel>
                                                                             </Grid>
                                                                         </Border>
+                                                                        </controls:DashboardTileHost>
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
                                                                 <ItemsControl.ItemsPanel>
@@ -625,3 +629,5 @@
                             Command="{Binding AddNoteCommand}"/>
     </Grid>
 </UserControl>
+
+

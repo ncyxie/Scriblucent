@@ -604,7 +604,8 @@
 
 		<!-- Fluent-style inset content stage: rounded where it meets the sidebar -->
 		<Grid Grid.Column="1" Margin="0,10,10,10">
-			<Border CornerRadius="{StaticResource Radius.Overlay}"
+			<Border x:Name="ContentStageHaloPlate"
+					CornerRadius="{StaticResource Radius.Overlay}"
 					Background="{DynamicResource WindowBackground}"
 					Margin="1"
 					IsHitTestVisible="False"

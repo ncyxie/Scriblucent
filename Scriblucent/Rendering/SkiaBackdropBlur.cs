@@ -1,0 +1,48 @@
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using SkiaSharp;
+
+namespace Scriblucent.Rendering;
+
+/// <summary>
+/// Gaussian-blurs a captured WPF bitmap with Skia's CPU backend. Replaces the second
+/// full-window RenderTargetBitmap pass (Image + BlurEffect) that overlay backdrops paid on
+/// every dialog open - the documented open-latency cost (see OverlayBackdropCapture).
+/// </summary>
+internal static class SkiaBackdropBlur
+{
+    /// <summary>
+    /// Blurs <paramref name="source"/> with a Gaussian of <paramref name="radiusDip"/> (WPF
+    /// BlurEffect convention: sigma = radius / 3). Returns the original source when the blur
+    /// cannot be produced - callers already treat that as the safe fallback.
+    /// </summary>
+    public static BitmapSource? Blur(BitmapSource source, double radiusDip, DpiScale dpi)
+    {
+        try
+        {
+            var width = source.PixelWidth;
+            var height = source.PixelHeight;
+            if (width < 1 || height < 1)
+                return source;
+
+            using var input = SkiaBitmapUtil.FromSource(source);
+
+            var sigma = (float)(radiusDip / 3.0);
+            using var output = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using (var canvas = new SKCanvas(output))
+            using (var filter = SKImageFilter.CreateBlur(sigma, sigma, SKShaderTileMode.Clamp))
+            using (var paint = new SKPaint { ImageFilter = filter })
+            {
+                canvas.Clear(SKColors.Transparent);
+                canvas.DrawBitmap(input, 0, 0, paint);
+            }
+
+            return SkiaBitmapUtil.ToSource(output, dpi);
+        }
+        catch
+        {
+            return source;
+        }
+    }
+}

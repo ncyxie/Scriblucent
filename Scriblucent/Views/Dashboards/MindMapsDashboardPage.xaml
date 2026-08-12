@@ -1,4 +1,4 @@
-<UserControl x:Class="Scriblucent.Views.Dashboards.MindMapsDashboardPage"
+﻿<UserControl x:Class="Scriblucent.Views.Dashboards.MindMapsDashboardPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Scriblucent.Controls"
@@ -59,6 +59,7 @@
                                                       ItemsSource="{Binding RecentMindMaps}" ItemsPanel="{StaticResource RecentItemsStripPanelTemplate}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:MindMapViewModel}">
+                                                    <controls:DashboardTileHost RendererKey="RecentMindMap">
                                                     <Button Style="{StaticResource RecentNoteCardStyle}"
                                                             Tag="{Binding}"
                                                             Click="RecentMindMapButton_Click">
@@ -78,6 +79,7 @@
                                                                        Margin="0,2,0,0"/>
                                                         </StackPanel>
                                                     </Button>
+                                                    </controls:DashboardTileHost>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -195,10 +197,11 @@
                                                                Foreground="{DynamicResource TextColor}"
                                                                Margin="2,2,2,8"/>
                                                     <Grid Grid.Row="1">
-                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178">
+                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178" behaviors:ScrollTileBehavior.IsEnabled="True">
                                                             <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type vm:CalendarScheduledItemViewModel}">
+                                                                        <controls:DashboardTileHost RendererKey="CalendarItem">
                                                                         <Border Style="{StaticResource CalendarScheduledItemCardStyle}"
                                                                                 Tag="{Binding}"
                                                                                 MouseLeftButtonUp="CalendarScheduledItemCard_MouseLeftButtonUp">
@@ -262,6 +265,7 @@
                                                                                 </StackPanel>
                                                                             </Grid>
                                                                         </Border>
+                                                                        </controls:DashboardTileHost>
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
                                                                 <ItemsControl.ItemsPanel>
@@ -515,6 +519,7 @@
                                                                                                     ItemCellSize="240,152">
                                                             <controls:DashboardVirtualizedCardGrid.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type vm:MindMapViewModel}">
+                                                                        <controls:DashboardTileHost RendererKey="MindMap">
                                                                         <Border Tag="{Binding}"
                                                                                 Width="236"
                                                                                 MinHeight="136"
@@ -627,6 +632,7 @@
                                                                             </Border>
                                                                             </Grid>
                                                                         </Border>
+                                                                    </controls:DashboardTileHost>
                                                                     </DataTemplate>
                                                             </controls:DashboardVirtualizedCardGrid.ItemTemplate>
                                                             </controls:DashboardVirtualizedCardGrid>
@@ -707,6 +713,7 @@
                                                       Visibility="{Binding HasUngroupedMindMaps, Converter={StaticResource BoolToVis}}">
                                             <controls:DashboardVirtualizedCardGrid.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type vm:MindMapViewModel}">
+                                                    <controls:DashboardTileHost RendererKey="MindMapUngrouped">
 													<Border x:Name="MindMapCardButton"
 															Tag="{Binding}"
 															Width="350"
@@ -956,6 +963,7 @@
                                                         </Border>
                         </Grid>
                                                     </Border>
+                                                </controls:DashboardTileHost>
                                                 </DataTemplate>
                                             </controls:DashboardVirtualizedCardGrid.ItemTemplate>
                                         </controls:DashboardVirtualizedCardGrid>
@@ -999,3 +1007,5 @@
                             Click="CreateMindMapButton_Click"/>
     </Grid>
 </UserControl>
+
+

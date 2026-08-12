@@ -52,13 +52,6 @@ public partial class NoteCardControl : UserControl
     {
         InitializeComponent();
 
-        // Card text renders in grayscale (not ClearType): grayscale glyph rasterization is
-        // several times faster than the LCD-filtered ClearType pass, and the scroll measurements
-        // showed the ClearType first-draw rasterization of newly-realized cards was a major
-        // render-thread stall source during flings. Grayscale is visually close to ClearType at
-        // high DPI (the editor keeps ClearType).
-        TextOptions.SetTextRenderingMode(this, System.Windows.Media.TextRenderingMode.Grayscale);
-
         // Use PreviewMouseLeftButtonUp so clicks inside child controls still trigger opening the editor
         PreviewMouseLeftButtonUp += NoteCardControl_PreviewMouseLeftButtonUp;
         Loaded += OnCardLoaded;
@@ -101,7 +94,8 @@ public partial class NoteCardControl : UserControl
         {
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip;
             var requestedVm = vm;
-            BitmapLayer.Source = Scriblucent.Rendering.SkiaCardTileCache.GetOrRequest(vm, dpi, source =>
+            BitmapLayer.Source = Scriblucent.Rendering.SkiaCardTileCache.GetOrRequest(
+                vm, dpi, Scriblucent.Rendering.SkiaTileRenderers.Notes, source =>
             {
                 // The render landed on the thread pool and marshaled back; only apply if this
                 // container still shows the same note in bitmap mode.

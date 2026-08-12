@@ -1,4 +1,4 @@
-using SkiaSharp;
+﻿using SkiaSharp;
 using SkiaSharp.HarfBuzz;
 using Scriblucent.ViewModels;
 
@@ -23,22 +23,31 @@ internal static class SkiaCardRenderer
     private static readonly object TypefaceGate = new();
     private static readonly Dictionary<string, SKTypeface> Typefaces = new();
 
-    public static SKTypeface GetTypeface(string familyName)
+    public static SKTypeface GetTypeface(string familyName, int weight = 400)
     {
+        var key = $"{familyName}|{weight}";
         lock (TypefaceGate)
         {
-            if (Typefaces.TryGetValue(familyName, out var cached))
+            if (Typefaces.TryGetValue(key, out var cached))
                 return cached;
 
-            var typeface = SKTypeface.FromFamilyName(familyName)
+            // MatchFamily instantiates the variable font at the requested weight (the WPF side
+            // renders "Segoe UI Variable Text" SemiBold); FromFamilyName(name, style) silently
+            // returns the default (Regular) instance, which made the tile titles thinner than
+            // the live text they mirror.
+            var style = new SKFontStyle((SKFontStyleWeight)weight, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+            var typeface =
+                SKFontManager.Default.MatchFamily(familyName, style)
+                ?? SKFontManager.Default.MatchFamily("Segoe UI", style)
+                ?? SKTypeface.FromFamilyName(familyName)
                 ?? SKTypeface.FromFamilyName("Segoe UI")
                 ?? SKTypeface.Default;
-            Typefaces[familyName] = typeface;
+            Typefaces[key] = typeface;
             return typeface;
         }
     }
 
-    private static SKShaper GetShaper(SKTypeface typeface)
+    internal static SKShaper GetShaper(SKTypeface typeface)
     {
         var shapers = Shapers.Value!;
         if (!shapers.TryGetValue(typeface, out var shaper))
@@ -60,7 +69,10 @@ internal static class SkiaCardRenderer
     {
         var scale = (float)dpiScale;
         var textWidth = (CardWidthDip - CardPaddingDip * 2) * scale;
-        var typeface = GetTypeface(ResolveFontFamily());
+        // Titles are SemiBold in the live UI (NoteCardControl / recent strip); the tile text
+        // must match or the cards read thinner than the strip.
+        var titleTypeface = GetTypeface(ResolveFontFamily(), 600);
+        var bodyTypeface = GetTypeface(ResolveFontFamily());
         var fontManager = SKFontManager.Default;
 
         var title = vm.Title ?? string.Empty;
@@ -69,14 +81,14 @@ internal static class SkiaCardRenderer
 
         Func<SKTypeface, SKShaper> shaperFactory = GetShaper;
 
-        var titleLayout = SkiaTextLayout.Layout(title, textWidth, typeface, 14.5f * scale, 1, fontManager, shaperFactory);
+        var titleLayout = SkiaTextLayout.Layout(title, textWidth, titleTypeface, 14.5f * scale, 1, fontManager, shaperFactory);
 
         // Match the uniform 164-DIP cell so applying a tile keeps the estimated extent stable.
         // Fit the preview line count into the remaining space.
         var fixedInnerHeight = (CellHeightDip - CardMarginDip * 2) * scale;
         var titleHeight = titleLayout.Height;
         var tagsLayout = tags.Length > 0
-            ? SkiaTextLayout.Layout(tags, textWidth, typeface, 12f * scale, 1, fontManager, shaperFactory)
+            ? SkiaTextLayout.Layout(tags, textWidth, bodyTypeface, 12f * scale, 1, fontManager, shaperFactory)
             : null;
         var tagsBlockHeight = tagsLayout is null ? 0 : tagsLayout.Height + 6 * scale;
 
@@ -84,7 +96,7 @@ internal static class SkiaCardRenderer
         var availablePreview = fixedInnerHeight - CardPaddingDip * 2 * scale - titleHeight - 4 * scale - tagsBlockHeight;
         var previewMaxLines = Math.Max(1, Math.Min(MaxPreviewLines, (int)Math.Floor(availablePreview / previewLineHeight)));
 
-        var previewLayout = SkiaTextLayout.Layout(preview, textWidth, typeface, 14f * scale, previewMaxLines, fontManager, shaperFactory);
+        var previewLayout = SkiaTextLayout.Layout(preview, textWidth, bodyTypeface, 14f * scale, previewMaxLines, fontManager, shaperFactory);
 
         var contentHeight = titleHeight + 4 * scale + previewLayout.Height + tagsBlockHeight;
         var innerHeight = Math.Max(MinCardHeightDip * scale, Math.Min(CellHeightDip * scale - CardMarginDip * 2 * scale, CardPaddingDip * 2 * scale + contentHeight));
@@ -146,7 +158,7 @@ internal static class SkiaCardRenderer
         return bitmap;
     }
 
-    private static void PaintLayout(SKCanvas canvas, SkiaTextLayout layout, float x, float y, SKColor color, float scale)
+    internal static void PaintLayout(SKCanvas canvas, SkiaTextLayout layout, float x, float y, SKColor color, float scale)
     {
         var lineY = y;
         foreach (var line in layout.Lines)
@@ -221,3 +233,4 @@ internal readonly record struct CardRenderColors(
     SKColor Text,
     SKColor TagBackground,
     SKColor TagText);
+

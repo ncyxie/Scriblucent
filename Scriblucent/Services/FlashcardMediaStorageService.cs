@@ -93,23 +93,17 @@ internal static class FlashcardMediaStorageService
     {
         var pixelWidth = Math.Max(1, source.PixelWidth);
         var pixelHeight = Math.Max(1, source.PixelHeight);
-        var visual = new DrawingVisual();
 
-        using (var context = visual.RenderOpen())
+        // Skia composits the white plate + the image instead of a DrawingVisual + RTB pass.
+        using var input = Scriblucent.Rendering.SkiaBitmapUtil.FromSource(source);
+        using var output = new SkiaSharp.SKBitmap(pixelWidth, pixelHeight, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
+        using (var canvas = new SkiaSharp.SKCanvas(output))
         {
-            var bounds = new Rect(0, 0, pixelWidth, pixelHeight);
-            context.DrawRectangle(Brushes.White, null, bounds);
-            context.DrawImage(source, bounds);
+            canvas.Clear(SkiaSharp.SKColors.White);
+            canvas.DrawBitmap(input, 0, 0);
         }
 
-        var rendered = new RenderTargetBitmap(pixelWidth, pixelHeight, 96, 96, PixelFormats.Pbgra32);
-        rendered.Render(visual);
-
-        var opaque = new FormatConvertedBitmap(rendered, PixelFormats.Bgr24, null, 0);
-        if (opaque.CanFreeze)
-            opaque.Freeze();
-
-        return opaque;
+        return Scriblucent.Rendering.SkiaBitmapUtil.ToSource(output, Scriblucent.Rendering.SkiaBitmapUtil.DefaultDpi);
     }
 
     /// <summary>Copies the source file as-is (no transcoding) with a generated name. The file

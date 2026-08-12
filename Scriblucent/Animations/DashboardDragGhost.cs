@@ -400,30 +400,32 @@ public static class DashboardDragGhost
         var originY = GhostShadowPad + GhostLiftAboveGrabY + GhostFloatYOffset;
 
         var dpi = VisualTreeHelper.GetDpi(owner);
-        var visual = new DrawingVisual();
-        using (var dc = visual.RenderOpen())
+        var pixelW = Math.Max(1, (int)Math.Ceiling(bakeW * dpi.DpiScaleX));
+        var pixelH = Math.Max(1, (int)Math.Ceiling(bakeH * dpi.DpiScaleY));
+
+        // Skia composites the nine-slice shadow + the captured card instead of a
+        // DrawingVisual + RTB pass.
+        using var output = new SkiaSharp.SKBitmap(pixelW, pixelH, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
+        using (var canvas = new SkiaSharp.SKCanvas(output))
         {
+            canvas.Clear(SkiaSharp.SKColors.Transparent);
+
             // Nine-slice hugs the visible card face only (exclude CaptureMargin pad).
             var face = new Rect(
                 originX + snapshot.ContentOffsetX,
                 originY + snapshot.ContentOffsetY,
                 snapshot.Width - 2 * snapshot.ContentOffsetX,
                 snapshot.Height - 2 * snapshot.ContentOffsetY);
-            DrawCardShadowNineSlice(dc, face);
+            DrawCardShadowNineSliceSkia(canvas, face, dpi);
 
-            dc.DrawImage(snapshot.Image, new Rect(originX, originY, contentW, contentH));
+            using var snapshotBitmap = Scriblucent.Rendering.SkiaBitmapUtil.FromSource((BitmapSource)snapshot.Image);
+            canvas.DrawBitmap(
+                snapshotBitmap,
+                (float)(originX * dpi.DpiScaleX),
+                (float)(originY * dpi.DpiScaleY));
         }
 
-        var pixelW = Math.Max(1, (int)Math.Ceiling(bakeW * dpi.DpiScaleX));
-        var pixelH = Math.Max(1, (int)Math.Ceiling(bakeH * dpi.DpiScaleY));
-        var baked = new RenderTargetBitmap(
-            pixelW,
-            pixelH,
-            dpi.PixelsPerInchX,
-            dpi.PixelsPerInchY,
-            PixelFormats.Pbgra32);
-        baked.Render(visual);
-        baked.Freeze();
+        var baked = Scriblucent.Rendering.SkiaBitmapUtil.ToSource(output, dpi);
 
         var grabPx = ResolveTransformToDevice(owner).Transform(
             new Point(originX + grabOffset.X, originY + grabOffset.Y));
@@ -436,8 +438,51 @@ public static class DashboardDragGhost
             (int)Math.Round(grabPx.Y));
     }
 
-    private static void DrawCardShadowNineSlice(DrawingContext dc, Rect face)
+    private static SkiaSharp.SKBitmap[]? _shadowSlices;
+
+    private static SkiaSharp.SKBitmap[] ShadowSlices
     {
+        get
+        {
+            if (_shadowSlices is not null)
+                return _shadowSlices;
+
+            ImageSource[] sources =
+            {
+                CardShadowAsset.TopLeft,
+                CardShadowAsset.TopRight,
+                CardShadowAsset.BottomLeft,
+                CardShadowAsset.BottomRight,
+                CardShadowAsset.TopEdge,
+                CardShadowAsset.BottomEdge,
+                CardShadowAsset.LeftEdge,
+                CardShadowAsset.RightEdge,
+            };
+
+            var slices = new SkiaSharp.SKBitmap[sources.Length];
+            for (var i = 0; i < sources.Length; i++)
+            {
+                var bitmapSource = (BitmapSource)sources[i];
+                var width = bitmapSource.PixelWidth;
+                var height = bitmapSource.PixelHeight;
+                var bitmap = new SkiaSharp.SKBitmap(width, height, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
+                bitmapSource.CopyPixels(
+                    new Int32Rect(0, 0, width, height),
+                    bitmap.GetPixels(),
+                    width * height * 4,
+                    width * 4);
+                slices[i] = bitmap;
+            }
+
+            _shadowSlices = slices;
+            return slices;
+        }
+    }
+
+    private static void DrawCardShadowNineSliceSkia(SkiaSharp.SKCanvas canvas, Rect face, DpiScale dpi)
+    {
+        var scaleX = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
+        var scaleY = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
         var left = GhostShadowBleedLeft;
         var top = GhostShadowBleedTop;
         var right = GhostShadowBleedRight;
@@ -450,26 +495,34 @@ public static class DashboardDragGhost
             face.Width + left + right,
             face.Height + top + bottom);
 
-        var x0 = plate.X;
-        var x1 = plate.X + corner;
-        var x2 = plate.Right - corner;
-        var y0 = plate.Y;
-        var y1 = plate.Y + corner;
-        var y2 = plate.Bottom - corner;
+        var x0 = plate.X * scaleX;
+        var x1 = (plate.X + corner) * scaleX;
+        var x2 = (plate.Right - corner) * scaleX;
+        var y0 = plate.Y * scaleY;
+        var y1 = (plate.Y + corner) * scaleY;
+        var y2 = (plate.Bottom - corner) * scaleY;
         var midW = Math.Max(0, x2 - x1);
         var midH = Math.Max(0, y2 - y1);
+        var c = corner * scaleX;
 
-        dc.PushOpacity(GhostShadowPlateOpacity);
-        dc.DrawImage(CardShadowAsset.TopLeft, new Rect(x0, y0, corner, corner));
-        dc.DrawImage(CardShadowAsset.TopEdge, new Rect(x1, y0, midW, corner));
-        dc.DrawImage(CardShadowAsset.TopRight, new Rect(x2, y0, corner, corner));
-        dc.DrawImage(CardShadowAsset.LeftEdge, new Rect(x0, y1, corner, midH));
-        dc.DrawImage(CardShadowAsset.RightEdge, new Rect(x2, y1, corner, midH));
-        dc.DrawImage(CardShadowAsset.BottomLeft, new Rect(x0, y2, corner, corner));
-        dc.DrawImage(CardShadowAsset.BottomEdge, new Rect(x1, y2, midW, corner));
-        dc.DrawImage(CardShadowAsset.BottomRight, new Rect(x2, y2, corner, corner));
-        dc.Pop();
+        var slices = ShadowSlices;
+        using var paint = new SkiaSharp.SKPaint
+        {
+            Color = new SkiaSharp.SKColor(255, 255, 255, (byte)Math.Round(255 * GhostShadowPlateOpacity))
+        };
+
+        DrawSlice(canvas, slices[0], x0, y0, c, c, paint);
+        DrawSlice(canvas, slices[4], x1, y0, midW, c, paint);
+        DrawSlice(canvas, slices[1], x2, y0, c, c, paint);
+        DrawSlice(canvas, slices[6], x0, y1, c, midH, paint);
+        DrawSlice(canvas, slices[7], x2, y1, c, midH, paint);
+        DrawSlice(canvas, slices[2], x0, y2, c, c, paint);
+        DrawSlice(canvas, slices[5], x1, y2, midW, c, paint);
+        DrawSlice(canvas, slices[3], x2, y2, c, c, paint);
     }
+
+    private static void DrawSlice(SkiaSharp.SKCanvas canvas, SkiaSharp.SKBitmap bitmap, double x, double y, double width, double height, SkiaSharp.SKPaint paint)
+        => canvas.DrawBitmap(bitmap, new SkiaSharp.SKRect((float)x, (float)y, (float)(x + width), (float)(y + height)), paint);
 
     private static SnapshotCapture? CaptureSnapshot(
         FrameworkElement dragSource,

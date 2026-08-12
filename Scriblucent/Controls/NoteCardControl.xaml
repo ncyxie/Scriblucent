@@ -12,7 +12,7 @@
              RenderTransformOrigin="0.5,0.5"
              UseLayoutRounding="True"
              SnapsToDevicePixels="True"
-             TextOptions.TextFormattingMode="Display"
+             TextOptions.TextFormattingMode="Ideal"
              TextOptions.TextRenderingMode="ClearType"
              Opacity="1"
              AllowDrop="True"

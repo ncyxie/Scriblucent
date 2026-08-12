@@ -1,4 +1,4 @@
-<Window x:Class="Scriblucent.Views.QuizLibraryWindow"
+﻿<Window x:Class="Scriblucent.Views.QuizLibraryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
@@ -12,7 +12,7 @@
         WindowStartupLocation="CenterOwner"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
-        Background="{DynamicResource FeatureFrameBackground}">
+        Background="{DynamicResource FeatureFrameBackground}" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
     <Window.Resources>
         <Style x:Key="LibraryCardStyle" TargetType="Border" BasedOn="{StaticResource FeatureCombinePanelStyle}"/>
         <Style x:Key="LibraryTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource FeatureCombineTextBoxStyle}"/>
@@ -128,7 +128,8 @@
 
                         <ScrollViewer Grid.Row="2"
                                       VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      behaviors:ScrollTileBehavior.IsEnabled="True">
                             <ItemsControl ItemsSource="{Binding Quizzes}"
                                           VirtualizingPanel.IsVirtualizing="True"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
@@ -141,6 +142,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type views:QuizLibraryItemViewModel}">
+                                        <controls:DashboardTileHost RendererKey="QuizLibraryRow">
                                         <Grid Margin="0,0,0,8"
                                               UseLayoutRounding="True"
                                               SnapsToDevicePixels="True"
@@ -180,6 +182,7 @@
                                                 </Grid>
                                             </Border>
                                         </Grid>
+                                        </controls:DashboardTileHost>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -250,7 +253,8 @@
 
                             <ScrollViewer Grid.Row="1"
                                           VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled">
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          behaviors:ScrollTileBehavior.IsEnabled="True">
                                 <ItemsControl ItemsSource="{Binding Quizzes}"
                                               VirtualizingPanel.IsVirtualizing="True"
                                               VirtualizingPanel.VirtualizationMode="Recycling"
@@ -263,6 +267,7 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type views:QuizLibraryItemViewModel}">
+                                            <controls:DashboardTileHost RendererKey="QuizLibrarySelectedRow">
                                             <Border Background="{DynamicResource HoverBackground}"
                                                     BorderThickness="0"
                                                     CornerRadius="{StaticResource Radius.Control}"
@@ -292,6 +297,7 @@
                                                               Click="SelectionCheckBox_Click"/>
                                                 </Grid>
                                             </Border>
+                                            </controls:DashboardTileHost>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -361,3 +367,6 @@
     </controls:FeatureWindowShell>
     </Grid>
 </Window>
+
+
+

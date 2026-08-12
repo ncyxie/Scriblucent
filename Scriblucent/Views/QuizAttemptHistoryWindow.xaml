@@ -1,4 +1,4 @@
-<Window x:Class="Scriblucent.Views.QuizAttemptHistoryWindow"
+﻿<Window x:Class="Scriblucent.Views.QuizAttemptHistoryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
@@ -10,7 +10,7 @@
         WindowStartupLocation="CenterOwner"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
-        Background="{DynamicResource FeatureFrameBackground}">
+        Background="{DynamicResource FeatureFrameBackground}" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
     <Grid x:Name="ContentRoot">
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Header>
@@ -90,6 +90,7 @@
                               ClipToBounds="True"
                               UseLayoutRounding="True"
                               SnapsToDevicePixels="True"
+                              behaviors:ScrollTileBehavior.IsEnabled="True"
                               Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding Attempts}"
                                   UseLayoutRounding="True"
@@ -107,6 +108,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
+                                <controls:DashboardTileHost RendererKey="AttemptHistoryRow">
                                 <Border Margin="0,0,0,10"
                                         Padding="16,14"
                                         CornerRadius="10"
@@ -193,6 +195,7 @@
                                         </Border>
                                     </Grid>
                                 </Border>
+                                </controls:DashboardTileHost>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -229,3 +232,6 @@
     </controls:FeatureWindowShell>
     </Grid>
 </Window>
+
+
+

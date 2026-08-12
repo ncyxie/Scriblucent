@@ -7,6 +7,10 @@ namespace Scriblucent.Icons;
 
 /// <summary>
 /// Thin Lucide vector icon for app chrome. Prefer this over emoji / system symbol fonts.
+/// Each kind's path data is parsed once into a frozen <see cref="StreamGeometry"/> (see
+/// <see cref="LucideGeometryCache"/>) and drawn with WPF vector rendering in OnRender, so
+/// icons stay crisp at any DPI, layout size, or ancestor scale (editor zoom) — no bitmaps,
+/// no Skia, no pixel snapping required.
 /// </summary>
 public class AppIcon : Control
 {
@@ -22,7 +26,7 @@ public class AppIcon : Control
             nameof(LucideKind),
             typeof(PackIconLucideKind),
             typeof(AppIcon),
-            new FrameworkPropertyMetadata(PackIconLucideKind.None, FrameworkPropertyMetadataOptions.AffectsRender));
+            new FrameworkPropertyMetadata(PackIconLucideKind.None, FrameworkPropertyMetadataOptions.AffectsRender, OnLucideKindChanged));
 
     public static readonly DependencyProperty StrokeThicknessProperty =
         DependencyProperty.Register(
@@ -76,16 +80,59 @@ public class AppIcon : Control
         set => SetValue(StrokeThicknessProperty, value);
     }
 
-    public override void OnApplyTemplate()
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
-        base.OnApplyTemplate();
-        UpdateLucideKind();
+        base.OnPropertyChanged(e);
+        if (e.Property == ForegroundProperty)
+            InvalidateVisual();
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        base.OnRender(dc);
+
+        var width = ActualWidth;
+        var height = ActualHeight;
+        if (width <= 0 || height <= 0)
+            return;
+
+        var geometry = LucideGeometryCache.Get(LucideKind);
+        if (geometry is null)
+            return;
+
+        var bounds = geometry.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return;
+
+        // Small rasters make the 1.75-unit stroke land at ~1.1-1.3px, which anti-aliases into
+        // a soft gray smear (thin/thick-looking strokes). Grow the glyph optically below 18 DIPs
+        // so the stroke stays >= ~1.4px; the icon's internal padding absorbs the growth.
+        var minSize = Math.Min(width, height);
+        var opticalGrow = minSize < 18 ? Math.Min(1.15, 18.0 / minSize) : 1.0;
+        var scale = (minSize / Math.Max(bounds.Width, bounds.Height)) * opticalGrow;
+
+        // The Lucide path data is authored Y-up; WPF is Y-down, so mirror the Y axis while
+        // scaling, then translate so the scaled bounds center in the control.
+        var matrix = new Matrix(
+            scale, 0, 0, -scale,
+            width / 2 - (bounds.Left + bounds.Width / 2) * scale,
+            height / 2 + (bounds.Top + bounds.Height / 2) * scale);
+
+        dc.PushTransform(new MatrixTransform(matrix));
+        dc.DrawGeometry(Foreground, null, geometry);
+        dc.Pop();
     }
 
     private static void OnKindChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is AppIcon icon)
             icon.UpdateLucideKind();
+    }
+
+    private static void OnLucideKindChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is AppIcon icon)
+            icon.InvalidateVisual();
     }
 
     private void UpdateLucideKind()

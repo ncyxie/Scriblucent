@@ -328,7 +328,8 @@
                       ClipToBounds="True"
                       behaviors:RoundedClipBehavior.IsEnabled="True"
                       behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
-                      behaviors:SmoothScrollBehavior.IsEnabled="True">
+                      behaviors:SmoothScrollBehavior.IsEnabled="True"
+                      behaviors:ScrollTileBehavior.IsEnabled="True">
             <ItemsControl x:Name="QuestionsItemsControl"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
@@ -341,6 +342,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
+                        <controls:DashboardTileHost RendererKey="QuizQuestion">
                         <Grid Margin="0,0,0,12" ClipToBounds="False">
                             <Border Padding="16"
                                     Background="{DynamicResource CardBackground}"
@@ -727,6 +729,7 @@
                             </Grid>
                         </Border>
                         </Grid>
+                        </controls:DashboardTileHost>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

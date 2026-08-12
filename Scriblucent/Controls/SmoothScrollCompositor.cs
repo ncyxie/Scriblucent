@@ -56,6 +56,9 @@ internal static class SmoothScrollCompositor
         public bool OriginalContentHitTestVisible = true;
         public double DpiScale = 1.0;
         public IReadOnlyList<DashboardVirtualizationHost>? Hosts;
+        /// <summary>Static section shells whose content was baked to a BitmapCache for the
+        /// session (restored at the surface-hold release).</summary>
+        public List<FrameworkElement>? CachedShells;
     }
 
     public static void Begin(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost> hosts)
@@ -114,6 +117,15 @@ internal static class SmoothScrollCompositor
         if (!reclaimedHold && session.ContentElement is { } shadowRoot)
             DashboardShadowSuspender.TrySuspend(DashboardShadowSuspender.AnimatedScrollShadowScope, shadowRoot);
 
+        // The full-content-stage halo plate is a live blur behind every dashboard; strip it
+        // for the session too so it cannot re-blur on scroll repaints. Restored with the scope.
+        if (Window.GetWindow(scrollViewer)?.FindName("ContentStageHaloPlate") is FrameworkElement stagePlate)
+            DashboardShadowSuspender.TrySuspend(DashboardShadowSuspender.AnimatedScrollShadowScope, stagePlate);
+
+        session.CachedShells = CacheScrollShells(session.ContentElement);
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+            Scriblucent.Services.ScrollPerfDiag.Log($"shellCache\t{session.CachedShells?.Count ?? 0}");
+
         DashboardScrollRenderGate.StripRealizedCardShadows(hosts);
         DashboardScrollRenderGate.SetRealizedCardShadowVisibility(hosts, visible: false);
         DashboardScrollRenderGate.SetRealizedCardBitmapMode(hosts, bitmapMode: true);
@@ -159,12 +171,14 @@ internal static class SmoothScrollCompositor
             teardown.ContentElement = null;
             var endHosts = teardown.Hosts;
             teardown.Hosts = null;
+            var endShells = teardown.CachedShells;
+            teardown.CachedShells = null;
 
             // Cards STAY in tile mode after the session ends: flipping back to the live template
             // per burst re-flowed the grid (live card heights vary; tiles are fixed-cell) - the
             // visible readjusting during scroll. The flip happens once, at the true settle (the
             // surface hold release).
-            BeginSurfaceHold(scrollViewer, endHosts);
+            BeginSurfaceHold(scrollViewer, endHosts, endShells);
         }, DispatcherPriority.Loaded);
     }
 
@@ -184,17 +198,21 @@ internal static class SmoothScrollCompositor
         if (ReferenceEquals(holder, scrollViewer))
             return true;
 
+        RestoreCachedShells(_surfaceHoldShells);
+        _surfaceHoldShells = null;
         DashboardScrollSurfaceCache.EndSession();
         DashboardShadowSuspender.TryResume(DashboardShadowSuspender.AnimatedScrollShadowScope);
         return false;
     }
 
     private static IReadOnlyList<DashboardVirtualizationHost>? _surfaceHoldHosts;
+    private static List<FrameworkElement>? _surfaceHoldShells;
 
-    private static void BeginSurfaceHold(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost>? hosts)
+    private static void BeginSurfaceHold(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost>? hosts, List<FrameworkElement>? shells)
     {
         _surfaceHoldScrollViewer = scrollViewer;
         _surfaceHoldHosts = hosts;
+        _surfaceHoldShells = shells;
 
         if (_surfaceHoldTimer is null)
         {
@@ -216,6 +234,8 @@ internal static class SmoothScrollCompositor
             return;
 
         _surfaceHoldScrollViewer = null;
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+            Scriblucent.Services.ScrollPerfDiag.Log($"holdRelease\thosts={_surfaceHoldHosts?.Count ?? -1}");
         if (_surfaceHoldHosts is { } holdHosts)
         {
             // The true settle: cards flip back to the live template (hover/menu/drag/mass-select)
@@ -224,6 +244,9 @@ internal static class SmoothScrollCompositor
             DashboardScrollRenderGate.SetRealizedCardShadowVisibility(holdHosts, visible: true);
             _surfaceHoldHosts = null;
         }
+
+        RestoreCachedShells(_surfaceHoldShells);
+        _surfaceHoldShells = null;
 
         DashboardScrollSurfaceCache.EndSessionStaggered();
         DashboardShadowSuspender.TryResumeStaggered(DashboardShadowSuspender.AnimatedScrollShadowScope);
@@ -437,6 +460,77 @@ internal static class SmoothScrollCompositor
 
     private static FrameworkElement? ResolveContentElement(ScrollViewer scrollViewer)
         => scrollViewer.Content as FrameworkElement;
+
+    /// <summary>
+    /// Bakes the scroll content's static section shells (solid rounded Borders) to a
+    /// BitmapCache for the session so the per-frame translate repaint skips their fills,
+    /// headers and chrome. Shells that contain a virtualization host are excluded: they hold
+    /// the realized cards, which change every commit - baking them would re-rasterize worse
+    /// than not caching. Only descends into un-baked subtrees.
+    /// </summary>
+    private static List<FrameworkElement>? CacheScrollShells(FrameworkElement? root)
+    {
+        if (root is null)
+            return null;
+
+        var cached = new List<FrameworkElement>();
+        CacheScrollShellsWalk(root, cached);
+        return cached.Count > 0 ? cached : null;
+    }
+
+    private static void CacheScrollShellsWalk(DependencyObject node, List<FrameworkElement> cached)
+    {
+        if (node is Border { Background: System.Windows.Media.SolidColorBrush { Color.A: > 0 } } border
+            && border.CornerRadius.TopLeft > 0
+            && !HasVirtualizationHostDescendant(border))
+        {
+            border.CacheMode = DpiAwareBitmapCache.Create(border, enableClearType: true);
+            cached.Add(border);
+            return;
+        }
+
+        // Cache recent-strip Buttons during their own ScrollViewer's session.
+        // They remain outside the scrolled content during main-dashboard sessions.
+        if (node is Button { Background: System.Windows.Media.SolidColorBrush { Color.A: > 0 } } button
+            && !HasVirtualizationHostDescendant(button))
+        {
+            button.CacheMode = DpiAwareBitmapCache.Create(button, enableClearType: true);
+            cached.Add(button);
+            return;
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(node);
+        for (var i = 0; i < count; i++)
+            CacheScrollShellsWalk(VisualTreeHelper.GetChild(node, i), cached);
+    }
+
+    private static bool HasVirtualizationHostDescendant(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is DashboardVirtualizationHost)
+                return true;
+
+            if (HasVirtualizationHostDescendant(child))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void RestoreCachedShells(List<FrameworkElement>? shells)
+    {
+        if (shells is null)
+            return;
+
+        foreach (var shell in shells)
+        {
+            if (shell.CacheMode is not null)
+                shell.CacheMode = null;
+        }
+    }
 
     private static Session GetOrCreateSession(ScrollViewer scrollViewer)
     {

@@ -1,4 +1,4 @@
-using Scriblucent.Animations;
+﻿using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
@@ -1726,7 +1726,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         return -1;
     }
 
-    private sealed class QuizPreviewQuestion : INotifyPropertyChanged
+    internal sealed class QuizPreviewQuestion : INotifyPropertyChanged
     {
         private readonly QuizQuestion _source;
         private bool _isSubmitted;
@@ -2312,7 +2312,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private sealed class QuizPreviewOption : INotifyPropertyChanged
+    internal sealed class QuizPreviewOption : INotifyPropertyChanged
     {
         private string _text = string.Empty;
         private bool _isCorrect;
@@ -2415,3 +2415,4 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     }
 
 }
+

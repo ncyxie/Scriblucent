@@ -86,6 +86,8 @@ internal static class DashboardScrollRenderGate
             {
                 if (child is ContentPresenter { Content: NoteCardControl card })
                     card.IsBitmapMode = bitmapMode;
+                else if (child is ContentPresenter { Content: DashboardTileHost tileHost })
+                    tileHost.IsBitmapMode = bitmapMode;
             }
         }
     }

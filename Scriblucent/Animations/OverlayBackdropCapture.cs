@@ -157,44 +157,15 @@ public static class OverlayBackdropCapture
 
     private static BitmapSource? ApplyBlur(BitmapSource source, double radius, DpiScale dpi)
     {
-        try
-        {
-            var scaleX = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
-            var scaleY = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
-            var dipWidth = source.PixelWidth / scaleX;
-            var dipHeight = source.PixelHeight / scaleY;
-
-            var image = new Image
-            {
-                Source = source,
-                Width = dipWidth,
-                Height = dipHeight,
-                Stretch = Stretch.Fill,
-                Effect = new BlurEffect
-                {
-                    Radius = radius,
-                    RenderingBias = RenderingBias.Performance
-                }
-            };
-
-            image.Measure(new Size(dipWidth, dipHeight));
-            image.Arrange(new Rect(0, 0, dipWidth, dipHeight));
-            image.UpdateLayout();
-
-            var bitmap = new RenderTargetBitmap(
-                source.PixelWidth,
-                source.PixelHeight,
-                dpi.PixelsPerInchX,
-                dpi.PixelsPerInchY,
-                PixelFormats.Pbgra32);
-
-            bitmap.Render(image);
-            bitmap.Freeze();
-            return bitmap;
-        }
-        catch
-        {
-            return source;
-        }
+        // Replaced the second full-window RenderTargetBitmap pass (an Image arranged at the
+        // capture size with a BlurEffect, then RTB-rendered again) - the documented open
+        // latency cost under nested ShowDialog. Skia's CPU Gaussian produces the same scrim
+        // from the already-captured pixels, without the extra render pass.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = Scriblucent.Rendering.SkiaBackdropBlur.Blur(source, radius, dpi);
+        stopwatch.Stop();
+        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+            Scriblucent.Services.ScrollPerfDiag.Log($"backdropBlur\t{stopwatch.Elapsed.TotalMilliseconds:F1}\tsize={source.PixelWidth}x{source.PixelHeight}");
+        return result;
     }
 }
