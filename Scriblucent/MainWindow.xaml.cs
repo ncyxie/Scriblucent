@@ -233,6 +233,17 @@ namespace Scriblucent
                 source.AddHook(WndProc);
         }
 
+        // Owned windows (Note Editor, MindMap/Flashcard/Quiz editors) are destroyed by the OS as
+        // a side effect of this window's own native destruction, which bypasses their managed
+        // Closing event entirely - so their unsaved-changes prompts never get a chance to run
+        // unless we close them ourselves first, through the normal Close() pipeline, before
+        // letting our own close proceed.
+        private void MainWindow_Closing(object sender, CancelEventArgs e)
+        {
+            if (!WindowCloseCascade.TryCloseOwnedWindows(this))
+                e.Cancel = true;
+        }
+
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == WmSettingChange)

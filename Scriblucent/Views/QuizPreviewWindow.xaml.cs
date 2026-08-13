@@ -668,17 +668,21 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             // (Submit confirmed, or the timer running out), so it's recorded immediately and
             // survives no matter how the window is closed afterward (Done, system X, ...).
             quizModeWindow.AttemptSubmitted += attempt => RecordCompletedAttempt(quizDocument, attempt);
-            quizModeWindow.ShowDialog();
-
-            if (quizModeWindow.LastAttempt == null && !_sourceDocument.ExamMode)
+            // Not submitted - capture wherever the attempt was left off so Start Quiz resumes
+            // there next time, instead of silently discarding an in-progress attempt. Fires on
+            // Closing so this runs no matter how the window closed (Done, X, Alt+F4, or an owner
+            // window cascading its own close into this one).
+            quizModeWindow.ProgressAbandoned += session =>
             {
-                // Not submitted - capture wherever the attempt was left off so Start Quiz resumes
-                // there next time, instead of silently discarding an in-progress attempt.
-                _sourceDocument.ProgressSession = quizModeWindow.CaptureProgress();
+                if (_sourceDocument.ExamMode)
+                    return;
+
+                _sourceDocument.ProgressSession = session;
                 SaveQuizProgress();
                 RefreshProgressPanel();
                 _requestImmediateSave?.Invoke();
-            }
+            };
+            quizModeWindow.ShowDialog();
         }
         catch (Exception ex)
         {
@@ -906,6 +910,12 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void QuizPreviewWindow_Closing(object? sender, CancelEventArgs e)
     {
+        if (!WindowCloseCascade.TryCloseOwnedWindows(this))
+        {
+            e.Cancel = true;
+            return;
+        }
+
         if (_allowCloseWithoutPrompt)
             return;
 

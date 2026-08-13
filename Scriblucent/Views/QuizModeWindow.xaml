@@ -15,7 +15,8 @@
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
-        PreviewKeyDown="QuizModeWindow_PreviewKeyDown">
+        PreviewKeyDown="QuizModeWindow_PreviewKeyDown"
+        Closing="QuizModeWindow_Closing">
     <Window.Resources>
         <Style x:Key="QuizNavQuestionButtonItemStyle"
                TargetType="Button"

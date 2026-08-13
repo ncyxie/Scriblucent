@@ -42,6 +42,12 @@ public partial class QuizModeWindow : Window
     // rather than inferring completion from LastAttempt after ShowDialog() returns.
     public event Action<QuizAttempt>? AttemptSubmitted;
     private bool _attemptSubmittedFired;
+
+    // Fires on close whenever an in-progress attempt wasn't submitted, so the caller can persist
+    // a resume snapshot no matter how the window closed (Done, X, Alt+F4, or an owner cascading
+    // Close() into this window) - mirrors AttemptSubmitted's own "status independent of how the
+    // window closes" design instead of relying on ShowDialog() returning normally.
+    public event Action<QuizProgressSession?>? ProgressAbandoned;
     private List<int> _wrongQuestionIndices = new();
     private bool _timerWarningActive;
 
@@ -202,6 +208,14 @@ public partial class QuizModeWindow : Window
     {
         Closed -= QuizModeWindow_Closed;
         _timer?.Stop();
+    }
+
+    private void QuizModeWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_attemptSubmittedFired || _isResultsView)
+            return;
+
+        ProgressAbandoned?.Invoke(CaptureProgress());
     }
 
     private void StartTimer()

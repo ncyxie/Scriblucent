@@ -18,7 +18,8 @@
 		UseLayoutRounding="True"
 		SnapsToDevicePixels="True"
 		TextOptions.TextFormattingMode="Ideal"
-		TextOptions.TextRenderingMode="ClearType">
+		TextOptions.TextRenderingMode="ClearType"
+        Closing="MainWindow_Closing">
 
     <Window.Resources>
 		<!-- Calendar schedule tiles use CalendarScheduledItemCardStyle (Level 4 D: E.Card + NoteCardBorder). -->
