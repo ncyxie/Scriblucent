@@ -132,7 +132,13 @@ internal static class DashboardMotionCardCatalog
         if (element is not Border border)
             return false;
 
-        if (!TryGetItemId(border, out _))
+        // Must be resolvable from this element's OWN Tag, not an inherited DataContext.
+        // Inner content borders (e.g. FlashcardSetCardBorder) don't set Tag themselves but
+        // inherit the same DataContext as the true outer wrapper, and can independently satisfy
+        // FindListingMotionSurface (e.g. via a nested tag-chip Border) - so the general
+        // TryGetItemId (which falls back to DataContext) would wrongly match them too, making
+        // the resolver cache the inner border as the "layout root" instead of the real wrapper.
+        if (!TryGetIdFromObject(border.Tag, out _))
             return false;
 
         return FindListingMotionSurface(border) is not null || CardSurfaceMotionBehavior.GetIsEnabled(border);
