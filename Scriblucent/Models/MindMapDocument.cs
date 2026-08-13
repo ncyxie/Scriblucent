@@ -5,6 +5,7 @@ public sealed class MindMapDocument
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
+    public bool? IsEditorTagsPanelOpen { get; set; }
     public MindMapNode Root { get; set; } = new();
     public string LayoutMode { get; set; } = "BalancedTree";
     public bool UseManualPositions { get; set; }

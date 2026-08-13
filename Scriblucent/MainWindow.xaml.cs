@@ -2421,6 +2421,9 @@ namespace Scriblucent
             // Create a blank root node with a default title
             var rootNode = new MindMapNode { Text = "Central Topic", NodeShape = "Rounded" };
 
+            MindMapDocument? savedDocument = null;
+            Action saveNow = null!;
+
             var editor = new MindMapPreviewWindow(
                 rootNode,
                 noteOptions: vm.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
@@ -2434,15 +2437,14 @@ namespace Scriblucent
                 Owner = this
             };
 
-            MindMapDocument? savedDocument = null;
-            var autoSaveTimer = StartEditorAutoSave(
-                editor.HasPendingAutoSaveChanges,
-                () =>
-                {
-                    var updatedDocument = editor.ToDocument(savedDocument);
-                    savedDocument = vm.AddOrUpdateMindMap(updatedDocument).Document;
-                    editor.MarkCurrentStateAutoSaved();
-                });
+            saveNow = () =>
+            {
+                var updatedDocument = editor.ToDocument(savedDocument);
+                savedDocument = vm.AddOrUpdateMindMap(updatedDocument).Document;
+                editor.MarkCurrentStateAutoSaved();
+            };
+
+            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
 
             try
             {
@@ -2462,6 +2464,9 @@ namespace Scriblucent
         private void OpenFlashcardSetEditor(MainViewModel vm, FlashcardSetViewModel? set, string? initialTitle = null)
         {
             var document = set?.Document;
+            FlashcardSetDocument? savedDocument = document;
+            Action saveNow = null!;
+
             var editor = new FlashcardsPreviewWindow(
                 document?.Cards ?? Enumerable.Empty<FlashcardItem>(),
                 vm.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
@@ -2473,20 +2478,20 @@ namespace Scriblucent
                 document?.SourceNoteId,
                 noteId => OpenNoteById(vm, noteId),
                 document?.FlipDelayMilliseconds ?? 0,
-                document?.StudyDueCardsOnly ?? true)
+                document?.StudyDueCardsOnly ?? true,
+                isTagsPanelOpen: document?.IsEditorTagsPanelOpen)
             {
                 Owner = this
             };
 
-            FlashcardSetDocument? savedDocument = document;
-            var autoSaveTimer = StartEditorAutoSave(
-                editor.HasPendingAutoSaveChanges,
-                () =>
-                {
-                    var updatedDocument = editor.ToDocument(savedDocument);
-                    savedDocument = vm.AddOrUpdateFlashcardSet(updatedDocument).Document;
-                    editor.MarkCurrentStateAutoSaved();
-                });
+            saveNow = () =>
+            {
+                var updatedDocument = editor.ToDocument(savedDocument);
+                savedDocument = vm.AddOrUpdateFlashcardSet(updatedDocument).Document;
+                editor.MarkCurrentStateAutoSaved();
+            };
+
+            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
 
             try
             {
@@ -2809,6 +2814,9 @@ namespace Scriblucent
             if (DataContext is not MainViewModel vm)
                 return;
 
+            MindMapDocument? savedDocument = mindMapVm.Document;
+            Action saveNow = null!;
+
             var editor = new MindMapPreviewWindow(
                 mindMapVm.Document.Root,
                 vm.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
@@ -2818,20 +2826,20 @@ namespace Scriblucent
                 mindMapVm.Document.LayoutMode,
                 mindMapVm.Document.UseManualPositions,
                 mindMapVm.Document.SourceNoteId,
-                noteId => OpenNoteById(vm, noteId))
+                noteId => OpenNoteById(vm, noteId),
+                isTagsPanelOpen: mindMapVm.Document.IsEditorTagsPanelOpen)
             {
                 Owner = this
             };
 
-            MindMapDocument? savedDocument = mindMapVm.Document;
-            var autoSaveTimer = StartEditorAutoSave(
-                editor.HasPendingAutoSaveChanges,
-                () =>
-                {
-                    var updatedDocument = editor.ToDocument(savedDocument);
-                    savedDocument = vm.AddOrUpdateMindMap(updatedDocument).Document;
-                    editor.MarkCurrentStateAutoSaved();
-                });
+            saveNow = () =>
+            {
+                var updatedDocument = editor.ToDocument(savedDocument);
+                savedDocument = vm.AddOrUpdateMindMap(updatedDocument).Document;
+                editor.MarkCurrentStateAutoSaved();
+            };
+
+            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
 
             try
             {

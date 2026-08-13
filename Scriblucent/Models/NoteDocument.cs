@@ -11,6 +11,7 @@ public class NoteDocument
     public string FontFamily { get; set; } = "Calibri";
     public double FontSize { get; set; } = 14;
     public bool? IsEditorFontPanelOpen { get; set; }
+    public bool? IsEditorTagsPanelOpen { get; set; }
     public bool? IsWordWrapEnabled { get; set; }
     public DateTime LastModified { get; set; } = DateTime.Now;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

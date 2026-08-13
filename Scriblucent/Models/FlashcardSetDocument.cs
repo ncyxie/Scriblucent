@@ -5,6 +5,7 @@ public sealed class FlashcardSetDocument
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
+    public bool? IsEditorTagsPanelOpen { get; set; }
     public Dictionary<int, string> SetNames { get; set; } = new();
     public List<FlashcardItem> Cards { get; set; } = new();
     public FlashcardStudySession StudySession { get; set; } = new();

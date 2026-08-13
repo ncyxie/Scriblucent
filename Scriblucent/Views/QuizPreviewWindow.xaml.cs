@@ -72,6 +72,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private bool _isInitializing = true;
     private bool _isFlashingTitleStatus;
     private bool _allowCloseWithoutPrompt;
+    private bool _isTagsPanelOpen;
+    private bool _lastSavedTagsPanelOpen;
+    private int _tagsPanelAnimationVersion;
 
     public QuizPreviewWindow(
         QuizDocument document,
@@ -131,6 +134,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         TagsTextBox.Text = document.Tags is null
             ? string.Empty
             : string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
+        SetTagsPanelOpen(document.IsEditorTagsPanelOpen ?? false, animate: false);
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         QuestionsItemsControl.ItemsSource = _questions;
         ConfigureAiGeneratedIndicator(modelDisplayName ?? document.AiModelDisplayName);
         UpdateModeChrome();
@@ -336,14 +341,20 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private void MarkCurrentStateSaved()
     {
         _lastSavedSnapshot = GetEditorSnapshot();
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         UpdateEditedIndicator();
     }
 
-    public bool HasPendingAutoSaveChanges() => HasUnsavedChanges();
+    // Excluded from GetEditorSnapshot/HasUnsavedChanges (toggling it shouldn't prompt a save on
+    // close), but still needs to reach disk eventually - piggybacking on the next natural autosave
+    // tick instead of triggering an immediate full-collection rewrite (and its visible "saved"
+    // flash) on every single toggle click.
+    public bool HasPendingAutoSaveChanges() => HasUnsavedChanges() || _isTagsPanelOpen != _lastSavedTagsPanelOpen;
 
     public void MarkCurrentStateAutoSaved()
     {
         _lastSavedSnapshot = GetEditorSnapshot();
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         ShowAutoSaveIndicator();
     }
 
@@ -489,6 +500,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 ? LocalizationService.GetString("QuizUntitled")
                 : EditorTitle,
             Tags = Tags.ToList(),
+            IsEditorTagsPanelOpen = _isTagsPanelOpen,
             Questions = _questions.Select(question => question.ToModel()).ToList(),
             CreatedAt = existingDocument?.CreatedAt ?? _sourceDocument.CreatedAt,
             LastModified = DateTime.Now,
@@ -906,6 +918,63 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         SaveAndClose();
+    }
+
+    private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
+        => SetTagsPanelOpen(!_isTagsPanelOpen, animate: true);
+
+    private void SetTagsPanelOpen(bool isOpen, bool animate)
+    {
+        _isTagsPanelOpen = isOpen;
+
+        if (!animate)
+        {
+            UiMotion.Stop(TagsPanel);
+            UiMotion.Clear(TagsPanel, UIElement.OpacityProperty);
+            UiMotion.Clear(EnsureTagsPanelTransform(), TranslateTransform.YProperty);
+            TagsPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
+            TagsPanel.Opacity = isOpen ? 1 : 0;
+            EnsureTagsPanelTransform().Y = isOpen ? 0 : -6;
+            return;
+        }
+
+        AnimateTagsPanel(isOpen);
+    }
+
+    private void AnimateTagsPanel(bool show)
+    {
+        var animationVersion = ++_tagsPanelAnimationVersion;
+        var transform = EnsureTagsPanelTransform();
+        var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
+        var opacityFrom = TagsPanel.Opacity;
+        var yFrom = transform.Y;
+
+        if (show)
+            TagsPanel.Visibility = Visibility.Visible;
+
+        UiMotion.Stop(TagsPanel);
+        UiMotion.RunComposited(
+            TagsPanel,
+            new[]
+            {
+                UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => TagsPanel.Opacity = value),
+                UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
+            },
+            () =>
+            {
+                if (!show && animationVersion == _tagsPanelAnimationVersion && !_isTagsPanelOpen)
+                    TagsPanel.Visibility = Visibility.Collapsed;
+            });
+    }
+
+    private TranslateTransform EnsureTagsPanelTransform()
+    {
+        if (TagsPanel.RenderTransform is TranslateTransform existing)
+            return existing;
+
+        var transform = new TranslateTransform(0, -6);
+        TagsPanel.RenderTransform = transform;
+        return transform;
     }
 
     private void QuizPreviewWindow_Closing(object? sender, CancelEventArgs e)

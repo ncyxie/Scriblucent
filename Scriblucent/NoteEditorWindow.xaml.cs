@@ -170,6 +170,8 @@ namespace Scriblucent
         private bool _isSerializingEditorContent;
         private bool _allowCloseWithoutPrompt;
         private bool _isFontPanelOpen;
+        private bool _isTagsPanelOpen;
+        private bool _lastSavedTagsPanelOpen;
         private bool _isSyncingLineSpacingSelector;
         private bool _isSyncingIndentSizeSelector;
         private readonly Dictionary<string, ComboBoxItem> _fontFamilyItemsByName =
@@ -203,6 +205,7 @@ namespace Scriblucent
             return string.IsNullOrWhiteSpace(primary) ? DefaultEditorFontFamily : primary;
         }
         private int _fontPanelAnimationVersion;
+        private int _tagsPanelAnimationVersion;
         private long _editorChangeVersion;
         private long _lastSavedEditorChangeVersion;
         private const double DefaultIndentSize = 48.0;
@@ -326,6 +329,8 @@ namespace Scriblucent
             SyncLineSpacingSelectorFromPreference();
             SyncIndentSizeSelectorFromPreference();
             SetFontPanelOpen(settings.IsEditorFontPanelOpen, animate: false, persist: false);
+            SetTagsPanelOpen(false, animate: false, persist: false);
+            _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         }
 
         private void InitializeEditorFormattingOptions()
@@ -581,6 +586,7 @@ namespace Scriblucent
             var horizontalScrollbarAvailable = ResolveEditorScrollbarSettings().Horizontal;
             SetEditorToolButtonActive(WordWrapButton, _isWordWrapEnabled || !horizontalScrollbarAvailable);
             SetEditorToolButtonActive(FontButton, _isFontPanelOpen);
+            SetEditorToolButtonActive(TagsPanelToggleButton, _isTagsPanelOpen);
             SetEditorToolButtonActive(ZoomMenuButton, Math.Abs(_zoomLevel - 1.0) > 0.0001);
         }
 
@@ -2441,6 +2447,8 @@ namespace Scriblucent
                         document.IsEditorFontPanelOpen ?? settings.IsEditorFontPanelOpen,
                         animate: false,
                         persist: false);
+                    SetTagsPanelOpen(document.IsEditorTagsPanelOpen ?? false, animate: false, persist: false);
+                    _lastSavedTagsPanelOpen = _isTagsPanelOpen;
 
                     var preferredFontFamily = string.IsNullOrWhiteSpace(settings.PreferredFontFamily)
                         ? DefaultEditorFontFamily
@@ -2662,6 +2670,7 @@ namespace Scriblucent
             document.FontFamily = newFontFamily;
             document.FontSize = newFontSize;
             document.IsEditorFontPanelOpen = _isFontPanelOpen;
+            document.IsEditorTagsPanelOpen = _isTagsPanelOpen;
             document.IsWordWrapEnabled = _isWordWrapEnabled;
         }
 
@@ -3855,10 +3864,14 @@ namespace Scriblucent
             }
         }
 
-        // Check if content has changed since last save
+        // Check if content has changed since last save. Tags-panel open/closed is excluded from
+        // HasUnsavedChanges (toggling it shouldn't trigger the close-confirmation prompt) but
+        // still needs to reach disk eventually - included here instead so it rides the next
+        // natural autosave tick rather than forcing an immediate synchronous full-store rewrite
+        // (and its visible "saved" flash) on every single toggle click.
         private bool HasContentChanged()
         {
-            return HasUnsavedChanges();
+            return HasUnsavedChanges() || _isTagsPanelOpen != _lastSavedTagsPanelOpen;
         }
 
         private bool HasUnsavedChanges()
@@ -3875,6 +3888,7 @@ namespace Scriblucent
             _lastSavedContent = GetContentAsText();
             _lastSavedEditorChangeVersion = _editorChangeVersion;
             _lastSavedSnapshot = GetEditorSnapshot();
+            _lastSavedTagsPanelOpen = _isTagsPanelOpen;
             UpdateEditedIndicator();
         }
 
@@ -4399,6 +4413,7 @@ namespace Scriblucent
                 FontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source),
                 FontSize = ContentTextBox.FontSize,
                 IsEditorFontPanelOpen = _isFontPanelOpen,
+                IsEditorTagsPanelOpen = _isTagsPanelOpen,
                 IsWordWrapEnabled = _isWordWrapEnabled,
                 CreatedAt = _currentDocument?.CreatedAt ?? DateTime.UtcNow,
                 LastModified = DateTime.Now
@@ -5055,6 +5070,70 @@ namespace Scriblucent
                 translate.Y = -6;
 
             return translate;
+        }
+
+        private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
+            // persist: false - the click-driven immediate SaveNotes() rewrite was the expensive/
+            // visible "auto-saving" trigger; HasContentChanged() now picks this up on the next
+            // natural autosave tick instead (see its comment).
+            => SetTagsPanelOpen(!_isTagsPanelOpen, animate: true, persist: false);
+
+        private void SetTagsPanelOpen(bool isOpen, bool animate, bool persist = true)
+        {
+            _isTagsPanelOpen = isOpen;
+            if (persist)
+                PersistCurrentDocumentEditorUiState();
+
+            UpdateEditorToolButtonStates();
+
+            if (!animate)
+            {
+                UiMotion.Stop(TagsPanel);
+                UiMotion.Clear(TagsPanel, UIElement.OpacityProperty);
+                UiMotion.Clear(EnsureTagsPanelTransform(), TranslateTransform.YProperty);
+                TagsPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
+                TagsPanel.Opacity = isOpen ? 1 : 0;
+                EnsureTagsPanelTransform().Y = isOpen ? 0 : -6;
+                return;
+            }
+
+            AnimateTagsPanel(isOpen);
+        }
+
+        private void AnimateTagsPanel(bool show)
+        {
+            var animationVersion = ++_tagsPanelAnimationVersion;
+            var transform = EnsureTagsPanelTransform();
+            var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
+            var opacityFrom = TagsPanel.Opacity;
+            var yFrom = transform.Y;
+
+            if (show)
+                TagsPanel.Visibility = Visibility.Visible;
+
+            UiMotion.Stop(TagsPanel);
+            UiMotion.RunComposited(
+                TagsPanel,
+                new[]
+                {
+                    UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => TagsPanel.Opacity = value),
+                    UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
+                },
+                () =>
+                {
+                    if (!show && animationVersion == _tagsPanelAnimationVersion && !_isTagsPanelOpen)
+                        TagsPanel.Visibility = Visibility.Collapsed;
+                });
+        }
+
+        private TranslateTransform EnsureTagsPanelTransform()
+        {
+            if (TagsPanel.RenderTransform is TranslateTransform existing)
+                return existing;
+
+            var transform = new TranslateTransform(0, -6);
+            TagsPanel.RenderTransform = transform;
+            return transform;
         }
 
         private void ApplyLineSpacingToTargetParagraphs(double spacingMultiplier)
@@ -7564,7 +7643,9 @@ namespace Scriblucent
                 return;
 
             _currentDocument.IsEditorFontPanelOpen = _isFontPanelOpen;
+            _currentDocument.IsEditorTagsPanelOpen = _isTagsPanelOpen;
             _currentDocument.IsWordWrapEnabled = _isWordWrapEnabled;
+            _lastSavedTagsPanelOpen = _isTagsPanelOpen;
 
             if (Application.Current.MainWindow?.DataContext is MainViewModel mainViewModel)
                 mainViewModel.SaveNotes();
@@ -7612,6 +7693,7 @@ namespace Scriblucent
             ContentTextBox.FontSize = document.FontSize > 0 ? document.FontSize : 14;
             _isWordWrapEnabled = document.IsWordWrapEnabled ?? _isWordWrapEnabled;
             SetFontPanelOpen(document.IsEditorFontPanelOpen ?? _isFontPanelOpen, animate: false);
+            SetTagsPanelOpen(document.IsEditorTagsPanelOpen ?? false, animate: false);
             ApplyContentToEditor(document.Content);
             ApplyEditorTextLayout();
             SyncFontSelectorsFromSelection();

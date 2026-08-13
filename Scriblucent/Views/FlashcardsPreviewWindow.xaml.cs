@@ -78,6 +78,12 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private bool _isApplyingFlipSpeed;
     private bool _isOptionsPanelOpen;
     private int _optionsPanelAnimationVersion;
+
+    // Tags panel is independent of the Options panel above (different row, no visual overlap) so
+    // it does not participate in mutual exclusion, and its state is persisted per-document.
+    private bool _isTagsPanelOpen;
+    private bool _lastSavedTagsPanelOpen;
+    private int _tagsPanelAnimationVersion;
     private FlashcardStudySession? _pendingStudySession;
     private FlashcardNoteLinkOption? _selectedLinkedNote;
     private bool _dueOnly = true;
@@ -125,7 +131,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         Guid? sourceNoteId = null,
         Action<Guid>? openNoteAction = null,
         int flipDelayMilliseconds = 0,
-        bool studyDueCardsOnly = true)
+        bool studyDueCardsOnly = true,
+        bool? isTagsPanelOpen = null)
     {
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
@@ -177,6 +184,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         TagsTextBox.Text = tags is null
             ? string.Empty
             : string.Join(", ", tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
+        SetTagsPanelOpen(isTagsPanelOpen ?? false, animate: false);
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         ConfigureAiGeneratedIndicator(modelDisplayName);
         OnPropertyChanged(nameof(NoteLinkOptions));
         OnPropertyChanged(nameof(LinkedNoteButtonText));
@@ -243,6 +252,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 ? LocalizationService.GetString("FlashcardSetUntitled")
                 : EditorTitle,
             Tags = Tags.ToList(),
+            IsEditorTagsPanelOpen = _isTagsPanelOpen,
             SetNames = _setOptions
                 .Where(option => !string.IsNullOrWhiteSpace(option.DisplayName))
                 .ToDictionary(option => option.SetIndex, option => option.DisplayName.Trim()),
@@ -373,14 +383,20 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void MarkCurrentStateSaved()
     {
         _lastSavedSnapshot = GetEditorSnapshot();
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         UpdateEditedIndicator();
     }
 
-    public bool HasPendingAutoSaveChanges() => HasUnsavedChanges();
+    // Excluded from GetEditorSnapshot/HasUnsavedChanges (toggling it shouldn't prompt a save on
+    // close, same as the Options panel), but still needs to reach disk eventually - piggybacking
+    // on the next natural autosave tick instead of triggering an immediate full-collection rewrite
+    // (and its visible "saved" flash) on every single toggle click.
+    public bool HasPendingAutoSaveChanges() => HasUnsavedChanges() || _isTagsPanelOpen != _lastSavedTagsPanelOpen;
 
     public void MarkCurrentStateAutoSaved()
     {
         _lastSavedSnapshot = GetEditorSnapshot();
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         ShowAutoSaveIndicator();
     }
 
@@ -1397,10 +1413,32 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         _isOptionsPanelOpen = isOpen;
         _optionsPanelAnimationVersion++;
-        AnimateChromePanel(FlashcardsOptionsPanel, isOpen, _optionsPanelAnimationVersion, () => _isOptionsPanelOpen);
+        AnimateChromePanel(FlashcardsOptionsPanel, isOpen, _optionsPanelAnimationVersion, () => _isOptionsPanelOpen, () => _optionsPanelAnimationVersion);
     }
 
-    private void AnimateChromePanel(Border panel, bool show, int animationVersion, Func<bool> isStillOpen)
+    private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
+        => SetTagsPanelOpen(!_isTagsPanelOpen);
+
+    private void SetTagsPanelOpen(bool isOpen, bool animate = true)
+    {
+        _isTagsPanelOpen = isOpen;
+
+        if (!animate)
+        {
+            UiMotion.Stop(FlashcardsTagsBorder);
+            UiMotion.Clear(FlashcardsTagsBorder, UIElement.OpacityProperty);
+            UiMotion.Clear(EnsureChromePanelTransform(FlashcardsTagsBorder), TranslateTransform.YProperty);
+            FlashcardsTagsBorder.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
+            FlashcardsTagsBorder.Opacity = isOpen ? 1 : 0;
+            EnsureChromePanelTransform(FlashcardsTagsBorder).Y = isOpen ? 0 : -6;
+            return;
+        }
+
+        _tagsPanelAnimationVersion++;
+        AnimateChromePanel(FlashcardsTagsBorder, isOpen, _tagsPanelAnimationVersion, () => _isTagsPanelOpen, () => _tagsPanelAnimationVersion);
+    }
+
+    private void AnimateChromePanel(Border panel, bool show, int animationVersion, Func<bool> isStillOpen, Func<int> latestVersion)
     {
         if (UiMotion.PrefersReducedMotion)
         {
@@ -1429,7 +1467,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             },
             () =>
             {
-                if (!show && animationVersion == _optionsPanelAnimationVersion && !isStillOpen())
+                if (!show && animationVersion == latestVersion() && !isStillOpen())
                     panel.Visibility = Visibility.Collapsed;
             });
     }
@@ -2620,6 +2658,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         var chromeVisibility = showStudyMode ? Visibility.Collapsed : Visibility.Visible;
         if (FlashcardsTagsBorder is not null)
             FlashcardsTagsBorder.Visibility = chromeVisibility;
+        if (TagsPanelToggleButton is not null)
+            TagsPanelToggleButton.Visibility = chromeVisibility;
+        if (FlashcardsTagsBorder is not null && !_isTagsPanelOpen)
+            FlashcardsTagsBorder.Visibility = Visibility.Collapsed;
         if (showStudyMode && _isOptionsPanelOpen)
             SetOptionsPanelOpen(false);
         if (OptionsPanelToggleButton is not null)

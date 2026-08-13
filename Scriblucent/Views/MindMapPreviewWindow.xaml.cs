@@ -137,6 +137,12 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private int _arrangePanelAnimationVersion;
     private int _searchPanelAnimationVersion;
     private int _fontPanelAnimationVersion;
+
+    // Tags panel is independent of the group above (different row, no visual overlap) so it does
+    // not participate in their mutual exclusion, and its state is persisted per-document.
+    private bool _isTagsPanelOpen;
+    private bool _lastSavedTagsPanelOpen;
+    private int _tagsPanelAnimationVersion;
     private bool _suppressFontPanelChangeHandlers;
 
     // Snapshot-based undo/redo, scoped to content edits only (add/delete/reparent/edit text/
@@ -199,7 +205,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         string? layoutMode = null,
         bool useManualPositions = false,
         Guid? sourceNoteId = null,
-        Action<Guid>? openNoteAction = null)
+        Action<Guid>? openNoteAction = null,
+        bool? isTagsPanelOpen = null)
     {
         _root = root;
         MindMapNodeIconCatalog.NormalizeTreeIcons(_root);
@@ -224,6 +231,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         TagsTextBox.Text = tags is null
             ? string.Empty
             : string.Join(", ", tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
+        SetTagsPanelOpen(isTagsPanelOpen ?? false, animate: false);
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         ConfigureAiGeneratedIndicator(modelDisplayName);
         UpdateSearchResultsText();
 
@@ -320,14 +329,20 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void MarkCurrentStateSaved()
     {
         _lastSavedSnapshot = GetEditorSnapshot();
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         UpdateEditedIndicator();
     }
 
-    public bool HasPendingAutoSaveChanges() => HasUnsavedChanges();
+    // Excluded from GetEditorSnapshot/HasUnsavedChanges (toggling it shouldn't prompt a save on
+    // close, same as Font/Arrange/Search), but still needs to reach disk eventually - piggybacking
+    // on the next natural autosave tick instead of triggering an immediate full-collection rewrite
+    // (and its visible "saved" flash) on every single toggle click.
+    public bool HasPendingAutoSaveChanges() => HasUnsavedChanges() || _isTagsPanelOpen != _lastSavedTagsPanelOpen;
 
     public void MarkCurrentStateAutoSaved()
     {
         _lastSavedSnapshot = GetEditorSnapshot();
+        _lastSavedTagsPanelOpen = _isTagsPanelOpen;
         ShowAutoSaveIndicator();
     }
 
@@ -492,6 +507,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 ? LocalizationService.GetString("MindMapUntitled")
                 : EditorTitle,
             Tags = Tags.ToList(),
+            IsEditorTagsPanelOpen = _isTagsPanelOpen,
             Root = _root,
             LayoutMode = GetLayoutModeKey(_selectedLayoutMode),
             UseManualPositions = _isManualPositioningMode,
@@ -3475,7 +3491,30 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private int GetLatestAnimationVersion(Border panel)
         => ReferenceEquals(panel, ArrangePanel) ? _arrangePanelAnimationVersion
             : ReferenceEquals(panel, SearchPanel) ? _searchPanelAnimationVersion
+            : ReferenceEquals(panel, TagsPanel) ? _tagsPanelAnimationVersion
             : _fontPanelAnimationVersion;
+
+    private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
+        => SetTagsPanelOpen(!_isTagsPanelOpen);
+
+    private void SetTagsPanelOpen(bool isOpen, bool animate = true)
+    {
+        _isTagsPanelOpen = isOpen;
+
+        if (!animate)
+        {
+            UiMotion.Stop(TagsPanel);
+            UiMotion.Clear(TagsPanel, UIElement.OpacityProperty);
+            UiMotion.Clear(EnsureChromePanelTransform(TagsPanel), TranslateTransform.YProperty);
+            TagsPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
+            TagsPanel.Opacity = isOpen ? 1 : 0;
+            EnsureChromePanelTransform(TagsPanel).Y = isOpen ? 0 : -6;
+            return;
+        }
+
+        _tagsPanelAnimationVersion++;
+        AnimateChromePanel(TagsPanel, isOpen, _tagsPanelAnimationVersion, () => _isTagsPanelOpen);
+    }
 
     // FreeMind's own font toolbar lists every font the OS has installed, not a curated handful -
     // matches that instead of a fixed list so anything actually available on this machine shows
