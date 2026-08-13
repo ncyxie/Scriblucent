@@ -57,16 +57,20 @@ public partial class EditHistoryWindow : Window
     {
         private const int PreviewMaxLength = 180;
 
+        private string? _previewText;
+
         public EditHistoryListItem(NoteEditHistoryEntry version)
         {
             Version = version;
             TimestampText = version.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture);
-            PreviewText = BuildPreview(version.Content);
         }
 
         public NoteEditHistoryEntry Version { get; }
         public string TimestampText { get; }
-        public string PreviewText { get; }
+
+        // Decoded lazily: the binding only evaluates for realized containers, so with a
+        // virtualized ListBox only visible rows pay the FlowDocument decode cost (once each).
+        public string PreviewText => _previewText ??= BuildPreview(Version.Content);
 
         private static string BuildPreview(string? encodedContent)
         {

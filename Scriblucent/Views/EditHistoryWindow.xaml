@@ -52,6 +52,9 @@
                          BorderThickness="0"
                          Background="Transparent"
                          HorizontalContentAlignment="Stretch"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel"
                          ItemContainerStyle="{StaticResource EditHistoryListBoxItemStyle}"
                          MouseDoubleClick="HistoryListBox_MouseDoubleClick">
                     <ListBox.ItemTemplate>

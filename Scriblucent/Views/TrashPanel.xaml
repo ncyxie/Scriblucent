@@ -43,6 +43,31 @@
             <Setter Property="Margin" Value="0,0,8,8"/>
             <Setter Property="Padding" Value="2,0,0,0"/>
         </Style>
+
+        <!-- Custom template so the list's own ScrollViewer can carry the scroll-tile behavior
+             (the default ListBox template's inner ScrollViewer cannot take attached behaviors).
+             Virtualization engages because the ListBox now owns a bounded viewport; smooth
+             scrolling comes from the app-wide implicit ScrollViewer style. -->
+        <Style x:Key="TrashListBoxStyle" TargetType="{x:Type ListBox}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ListBox}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ScrollViewer Focusable="False"
+                                          CanContentScroll="True"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          Background="Transparent"
+                                          behaviors:ScrollTileBehavior.IsEnabled="True">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
     <Grid x:Name="OverlayRoot">
         <Grid x:Name="ScrimHost"
@@ -185,19 +210,18 @@
                                            TextAlignment="Center"/>
                             </StackPanel>
 
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          MaxHeight="360"
-                                          behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                          behaviors:ScrollTileBehavior.IsEnabled="True">
-                                <ListBox x:Name="TrashedItemsListBox"
-                                         Background="Transparent"
-                                         BorderThickness="0"
-                                         HorizontalContentAlignment="Stretch"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                         ItemContainerStyle="{StaticResource TrashListBoxItemStyle}"
-                                         SelectionMode="Extended"
-                                         SelectionChanged="TrashedItemsListBox_SelectionChanged">
+                            <ListBox x:Name="TrashedItemsListBox"
+                                     MaxHeight="480"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     HorizontalContentAlignment="Stretch"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                     VirtualizingPanel.ScrollUnit="Pixel"
+                                     Style="{StaticResource TrashListBoxStyle}"
+                                     ItemContainerStyle="{StaticResource TrashListBoxItemStyle}"
+                                     SelectionMode="Extended"
+                                     SelectionChanged="TrashedItemsListBox_SelectionChanged">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <controls:DashboardTileHost RendererKey="TrashRow">
@@ -251,7 +275,6 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                            </ScrollViewer>
                         </Grid>
 
                         <Grid Grid.Row="5" Margin="0,16,0,0">

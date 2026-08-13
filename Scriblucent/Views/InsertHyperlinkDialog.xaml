@@ -81,14 +81,15 @@
                                 Background="{DynamicResource WindowBackground}"
                                 Padding="4"
                                 Height="150">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <ListBox x:Name="NoteResultsListBox"
-                                         Background="Transparent"
-                                         BorderThickness="0"
-                                         SelectionMode="Single"
-                                         DisplayMemberPath="Title"
-                                         SelectionChanged="NoteResultsListBox_SelectionChanged"/>
-                            </ScrollViewer>
+                            <ListBox x:Name="NoteResultsListBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     SelectionMode="Single"
+                                     DisplayMemberPath="Title"
+                                     VirtualizingPanel.IsVirtualizing="True"
+                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                     VirtualizingPanel.ScrollUnit="Pixel"
+                                     SelectionChanged="NoteResultsListBox_SelectionChanged"/>
                         </Border>
                     </StackPanel>
                 </Grid>

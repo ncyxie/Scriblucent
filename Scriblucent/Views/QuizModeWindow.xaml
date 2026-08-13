@@ -4,6 +4,7 @@
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:wpftoolkit="clr-namespace:WpfToolkit.Controls"
         Title="{Binding [QuizModeTitle], Source={StaticResource Loc}}"
         Height="650"
         Width="800"
@@ -15,6 +16,28 @@
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
         PreviewKeyDown="QuizModeWindow_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="QuizNavQuestionButtonItemStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource QuizNavQuestionButtonStyle}">
+            <Setter Property="ToolTipService.ShowDuration" Value="12000"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsAnswered}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentSuccessSubtleBorder}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                    <Setter Property="BorderThickness" Value="2"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Body><Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
@@ -362,11 +385,42 @@
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled"
                                   Background="Transparent"
-                                  CanContentScroll="False"
+                                  CanContentScroll="True"
                                   VerticalAlignment="Stretch"
                                   behaviors:SmoothScrollBehavior.IsEnabled="True"
                                   behaviors:ScrollBarAutoHideBehavior.Enable="True">
-                        <WrapPanel x:Name="QuestionNavButtonsPanel"/>
+                        <ItemsControl x:Name="QuestionNavItemsControl"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <wpftoolkit:VirtualizingWrapPanel IsItemsHost="True" ItemSize="38,38"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource QuizNavQuestionButtonItemStyle}"
+                                            Tag="{Binding Index}"
+                                            IsEnabled="{Binding IsEnabled}"
+                                            ToolTip="{Binding NavToolTip}"
+                                            Click="QuestionNavButton_Click">
+                                        <Grid Width="32" Height="32">
+                                            <TextBlock Text="{Binding Number}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                            <Polygon Points="0,0 10,0 10,10"
+                                                     Fill="{DynamicResource AccentDanger}"
+                                                     HorizontalAlignment="Right"
+                                                     VerticalAlignment="Top"
+                                                     Margin="0,-1,-1,0"
+                                                     IsHitTestVisible="False"
+                                                     Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVis}}"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </ScrollViewer>
                 </Grid>
             </Border>

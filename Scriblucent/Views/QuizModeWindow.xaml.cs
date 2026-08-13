@@ -6,8 +6,10 @@ using Scriblucent;
 using Scriblucent.Models;
 using Scriblucent.Services;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -20,7 +22,6 @@ namespace Scriblucent.Views;
 public partial class QuizModeWindow : Window
 {
     private const string PlainTextAnswerMarker = "__PLAINTEXT__:";
-    private static readonly object NavFlagMarkTag = new();
 
     private QuizDocument _quiz;
     private int _currentQuestionIndex;
@@ -332,69 +333,17 @@ public partial class QuizModeWindow : Window
 
     private void RebuildQuestionNavigator()
     {
-        if (FindName("QuestionNavButtonsPanel") is not WrapPanel panel)
+        if (FindName("QuestionNavItemsControl") is not ItemsControl items)
             return;
 
-        panel.Children.Clear();
         var count = _quiz.Questions?.Count ?? 0;
+        var navItems = new List<QuizNavItem>(count);
         for (var i = 0; i < count; i++)
-        {
-            var button = new Button
-            {
-                Tag = i,
-                Content = CreateQuestionNavButtonContent(i)
-            };
-            if (TryFindResource("QuizNavQuestionButtonStyle") is Style navStyle)
-                button.Style = navStyle;
+            navItems.Add(new QuizNavItem(i));
 
-            button.Click += QuestionNavButton_Click;
-            panel.Children.Add(button);
-        }
-
+        items.ItemsSource = navItems;
         RefreshQuestionNavigator();
     }
-
-    private FrameworkElement CreateQuestionNavButtonContent(int index)
-    {
-        var root = new Grid
-        {
-            Width = 32,
-            Height = 32
-        };
-
-        var number = new TextBlock
-        {
-            Text = (index + 1).ToString(CultureInfo.CurrentCulture),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        root.Children.Add(number);
-
-        // Moodle-style red corner flag marker
-        var flagMark = new Polygon
-        {
-            Tag = NavFlagMarkTag,
-            Points = new PointCollection
-            {
-                new Point(0, 0),
-                new Point(10, 0),
-                new Point(10, 10)
-            },
-            Fill = (Brush)FindResource("AccentDanger"),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, -1, -1, 0),
-            IsHitTestVisible = false,
-            Visibility = Visibility.Collapsed
-        };
-        root.Children.Add(flagMark);
-        return root;
-    }
-
-    private static Polygon? TryGetNavFlagMark(Button button)
-        => button.Content is Grid grid
-            ? grid.Children.OfType<Polygon>().FirstOrDefault(p => ReferenceEquals(p.Tag, NavFlagMarkTag))
-            : null;
 
     private void RefreshQuestionNavigator()
     {
@@ -415,73 +364,52 @@ public partial class QuizModeWindow : Window
             Grid.SetColumnSpan(resultsView, showNav ? 1 : 2);
         }
 
-        if (FindName("QuestionNavButtonsPanel") is not WrapPanel panel)
+        if (FindName("QuestionNavItemsControl") is not ItemsControl items
+            || items.ItemsSource is not IEnumerable<QuizNavItem> navItems)
             return;
 
         var examMode = _quiz.ExamMode;
-        foreach (var child in panel.Children)
+        foreach (var item in navItems)
         {
-            if (child is not Button button || button.Tag is not int index)
-                continue;
-
+            var index = item.Index;
             var isCurrent = index == _currentQuestionIndex;
             var isAnswered = IsQuestionAnswered(index);
             var isFlagged = _flaggedQuestions.Contains(index);
             var canJump = !examMode;
 
-            button.IsEnabled = canJump || isCurrent;
-            button.Opacity = canJump || isCurrent ? 1.0 : 0.45;
-            button.FontWeight = isCurrent ? FontWeights.Bold : FontWeights.SemiBold;
-            button.Background = isCurrent
-                ? (Brush)FindResource("SelectionBackground")
-                : isAnswered
-                    ? (Brush)FindResource("AccentSuccessSubtle")
-                    : (Brush)FindResource("WindowBackground");
-            button.BorderBrush = isCurrent
-                ? (Brush)FindResource("AccentPrimary")
-                : isAnswered
-                    ? (Brush)FindResource("AccentSuccessSubtleBorder")
-                    : Brushes.Transparent;
-            button.BorderThickness = isCurrent
-                ? new Thickness(2)
-                : isAnswered
-                    ? new Thickness(1)
-                    : new Thickness(0);
-            button.Foreground = isAnswered && !isCurrent
-                ? (Brush)FindResource("AccentSuccessSubtleForeground")
-                : (Brush)FindResource("TextColor");
-
-            if (TryGetNavFlagMark(button) is Polygon flagMark)
-                flagMark.Visibility = isFlagged ? Visibility.Visible : Visibility.Collapsed;
+            item.IsCurrent = isCurrent;
+            item.IsAnswered = isAnswered;
+            item.IsFlagged = isFlagged;
+            item.IsEnabled = canJump || isCurrent;
 
             if (examMode && !isCurrent)
             {
-                button.ToolTip = LocalizationService.GetString("QuizExamNavLockedTooltip");
+                item.NavToolTip = LocalizationService.GetString("QuizExamNavLockedTooltip");
             }
             else if (isFlagged && isAnswered)
             {
-                button.ToolTip = string.Format(
+                item.NavToolTip = string.Format(
                     CultureInfo.CurrentCulture,
                     LocalizationService.GetString("QuizAnsweredFlaggedNavTooltipFormat"),
                     index + 1);
             }
             else if (isFlagged)
             {
-                button.ToolTip = string.Format(
+                item.NavToolTip = string.Format(
                     CultureInfo.CurrentCulture,
                     LocalizationService.GetString("QuizFlaggedNavTooltipFormat"),
                     index + 1);
             }
             else if (isAnswered)
             {
-                button.ToolTip = string.Format(
+                item.NavToolTip = string.Format(
                     CultureInfo.CurrentCulture,
                     LocalizationService.GetString("QuizAnsweredNavTooltipFormat"),
                     index + 1);
             }
             else
             {
-                button.ToolTip = string.Format(
+                item.NavToolTip = string.Format(
                     CultureInfo.CurrentCulture,
                     LocalizationService.GetString("QuizJumpToQuestionTooltipFormat"),
                     index + 1);
@@ -1577,5 +1505,66 @@ public partial class QuizModeWindow : Window
 
         public bool HasCorrectAnswer => CorrectAnswerText.Length > 0;
         public bool HasExplanation => Explanation.Length > 0;
+    }
+
+    /// <summary>Lightweight per-question row for the virtualized question number navigator.
+    /// State changes are pushed from <see cref="RefreshQuestionNavigator"/>; only realized
+    /// (visible) containers raise property-changed to WPF.</summary>
+    internal sealed class QuizNavItem : INotifyPropertyChanged
+    {
+        private bool _isCurrent;
+        private bool _isAnswered;
+        private bool _isFlagged;
+        private bool _isEnabled;
+        private string? _navToolTip;
+
+        public QuizNavItem(int index)
+        {
+            Index = index;
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public int Index { get; }
+        public string Number => (Index + 1).ToString(CultureInfo.CurrentCulture);
+
+        public bool IsCurrent
+        {
+            get => _isCurrent;
+            set => SetField(ref _isCurrent, value);
+        }
+
+        public bool IsAnswered
+        {
+            get => _isAnswered;
+            set => SetField(ref _isAnswered, value);
+        }
+
+        public bool IsFlagged
+        {
+            get => _isFlagged;
+            set => SetField(ref _isFlagged, value);
+        }
+
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set => SetField(ref _isEnabled, value);
+        }
+
+        public string? NavToolTip
+        {
+            get => _navToolTip;
+            set => SetField(ref _navToolTip, value);
+        }
+
+        private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+                return;
+
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }

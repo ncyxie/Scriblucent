@@ -1,8 +1,10 @@
 using Scriblucent.Animations;
 using Scriblucent.Controls;
 using Scriblucent.Localization;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 
 namespace Scriblucent.Views;
@@ -15,6 +17,7 @@ public partial class InsertHyperlinkDialog : Window
 
     private readonly OverlayDialogAnimator _overlayAnimator;
     private readonly IReadOnlyList<NoteLinkOption> _noteOptions;
+    private readonly ICollectionView _noteResultsView;
 
     public string LinkText { get; private set; } = string.Empty;
     public Uri? ResultUri { get; private set; }
@@ -27,8 +30,9 @@ public partial class InsertHyperlinkDialog : Window
         Loaded += InsertHyperlinkDialog_Loaded;
 
         _noteOptions = noteOptions;
+        _noteResultsView = CollectionViewSource.GetDefaultView(_noteOptions);
+        NoteResultsListBox.ItemsSource = _noteResultsView;
         DisplayTextBox.Text = initialDisplayText;
-        NoteResultsListBox.ItemsSource = _noteOptions;
 
         if (_noteOptions.Count == 0)
             NoteModeRadioButton.IsEnabled = false;
@@ -62,9 +66,10 @@ public partial class InsertHyperlinkDialog : Window
     private void NoteSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         var query = NoteSearchTextBox.Text?.Trim() ?? string.Empty;
-        NoteResultsListBox.ItemsSource = query.Length == 0
-            ? _noteOptions
-            : _noteOptions.Where(option => option.Title.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        _noteResultsView.Filter = query.Length == 0
+            ? null
+            : option => option is NoteLinkOption noteLink
+                        && noteLink.Title.Contains(query, StringComparison.OrdinalIgnoreCase);
     }
 
     private void NoteResultsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

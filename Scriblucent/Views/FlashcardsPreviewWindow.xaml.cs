@@ -2860,7 +2860,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                     return;
 
                 _questionImageFileName = value;
-                _questionImageSource = FlashcardMediaStorageService.LoadImage(value, decodePixelWidth: 340);
+                _questionImageSource = null;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(QuestionImageSource));
                 OnPropertyChanged(nameof(HasQuestionImage));
@@ -2876,7 +2876,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                     return;
 
                 _answerImageFileName = value;
-                _answerImageSource = FlashcardMediaStorageService.LoadImage(value, decodePixelWidth: 340);
+                _answerImageSource = null;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(AnswerImageSource));
                 OnPropertyChanged(nameof(HasAnswerImage));
@@ -2911,8 +2911,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             }
         }
 
-        public ImageSource? QuestionImageSource => _questionImageSource;
-        public ImageSource? AnswerImageSource => _answerImageSource;
+        public ImageSource? QuestionImageSource => _questionImageSource ??= FlashcardMediaStorageService.LoadImage(_questionImageFileName, decodePixelWidth: 340);
+        public ImageSource? AnswerImageSource => _answerImageSource ??= FlashcardMediaStorageService.LoadImage(_answerImageFileName, decodePixelWidth: 340);
         public bool HasQuestionImage => !string.IsNullOrWhiteSpace(_questionImageFileName);
         public bool HasAnswerImage => !string.IsNullOrWhiteSpace(_answerImageFileName);
         public bool HasQuestionAudio => !string.IsNullOrWhiteSpace(_questionAudioFileName);

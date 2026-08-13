@@ -639,7 +639,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
     public override SKBitmap Render(object viewModel, double dpiScale, float widthDip, out double heightDip)
     {
         var dpi = (float)dpiScale;
-        var scale = dpi * _spec.Scale;
+        var scale = dpi;
         var colors = ResolveColors();
 
         var width = (int)Math.Ceiling(_spec.BitmapWidthDip * dpi);
@@ -650,6 +650,9 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         canvas.Clear(SKColors.Transparent);
         canvas.Scale(_spec.Scale, _spec.Scale);
 
+        // canvas.Scale(_spec.Scale) above already folds the card spec scale into every draw
+        // (round rect, radius, fonts, paddings, strokes); keeping `scale` DPI-only avoids
+        // double-scaling ungrouped tiles to ~25% smaller than their live card.
         var cardRect = SKRect.Create(0, 0, _spec.CardWidthDip * scale, _spec.CardHeightDip * scale);
         using (var background = new SKPaint { Color = colors.CardBackground, IsAntialias = true })
         {
@@ -779,6 +782,10 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
     {
         var dpi = (float)dpiScale;
         var colors = ResolveColors();
+
+        // The placeholder must match the full-fidelity tile (and the live card), so it applies
+        // the same _spec.Scale the tile folds into its canvas; otherwise it pops in bigger.
+        var scale = dpi * _spec.Scale;
         var bitmap = new SKBitmap(
             (int)Math.Ceiling(_spec.BitmapWidthDip * dpi),
             (int)Math.Ceiling(_spec.BitmapHeightDip * dpi),
@@ -787,8 +794,8 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Transparent);
         using var paint = new SKPaint { Color = colors.CardBackground, IsAntialias = true };
-        var radius = 14f * dpi;
-        canvas.DrawRoundRect(SKRect.Create(0, 0, _spec.CardWidthDip * dpi, _spec.CardHeightDip * dpi), radius, radius, paint);
+        var radius = 14f * scale;
+        canvas.DrawRoundRect(SKRect.Create(0, 0, _spec.CardWidthDip * scale, _spec.CardHeightDip * scale), radius, radius, paint);
         return bitmap;
     }
 
