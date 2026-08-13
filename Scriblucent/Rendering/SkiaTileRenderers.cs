@@ -1,4 +1,5 @@
 ﻿using SkiaSharp;
+using Scriblucent.Localization;
 using Scriblucent.ViewModels;
 using Scriblucent.Views;
 
@@ -37,14 +38,19 @@ internal static class SkiaTileRenderers
     public const string KeyQuizLibraryRow = "QuizLibraryRow";
     public const string KeyCombineRow = "CombineRow";
     public const string KeyQuizQuestion = "QuizQuestion";
+    public const string KeyQuizResultRow = "QuizResultRow";
     public const string KeyStudyHistoryRow = "StudyHistoryRow";
     public const string KeyAttemptHistoryRow = "AttemptHistoryRow";
     public const string KeyCombineSelectedRow = "CombineSelectedRow";
     public const string KeyQuizLibrarySelectedRow = "QuizLibrarySelectedRow";
+    public const string KeyFlashcardGridCard = "FlashcardGridCard";
 
     private static string FormatDate(DateTime dt) => dt.ToString("dd MMM, HH:mm", System.Globalization.CultureInfo.CurrentCulture);
 
     public static readonly SkiaTileRenderer Notes = new NotesTileRenderer();
+
+    public static readonly SkiaTileRenderer FlashcardGridCard = new FlashcardGridCardRenderer();
+
 
     public static readonly SkiaTileRenderer FlashcardSet = new ListingTileRenderer(
         new ListingCardSpec
@@ -366,6 +372,8 @@ internal static class SkiaTileRenderers
             BorderThicknessDip = 0,
         });
 
+    private static readonly SkiaTileRenderer QuizResultRow = new QuizResultCardRenderer();
+
     private static readonly SkiaTileRenderer StudyHistoryRow = new FluidRowRenderer(
         new FluidRowSpec
         {
@@ -514,6 +522,7 @@ internal static class SkiaTileRenderers
         KeyQuizLibraryRow => QuizLibraryRow,
         KeyCombineRow => CombineRow,
         KeyQuizQuestion => QuizQuestion,
+        KeyQuizResultRow => QuizResultRow,
         KeyStudyHistoryRow => StudyHistoryRow,
         KeyAttemptHistoryRow => AttemptHistoryRow,
         KeyCombineSelectedRow => CombineSelectedRow,
@@ -1054,6 +1063,475 @@ internal sealed class RecentCardColors
     public required SKColor Border;
     public required SKColor Text;
     public required SKColor TextSecondary;
+}
+
+/// <summary>
+/// Tile renderer for quiz results-review cards: mirrors the live card look (green/red subtle
+/// background by correctness, question header + status icon, your-answer, correct-answer,
+/// explanation). Painted at the host's current width so rows never scale or jump.
+/// </summary>
+internal sealed class QuizResultCardRenderer : SkiaTileRenderer
+{
+    private const float DefaultWidthDip = 760f;
+    private const float RadiusDip = 10f;
+    private const float PaddingDip = 16f;
+    private const float MarginBottomDip = 12f;
+
+    private readonly Dictionary<string, QuizResultColors> _colorsByTheme = new();
+
+    public override SKBitmap Render(object viewModel, double dpiScale, float widthDip, out double heightDip)
+    {
+        var item = (Views.QuizModeWindow.QuizResultItem)viewModel;
+        var dpi = (float)dpiScale;
+        var colors = ResolveColors(item.IsCorrect);
+        var width = Math.Max(100f, widthDip > 0 ? widthDip : DefaultWidthDip) * dpi;
+        var innerWidth = width - PaddingDip * 2 * dpi;
+
+        var fontManager = SKFontManager.Default;
+        Func<SKTypeface, SkiaSharp.HarfBuzz.SKShaper> shaperFactory = SkiaCardRenderer.GetShaper;
+        var titleTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 600);
+        var bodyTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 400);
+
+        var headerLayout = SkiaTextLayout.Layout(item.HeaderText, innerWidth - 28f * dpi, titleTypeface, 15f * dpi, 3, fontManager, shaperFactory);
+
+        List<(string Text, float Size, bool SemiBold, SKColor Color)> details = new();
+        if (item.UserAnswerText.Length > 0)
+            details.Add((item.UserAnswerText, 13f, false, colors.Text));
+        if (item.CorrectAnswerText.Length > 0)
+            details.Add((item.CorrectAnswerText, 13f, false, colors.SuccessForeground));
+        if (item.Explanation.Length > 0)
+            details.Add((item.Explanation, 12f, false, colors.TextSecondary));
+
+        var contentHeightDip = headerLayout.Height;
+        var lineLayouts = new List<SkiaTextLayout>(details.Count);
+        foreach (var detail in details)
+        {
+            var layout = SkiaTextLayout.Layout(detail.Text, innerWidth, bodyTypeface, detail.Size * dpi, 3, fontManager, shaperFactory);
+            lineLayouts.Add(layout);
+            contentHeightDip += 4f * dpi + layout.Height;
+        }
+
+        var rowHeightDip = Math.Max(PaddingDip * 2 * dpi + headerLayout.Height, PaddingDip * 2 * dpi + contentHeightDip);
+        heightDip = (rowHeightDip + MarginBottomDip * dpi) / dpi;
+
+        var bitmapWidth = (int)Math.Ceiling(width);
+        var bitmapHeight = (int)Math.Ceiling(rowHeightDip + MarginBottomDip * dpi);
+        var bitmap = new SKBitmap(bitmapWidth, bitmapHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+
+        var cardRect = SKRect.Create(0, 0, width, rowHeightDip);
+        using (var background = new SKPaint { Color = colors.CardBackground, IsAntialias = true })
+            canvas.DrawRoundRect(cardRect, RadiusDip * dpi, RadiusDip * dpi, background);
+
+        var x = PaddingDip * dpi;
+        var y = PaddingDip * dpi;
+
+        // Status icon (checkmark / close), right-aligned on the header row.
+        var glyphSize = 18f * dpi;
+        var glyphX = width - PaddingDip * dpi - glyphSize;
+        var glyphY = y;
+        using (var glyphPaint = new SKPaint
+        {
+            Color = colors.AccentForeground,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f * dpi,
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        })
+        {
+            if (item.IsCorrect)
+            {
+                using var path = new SKPath();
+                path.MoveTo(glyphX + glyphSize * 0.2f, glyphY + glyphSize * 0.52f);
+                path.LineTo(glyphX + glyphSize * 0.44f, glyphY + glyphSize * 0.76f);
+                path.LineTo(glyphX + glyphSize * 0.82f, glyphY + glyphSize * 0.28f);
+                canvas.DrawPath(path, glyphPaint);
+            }
+            else
+            {
+                using var path = new SKPath();
+                path.MoveTo(glyphX + glyphSize * 0.22f, glyphY + glyphSize * 0.22f);
+                path.LineTo(glyphX + glyphSize * 0.78f, glyphY + glyphSize * 0.78f);
+                path.MoveTo(glyphX + glyphSize * 0.78f, glyphY + glyphSize * 0.22f);
+                path.LineTo(glyphX + glyphSize * 0.22f, glyphY + glyphSize * 0.78f);
+                canvas.DrawPath(path, glyphPaint);
+            }
+        }
+
+        SkiaCardRenderer.PaintLayout(canvas, headerLayout, x, y, colors.AccentForeground, dpi);
+        y += headerLayout.Height;
+
+        for (var i = 0; i < lineLayouts.Count; i++)
+        {
+            y += 4f * dpi;
+            SkiaCardRenderer.PaintLayout(canvas, lineLayouts[i], x, y, details[i].Color, dpi);
+            y += lineLayouts[i].Height;
+        }
+
+        return bitmap;
+    }
+
+    public override SKBitmap RenderPlaceholder(double dpiScale)
+    {
+        var dpi = (float)dpiScale;
+        var colors = ResolveColors(isCorrect: true);
+        var bitmap = new SKBitmap(
+            (int)Math.Ceiling(DefaultWidthDip * dpi),
+            (int)Math.Ceiling(96f * dpi),
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+        using var paint = new SKPaint { Color = colors.CardBackground, IsAntialias = true };
+        canvas.DrawRoundRect(SKRect.Create(0, 0, DefaultWidthDip * dpi, 96f * dpi), RadiusDip * dpi, RadiusDip * dpi, paint);
+        return bitmap;
+    }
+
+    public override string BuildSignature(object viewModel)
+    {
+        var item = (Views.QuizModeWindow.QuizResultItem)viewModel;
+        return $"{ThemeManager.CurrentTheme}|{item.IsCorrect}|{item.HeaderText}|{item.UserAnswerText}|{item.CorrectAnswerText}|{item.Explanation}";
+    }
+
+    private string ResolveFontFamily()
+    {
+        try
+        {
+            var app = System.Windows.Application.Current;
+            var family = app?.Resources["FontFamily.UI"] as System.Windows.Media.FontFamily;
+            var source = family?.Source ?? "Segoe UI Variable Text";
+            return source.Split(',')[0].Trim();
+        }
+        catch
+        {
+            return "Segoe UI";
+        }
+    }
+
+    private QuizResultColors ResolveColors(bool isCorrect)
+    {
+        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        var key = $"{theme}|{isCorrect}";
+        if (_colorsByTheme.TryGetValue(key, out var cached))
+            return cached;
+
+        System.Windows.Media.Color Get(string resKey, System.Windows.Media.Color fallback)
+            => System.Windows.Application.Current?.TryFindResource(resKey) is System.Windows.Media.SolidColorBrush brush
+                ? brush.Color
+                : fallback;
+
+        var backgroundKey = isCorrect ? "AccentSuccessSubtle" : "AccentDangerSubtle";
+        var foregroundKey = isCorrect ? "AccentSuccessSubtleForeground" : "AccentDangerSubtleForeground";
+        var colors = new QuizResultColors
+        {
+            CardBackground = ToSkia(Get(backgroundKey, System.Windows.Media.Color.FromRgb(isCorrect ? (byte)230 : (byte)250, isCorrect ? (byte)246 : (byte)228, isCorrect ? (byte)235 : (byte)227))),
+            AccentForeground = ToSkia(Get(foregroundKey, System.Windows.Media.Colors.Black)),
+            SuccessForeground = ToSkia(Get("AccentSuccessSubtleForeground", System.Windows.Media.Color.FromRgb(0, 128, 70))),
+            Text = ToSkia(Get("TextColor", System.Windows.Media.Color.FromRgb(28, 28, 28))),
+            TextSecondary = ToSkia(Get("TextColorSecondary", System.Windows.Media.Color.FromRgb(96, 100, 110))),
+        };
+
+        _colorsByTheme[key] = colors;
+        return colors;
+    }
+
+    private static SKColor ToSkia(System.Windows.Media.Color c)
+        => new(c.R, c.G, c.B, c.A);
+
+    private sealed class QuizResultColors
+    {
+        public required SKColor CardBackground;
+        public required SKColor AccentForeground;
+        public required SKColor SuccessForeground;
+        public required SKColor Text;
+        public required SKColor TextSecondary;
+    }
+}
+
+/// <summary>Tile renderer for the flashcard browse-grid flip cards (question/answer faces).
+/// Fixed 316x224 footprint matching the live FlashcardGridCardStyle; audio/edit/move buttons
+/// are interactive chrome and deliberately omitted, like every other dashboard tile.</summary>
+internal sealed class FlashcardGridCardRenderer : SkiaTileRenderer
+{
+    private const float CardWidthDip = 316f;
+    private const float CardHeightDip = 224f;
+    private const float RadiusDip = 14f;
+    private const float ChipRadiusDip = 8f;
+    private const float PaddingDip = 16f;
+    private const float HeaderHeightDip = 24f;
+    private const float HeaderGapDip = 14f;
+    private const float BodyGapDip = 12f;
+    private const float ImageWellHeightDip = 76f;
+    private const float ImageWellGapDip = 6f;
+    private const float StarSizeDip = 13f;
+
+    private readonly Dictionary<string, FlashcardGridColors> _colorsByTheme = new();
+
+    public override SKBitmap Render(object viewModel, double dpiScale, float widthDip, out double heightDip)
+    {
+        var item = (Views.FlashcardsPreviewWindow.FlashcardPreviewItem)viewModel;
+        var dpi = (float)dpiScale;
+        var colors = ResolveColors();
+        var isFlipped = item.IsFlipped;
+
+        var bitmapWidth = (int)Math.Ceiling(CardWidthDip * dpi);
+        var bitmapHeight = (int)Math.Ceiling(CardHeightDip * dpi);
+        var bitmap = new SKBitmap(bitmapWidth, bitmapHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+
+        var fontManager = SKFontManager.Default;
+        Func<SKTypeface, SkiaSharp.HarfBuzz.SKShaper> shaperFactory = SkiaCardRenderer.GetShaper;
+        var chipTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 600);
+        var bodyTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 600);
+
+        var cardRect = SKRect.Create(0, 0, CardWidthDip * dpi, CardHeightDip * dpi);
+        var selected = item.IsSelected;
+
+        using (var background = new SKPaint
+        {
+            Color = selected ? colors.SelectedBackground : colors.CardBackground,
+            IsAntialias = true,
+        })
+            canvas.DrawRoundRect(cardRect, RadiusDip * dpi, RadiusDip * dpi, background);
+
+        using (var borderPaint = new SKPaint
+        {
+            Color = selected ? colors.SelectedBorder : colors.CardBorder,
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = (selected ? 2f : 1f) * dpi,
+        })
+        {
+            var inset = borderPaint.StrokeWidth / 2f;
+            canvas.DrawRoundRect(
+                new SKRect(inset, inset, CardWidthDip * dpi - inset, CardHeightDip * dpi - inset),
+                RadiusDip * dpi,
+                RadiusDip * dpi,
+                borderPaint);
+        }
+
+        var bodyText = isFlipped ? item.Answer : item.Question;
+        var bodyImage = isFlipped ? item.AnswerImageSource : item.QuestionImageSource;
+        var imageFileName = isFlipped ? item.AnswerImageFileName : item.QuestionImageFileName;
+
+        var innerWidth = CardWidthDip - PaddingDip * 2;
+        var bodyTop = PaddingDip + HeaderHeightDip + HeaderGapDip;
+        var bodyBottom = CardHeightDip - PaddingDip - BodyGapDip - 21f;
+        var bodyHeight = bodyBottom - bodyTop;
+        var hasImage = bodyImage is System.Windows.Media.Imaging.BitmapSource;
+
+        // Header row: side chip + star.
+        var chipText = LocalizationService.GetString(isFlipped ? "FlashcardSideAnswer" : "FlashcardSideQuestion");
+        var chipLayout = SkiaTextLayout.Layout(chipText, 132f * dpi, chipTypeface, 11f * dpi, 1, fontManager, shaperFactory);
+        var chipWidth = 8f * dpi * 2 + chipLayout.MaxIntrinsicWidth;
+        var chipHeight = 6f * dpi + chipLayout.Height;
+        var chipY = (HeaderHeightDip - chipHeight / dpi) / 2f * dpi;
+        using (var chipPaint = new SKPaint { Color = colors.SideChipBackground, IsAntialias = true })
+            canvas.DrawRoundRect(SKRect.Create(PaddingDip * dpi, chipY, chipWidth, chipHeight), ChipRadiusDip * dpi, ChipRadiusDip * dpi, chipPaint);
+        SkiaCardRenderer.PaintLayout(canvas, chipLayout, (PaddingDip + 8f) * dpi, chipY + 3f * dpi, colors.SideChipForeground, dpi);
+
+        DrawStar(
+            canvas,
+            new SKPoint((CardWidthDip - PaddingDip - StarSizeDip / 2f) * dpi, (PaddingDip + HeaderHeightDip / 2f) * dpi),
+            StarSizeDip / 2f * dpi,
+            item.IsStarred ? colors.StarGold : colors.TextSecondary,
+            dpi);
+
+        // Body: optional image well, then the question/answer text centered in the remainder.
+        float textTop = bodyTop * dpi;
+        float textRegionHeight = bodyHeight * dpi;
+        if (hasImage && bodyImage is System.Windows.Media.Imaging.BitmapSource bitmapSource)
+        {
+            using var imagePaint = new SKPaint { Color = colors.ImageWell, IsAntialias = true };
+            canvas.DrawRoundRect(
+                SKRect.Create(PaddingDip * dpi, bodyTop * dpi, innerWidth * dpi, ImageWellHeightDip * dpi),
+                10f * dpi,
+                10f * dpi,
+                imagePaint);
+
+            using var skImage = SkiaBitmapUtil.FromSource(bitmapSource);
+            var scale = Math.Min(innerWidth / (float)skImage.Width, ImageWellHeightDip / (float)skImage.Height);
+            var drawWidth = skImage.Width * scale * dpi;
+            var drawHeight = skImage.Height * scale * dpi;
+            var dest = SKRect.Create(
+                (PaddingDip + (innerWidth - skImage.Width * scale) / 2f) * dpi,
+                (bodyTop + (ImageWellHeightDip - skImage.Height * scale) / 2f) * dpi,
+                drawWidth,
+                drawHeight);
+            canvas.DrawBitmap(
+                skImage,
+                new SKRect(0, 0, skImage.Width, skImage.Height),
+                dest,
+                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
+
+            textTop = (bodyTop + ImageWellHeightDip + ImageWellGapDip) * dpi;
+            textRegionHeight = (bodyBottom - bodyTop - ImageWellHeightDip - ImageWellGapDip) * dpi;
+        }
+
+        if (!string.IsNullOrWhiteSpace(bodyText))
+        {
+            var maxLines = hasImage ? 2 : 4;
+            var textLayout = SkiaTextLayout.Layout(bodyText, innerWidth * dpi, bodyTypeface, 16f * dpi, maxLines, fontManager, shaperFactory);
+            var textHeight = textLayout.Height;
+            var textY = textTop + Math.Max(0f, (textRegionHeight - textHeight) / 2f);
+            SkiaCardRenderer.PaintLayout(canvas, textLayout, PaddingDip * dpi, textY, colors.Text, dpi);
+        }
+
+        // Status row: category chip + one maturity chip (New / Learning / Mature).
+        var statusY = (CardHeightDip - PaddingDip - 21f) * dpi;
+        var statusX = PaddingDip * dpi;
+        if (item.HasCategory)
+        {
+            var categoryLayout = SkiaTextLayout.Layout(item.Category, 176f * dpi, chipTypeface, 11f * dpi, 1, fontManager, shaperFactory);
+            var categoryWidth = 8f * dpi * 2 + categoryLayout.MaxIntrinsicWidth;
+            using var chipPaint = new SKPaint { Color = colors.CategoryChipBackground, IsAntialias = true };
+            canvas.DrawRoundRect(SKRect.Create(statusX, statusY, categoryWidth, 21f * dpi), ChipRadiusDip * dpi, ChipRadiusDip * dpi, chipPaint);
+            SkiaCardRenderer.PaintLayout(canvas, categoryLayout, statusX + 8f * dpi, statusY + 3f * dpi, colors.CategoryChipForeground, dpi);
+            statusX += categoryWidth + 8f * dpi;
+        }
+
+        (string Text, SKColor Background, SKColor Foreground)? maturity = item.IsMaturityNew
+            ? (LocalizationService.GetString("FlashcardStatusNew"), colors.NewChipBackground, colors.NewChipForeground)
+            : item.IsMaturityLearning
+                ? (LocalizationService.GetString("FlashcardStatusLearning"), colors.LearningChipBackground, colors.LearningChipForeground)
+                : item.IsMaturityMature
+                    ? (LocalizationService.GetString("FlashcardStatusMature"), colors.MatureChipBackground, colors.MatureChipForeground)
+                    : null;
+
+        if (maturity is { } chip)
+        {
+            var maturityLayout = SkiaTextLayout.Layout(chip.Text, 132f * dpi, chipTypeface, 11f * dpi, 1, fontManager, shaperFactory);
+            var maturityWidth = 8f * dpi * 2 + maturityLayout.MaxIntrinsicWidth;
+            using var chipPaint = new SKPaint { Color = chip.Background, IsAntialias = true };
+            canvas.DrawRoundRect(SKRect.Create(statusX, statusY, maturityWidth, 21f * dpi), ChipRadiusDip * dpi, ChipRadiusDip * dpi, chipPaint);
+            SkiaCardRenderer.PaintLayout(canvas, maturityLayout, statusX + 8f * dpi, statusY + 3f * dpi, chip.Foreground, dpi);
+        }
+
+        heightDip = CardHeightDip;
+        return bitmap;
+    }
+
+    public override SKBitmap RenderPlaceholder(double dpiScale)
+    {
+        var dpi = (float)dpiScale;
+        var colors = ResolveColors();
+        var bitmap = new SKBitmap(
+            (int)Math.Ceiling(CardWidthDip * dpi),
+            (int)Math.Ceiling(CardHeightDip * dpi),
+            SKColorType.Bgra8888,
+            SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Transparent);
+        using var paint = new SKPaint { Color = colors.CardBackground, IsAntialias = true };
+        canvas.DrawRoundRect(SKRect.Create(0, 0, CardWidthDip * dpi, CardHeightDip * dpi), RadiusDip * dpi, RadiusDip * dpi, paint);
+        return bitmap;
+    }
+
+    public override string BuildSignature(object viewModel)
+    {
+        var item = (Views.FlashcardsPreviewWindow.FlashcardPreviewItem)viewModel;
+        return $"{ThemeManager.CurrentTheme}|{item.IsFlipped}|{item.Question}|{item.Answer}|{item.Category}|" +
+               $"{item.IsStarred}|{item.IsSelected}|{item.IsMaturityNew}|{item.IsMaturityLearning}|{item.IsMaturityMature}|" +
+               $"{item.QuestionImageFileName}|{item.AnswerImageFileName}";
+    }
+
+    private static void DrawStar(SKCanvas canvas, SKPoint center, float outerRadius, SKColor color, float dpi)
+    {
+        using var path = new SKPath();
+        const int points = 5;
+        for (var i = 0; i < points * 2; i++)
+        {
+            var radius = i % 2 == 0 ? outerRadius : outerRadius * 0.45f;
+            var angle = Math.PI / 2 + i * Math.PI / points;
+            var x = center.X + (float)Math.Cos(angle) * radius;
+            var y = center.Y - (float)Math.Sin(angle) * radius;
+            if (i == 0) path.MoveTo(x, y);
+            else path.LineTo(x, y);
+        }
+        path.Close();
+        using var paint = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Fill };
+        canvas.DrawPath(path, paint);
+    }
+
+    private string ResolveFontFamily()
+    {
+        try
+        {
+            var app = System.Windows.Application.Current;
+            var family = app?.Resources["FontFamily.UI"] as System.Windows.Media.FontFamily;
+            var source = family?.Source ?? "Segoe UI Variable Text";
+            return source.Split(',')[0].Trim();
+        }
+        catch
+        {
+            return "Segoe UI";
+        }
+    }
+
+    private FlashcardGridColors ResolveColors()
+    {
+        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        if (_colorsByTheme.TryGetValue(theme, out var cached))
+            return cached;
+
+        System.Windows.Media.Color Get(string resKey, System.Windows.Media.Color fallback)
+            => System.Windows.Application.Current?.TryFindResource(resKey) is System.Windows.Media.SolidColorBrush brush
+                ? brush.Color
+                : fallback;
+
+        var colors = new FlashcardGridColors
+        {
+            CardBackground = ToSkia(Get("FlashcardCardBackground", System.Windows.Media.Color.FromRgb(255, 255, 255))),
+            CardBorder = ToSkia(Get("FlashcardCardBorder", System.Windows.Media.Color.FromRgb(226, 229, 235))),
+            SelectedBackground = ToSkia(Get("FlashcardCardSelectedBackground", System.Windows.Media.Color.FromRgb(235, 240, 255))),
+            SelectedBorder = ToSkia(Get("FlashcardCardSelectedBorder", System.Windows.Media.Color.FromRgb(88, 108, 200))),
+            SideChipBackground = ToSkia(Get("FlashcardSideChipBackground", System.Windows.Media.Color.FromRgb(240, 242, 247))),
+            SideChipForeground = ToSkia(Get("FlashcardSideChipForeground", System.Windows.Media.Color.FromRgb(74, 84, 104))),
+            CategoryChipBackground = ToSkia(Get("FlashcardCategoryChipBackground", System.Windows.Media.Color.FromRgb(237, 239, 255))),
+            CategoryChipForeground = ToSkia(Get("FlashcardCategoryChipForeground", System.Windows.Media.Color.FromRgb(88, 98, 200))),
+            NewChipBackground = ToSkia(Get("FlashcardNewChipBackground", System.Windows.Media.Color.FromRgb(240, 242, 247))),
+            NewChipForeground = ToSkia(Get("FlashcardNewChipForeground", System.Windows.Media.Color.FromRgb(74, 84, 104))),
+            LearningChipBackground = ToSkia(Get("FlashcardUnknownChipBackground", System.Windows.Media.Color.FromRgb(255, 243, 224))),
+            LearningChipForeground = ToSkia(Get("FlashcardUnknownChipForeground", System.Windows.Media.Color.FromRgb(176, 98, 22))),
+            MatureChipBackground = ToSkia(Get("FlashcardKnownChipBackground", System.Windows.Media.Color.FromRgb(229, 246, 235))),
+            MatureChipForeground = ToSkia(Get("FlashcardKnownChipForeground", System.Windows.Media.Color.FromRgb(20, 128, 70))),
+            Text = ToSkia(Get("TextColor", System.Windows.Media.Color.FromRgb(28, 28, 28))),
+            TextSecondary = ToSkia(Get("TextColorSecondary", System.Windows.Media.Color.FromRgb(96, 100, 110))),
+            ImageWell = ToSkia(Get("SidebarBackground", System.Windows.Media.Color.FromRgb(238, 240, 245))),
+            StarGold = ToSkia(Get("AccentWarning", System.Windows.Media.Color.FromRgb(220, 165, 40))),
+        };
+
+        _colorsByTheme[theme] = colors;
+        return colors;
+    }
+
+    private static SKColor ToSkia(System.Windows.Media.Color c)
+        => new(c.R, c.G, c.B, c.A);
+
+    private sealed class FlashcardGridColors
+    {
+        public required SKColor CardBackground;
+        public required SKColor CardBorder;
+        public required SKColor SelectedBackground;
+        public required SKColor SelectedBorder;
+        public required SKColor SideChipBackground;
+        public required SKColor SideChipForeground;
+        public required SKColor CategoryChipBackground;
+        public required SKColor CategoryChipForeground;
+        public required SKColor NewChipBackground;
+        public required SKColor NewChipForeground;
+        public required SKColor LearningChipBackground;
+        public required SKColor LearningChipForeground;
+        public required SKColor MatureChipBackground;
+        public required SKColor MatureChipForeground;
+        public required SKColor Text;
+        public required SKColor TextSecondary;
+        public required SKColor ImageWell;
+        public required SKColor StarGold;
+    }
 }
 
 /// <summary>Layout spec for a fluid-width row (window lists + calendar rail).</summary>

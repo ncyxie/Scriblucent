@@ -109,12 +109,21 @@ public static class ScrollTileBehavior
 
     private static void SetScrollBitmapMode(ScrollViewer viewer, bool bitmapMode)
     {
-        if (viewer.Content is not ItemsControl items)
-            return;
+        var items = viewer.Content;
+        Panel? panel = null;
+        if (items is ItemsControl itemsControl)
+        {
+            if (VisualTreeHelper.GetChildrenCount(itemsControl) > 0)
+                panel = VisualTreeHelper.GetChild(itemsControl, 0) as Panel;
+        }
+        else if (items is ContentPresenter presenter)
+        {
+            // Template-hosted ScrollViewers (e.g. FlashcardGridItemsControl) expose the items
+            // host panel through the ItemsPresenter instead of an ItemsControl instance.
+            if (VisualTreeHelper.GetChildrenCount(presenter) > 0)
+                panel = VisualTreeHelper.GetChild(presenter, 0) as Panel;
+        }
 
-        var panel = VisualTreeHelper.GetChildrenCount(items) > 0
-            ? VisualTreeHelper.GetChild(items, 0) as Panel
-            : null;
         if (panel is null)
             return;
 

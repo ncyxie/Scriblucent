@@ -2725,7 +2725,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         return string.Join("\n", lines);
     }
 
-    private sealed class FlashcardPreviewItem : INotifyPropertyChanged
+    internal sealed class FlashcardPreviewItem : INotifyPropertyChanged
     {
         public Guid Id { get; }
         private bool _isFlipped;

@@ -182,11 +182,15 @@
                     ClipToBounds="True"
                     SnapsToDevicePixels="True"
                     Visibility="Collapsed">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              Background="Transparent"
-                              Padding="20">
-                    <StackPanel>
-                        <!-- Score Summary -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0"
+                                Margin="20,20,20,0">
+                        <!-- Score Summary (stays pinned above the review list) -->
                         <Border Background="{DynamicResource WindowBackground}"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource Radius.Card}"
@@ -218,10 +222,119 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextColor}"
                                    Margin="0,0,0,16"/>
-
-                        <StackPanel x:Name="ResultsQuestionsPanel"/>
                     </StackPanel>
-                </ScrollViewer>
+
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Background="Transparent"
+                                  Padding="20,0,20,20"
+                                  CanContentScroll="True"
+                                  behaviors:SmoothScrollBehavior.IsEnabled="True"
+                                  behaviors:ScrollTileBehavior.IsEnabled="True">
+                        <ItemsControl x:Name="ResultsQuestionsList"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel IsItemsHost="True"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <controls:DashboardTileHost RendererKey="QuizResultRow"
+                                                                Loaded="ResultsCard_Loaded">
+                                        <Border Padding="16"
+                                                Margin="0,0,0,12"
+                                                CornerRadius="{StaticResource Radius.Card}"
+                                                SnapsToDevicePixels="True"
+                                                TextOptions.TextFormattingMode="Ideal"
+                                                TextOptions.TextRenderingMode="ClearType">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCorrect}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Text="{Binding HeaderText}"
+                                                               FontSize="{StaticResource Type.SectionTitle}"
+                                                               FontWeight="SemiBold"
+                                                               TextWrapping="Wrap"
+                                                               VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsCorrect}" Value="True">
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+
+                                                    <icons:AppIcon Grid.Column="1"
+                                                                   Kind="Close"
+                                                                   Width="18"
+                                                                   Height="18"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="10,0,0,0">
+                                                        <icons:AppIcon.Style>
+                                                            <Style TargetType="icons:AppIcon">
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsCorrect}" Value="True">
+                                                                        <Setter Property="Kind" Value="Checkmark"/>
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </icons:AppIcon.Style>
+                                                    </icons:AppIcon>
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding UserAnswerText}"
+                                                           FontSize="{StaticResource Type.Meta}"
+                                                           Foreground="{DynamicResource TextColor}"
+                                                           Margin="0,0,0,4"
+                                                           TextWrapping="Wrap"/>
+
+                                                <TextBlock Text="{Binding CorrectAnswerText}"
+                                                           FontSize="{StaticResource Type.Meta}"
+                                                           Foreground="{DynamicResource AccentSuccessSubtleForeground}"
+                                                           Margin="0,0,0,4"
+                                                           TextWrapping="Wrap"
+                                                           Visibility="{Binding HasCorrectAnswer, Converter={StaticResource BoolToVis}}"/>
+
+                                                <TextBlock Text="{Binding Explanation}"
+                                                           FontSize="{StaticResource Type.Caption}"
+                                                           Foreground="{DynamicResource TextColorSecondary}"
+                                                           Margin="0,8,0,0"
+                                                           TextWrapping="Wrap"
+                                                           FontStyle="Italic"
+                                                           Visibility="{Binding HasExplanation, Converter={StaticResource BoolToVis}}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </controls:DashboardTileHost>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
             </Border>
 
             <!-- Moodle-style question number navigator -->

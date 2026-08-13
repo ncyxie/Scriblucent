@@ -1215,98 +1215,33 @@ public partial class QuizModeWindow : Window
             UiMotion.AnimateInlineReveal(rab, !_quiz.ExamMode);
         if (FindName("RetryWrongButton") is Button rwb)
             UiMotion.AnimateInlineReveal(rwb, !_quiz.ExamMode && _wrongQuestionIndices.Count > 0);
-        if (FindName("ResultsQuestionsPanel") is StackPanel rp)
+        if (FindName("ResultsQuestionsList") is ItemsControl resultsList)
         {
-            rp.Children.Clear();
+            var items = new List<QuizResultItem>(questions.Count);
             for (int i = 0; i < questions.Count; i++)
             {
                 var q = questions[i];
                 var userSel = _userAnswers.TryGetValue(i, out var ans) ? ans : new List<QuizOption>();
                 var isCorrect = IsAnswerCorrect(q, userSel);
 
-                var card = new Border
-                {
-                    Background = isCorrect
-                        ? (Brush)FindResource("AccentSuccessSubtle")
-                        : (Brush)FindResource("AccentDangerSubtle"),
-                    BorderBrush = Brushes.Transparent,
-                    BorderThickness = new Thickness(0),
-                    CornerRadius = new CornerRadius(10),
-                    Padding = new Thickness(16),
-                    Margin = new Thickness(0, 0, 0, 12)
-                };
-
-                var content = new StackPanel();
-
-                var header = new Grid();
-                header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                var qText = new TextBlock
-                {
-                    Text = string.Format(LocalizationService.GetString("QuizQuestionPrefixFormat"), i + 1, q.Question),
-                    FontSize = TypeScale.Px(TypeScale.SectionTitle, 15),
-                    FontWeight = FontWeights.SemiBold,
-                    Foreground = isCorrect
-                        ? (Brush)FindResource("AccentSuccessSubtleForeground")
-                        : (Brush)FindResource("AccentDangerSubtleForeground"),
-                    TextWrapping = TextWrapping.Wrap,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                Grid.SetColumn(qText, 0);
-                header.Children.Add(qText);
-
-                var statusIcon = new AppIcon
-                {
-                    Kind = isCorrect ? AppIconKind.Checkmark : AppIconKind.Close,
-                    Width = 18,
-                    Height = 18,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(10, 0, 0, 0),
-                    Foreground = isCorrect
-                        ? (Brush)FindResource("AccentSuccessSubtleForeground")
-                        : (Brush)FindResource("AccentDangerSubtleForeground")
-                };
-                Grid.SetColumn(statusIcon, 1);
-                header.Children.Add(statusIcon);
-
-                content.Children.Add(header);
+                var header = string.Format(LocalizationService.GetString("QuizQuestionPrefixFormat"), i + 1, q.Question);
+                var userAnswerText = string.Empty;
+                var correctAnswerText = string.Empty;
+                var explanation = string.Empty;
 
                 // Handle display based on question type
                 if (q.Type == QuizQuestionType.PlainText)
                 {
                     // Extract the plain text answer
-                    var userAnswer = TryGetPlainTextAnswer(userSel, out var plainTextAnswer) && !string.IsNullOrWhiteSpace(plainTextAnswer)
+                    var plainAnswer = TryGetPlainTextAnswer(userSel, out var plainTextAnswer) && !string.IsNullOrWhiteSpace(plainTextAnswer)
                         ? plainTextAnswer
                         : LocalizationService.GetString("QuizNoAnswer");
 
-                    var userAnsBlock = new TextBlock
-                    {
-                        Text = string.Format(
-                            LocalizationService.GetString("QuizYourAnswerFormat"),
-                            userAnswer),
-                        FontSize = TypeScale.Px(TypeScale.Meta, 13),
-                        Foreground = (Brush)FindResource("TextColor"),
-                        Margin = new Thickness(0, 8, 0, 4),
-                        TextWrapping = TextWrapping.Wrap
-                    };
-                    content.Children.Add(userAnsBlock);
+                    userAnswerText = string.Format(LocalizationService.GetString("QuizYourAnswerFormat"), plainAnswer);
 
                     // Show correct answer if incorrect
                     if (!isCorrect && !string.IsNullOrEmpty(q.PlainTextAnswer))
-                    {
-                        var correctAnsBlock = new TextBlock
-                        {
-                            Text = string.Format(
-                                LocalizationService.GetString("QuizCorrectAnswerFormat"),
-                                q.PlainTextAnswer),
-                            FontSize = TypeScale.Px(TypeScale.Meta, 13),
-                            Foreground = (Brush)FindResource("AccentSuccessSubtleForeground"),
-                            Margin = new Thickness(0, 0, 0, 4),
-                            TextWrapping = TextWrapping.Wrap
-                        };
-                        content.Children.Add(correctAnsBlock);
-                    }
+                        correctAnswerText = string.Format(LocalizationService.GetString("QuizCorrectAnswerFormat"), q.PlainTextAnswer);
                 }
                 else
                 {
@@ -1314,68 +1249,49 @@ public partial class QuizModeWindow : Window
                     var options = q.Options ?? new List<QuizOption>();
                     var correctOpts = options.Where(o => o.IsCorrect).ToList();
 
-                    var userAnswerText = userSel.Count > 0
+                    var userAnswerValue = userSel.Count > 0
                         ? string.Join(", ", userSel.Select(o =>
                         {
-                            var index = options.IndexOf(o);
-                            return index >= 0
-                                ? QuizOptionMarker.FormatWithLetter(index, o.Text)
+                            var optionIndex = options.IndexOf(o);
+                            return optionIndex >= 0
+                                ? QuizOptionMarker.FormatWithLetter(optionIndex, o.Text)
                                 : o.Text;
                         }))
                         : LocalizationService.GetString("QuizNoAnswer");
 
-                    var userAns = new TextBlock
-                    {
-                        Text = string.Format(
-                            LocalizationService.GetString("QuizYourAnswerFormat"),
-                            userAnswerText),
-                        FontSize = TypeScale.Px(TypeScale.Meta, 13),
-                        Foreground = (Brush)FindResource("TextColor"),
-                        Margin = new Thickness(0, 8, 0, 4),
-                        TextWrapping = TextWrapping.Wrap
-                    };
-                    content.Children.Add(userAns);
+                    userAnswerText = string.Format(LocalizationService.GetString("QuizYourAnswerFormat"), userAnswerValue);
 
                     if (!isCorrect && correctOpts.Count > 0)
                     {
-                        var correctAnswerText = string.Join(", ", correctOpts.Select(o =>
+                        var correctAnswerValue = string.Join(", ", correctOpts.Select(o =>
                         {
-                            var index = options.IndexOf(o);
-                            return index >= 0
-                                ? QuizOptionMarker.FormatWithLetter(index, o.Text)
+                            var optionIndex = options.IndexOf(o);
+                            return optionIndex >= 0
+                                ? QuizOptionMarker.FormatWithLetter(optionIndex, o.Text)
                                 : o.Text;
                         }));
-
-                        var correctAns = new TextBlock
-                        {
-                            Text = string.Format(LocalizationService.GetString("QuizCorrectAnswerFormat"), correctAnswerText),
-                            FontSize = TypeScale.Px(TypeScale.Meta, 13),
-                            Foreground = (Brush)FindResource("AccentSuccessSubtleForeground"),
-                            Margin = new Thickness(0, 0, 0, 4),
-                            TextWrapping = TextWrapping.Wrap
-                        };
-                        content.Children.Add(correctAns);
+                        correctAnswerText = string.Format(LocalizationService.GetString("QuizCorrectAnswerFormat"), correctAnswerValue);
                     }
                 }
 
                 if (!string.IsNullOrWhiteSpace(q.Explanation))
-                {
-                    var expl = new TextBlock
-                    {
-                        Text = string.Format(LocalizationService.GetString("QuizExplanationFormat"), q.Explanation),
-                        FontSize = TypeScale.Px(TypeScale.Caption, 12),
-                        Foreground = (Brush)FindResource("TextColorSecondary"),
-                        Margin = new Thickness(0, 8, 0, 0),
-                        TextWrapping = TextWrapping.Wrap,
-                        FontStyle = FontStyles.Italic
-                    };
-                    content.Children.Add(expl);
-                }
+                    explanation = string.Format(LocalizationService.GetString("QuizExplanationFormat"), q.Explanation);
 
-                card.Child = content;
-                rp.Children.Add(card);
-                AnimateResultsReviewCard(card, i);
+                items.Add(new QuizResultItem
+                {
+                    Index = i,
+                    IsCorrect = isCorrect,
+                    HeaderText = header,
+                    UserAnswerText = userAnswerText,
+                    CorrectAnswerText = correctAnswerText,
+                    Explanation = explanation,
+                });
             }
+
+            // The list is now a virtualized swap-in of lightweight data rows; the entrance
+            // animation plays per container shortly after the swap (see ResultsCard_Loaded).
+            AllowResultsCardEntrance(allow: true);
+            resultsList.ItemsSource = items;
         }
     }
 
@@ -1396,6 +1312,34 @@ public partial class QuizModeWindow : Window
                 UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, 0, 1, value => card.Opacity = value, startDelayMs: delay),
                 UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, UiMotion.ContentLiftY, 0, value => translate.Y = value, startDelayMs: delay)
             });
+    }
+
+    /// <summary>Plays the staggered entrance for result cards only when the results list was
+    /// just (re)built — recycled containers that re-enter on scroll must not replay it.</summary>
+    private DispatcherTimer? _resultsEntranceTimer;
+
+    private void AllowResultsCardEntrance(bool allow)
+    {
+        _resultsEntranceTimer?.Stop();
+        _resultsEntranceTimer = null;
+
+        if (!allow)
+            return;
+
+        _resultsEntranceTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(1200)
+        };
+        _resultsEntranceTimer.Tick += (_, _) => AllowResultsCardEntrance(allow: false);
+        _resultsEntranceTimer.Start();
+    }
+
+    private void ResultsCard_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (_resultsEntranceTimer is null || sender is not FrameworkElement card || card.DataContext is not QuizResultItem item)
+            return;
+
+        AnimateResultsReviewCard(card, item.Index);
     }
 
     private void LoadQuestionAnimated(int direction)
@@ -1593,8 +1537,8 @@ public partial class QuizModeWindow : Window
         ResetTimerForNewSession();
         ApplyReturnFromResultsState();
 
-        if (FindName("ResultsQuestionsPanel") is StackPanel resultsPanel)
-            resultsPanel.Children.Clear();
+        if (FindName("ResultsQuestionsList") is ItemsControl resultsList)
+            resultsList.ItemsSource = null;
 
         RebuildQuestionNavigator();
         LoadQuestion();
@@ -1619,4 +1563,19 @@ public partial class QuizModeWindow : Window
         UpdateTimerDisplay(_isCountdown ? _remainingTime : _elapsedTime);
     }
 
+    /// <summary>Lightweight data row for the virtualized results review list. All display
+    /// strings are pre-formatted on the UI thread; the cards themselves are realized only for
+    /// the visible viewport (recycled), and rendered as Skia tiles while the list scrolls.</summary>
+    internal sealed class QuizResultItem
+    {
+        public required int Index;
+        public required bool IsCorrect;
+        public required string HeaderText;
+        public required string UserAnswerText;
+        public required string CorrectAnswerText;
+        public required string Explanation;
+
+        public bool HasCorrectAnswer => CorrectAnswerText.Length > 0;
+        public bool HasExplanation => Explanation.Length > 0;
+    }
 }

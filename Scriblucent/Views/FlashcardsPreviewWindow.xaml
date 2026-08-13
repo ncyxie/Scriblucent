@@ -38,6 +38,7 @@
                                       HorizontalScrollBarVisibility="Disabled"
                                       Background="Transparent"
                                       ClipToBounds="True"
+                                      behaviors:ScrollTileBehavior.IsEnabled="True"
                                       behaviors:RoundedClipBehavior.IsEnabled="True"
                                       behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}">
                             <ItemsPresenter Margin="{TemplateBinding Padding}"/>
@@ -1173,21 +1174,23 @@
                         </controls:FlashcardGridItemsControl.ItemsPanel>
                         <controls:FlashcardGridItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <controls:FlashcardFlipHost IsFlipped="{Binding IsFlipped, Mode=TwoWay}"
-                                                            Width="316"
-                                                            Height="224"
+                                <controls:DashboardTileHost RendererKey="FlashcardGridCard"
                                                             Margin="0,8,16,16"
-                                                            ClipToBounds="False"
-                                                            MouseLeftButtonUp="FlashcardCard_MouseLeftButtonUp">
-                                    <controls:FlashcardFlipHost.FrontContent>
-                                        <ContentControl Content="{Binding}"
-                                                        ContentTemplate="{StaticResource FlashcardGridQuestionFaceTemplate}"/>
-                                    </controls:FlashcardFlipHost.FrontContent>
-                                    <controls:FlashcardFlipHost.BackContent>
-                                        <ContentControl Content="{Binding}"
-                                                        ContentTemplate="{StaticResource FlashcardGridAnswerFaceTemplate}"/>
-                                    </controls:FlashcardFlipHost.BackContent>
-                                </controls:FlashcardFlipHost>
+                                                            ClipToBounds="False">
+                                    <controls:FlashcardFlipHost IsFlipped="{Binding IsFlipped, Mode=TwoWay}"
+                                                                Width="316"
+                                                                Height="224"
+                                                                MouseLeftButtonUp="FlashcardCard_MouseLeftButtonUp">
+                                        <controls:FlashcardFlipHost.FrontContent>
+                                            <ContentControl Content="{Binding}"
+                                                            ContentTemplate="{StaticResource FlashcardGridQuestionFaceTemplate}"/>
+                                        </controls:FlashcardFlipHost.FrontContent>
+                                        <controls:FlashcardFlipHost.BackContent>
+                                            <ContentControl Content="{Binding}"
+                                                            ContentTemplate="{StaticResource FlashcardGridAnswerFaceTemplate}"/>
+                                        </controls:FlashcardFlipHost.BackContent>
+                                    </controls:FlashcardFlipHost>
+                                </controls:DashboardTileHost>
                             </DataTemplate>
                         </controls:FlashcardGridItemsControl.ItemTemplate>
                     </controls:FlashcardGridItemsControl>
