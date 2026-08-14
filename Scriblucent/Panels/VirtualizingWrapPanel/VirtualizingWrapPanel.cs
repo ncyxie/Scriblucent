@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -700,6 +700,42 @@ public class VirtualizingWrapPanel : VirtualizingPanelBase
 
         int budget = RealizeMaxContainersPerPass;
         bool deferred = false;
+
+        // A jump that leaves the previously realized band entirely (scrollbar thumb drag to a
+        // distant offset, track click, first realization straight into a deep band): walking
+        // from the stale base would realize budget-sized chunks across thousands of indices,
+        // leaving the viewport blank and the cards flickering until the walk arrives. Reset
+        // the base to the target band and realize it viewport-first (the cache margins still
+        // trickle within the budget via deferred re-measures).
+        bool disjointJump = _lastRealizedStartItemIndex < 0
+            || startItemIndex > _lastRealizedEndItemIndex + 1
+            || endItemIndex < _lastRealizedStartItemIndex - 1;
+
+        if (disjointJump)
+        {
+            int viewportCount = Math.Min(endItemIndex - startItemIndex + 1, budget);
+            for (int itemIndex = startItemIndex; itemIndex < startItemIndex + viewportCount; itemIndex++)
+            {
+                RealizeUniformItem(itemIndex);
+            }
+
+            _lastRealizedStartItemIndex = startItemIndex;
+            _lastRealizedEndItemIndex = startItemIndex + viewportCount - 1;
+
+            int remainingTarget = Math.Max(0, endItemIndex - (_lastRealizedEndItemIndex + 1) + 1);
+            int realizeRemaining = Math.Min(remainingTarget, budget - viewportCount);
+            for (int itemIndex = _lastRealizedEndItemIndex + 1; itemIndex <= _lastRealizedEndItemIndex + realizeRemaining; itemIndex++)
+            {
+                RealizeUniformItem(itemIndex);
+            }
+
+            _lastRealizedEndItemIndex += realizeRemaining;
+
+            if (_lastRealizedEndItemIndex < endItemIndex)
+                DeferRealization();
+
+            return;
+        }
 
         // Leading edge (ahead of the viewport) first - the direction scroll most likely moves
         // next - then the trailing edge, then the already-realized middle (cheap cached

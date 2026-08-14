@@ -318,8 +318,22 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         _smoothScrollVelocityPxPerMs = 0;
         _lastSmoothScrollSyncUtc = DateTime.MinValue;
+        ResetRealizationBudget();
         ForceViewportSync();
         Grid?.FlushDeferredInteractiveSweep();
+    }
+
+    /// <summary>
+    /// Restores the per-pass realization budget to unlimited. ApplyViewportSlice throttles it
+    /// only while a smooth-scroll session is active; without this reset a stale throttle would
+    /// keep chunking realization - walked in 2-6-container passes from the previous session's
+    /// realized band - for every later non-session scroll (e.g. a scrollbar thumb drag), leaving
+    /// the viewport blank and flickering until the walk catches up.
+    /// </summary>
+    private void ResetRealizationBudget()
+    {
+        if (Grid?.ResolveItemsPanel() is WpfToolkit.Controls.VirtualizingWrapPanel panel)
+            panel.RealizeMaxContainersPerPass = int.MaxValue;
     }
 
     internal void NotifyVisualScrollOffsetChanged(double velocityPxPerMs = 0)
@@ -862,6 +876,13 @@ public sealed class DashboardVirtualizationHost : Decorator
                 var baseBudget = Math.Clamp(viewportRows / 2, 2, 6);
                 budgetPanel.RealizeMaxContainersPerPass = (int)Math.Clamp(baseBudget + (speed - 0.5) * 4, baseBudget, baseBudget * 3);
             }
+        }
+        else if (grid.ResolveItemsPanel() is WpfToolkit.Controls.VirtualizingWrapPanel idlePanel)
+        {
+            // Any non-session scroll (scrollbar thumb drag, keyboard page, programmatic jump)
+            // must never inherit a stale throttle from a previous smooth-scroll session - the
+            // chunked realization walk it enables leaves the viewport blank and flickering.
+            idlePanel.RealizeMaxContainersPerPass = int.MaxValue;
         }
 
         if (!IsSmoothScrollActive || heightChanged || requiresHostMeasure)
