@@ -5,7 +5,7 @@ namespace Scriblucent.Services;
 
 public static class GlobalScrollBarSettingsService
 {
-    private const double VisibleThickness = 6.0;
+    private const double VisibleThickness = 8.0;
     private const double HiddenThickness = 0.0;
 
     public static void Apply(AppSettings settings)

@@ -758,8 +758,8 @@
                 <Border x:Name="EditorScrollbarCorner"
                         Grid.Row="1"
                         Grid.Column="1"
-                        Width="6"
-                        Height="6"
+                        Width="{DynamicResource GlobalVerticalScrollBarWidth}"
+                        Height="{DynamicResource GlobalHorizontalScrollBarHeight}"
                         Background="{DynamicResource ScrollBarTrackBackground}"
                         IsHitTestVisible="False"
                         Visibility="Collapsed"/>

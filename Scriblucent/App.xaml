@@ -4,6 +4,7 @@
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:controls="clr-namespace:Scriblucent.Controls"
              xmlns:conv="clr-namespace:Scriblucent.Converters">
     <Application.Resources>
         <ResourceDictionary>
@@ -19,11 +20,11 @@
                 <ResourceDictionary Source="Themes/Controls/Quiz.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
-            <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarWidthKey}">6</sys:Double>
-            <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarHeightKey}">6</sys:Double>
+            <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarWidthKey}">8</sys:Double>
+            <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarHeightKey}">8</sys:Double>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-            <sys:Double x:Key="GlobalVerticalScrollBarWidth">6</sys:Double>
-            <sys:Double x:Key="GlobalHorizontalScrollBarHeight">6</sys:Double>
+            <sys:Double x:Key="GlobalVerticalScrollBarWidth">8</sys:Double>
+            <sys:Double x:Key="GlobalHorizontalScrollBarHeight">8</sys:Double>
 
             <!-- One shared ContextMenu for every dashboard card. Cards are virtualized and can
                  number in the hundreds; an 11-item menu + 2 separators + 13 bindings per card
@@ -122,15 +123,20 @@
             <Style x:Key="ModernScrollBarThumbStyle" TargetType="{x:Type Thumb}">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="Background" Value="{DynamicResource ScrollBarThumbBackground}"/>
-                <Setter Property="MinWidth" Value="3"/>
-                <Setter Property="MinHeight" Value="26"/>
+                <Setter Property="UseLayoutRounding" Value="True"/>
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
+                <!-- No MinWidth/MinHeight: the WPF Track clips the thumb to its computed slot,
+                     so a min-height-stretched thumb gets a square cut at the clip edge (the
+                     "rounded top, flat bottom" artifact). Without a min the thumb matches the
+                     slot and both ends render rounded at any size. -->
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type Thumb}">
                             <Border x:Name="ThumbBody"
                                     Background="{TemplateBinding Background}"
-                                    CornerRadius="2"
-                                    Margin="1"/>
+                                    CornerRadius="3"
+                                    Margin="1"
+                                    SnapsToDevicePixels="True"/>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="ThumbBody" Property="Background" Value="{DynamicResource ScrollBarThumbHoverBackground}"/>
@@ -163,6 +169,8 @@
                 <Setter Property="Width" Value="{DynamicResource GlobalVerticalScrollBarWidth}"/>
                 <Setter Property="Height" Value="Auto"/>
                 <Setter Property="Background" Value="{DynamicResource ScrollBarTrackBackground}"/>
+                <Setter Property="UseLayoutRounding" Value="True"/>
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type ScrollBar}">
@@ -194,8 +202,6 @@
                                     <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
                                     <Setter TargetName="DecreaseButton" Property="Command" Value="ScrollBar.LineLeftCommand"/>
                                     <Setter TargetName="IncreaseButton" Property="Command" Value="ScrollBar.LineRightCommand"/>
-                                    <Setter TargetName="PART_Thumb" Property="MinWidth" Value="26"/>
-                                    <Setter TargetName="PART_Thumb" Property="MinHeight" Value="3"/>
                                     <Setter Property="Width" Value="Auto"/>
                                     <Setter Property="Height" Value="{DynamicResource GlobalHorizontalScrollBarHeight}"/>
                                 </Trigger>
