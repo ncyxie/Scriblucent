@@ -685,50 +685,83 @@
               behaviors:FieldFocusRingBehavior.IsEnabled="True"
               SnapsToDevicePixels="True"
               UseLayoutRounding="True">
-            <Grid x:Name="EditorSurface"
-                  ClipToBounds="True">
-                <RichTextBox x:Name="ContentTextBox"
-                             Style="{StaticResource EditorRichTextBoxStyle}"
-                             SelectionChanged="ContentTextBox_SelectionChanged"
-                             PreviewMouseWheel="ContentTextBox_PreviewMouseWheel"
-                             TextChanged="ContentTextBox_TextChanged"
-                             SnapsToDevicePixels="True"
-                             TextOptions.TextFormattingMode="Ideal"
-                             TextOptions.TextRenderingMode="ClearType"
-                             RenderOptions.ClearTypeHint="Enabled"
-                             Margin="0"
-                             Padding="18,16"
-                             FontSize="{StaticResource Type.Body}"
-                             FontFamily="{StaticResource FontFamily.Editor}"
-                             AcceptsReturn="True"
-                             AcceptsTab="True"
-                             KeyboardNavigation.TabNavigation="None"
-                             IsInactiveSelectionHighlightEnabled="True"
-                             SelectionBrush="{DynamicResource EditorSelectionBrush}"
-                             SelectionOpacity="0.4"
-                             Background="Transparent"
-                             BorderThickness="0">
-                    <RichTextBox.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="{Binding [Cut], Source={StaticResource Loc}}" Command="Cut"/>
-                            <MenuItem Header="{Binding [Copy], Source={StaticResource Loc}}" Command="Copy"/>
-                            <MenuItem Header="{Binding [Paste], Source={StaticResource Loc}}" Command="Paste"/>
-                            <Separator/>
-                            <MenuItem Header="{Binding [SelectAll], Source={StaticResource Loc}}" Command="SelectAll"/>
-                        </ContextMenu>
-                    </RichTextBox.ContextMenu>
-                </RichTextBox>
-                <Canvas x:Name="FloatingImageOverlay"
-                        Panel.ZIndex="20"
-                        ClipToBounds="True"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- The zoom LayoutTransform applies to EditorSurface only - the scrollbar
+                     mirrors below live outside it, so they never scale with the zoom (the
+                     note editor's scrollbar "ignores the zoom", like the mind map). -->
+                <Grid x:Name="EditorSurface"
+                      Grid.Row="0"
+                      Grid.Column="0"
+                      ClipToBounds="True">
+                    <RichTextBox x:Name="ContentTextBox"
+                                 Style="{StaticResource EditorRichTextBoxStyle}"
+                                 SelectionChanged="ContentTextBox_SelectionChanged"
+                                 PreviewMouseWheel="ContentTextBox_PreviewMouseWheel"
+                                 TextChanged="ContentTextBox_TextChanged"
+                                 SnapsToDevicePixels="True"
+                                 TextOptions.TextFormattingMode="Ideal"
+                                 TextOptions.TextRenderingMode="ClearType"
+                                 RenderOptions.ClearTypeHint="Enabled"
+                                 Margin="0"
+                                 Padding="18,16"
+                                 FontSize="{StaticResource Type.Body}"
+                                 FontFamily="{StaticResource FontFamily.Editor}"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 KeyboardNavigation.TabNavigation="None"
+                                 IsInactiveSelectionHighlightEnabled="True"
+                                 SelectionBrush="{DynamicResource EditorSelectionBrush}"
+                                 SelectionOpacity="0.4"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Hidden">
+                        <RichTextBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="{Binding [Cut], Source={StaticResource Loc}}" Command="Cut"/>
+                                <MenuItem Header="{Binding [Copy], Source={StaticResource Loc}}" Command="Copy"/>
+                                <MenuItem Header="{Binding [Paste], Source={StaticResource Loc}}" Command="Paste"/>
+                                <Separator/>
+                                <MenuItem Header="{Binding [SelectAll], Source={StaticResource Loc}}" Command="SelectAll"/>
+                            </ContextMenu>
+                        </RichTextBox.ContextMenu>
+                    </RichTextBox>
+                    <Canvas x:Name="FloatingImageOverlay"
+                            Panel.ZIndex="20"
+                            ClipToBounds="True"/>
+                </Grid>
+
+                <ScrollBar x:Name="EditorMirrorVerticalScrollBar"
+                           Grid.Row="0"
+                           Grid.Column="1"
+                           Orientation="Vertical"
+                           Width="{DynamicResource GlobalVerticalScrollBarWidth}"
+                           Visibility="Collapsed"
+                           Scroll="EditorMirrorVerticalScrollBar_Scroll"/>
+                <ScrollBar x:Name="EditorMirrorHorizontalScrollBar"
+                           Grid.Row="1"
+                           Grid.Column="0"
+                           Orientation="Horizontal"
+                           Width="Auto"
+                           Height="{DynamicResource GlobalHorizontalScrollBarHeight}"
+                           Visibility="Collapsed"
+                           Scroll="EditorMirrorHorizontalScrollBar_Scroll"/>
                 <Border x:Name="EditorScrollbarCorner"
+                        Grid.Row="1"
+                        Grid.Column="1"
                         Width="6"
                         Height="6"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Bottom"
                         Background="{DynamicResource ScrollBarTrackBackground}"
                         IsHitTestVisible="False"
-                        Panel.ZIndex="30"
                         Visibility="Collapsed"/>
             </Grid>
         </Border>

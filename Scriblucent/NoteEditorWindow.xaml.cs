@@ -223,6 +223,9 @@ namespace Scriblucent
         private const double StatusIndicatorExpandedHeight = 20;
         private const double UnwrappedDocumentPageWidth = 10000;
         private ScrollViewer? _contentScrollViewer;
+        private DispatcherTimer? _editorScrollbarHideTimer;
+        private bool _syncingEditorScrollbarMirror;
+        private const int EditorScrollbarHideDelayMs = 1200;
         private INotifyPropertyChanged? _editorSettingsSource;
         private static readonly double[] WordFontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
         private static readonly double[] WordIndentSizes = [24, 48, 72, 96, 120, 144];
@@ -491,7 +494,9 @@ namespace Scriblucent
             ContentTextBox.InvalidateMeasure();
             _contentScrollViewer?.InvalidateScrollInfo();
             UpdateEditorToolButtonStates();
+            UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
+            Dispatcher.InvokeAsync(UpdateEditorScrollbarMirror);
             Dispatcher.InvokeAsync(UpdateEditorScrollbarCorner);
 
             // Zoom / word-wrap / scrollbar preference changes alter line extents and column
@@ -509,6 +514,7 @@ namespace Scriblucent
             Scriblucent.Services.WindowThemeService.ApplyTheme(this, ThemeManager.CurrentTheme, rebuildFrame: true);
             ApplyRichTextBoxTheme();
             UpdateEditorToolButtonStates();
+            UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
         }
 
@@ -527,9 +533,33 @@ namespace Scriblucent
             _contentScrollViewer = FindVisualChild<ScrollViewer>(ContentTextBox);
             if (_contentScrollViewer != null)
             {
+                // The RichTextBox attached property does not reliably reach the internal
+                // viewer across themes - hide its scrollbars directly (a local value is
+                // authoritative) so only the unscaled mirrors are visible.
+                _contentScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
+                _contentScrollViewer.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+
                 _contentScrollViewer.SetResourceReference(ScrollViewer.BackgroundProperty, "RichTextBoxBackground");
                 _contentScrollViewer.ScrollChanged += ContentScrollViewer_ScrollChanged;
+
+                // The internal RichTextBox scrollbar is hidden; the unscaled mirrors beside the
+                // editor surface (outside the zoom transform) show/hide with it and auto-hide
+                // like the app's other scrollbars.
+                _editorScrollbarHideTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(EditorScrollbarHideDelayMs)
+                };
+                _editorScrollbarHideTimer.Tick += (_, _) => HideEditorScrollbars();
+
+                _contentScrollViewer.PreviewMouseMove += (_, _) => ShowEditorScrollbars();
+                _contentScrollViewer.PreviewMouseWheel += (_, _) => ShowEditorScrollbars();
+                _contentScrollViewer.PreviewMouseDown += (_, _) => ShowEditorScrollbars();
+                _contentScrollViewer.PreviewKeyDown += (_, _) => ShowEditorScrollbars();
+                _contentScrollViewer.MouseEnter += (_, _) => ShowEditorScrollbars();
+
+                UpdateEditorScrollbarMirror();
                 UpdateEditorScrollbarCorner();
+                ShowEditorScrollbars();
             }
         }
 
@@ -538,23 +568,127 @@ namespace Scriblucent
             if (_contentScrollViewer != null)
                 _contentScrollViewer.ScrollChanged -= ContentScrollViewer_ScrollChanged;
 
+            _editorScrollbarHideTimer?.Stop();
+            _editorScrollbarHideTimer = null;
             _contentScrollViewer = null;
         }
 
         private void ContentScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
+            UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
+            ShowEditorScrollbars();
         }
 
-        private void UpdateEditorScrollbarCorner()
+        /// <summary>
+        /// Mirrors the (hidden) internal editor ScrollViewer onto the unscaled scrollbars that
+        /// sit outside the zoom transform. The thumb length still reflects the visible fraction
+        /// of the document (like Word's); the bars themselves never scale with the zoom.
+        /// </summary>
+        private void UpdateEditorScrollbarMirror()
         {
             if (_contentScrollViewer == null)
                 return;
 
-            var verticalVisible =
-                _contentScrollViewer.ComputedVerticalScrollBarVisibility == Visibility.Visible;
-            var horizontalVisible =
-                _contentScrollViewer.ComputedHorizontalScrollBarVisibility == Visibility.Visible;
+            _syncingEditorScrollbarMirror = true;
+            try
+            {
+                var viewer = _contentScrollViewer;
+
+                var vertical = EditorMirrorVerticalScrollBar;
+                if (vertical != null)
+                {
+                    var scrollable = Math.Max(0, viewer.ExtentHeight - viewer.ViewportHeight);
+                    var visible = scrollable > 0.5;
+                    vertical.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                    if (visible)
+                    {
+                        vertical.Maximum = scrollable;
+                        vertical.ViewportSize = viewer.ViewportHeight;
+                        vertical.SmallChange = Math.Max(16, viewer.ViewportHeight * 0.1);
+                        vertical.LargeChange = Math.Max(1, viewer.ViewportHeight);
+                        vertical.Value = Math.Min(viewer.VerticalOffset, scrollable);
+                    }
+                }
+
+                var horizontal = EditorMirrorHorizontalScrollBar;
+                if (horizontal != null)
+                {
+                    var scrollable = Math.Max(0, viewer.ExtentWidth - viewer.ViewportWidth);
+                    var visible = scrollable > 0.5;
+                    horizontal.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                    if (visible)
+                    {
+                        horizontal.Maximum = scrollable;
+                        horizontal.ViewportSize = viewer.ViewportWidth;
+                        horizontal.SmallChange = Math.Max(16, viewer.ViewportWidth * 0.1);
+                        horizontal.LargeChange = Math.Max(1, viewer.ViewportWidth);
+                        horizontal.Value = Math.Min(viewer.HorizontalOffset, scrollable);
+                    }
+                }
+            }
+            finally
+            {
+                _syncingEditorScrollbarMirror = false;
+            }
+        }
+
+        private void EditorMirrorVerticalScrollBar_Scroll(object sender, ScrollEventArgs e)
+        {
+            if (_syncingEditorScrollbarMirror || _contentScrollViewer == null)
+                return;
+
+            _contentScrollViewer.ScrollToVerticalOffset(e.NewValue);
+        }
+
+        private void EditorMirrorHorizontalScrollBar_Scroll(object sender, ScrollEventArgs e)
+        {
+            if (_syncingEditorScrollbarMirror || _contentScrollViewer == null)
+                return;
+
+            _contentScrollViewer.ScrollToHorizontalOffset(e.NewValue);
+        }
+
+        private void ShowEditorScrollbars()
+        {
+            AnimateEditorScrollbars(1.0);
+            _editorScrollbarHideTimer?.Stop();
+            _editorScrollbarHideTimer?.Start();
+        }
+
+        private void HideEditorScrollbars()
+        {
+            if (EditorSurface.IsMouseOver || EditorSurface.IsKeyboardFocusWithin)
+            {
+                ShowEditorScrollbars();
+                return;
+            }
+
+            if (EditorMirrorVerticalScrollBar is { IsMouseOver: true }
+                || EditorMirrorVerticalScrollBar.IsMouseCaptureWithin
+                || EditorMirrorHorizontalScrollBar is { IsMouseOver: true }
+                || EditorMirrorHorizontalScrollBar.IsMouseCaptureWithin)
+            {
+                ShowEditorScrollbars();
+                return;
+            }
+
+            AnimateEditorScrollbars(0);
+        }
+
+        private void AnimateEditorScrollbars(double targetOpacity)
+        {
+            if (EditorMirrorVerticalScrollBar is { Visibility: Visibility.Visible })
+                UiMotion.Fade(EditorMirrorVerticalScrollBar, targetOpacity, 180, UiMotion.OutQuad);
+
+            if (EditorMirrorHorizontalScrollBar is { Visibility: Visibility.Visible })
+                UiMotion.Fade(EditorMirrorHorizontalScrollBar, targetOpacity, 180, UiMotion.OutQuad);
+        }
+
+        private void UpdateEditorScrollbarCorner()
+        {
+            var verticalVisible = EditorMirrorVerticalScrollBar?.Visibility == Visibility.Visible;
+            var horizontalVisible = EditorMirrorHorizontalScrollBar?.Visibility == Visibility.Visible;
 
             if (EditorScrollbarCorner != null)
             {
@@ -562,23 +696,7 @@ namespace Scriblucent
                     ? Visibility.Visible
                     : Visibility.Collapsed;
             }
-
-            // Keep floating images in the content viewport — never paint over scrollbar gutters.
-            if (FloatingImageOverlay != null)
-            {
-                var right = verticalVisible ? ResolveVerticalScrollBarWidth() : 0;
-                var bottom = horizontalVisible ? ResolveHorizontalScrollBarHeight() : 0;
-                var margin = new Thickness(0, 0, right, bottom);
-                if (FloatingImageOverlay.Margin != margin)
-                    FloatingImageOverlay.Margin = margin;
-            }
         }
-
-        private double ResolveVerticalScrollBarWidth()
-            => TryFindResource("GlobalVerticalScrollBarWidth") is double width && width > 0 ? width : 6;
-
-        private double ResolveHorizontalScrollBarHeight()
-            => TryFindResource("GlobalHorizontalScrollBarHeight") is double height && height > 0 ? height : 6;
 
         private void UpdateEditorToolButtonStates()
         {
@@ -8135,9 +8253,9 @@ namespace Scriblucent
             if (_zoomLevel > 3.0) _zoomLevel = 3.0;
 
             // Zoom the whole editor surface so floating/inline overlay images scale with text.
-            ContentTextBox.LayoutTransform = Transform.Identity;
             EditorSurface.LayoutTransform = new ScaleTransform(_zoomLevel, _zoomLevel);
-            UpdateEditorToolButtonStates();
+            UpdateEditorScrollbarMirror();
+            UpdateEditorScrollbarCorner();
         }
         private bool _isWordWrapEnabled = true;
 
