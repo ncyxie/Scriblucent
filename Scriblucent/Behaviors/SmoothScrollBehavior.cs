@@ -95,6 +95,7 @@ public static class SmoothScrollBehavior
         public TimeSpan LastTickRenderingTime = TimeSpan.MinValue;
         public ScrollBar? VerticalScrollBar;
         public ScrollBar? HorizontalScrollBar;
+        public List<(ScrollBar Bar, MouseWheelEventHandler Handler)> ExternalScrollBars { get; } = new();
         public MouseWheelEventHandler? MouseWheelHandler;
         public ScrollChangedEventHandler? ScrollChangedHandler;
         public SizeChangedEventHandler? SizeChangedHandler;
@@ -154,6 +155,11 @@ public static class SmoothScrollBehavior
             scrollViewer.Loaded -= state.LoadedHandler;
 
         DetachScrollbarHooks(state);
+
+        foreach (var (bar, handler) in state.ExternalScrollBars)
+            bar.PreviewMouseWheel -= handler;
+        state.ExternalScrollBars.Clear();
+
         state.IsAttached = false;
     }
 
@@ -336,6 +342,46 @@ public static class SmoothScrollBehavior
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Registers a standalone scrollbar that is not one of the viewer's template bars (e.g.
+    /// the note editor's unscaled mirror scrollbars) so hovering it and using the mouse
+    /// wheel drives the viewer's smooth scroll on that bar's axis - the same behavior the
+    /// viewer's own scrollbars have.
+    /// </summary>
+    internal static void RegisterExternalBar(ScrollViewer scrollViewer, ScrollBar bar)
+    {
+        if (bar is null)
+            return;
+
+        var state = GetOrCreateState(scrollViewer);
+        if (state.ExternalScrollBars.Exists(entry => ReferenceEquals(entry.Bar, bar)))
+            return;
+
+        MouseWheelEventHandler handler = (_, args) => OnExternalScrollBarWheel(state, bar, args);
+        state.ExternalScrollBars.Add((bar, handler));
+        bar.PreviewMouseWheel += handler;
+    }
+
+    private static void OnExternalScrollBarWheel(State state, ScrollBar bar, MouseWheelEventArgs e)
+    {
+        if (e.Handled || state.ExternalDrive || !CanScroll(state.ScrollViewer))
+            return;
+
+        var ticks = e.Delta / 120.0;
+        double deltaX = 0;
+        double deltaY = 0;
+
+        if (bar.Orientation == Orientation.Horizontal && state.ScrollViewer.ScrollableWidth > 0)
+            deltaX = -ticks * Math.Max(1, state.ScrollViewer.ViewportWidth) * WheelViewportRatio;
+        else if (bar.Orientation == Orientation.Vertical && state.ScrollViewer.ScrollableHeight > 0)
+            deltaY = -ticks * Math.Max(1, state.ScrollViewer.ViewportHeight) * WheelViewportRatio;
+        else
+            return;
+
+        e.Handled = true;
+        ApplyWheelDeltas(state, deltaX, deltaY);
     }
 
     /// <summary>

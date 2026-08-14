@@ -20,6 +20,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using Scriblucent.Behaviors;
 using Scriblucent.Controls;
 using WeCantSpell.Hunspell;
 
@@ -559,9 +560,13 @@ namespace Scriblucent
 
                 // The mirror bars sit outside the zoom transform; register them with the
                 // compositor so their thumbs track the gliding content during smooth scroll
-                // sessions instead of lagging behind the throttled commits.
+                // sessions instead of lagging behind the throttled commits, and with the
+                // smooth-scroll behavior so hovering them and using the mouse wheel scrolls
+                // the editor (like the viewer's own scrollbars).
                 SmoothScrollCompositor.RegisterExternalBar(_contentScrollViewer, EditorMirrorVerticalScrollBar);
                 SmoothScrollCompositor.RegisterExternalBar(_contentScrollViewer, EditorMirrorHorizontalScrollBar);
+                SmoothScrollBehavior.RegisterExternalBar(_contentScrollViewer, EditorMirrorVerticalScrollBar);
+                SmoothScrollBehavior.RegisterExternalBar(_contentScrollViewer, EditorMirrorHorizontalScrollBar);
 
                 UpdateEditorScrollbarMirror();
                 UpdateEditorScrollbarCorner();
