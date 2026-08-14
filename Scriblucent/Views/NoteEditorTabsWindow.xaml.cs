@@ -583,7 +583,7 @@ public partial class NoteEditorTabsWindow : Window
         return null;
     }
 
-    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+    private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (WindowContentEnterHelper.ShouldBypassCloseHandling(this))
             return;

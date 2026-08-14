@@ -1049,7 +1049,7 @@ public class NoteWrapLayoutEngineTests
         var tall = EnumerateAllParagraphs(harness.Editor.Document.Blocks).First();
         var stack = FindSpacers(tall);
         Assert.NotEmpty(stack);
-        Assert.Equal(1, stack.Select(c => c.Parent).Distinct().Count()); // one shared stack
+        Assert.Single(stack.Select(c => c.Parent).Distinct()); // one shared stack
 
         // The stack covers the deepest band bottom (350 + 150 + 16).
         var tailTop = GetInlineAfterStack(tall.Inlines, stack).ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
@@ -1065,7 +1065,7 @@ public class NoteWrapLayoutEngineTests
         harness.Editor.UpdateLayout();
 
         var stack2 = FindSpacers(tall);
-        Assert.Equal(1, stack2.Select(c => c.Parent).Distinct().Count());
+        Assert.Single(stack2.Select(c => c.Parent).Distinct());
         Assert.Equal(headBefore, GetRunsTextBeforeStack(tall, stack2));
         Assert.True(
             stack2.Sum(c => ((Border)c.Child).Height) > heightBefore + 3,

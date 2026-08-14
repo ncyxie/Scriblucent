@@ -47,4 +47,11 @@ internal static class SkiaBitmapUtil
     }
 
     public static DpiScale DefaultDpi => new(96, 96);
+
+    /// <summary>
+    /// Sampling options for the DrawBitmap overloads that replaced the obsolete
+    /// SKFilterQuality-based ones: bilinear filtering without mipmaps preserves the old
+    /// default low-quality (linear) upscale behavior for thumbnails and backdrops.
+    /// </summary>
+    public static SKSamplingOptions LinearSampling { get; } = new(SKFilterMode.Linear, SKMipmapMode.None);
 }

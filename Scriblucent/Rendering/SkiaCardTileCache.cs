@@ -39,7 +39,6 @@ internal static class SkiaCardTileCache
     private static readonly ConcurrentQueue<Request> Pending = new();
     private static readonly ConcurrentDictionary<(object Vm, SkiaTileRenderer Renderer), byte> InFlight = new();
     private static int _workersStarted;
-    private static bool _themeHookAttached;
 
     static SkiaCardTileCache()
     {
@@ -177,7 +176,8 @@ internal static class SkiaCardTileCache
                     InFlight.TryRemove((viewModel, renderer), out _);
                 }
 
-                request.Completed?.Invoke(GetCached(viewModel, dpi, renderer, request.WidthDip));
+                if (GetCached(viewModel, dpi, renderer, request.WidthDip) is { } cached)
+                    request.Completed?.Invoke(cached);
             }));
         }
     }

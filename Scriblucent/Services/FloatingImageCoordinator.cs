@@ -863,14 +863,14 @@ public sealed class FloatingImageCoordinator
     /// handles are never clipped by the text content box.</summary>
     private void SyncInlineChrome()
     {
-        EnsureInlineChrome();
+        var chrome = EnsureInlineChrome();
         if (_overlay is null
             || _editor is null
             || _selectedInlineId is not { } id
             || !_inlineContainers.TryGetValue(id, out var container)
             || container.Child is not InlineNoteImageElement element)
         {
-            _inlineChrome!.Visibility = Visibility.Collapsed;
+            chrome.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -879,21 +879,21 @@ public sealed class FloatingImageCoordinator
             // The element's position in the editor equals its position in the overlay (both
             // siblings at the same origin in the editor surface).
             var origin = element.TransformToAncestor(_editor).Transform(new Point(0, 0));
-            Canvas.SetLeft(_inlineChrome, origin.X);
-            Canvas.SetTop(_inlineChrome, origin.Y);
-            _inlineChrome.Width = element.Width;
-            _inlineChrome.Height = element.Height - element.CaptionHeight;
-            _inlineChrome.Visibility = Visibility.Visible;
+            Canvas.SetLeft(chrome, origin.X);
+            Canvas.SetTop(chrome, origin.Y);
+            chrome.Width = element.Width;
+            chrome.Height = element.Height - element.CaptionHeight;
+            chrome.Visibility = Visibility.Visible;
 
             // The chips normally sit above the photo; when it is pressed against the editor's
             // top edge, flip them below (same rule as the floating widget).
             var rect = container.ContentStart.GetCharacterRect(LogicalDirection.Forward);
             var top = rect.IsEmpty ? 0 : rect.Top + _editor.Padding.Top;
-            _inlineChrome.ButtonsFlipped = top < ButtonsFlipThresholdDip;
+            chrome.ButtonsFlipped = top < ButtonsFlipThresholdDip;
         }
         catch
         {
-            _inlineChrome.Visibility = Visibility.Collapsed;
+            chrome.Visibility = Visibility.Collapsed;
         }
     }
 

@@ -45,7 +45,7 @@ internal static class SkiaMindMapRenderer
 
         foreach (var edge in snapshot.Edges)
         {
-            using var path = new SKPath();
+            using var path = new SKPathBuilder();
             path.MoveTo((float)edge.SX * renderScale, (float)edge.SY * renderScale);
             path.CubicTo(
                 (float)edge.C1X * renderScale, (float)edge.C1Y * renderScale,
@@ -59,7 +59,7 @@ internal static class SkiaMindMapRenderer
                 StrokeWidth = 2f * renderScale,
                 StrokeCap = SKStrokeCap.Round,
             };
-            canvas.DrawPath(path, paint);
+            canvas.DrawPath(path.Detach(), paint);
         }
 
         foreach (var node in snapshot.Nodes)
@@ -171,7 +171,7 @@ internal static class SkiaMindMapRenderer
     private static void DrawChevron(SKCanvas canvas, float x, float y, float size, bool folded, SKColor color)
     {
         using var paint = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.6f, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
-        using var path = new SKPath();
+        using var path = new SKPathBuilder();
         if (folded)
         {
             path.MoveTo(x + size * 0.25f, y + size * 0.2f);
@@ -184,7 +184,7 @@ internal static class SkiaMindMapRenderer
             path.LineTo(x + size * 0.5f, y + size * 0.75f);
             path.LineTo(x + size * 0.8f, y + size * 0.25f);
         }
-        canvas.DrawPath(path, paint);
+        canvas.DrawPath(path.Detach(), paint);
     }
 
     private static SKTypeface ResolveTitleTypeface(MindMapTileNode node)
@@ -228,7 +228,7 @@ internal static class SkiaMindMapRenderer
     {
         try
         {
-            var path = new SKPath();
+            var path = new SKPathBuilder();
             var tokens = new List<(bool IsCommand, char Command, float Value)>();
             var i = 0;
             while (i < data.Length)
@@ -331,7 +331,7 @@ internal static class SkiaMindMapRenderer
                 }
             }
 
-            return path;
+            return path.Detach();
         }
         catch
         {

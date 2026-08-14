@@ -66,7 +66,7 @@ internal static class SkiaTileRenderers
             CountLine = vm => ((FlashcardSetViewModel)vm).CardCountText,
             SecondaryCountLine = null,
             HasDueChip = vm => ((FlashcardSetViewModel)vm).HasDueCards,
-            DueChipText = vm => ((FlashcardSetViewModel)vm).DueStatusText,
+            DueChipText = vm => ((FlashcardSetViewModel)vm).DueStatusText ?? string.Empty,
             ShowNextReview = vm => ((FlashcardSetViewModel)vm).ShowNextReviewText,
             IsAi = vm => ((FlashcardSetViewModel)vm).IsAiGenerated,
             IsPinned = vm => ((FlashcardSetViewModel)vm).IsPinned,
@@ -132,7 +132,7 @@ internal static class SkiaTileRenderers
             CountLine = vm => ((FlashcardSetViewModel)vm).CardCountText,
             SecondaryCountLine = vm => ((FlashcardSetViewModel)vm).SetCountText,
             HasDueChip = vm => ((FlashcardSetViewModel)vm).HasDueCards,
-            DueChipText = vm => ((FlashcardSetViewModel)vm).DueStatusText,
+            DueChipText = vm => ((FlashcardSetViewModel)vm).DueStatusText ?? string.Empty,
             ShowNextReview = vm => ((FlashcardSetViewModel)vm).ShowNextReviewText,
             IsAi = vm => ((FlashcardSetViewModel)vm).IsAiGenerated,
             IsPinned = vm => ((FlashcardSetViewModel)vm).IsPinned,
@@ -811,7 +811,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
     private static void DrawPinGlyph(SKCanvas canvas, float x, float y, float size, SKColor color)
     {
         using var paint = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Fill };
-        using var path = new SKPath();
+        using var path = new SKPathBuilder();
         var s = size;
         path.MoveTo(x + s * 0.5f, y);
         path.LineTo(x + s * 0.5f, y + s * 0.65f);
@@ -821,13 +821,13 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         path.LineTo(x + s * 0.5f, y + s * 0.65f);
         path.LineTo(x + s * 0.5f, y);
         path.Close();
-        canvas.DrawPath(path, paint);
+        canvas.DrawPath(path.Detach(), paint);
     }
 
     private static void DrawScheduleGlyph(SKCanvas canvas, float x, float y, float size, SKColor color)
     {
         using var paint = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Fill };
-        using var path = new SKPath();
+        using var path = new SKPathBuilder();
         var s = size;
         path.MoveTo(x + s * 0.5f, y + s * 0.12f);
         path.LineTo(x + s * 0.5f, y);
@@ -837,7 +837,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         path.LineTo(x + s * 0.62f, y);
         path.LineTo(x + s * 0.5f, y);
         path.Close();
-        canvas.DrawPath(path, paint);
+        canvas.DrawPath(path.Detach(), paint);
         using var face = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.4f * size / 12f };
         canvas.DrawOval(new SKRect(x, y + s * 0.15f, x + s, y + s * 0.95f), face);
         using var hand = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.1f * size / 12f, StrokeCap = SKStrokeCap.Round };
@@ -1150,20 +1150,20 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
         {
             if (item.IsCorrect)
             {
-                using var path = new SKPath();
+                using var path = new SKPathBuilder();
                 path.MoveTo(glyphX + glyphSize * 0.2f, glyphY + glyphSize * 0.52f);
                 path.LineTo(glyphX + glyphSize * 0.44f, glyphY + glyphSize * 0.76f);
                 path.LineTo(glyphX + glyphSize * 0.82f, glyphY + glyphSize * 0.28f);
-                canvas.DrawPath(path, glyphPaint);
+                canvas.DrawPath(path.Detach(), glyphPaint);
             }
             else
             {
-                using var path = new SKPath();
+                using var path = new SKPathBuilder();
                 path.MoveTo(glyphX + glyphSize * 0.22f, glyphY + glyphSize * 0.22f);
                 path.LineTo(glyphX + glyphSize * 0.78f, glyphY + glyphSize * 0.78f);
                 path.MoveTo(glyphX + glyphSize * 0.78f, glyphY + glyphSize * 0.22f);
                 path.LineTo(glyphX + glyphSize * 0.22f, glyphY + glyphSize * 0.78f);
-                canvas.DrawPath(path, glyphPaint);
+                canvas.DrawPath(path.Detach(), glyphPaint);
             }
         }
 
@@ -1447,7 +1447,7 @@ internal sealed class FlashcardGridCardRenderer : SkiaTileRenderer
 
     private static void DrawStar(SKCanvas canvas, SKPoint center, float outerRadius, SKColor color, float dpi)
     {
-        using var path = new SKPath();
+        using var path = new SKPathBuilder();
         const int points = 5;
         for (var i = 0; i < points * 2; i++)
         {
@@ -1460,7 +1460,7 @@ internal sealed class FlashcardGridCardRenderer : SkiaTileRenderer
         }
         path.Close();
         using var paint = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Fill };
-        canvas.DrawPath(path, paint);
+        canvas.DrawPath(path.Detach(), paint);
     }
 
     private string ResolveFontFamily()
@@ -1796,11 +1796,11 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
         if (isChecked)
         {
             using var check = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2f, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
-            using var path = new SKPath();
+            using var path = new SKPathBuilder();
             path.MoveTo(x + size * 0.22f, y + size * 0.52f);
             path.LineTo(x + size * 0.44f, y + size * 0.72f);
             path.LineTo(x + size * 0.8f, y + size * 0.3f);
-            canvas.DrawPath(path, check);
+            canvas.DrawPath(path.Detach(), check);
         }
     }
 

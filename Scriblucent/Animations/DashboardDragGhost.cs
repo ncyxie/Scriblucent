@@ -422,7 +422,8 @@ public static class DashboardDragGhost
             canvas.DrawBitmap(
                 snapshotBitmap,
                 (float)(originX * dpi.DpiScaleX),
-                (float)(originY * dpi.DpiScaleY));
+                (float)(originY * dpi.DpiScaleY),
+                Scriblucent.Rendering.SkiaBitmapUtil.LinearSampling);
         }
 
         var baked = Scriblucent.Rendering.SkiaBitmapUtil.ToSource(output, dpi);
@@ -522,7 +523,7 @@ public static class DashboardDragGhost
     }
 
     private static void DrawSlice(SkiaSharp.SKCanvas canvas, SkiaSharp.SKBitmap bitmap, double x, double y, double width, double height, SkiaSharp.SKPaint paint)
-        => canvas.DrawBitmap(bitmap, new SkiaSharp.SKRect((float)x, (float)y, (float)(x + width), (float)(y + height)), paint);
+        => canvas.DrawBitmap(bitmap, new SkiaSharp.SKRect((float)x, (float)y, (float)(x + width), (float)(y + height)), Scriblucent.Rendering.SkiaBitmapUtil.LinearSampling, paint);
 
     private static SnapshotCapture? CaptureSnapshot(
         FrameworkElement dragSource,

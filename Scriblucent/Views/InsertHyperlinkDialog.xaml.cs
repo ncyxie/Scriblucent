@@ -109,7 +109,7 @@ public partial class InsertHyperlinkDialog : Window
         }
 
         var displayText = DisplayTextBox.Text?.Trim();
-        LinkText = string.IsNullOrEmpty(displayText) ? uri.ToString() : displayText;
+        LinkText = string.IsNullOrEmpty(displayText) ? uri!.ToString() : displayText;
         ResultUri = uri;
         BeginCloseAnimation(true);
     }

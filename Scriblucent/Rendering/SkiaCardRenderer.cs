@@ -199,11 +199,11 @@ internal static class SkiaCardRenderer
 
         // A tiny "mountain + sun" glyph inside the frame.
         using var inner = new SKPaint { Color = paint.Color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = paint.StrokeWidth };
-        var mountain = new SKPath();
+        using var mountain = new SKPathBuilder();
         mountain.MoveTo(rect.Left + size * 0.2f, rect.Bottom - size * 0.25f);
         mountain.LineTo(rect.Left + size * 0.45f, rect.Top + size * 0.45f);
         mountain.LineTo(rect.Left + size * 0.68f, rect.Bottom - size * 0.25f);
-        canvas.DrawPath(mountain, inner);
+        canvas.DrawPath(mountain.Detach(), inner);
 
         using var sun = new SKPaint { Color = paint.Color, IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = paint.StrokeWidth };
         canvas.DrawCircle(rect.Right - size * 0.28f, rect.Top + size * 0.3f, size * 0.09f, sun);

@@ -27,7 +27,6 @@ namespace Scriblucent
 {
     public partial class NoteEditorWindow : Window
     {
-        private bool? _pendingDialogResult = null;
         private bool _isHostedInTab;
         // Last search/replace state for Find Next / Replace Next functionality
         private string? _lastSearchQuery = null;
@@ -2549,7 +2548,7 @@ namespace Scriblucent
 
         private void OnRestoreSettleTick(object? sender, EventArgs e)
         {
-            _restoreSettleTimer.Stop();
+            _restoreSettleTimer?.Stop();
             _suppressEditedMarking = false;
             MarkCurrentStateSaved();
             UpdateEditedIndicator();

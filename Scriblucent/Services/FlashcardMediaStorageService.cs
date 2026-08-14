@@ -100,7 +100,7 @@ internal static class FlashcardMediaStorageService
         using (var canvas = new SkiaSharp.SKCanvas(output))
         {
             canvas.Clear(SkiaSharp.SKColors.White);
-            canvas.DrawBitmap(input, 0, 0);
+            canvas.DrawBitmap(input, 0, 0, Scriblucent.Rendering.SkiaBitmapUtil.LinearSampling);
         }
 
         return Scriblucent.Rendering.SkiaBitmapUtil.ToSource(output, Scriblucent.Rendering.SkiaBitmapUtil.DefaultDpi);

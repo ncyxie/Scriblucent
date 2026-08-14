@@ -2324,7 +2324,7 @@ public class InlineImageTests
         var photoOnly = new NoteDocument
         {
             Title = "P",
-            Content = null,
+            Content = null!,
             Images = new List<NoteImageAttachment>
             {
                 new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square, Top = 5000 }

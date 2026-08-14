@@ -58,7 +58,7 @@ public enum NoteImageArrangeDirection
 public sealed class NoteImageSession
 {
     public required Guid Id { get; init; }
-    public byte[] Bytes { get; set; }
+    public byte[] Bytes { get; set; } = Array.Empty<byte>();
     public double NaturalPixelWidth { get; set; }
     public double NaturalPixelHeight { get; set; }
     public int DecodePixelWidth { get; set; }

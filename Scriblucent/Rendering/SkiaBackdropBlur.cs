@@ -35,7 +35,7 @@ internal static class SkiaBackdropBlur
             using (var paint = new SKPaint { ImageFilter = filter })
             {
                 canvas.Clear(SKColors.Transparent);
-                canvas.DrawBitmap(input, 0, 0, paint);
+                canvas.DrawBitmap(input, 0, 0, SkiaBitmapUtil.LinearSampling, paint);
             }
 
             return SkiaBitmapUtil.ToSource(output, dpi);
