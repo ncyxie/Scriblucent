@@ -557,6 +557,12 @@ namespace Scriblucent
                 _contentScrollViewer.PreviewKeyDown += (_, _) => ShowEditorScrollbars();
                 _contentScrollViewer.MouseEnter += (_, _) => ShowEditorScrollbars();
 
+                // The mirror bars sit outside the zoom transform; register them with the
+                // compositor so their thumbs track the gliding content during smooth scroll
+                // sessions instead of lagging behind the throttled commits.
+                SmoothScrollCompositor.RegisterExternalBar(_contentScrollViewer, EditorMirrorVerticalScrollBar);
+                SmoothScrollCompositor.RegisterExternalBar(_contentScrollViewer, EditorMirrorHorizontalScrollBar);
+
                 UpdateEditorScrollbarMirror();
                 UpdateEditorScrollbarCorner();
                 ShowEditorScrollbars();

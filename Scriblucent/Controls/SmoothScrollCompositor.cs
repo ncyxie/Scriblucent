@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Scriblucent.Animations;
@@ -59,6 +60,23 @@ internal static class SmoothScrollCompositor
         /// <summary>Static section shells whose content was baked to a BitmapCache for the
         /// session (restored at the surface-hold release).</summary>
         public List<FrameworkElement>? CachedShells;
+        /// <summary>Thumbs (the viewer's own scrollbars plus any registered external bars
+        /// like the note editor's mirror) that are translated by the drift each frame so the
+        /// thumb tracks the gliding content instead of lagging behind the throttled commits.</summary>
+        public List<ThumbCompensation> ThumbCompensations { get; } = new();
+    }
+
+    private sealed class ThumbCompensation
+    {
+        public required ScrollViewer Owner;
+        public required ScrollBar Bar;
+        public required Thumb Thumb;
+        public bool IsVertical;
+        public TranslateTransform? Translate;
+        public Transform? OriginalTransform;
+        public double BaselineX;
+        public double BaselineY;
+        public bool AddedSmoothTranslateChild;
     }
 
     public static void Begin(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost> hosts)
@@ -129,6 +147,8 @@ internal static class SmoothScrollCompositor
         DashboardScrollRenderGate.StripRealizedCardShadows(hosts);
         DashboardScrollRenderGate.SetRealizedCardShadowVisibility(hosts, visible: false);
         DashboardScrollRenderGate.SetRealizedCardBitmapMode(hosts, bitmapMode: true);
+
+        AddViewerThumbCompensations(session, scrollViewer);
     }
 
     public static void End(ScrollViewer scrollViewer, double finalX, double finalY)
@@ -179,6 +199,8 @@ internal static class SmoothScrollCompositor
             // visible readjusting during scroll. The flip happens once, at the true settle (the
             // surface hold release).
             BeginSurfaceHold(scrollViewer, endHosts, endShells);
+
+            RestoreThumbCompensations(teardown);
         }, DispatcherPriority.Loaded);
     }
 
@@ -390,6 +412,131 @@ internal static class SmoothScrollCompositor
         var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
         translate.X = Snap(session.BaselineTranslateX - (session.VisualX - session.CommittedX), scale);
         translate.Y = Snap(session.BaselineTranslateY - (session.VisualY - session.CommittedY), scale);
+
+        UpdateThumbCompensations(session);
+    }
+
+    /// <summary>
+    /// The thumb reflects the ScrollViewer's committed offset, which only advances at the
+    /// throttled commits - so during the glide the thumb visibly lags the drifting content.
+    /// Translating the thumb by the drift (scaled by the thumb's travel range over the
+    /// scrollable extent, opposite of the content's translate) pins it to the visual
+    /// position every frame, with no extra commits. Because the compensation is
+    /// r * drift with r = thumbRange / scrollable, the thumb's visual position maps to
+    /// r * committed + r * drift = r * visual - monotonic during the glide, no sawtooth at
+    /// commits, and always inside the track.
+    /// </summary>
+    private static void UpdateThumbCompensations(Session session)
+    {
+        if (session.ThumbCompensations.Count == 0)
+            return;
+
+        var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
+        var driftX = session.VisualX - session.CommittedX;
+        var driftY = session.VisualY - session.CommittedY;
+        foreach (var compensation in session.ThumbCompensations)
+        {
+            if (compensation.Translate is not { } translate)
+                continue;
+
+            var thumbRange = compensation.IsVertical
+                ? compensation.Bar.ActualHeight - compensation.Thumb.ActualHeight
+                : compensation.Bar.ActualWidth - compensation.Thumb.ActualWidth;
+            var scrollable = compensation.IsVertical
+                ? compensation.Owner.ScrollableHeight
+                : compensation.Owner.ScrollableWidth;
+            var ratio = scrollable > 0 ? Math.Max(0, thumbRange) / scrollable : 0;
+
+            if (compensation.IsVertical)
+                translate.Y = Snap(compensation.BaselineY + driftY * ratio, scale);
+            else
+                translate.X = Snap(compensation.BaselineX + driftX * ratio, scale);
+        }
+    }
+
+    private static void RestoreThumbCompensations(Session session)
+    {
+        foreach (var compensation in session.ThumbCompensations)
+        {
+            if (compensation.Translate is { } translate)
+            {
+                translate.X = compensation.BaselineX;
+                translate.Y = compensation.BaselineY;
+
+                if (compensation.AddedSmoothTranslateChild
+                    && compensation.OriginalTransform is TransformGroup group)
+                    group.Children.Remove(translate);
+            }
+
+            compensation.Thumb.RenderTransform = compensation.OriginalTransform;
+        }
+
+        session.ThumbCompensations.Clear();
+    }
+
+    private static void AddViewerThumbCompensations(Session session, ScrollViewer scrollViewer)
+    {
+        if (scrollViewer.Template?.FindName("PART_VerticalScrollBar", scrollViewer) is ScrollBar verticalBar)
+            AddThumbCompensation(session, scrollViewer, verticalBar, isVertical: true);
+
+        if (scrollViewer.Template?.FindName("PART_HorizontalScrollBar", scrollViewer) is ScrollBar horizontalBar)
+            AddThumbCompensation(session, scrollViewer, horizontalBar, isVertical: false);
+    }
+
+    /// <summary>
+    /// Registers a standalone scrollbar (e.g. the note editor's unscaled mirror) whose thumb
+    /// should track the gliding content of <paramref name="scrollViewer"/> during its smooth
+    /// scroll sessions. Safe to call before any session begins.
+    /// </summary>
+    internal static void RegisterExternalBar(ScrollViewer scrollViewer, ScrollBar bar)
+        => AddThumbCompensation(GetOrCreateSession(scrollViewer), scrollViewer, bar, bar.Orientation == Orientation.Vertical);
+
+    private static void AddThumbCompensation(Session session, ScrollViewer owner, ScrollBar bar, bool isVertical)
+    {
+        bar.ApplyTemplate();
+        if (bar.Template?.FindName("PART_Thumb", bar) is not Thumb thumb)
+            return;
+
+        var compensation = new ThumbCompensation
+        {
+            Owner = owner,
+            Bar = bar,
+            Thumb = thumb,
+            IsVertical = isVertical,
+            OriginalTransform = thumb.RenderTransform
+        };
+        compensation.Translate = PrepareThumbTranslate(thumb, compensation);
+        session.ThumbCompensations.Add(compensation);
+    }
+
+    private static TranslateTransform? PrepareThumbTranslate(Thumb thumb, ThumbCompensation compensation)
+    {
+        if (thumb.RenderTransform is TranslateTransform translate && !translate.IsFrozen)
+        {
+            compensation.BaselineX = translate.X;
+            compensation.BaselineY = translate.Y;
+            return translate;
+        }
+
+        if (thumb.RenderTransform is TransformGroup group && !group.IsFrozen)
+        {
+            var existing = group.Children.OfType<TranslateTransform>().FirstOrDefault();
+            if (existing is not null && !existing.IsFrozen)
+            {
+                compensation.BaselineX = existing.X;
+                compensation.BaselineY = existing.Y;
+                return existing;
+            }
+
+            translate = new TranslateTransform();
+            group.Children.Add(translate);
+            compensation.AddedSmoothTranslateChild = true;
+            return translate;
+        }
+
+        translate = new TranslateTransform();
+        thumb.RenderTransform = translate;
+        return translate;
     }
 
     private static double Snap(double value, double scale)
