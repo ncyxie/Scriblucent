@@ -2,6 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:services="clr-namespace:Scriblucent.Services"
         Title="{Binding [FlashcardViewImage], Source={StaticResource Loc}}"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -17,7 +19,9 @@
              dimmed room. Cheap by construction: a single pre-blurred snapshot captured once (see
              OverlayBackdropCapture, already used by every other overlay in this app), not a live
              per-frame blur - no ongoing GPU/CPU cost while the viewer is open. -->
-        <Grid x:Name="BackdropLayer">
+        <Grid x:Name="BackdropLayer"
+              behaviors:RoundedClipBehavior.IsEnabled="True"
+              behaviors:RoundedClipBehavior.CornerRadius="{x:Static services:OverlayScrimRounding.WindowMatchRadius}">
             <Image x:Name="BackdropImage" Stretch="Fill"/>
             <Border Background="#B3000000"/>
         </Grid>

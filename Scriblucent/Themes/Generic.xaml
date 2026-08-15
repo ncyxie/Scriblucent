@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
                     xmlns:controls="clr-namespace:Scriblucent.Controls"
+                    xmlns:services="clr-namespace:Scriblucent.Services"
                     xmlns:icons="clr-namespace:Scriblucent.Icons"
                     xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks">
     <!-- Scroll-tile host for dashboard listing cards: the Skia tile covers the live template
@@ -67,7 +68,9 @@
                     <Grid x:Name="OverlayRoot">
                         <Grid x:Name="ScrimHost"
                               HorizontalAlignment="Stretch"
-                              VerticalAlignment="Stretch">
+                              VerticalAlignment="Stretch"
+                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                              behaviors:RoundedClipBehavior.CornerRadius="{x:Static services:OverlayScrimRounding.WindowMatchRadius}">
                             <Image x:Name="BackdropSnapshot"
                                    Stretch="Fill"
                                    Visibility="Collapsed"
@@ -82,10 +85,11 @@
                                 UseLayoutRounding="True"
                                 SnapsToDevicePixels="True">
                             <Grid>
-                                <Border Background="{DynamicResource CardBackground}"
-                                        CornerRadius="{StaticResource Radius.Overlay}"
-                                        IsHitTestVisible="False"
-                                        Effect="{StaticResource Elevation.Dialog}"/>
+                                <controls:CardShadowLayer
+                                    Width="{Binding ActualWidth, ElementName=DialogCard}"
+                                    Height="{Binding ActualHeight, ElementName=DialogCard}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Top"/>
                                 <Border x:Name="DialogCard"
                                         Background="{DynamicResource CardBackground}"
                                         BorderThickness="0"
