@@ -606,6 +606,14 @@ public partial class NoteEditorTabsWindow : Window
         _isWindowClosing = true;
         _skipCloseConfirmation = false;
 
+        // Claim foreground now, while this window is still alive, rather than leaving it to the
+        // reactive MainWindow.Activate() in MainWindow's Closed handler. The real native close
+        // happens a dispatcher tick later (WindowContentEnterHelper.FinishExit) - without this,
+        // the gap between this window's HWND being destroyed and that later Activate() call left
+        // whatever the OS handed focus to next (e.g. another app behind Scriblucent) briefly
+        // visible before the owner reclaimed foreground.
+        Owner?.Activate();
+
         foreach (var state in _tabsByDocumentId.Values.ToList())
             FinishCloseTab(state);
     }
