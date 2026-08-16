@@ -5348,6 +5348,15 @@ public class MainViewModel : ViewModelBase
     public bool HasRecentMindMaps => RecentMindMaps.Count > 0;
     public bool HasRecentQuizzes => RecentQuizzes.Count > 0;
 
+    private static List<NoteCardViewModel> ComputeRecentNotes(List<NoteCardViewModel> notes, HashSet<string> selectedTags, int limit)
+    {
+        return notes
+            .Where(note => MatchesSelectedTags(note, selectedTags))
+            .OrderByDescending(n => n.Document.LastModified)
+            .Take(limit)
+            .ToList();
+    }
+
     public void RefreshRecentNotes()
     {
         var recent = Notes
@@ -5542,6 +5551,23 @@ public class MainViewModel : ViewModelBase
         return MatchesSearch(note);
     }
 
+    /// <summary>Tag-only subset of <see cref="MatchesSearch"/> - never touches
+    /// <see cref="NoteCardViewModel.Content"/>, which lazily builds a WPF FlowDocument and is
+    /// therefore not safe to call off the UI thread. Equivalent to MatchesSearch whenever
+    /// SearchQuery is empty.</summary>
+    private static bool MatchesSelectedTags(NoteCardViewModel note, HashSet<string> selectedTags)
+    {
+        if (selectedTags.Count == 0)
+            return true;
+
+        var noteTags = note.Document.Tags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(tag => tag.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return selectedTags.All(noteTags.Contains);
+    }
+
     private bool MatchesSearch(NoteCardViewModel note)
     {
         if (_selectedTags.Count > 0)
@@ -5616,22 +5642,26 @@ public class MainViewModel : ViewModelBase
             note.Document.GroupId.Value.ToString()[..4].ToUpperInvariant());
     }
 
-    private void RefreshTagFilters<TDoc>(
+    private static List<string> ComputeSortedDistinctTags<TDoc>(
         IEnumerable<TDoc> source,
-        Func<TDoc, List<string>?> tagsSelector,
-        HashSet<string> selectedTags,
-        ObservableCollection<TagFilterItemViewModel> targetFilters,
-        Action<string, bool> onSelectionChanged,
-        Action notifyChanged)
+        Func<TDoc, List<string>?> tagsSelector)
     {
-        var tags = source
+        return source
             .SelectMany(item => tagsSelector(item) ?? new List<string>())
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .Select(tag => tag.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+    }
 
+    private static void ApplyTagFilters(
+        List<string> tags,
+        HashSet<string> selectedTags,
+        ObservableCollection<TagFilterItemViewModel> targetFilters,
+        Action<string, bool> onSelectionChanged,
+        Action notifyChanged)
+    {
         selectedTags.RemoveWhere(selected => !tags.Any(tag => string.Equals(tag, selected, StringComparison.OrdinalIgnoreCase)));
 
         targetFilters.Clear();
@@ -5645,17 +5675,31 @@ public class MainViewModel : ViewModelBase
         CommandManager.InvalidateRequerySuggested();
     }
 
+    private void RefreshTagFilters<TDoc>(
+        IEnumerable<TDoc> source,
+        Func<TDoc, List<string>?> tagsSelector,
+        HashSet<string> selectedTags,
+        ObservableCollection<TagFilterItemViewModel> targetFilters,
+        Action<string, bool> onSelectionChanged,
+        Action notifyChanged)
+    {
+        var tags = ComputeSortedDistinctTags(source, tagsSelector);
+        ApplyTagFilters(tags, selectedTags, targetFilters, onSelectionChanged, notifyChanged);
+    }
+
     private void RefreshAvailableTags()
     {
-        RefreshTagFilters(Notes, note => note.Document.Tags, _selectedTags, TagFilters, SetTagFilterSelected, () =>
-        {
-            OnPropertyChanged(nameof(HasTagFilters));
-            OnPropertyChanged(nameof(ActiveHasTagFilters));
-            OnPropertyChanged(nameof(HasActiveTagFilters));
-            OnPropertyChanged(nameof(TagFilterButtonText));
-            OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
-            OnPropertyChanged(nameof(ActiveTagFilterButtonText));
-        });
+        RefreshTagFilters(Notes, note => note.Document.Tags, _selectedTags, TagFilters, SetTagFilterSelected, NotifyTagFilterPropertiesChanged);
+    }
+
+    private void NotifyTagFilterPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(HasTagFilters));
+        OnPropertyChanged(nameof(ActiveHasTagFilters));
+        OnPropertyChanged(nameof(HasActiveTagFilters));
+        OnPropertyChanged(nameof(TagFilterButtonText));
+        OnPropertyChanged(nameof(ActiveHasActiveTagFilters));
+        OnPropertyChanged(nameof(ActiveTagFilterButtonText));
     }
 
     private void ClearActiveTagFilters()
@@ -7429,9 +7473,9 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    private List<NoteCardViewModel> SortNotes(IEnumerable<NoteCardViewModel> notes)
+    private static List<NoteCardViewModel> SortNotesBy(IEnumerable<NoteCardViewModel> notes, string sortOptionKey)
     {
-        return _selectedSortOptionKey switch
+        return sortOptionKey switch
         {
             SortLastModifiedAsc => notes
                 .OrderByDescending(n => n.Document.IsPinned)
@@ -7465,6 +7509,9 @@ public class MainViewModel : ViewModelBase
                 .ToList()
         };
     }
+
+    private List<NoteCardViewModel> SortNotes(IEnumerable<NoteCardViewModel> notes)
+        => SortNotesBy(notes, _selectedSortOptionKey);
 
     private List<FlashcardSetViewModel> SortFlashcardSets(IEnumerable<FlashcardSetViewModel> sets)
     {
@@ -7704,8 +7751,65 @@ public class MainViewModel : ViewModelBase
 
     public void RefreshTagFiltersAfterNoteEdit()
     {
-        RefreshAvailableTags();
-        ApplyFilters();
+        // Compute dashboard tags, groups, recents, and calendar projections off-thread.
+        // Active text searches stay on the UI thread because NoteCardViewModel.Content
+        // lazily creates a WPF FlowDocument (see WarmContentPreview).
+        if (!string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            RefreshAvailableTags();
+            ApplyFilters();
+            return;
+        }
+
+        if (_dashboardRefreshInFlight)
+        {
+            _dashboardRefreshPending = true;
+            return;
+        }
+
+        _dashboardRefreshInFlight = true;
+
+        var notesSnapshot = Notes.ToList();
+        var flashcardSetsSnapshot = FlashcardSets.ToList();
+        var mindMapsSnapshot = MindMaps.ToList();
+        var quizzesSnapshot = Quizzes.ToList();
+        var selectedTagsSnapshot = new HashSet<string>(_selectedTags, StringComparer.OrdinalIgnoreCase);
+        var metadataSnapshot = _groupMetadata.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new NoteGroupData
+            {
+                GroupId = kvp.Value.GroupId,
+                Name = kvp.Value.Name,
+                BackgroundColor = kvp.Value.BackgroundColor,
+                SortOrder = kvp.Value.SortOrder
+            });
+        var sortOptionKey = _selectedSortOptionKey;
+        var recentLimit = _recentItemsLimit;
+        var calendarDate = CalendarSelectedDate;
+        var uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
+
+        Task.Run(() =>
+        {
+            var noteTags = ComputeSortedDistinctTags(notesSnapshot, note => note.Document.Tags);
+            var groups = ComputeNoteGroups(notesSnapshot, selectedTagsSnapshot, sortOptionKey, metadataSnapshot);
+            var recentNotes = ComputeRecentNotes(notesSnapshot, selectedTagsSnapshot, recentLimit);
+            var (calendarItems, calendarDates) = ComputeCalendarScheduledNotes(
+                notesSnapshot, selectedTagsSnapshot, flashcardSetsSnapshot, mindMapsSnapshot, quizzesSnapshot, calendarDate);
+
+            return new DashboardRefreshResult(noteTags, groups, metadataSnapshot, recentNotes, calendarItems, calendarDates);
+        }).ContinueWith(task =>
+        {
+            _dashboardRefreshInFlight = false;
+
+            if (task.IsCompletedSuccessfully)
+                ApplyDashboardRefreshResult(task.Result);
+
+            if (_dashboardRefreshPending)
+            {
+                _dashboardRefreshPending = false;
+                RefreshTagFiltersAfterNoteEdit();
+            }
+        }, uiScheduler);
     }
 
     public void SetNoteSchedules(NoteCardViewModel note, IEnumerable<NoteScheduleEntry>? schedules)
@@ -7867,6 +7971,82 @@ public class MainViewModel : ViewModelBase
     {
         RefreshCalendarScheduledNotes();
         RefreshRecentQuizzes();
+    }
+
+    /// <summary>Background-safe mirror of <see cref="RefreshCalendarScheduledNotes"/>: same
+    /// four-collection scope and grouping, but tag-filtered (<see cref="MatchesSelectedTags"/>)
+    /// instead of search-filtered, since search text needs the UI-thread-affine
+    /// NoteCardViewModel.Content decode.</summary>
+    private static (List<CalendarScheduledItemViewModel> Items, DateTime[] DatesWithSchedules) ComputeCalendarScheduledNotes(
+        List<NoteCardViewModel> notes,
+        HashSet<string> selectedTags,
+        List<FlashcardSetViewModel> flashcardSets,
+        List<MindMapViewModel> mindMaps,
+        List<QuizViewModel> quizzes,
+        DateTime selectedDate)
+    {
+        var selected = selectedDate.Date;
+
+        var noteItems = notes
+            .Where(note => MatchesSelectedTags(note, selectedTags))
+            .SelectMany(note => GetEffectiveSchedules(note.Document).Select(entry => new CalendarScheduledItemViewModel
+            {
+                ItemType = ScheduledItemType.Note,
+                Note = note,
+                Title = note.Title,
+                ScheduledAt = entry.ScheduledAt,
+                ScheduleNote = entry.Note ?? string.Empty
+            }));
+
+        var flashcardItems = flashcardSets
+            .SelectMany(fs => (fs.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
+            {
+                ItemType = ScheduledItemType.Flashcard,
+                FlashcardSet = fs,
+                Title = fs.Title,
+                ScheduledAt = entry.ScheduledAt,
+                ScheduleNote = entry.Note ?? string.Empty
+            }));
+
+        var mindMapItems = mindMaps
+            .SelectMany(mm => (mm.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
+            {
+                ItemType = ScheduledItemType.MindMap,
+                MindMap = mm,
+                Title = mm.Title,
+                ScheduledAt = entry.ScheduledAt,
+                ScheduleNote = entry.Note ?? string.Empty
+            }));
+
+        var quizItems = quizzes
+            .SelectMany(q => (q.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
+            {
+                ItemType = ScheduledItemType.Quiz,
+                Quiz = q,
+                Title = q.Title,
+                ScheduledAt = entry.ScheduledAt,
+                ScheduleNote = entry.Note ?? string.Empty
+            }));
+
+        var allItems = noteItems
+            .Concat(flashcardItems)
+            .Concat(mindMapItems)
+            .Concat(quizItems)
+            .ToList();
+
+        var datesWithSchedules = allItems
+            .Select(item => item.ScheduledAt.Date)
+            .Distinct()
+            .OrderBy(date => date)
+            .ToArray();
+
+        var items = allItems
+            .Where(item => item.ScheduledAt.Date == selected)
+            .OrderBy(item => item.ScheduledAt)
+            .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        return (items, datesWithSchedules);
     }
 
     private void RefreshCalendarScheduledNotes()
@@ -8089,6 +8269,54 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    private sealed record NoteGroupPlan(Guid GroupId, string Name, string BackgroundColor, List<NoteCardViewModel> Notes);
+
+    /// <summary>Background-safe mirror of <see cref="RebuildGroups"/>: same grouping/sort/filter
+    /// logic, but returns plain plan records instead of constructing NoteGroupViewModel/Brush
+    /// instances (not provably thread-safe - see GroupBrushFactory's Application.Current.Resources
+    /// fallback) and mutates a private metadata clone instead of the live _groupMetadata
+    /// dictionary (which EnsureGroupMetadata both reads and writes).</summary>
+    private static List<NoteGroupPlan> ComputeNoteGroups(
+        List<NoteCardViewModel> notes,
+        HashSet<string> selectedTags,
+        string sortOptionKey,
+        Dictionary<Guid, NoteGroupData> metadata)
+    {
+        var groupedByRecent = notes
+            .Where(n => n.Document.GroupId.HasValue)
+            .GroupBy(n => n.Document.GroupId!.Value)
+            .OrderByDescending(g => g.Max(n => n.Document.LastModified))
+            .ToList();
+
+        var nextOrder = 0;
+        foreach (var group in groupedByRecent)
+        {
+            var groupMetadata = EnsureGroupMetadata(metadata, group.Key);
+            if (!groupMetadata.SortOrder.HasValue)
+                groupMetadata.SortOrder = nextOrder;
+
+            nextOrder = Math.Max(nextOrder, groupMetadata.SortOrder.Value + 1);
+        }
+
+        var grouped = groupedByRecent
+            .OrderBy(g => EnsureGroupMetadata(metadata, g.Key).SortOrder ?? int.MaxValue)
+            .ThenByDescending(g => g.Max(n => n.Document.LastModified))
+            .ToList();
+
+        var plans = new List<NoteGroupPlan>();
+        foreach (var group in grouped)
+        {
+            var visibleNotes = SortNotesBy(group.Where(n => MatchesSelectedTags(n, selectedTags)), sortOptionKey);
+            if (visibleNotes.Count == 0)
+                continue;
+
+            var groupMetadata = EnsureGroupMetadata(metadata, group.Key);
+            plans.Add(new NoteGroupPlan(group.Key, groupMetadata.Name, groupMetadata.BackgroundColor, visibleNotes));
+        }
+
+        return plans;
+    }
+
     private void RebuildGroups()
     {
         Scriblucent.Services.ScrollPerfDiag.Log($"rebuildGroups\tnotesCount={Notes.Count}\tnoteGroupsCountBefore={NoteGroups.Count}");
@@ -8169,6 +8397,68 @@ public class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasUngroupedNotes));
         OnPropertyChanged(nameof(HasNotes));
         NotifyNotesDashboardPresentationChanged();
+    }
+
+    private sealed record DashboardRefreshResult(
+        List<string> NoteTags,
+        List<NoteGroupPlan> Groups,
+        Dictionary<Guid, NoteGroupData> GroupMetadata,
+        List<NoteCardViewModel> RecentNotes,
+        List<CalendarScheduledItemViewModel> CalendarScheduledNotes,
+        DateTime[] CalendarDatesWithSchedules);
+
+    private void ApplyDashboardRefreshResult(DashboardRefreshResult result)
+    {
+        // Coalesced with everything else here rather than run eagerly at dispatch time (see
+        // RefreshTagFiltersAfterNoteEdit) - a rapid batch of saves used to pay this full-list
+        // Refresh() cost once per save even though the rest of the rebuild already coalesced into
+        // a single background cycle; now it runs exactly once, when the batch actually applies.
+        InvalidateUngroupedVisibleCount();
+        _notesView.Refresh();
+
+        ApplyTagFilters(result.NoteTags, _selectedTags, TagFilters, SetTagFilterSelected, NotifyTagFilterPropertiesChanged);
+
+        // Fill-gaps-only merge: a rename/recolor/create that happened live while this snapshot's
+        // background compute was still running must win over the (now slightly stale) computed
+        // metadata - only ever create a missing entry or fill a still-null SortOrder.
+        foreach (var (groupId, computed) in result.GroupMetadata)
+        {
+            if (!_groupMetadata.TryGetValue(groupId, out var live))
+            {
+                _groupMetadata[groupId] = computed;
+                continue;
+            }
+
+            live.SortOrder ??= computed.SortOrder;
+        }
+
+        var desiredGroups = result.Groups
+            .Select(plan => new NoteGroupViewModel(plan.GroupId, plan.Name, plan.BackgroundColor, plan.Notes))
+            .ToList();
+
+        var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
+        var removingIds = NoteGroups
+            .Where(group => !desiredIds.Contains(group.GroupId))
+            .Select(group => group.GroupId)
+            .ToList();
+
+        if (!TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds, () => SyncNoteGroups(desiredGroups)))
+            SyncNoteGroups(desiredGroups);
+
+        RecentNotes.Clear();
+        foreach (var note in result.RecentNotes)
+            RecentNotes.Add(note);
+        Scriblucent.Services.StartupProbe.MarkOnce("recentStrip");
+
+        CalendarDatesWithSchedules = result.CalendarDatesWithSchedules;
+        OnPropertyChanged(nameof(CalendarDatesWithSchedules));
+
+        CalendarScheduledNotes.Clear();
+        foreach (var item in result.CalendarScheduledNotes)
+            CalendarScheduledNotes.Add(item);
+
+        OnPropertyChanged(nameof(HasCalendarScheduledNotes));
+        OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
     }
 
     private void NotifyNotesChanged()
@@ -8322,7 +8612,13 @@ public class MainViewModel : ViewModelBase
 
     private bool _notesWriteInFlight;
     private bool _notesWritePending;
+    private bool _dashboardRefreshInFlight;
+    private bool _dashboardRefreshPending;
     private string? _lastSavedNotesSignature;
+    /// <summary>Managed heap size right after the last forced post-save collect (see
+    /// <see cref="SaveNotes"/>). Growth since this baseline decides whether the next save's
+    /// collect actually needs to run.</summary>
+    private long _heapBytesAfterLastForcedCollect = GC.GetTotalMemory(false);
     private string? _lastSavedFlashcardSetsSignature;
     private string? _lastSavedMindMapsSignature;
     private string? _lastSavedQuizzesSignature;
@@ -8417,8 +8713,25 @@ public class MainViewModel : ViewModelBase
                 // window open). Collect deterministically right here, off the UI thread - the
                 // Optimized/non-blocking variant proved unreliable (skipped passes let the
                 // post-collection baseline climb ~150MB per save).
-                GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-                GC.WaitForPendingFinalizers();
+                //
+                // But this is a blocking Gen2 collect - a stop-the-world pause that suspends every
+                // managed thread, including the UI thread, regardless of which thread requested it.
+                // Running it unconditionally on every save (even a one-line text edit that allocates
+                // almost nothing) was stalling whatever the UI was mid-animation for, e.g. the note
+                // editor's close animation. Only pay for it once actual garbage has accumulated.
+                const long ForcedCollectThresholdBytes = 50 * 1024 * 1024;
+                if (GC.GetTotalMemory(false) - _heapBytesAfterLastForcedCollect > ForcedCollectThresholdBytes)
+                {
+                    // Gives the note editor's close animation (WindowCloseMs=340 / NavFadeOutMs=120,
+                    // see UiMotion) time to finish before this fires - this collect is a blocking
+                    // Gen2 pause that freezes every thread, including whatever's mid-render,
+                    // regardless of which thread asked for it. We're already off the UI thread
+                    // here, so sleeping this background thread briefly is free.
+                    System.Threading.Thread.Sleep(450);
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                    GC.WaitForPendingFinalizers();
+                    _heapBytesAfterLastForcedCollect = GC.GetTotalMemory(false);
+                }
             }
             catch
             {
@@ -9009,33 +9322,37 @@ public class MainViewModel : ViewModelBase
             );
     }
 
-    private NoteGroupData EnsureGroupMetadata(Guid groupId)
+    private NoteGroupData EnsureGroupMetadata(Guid groupId) => EnsureGroupMetadata(_groupMetadata, groupId);
+
+    private static NoteGroupData EnsureGroupMetadata(Dictionary<Guid, NoteGroupData> metadata, Guid groupId)
     {
-        if (_groupMetadata.TryGetValue(groupId, out var metadata))
+        if (metadata.TryGetValue(groupId, out var existing))
         {
-            metadata.SortOrder ??= GetNextGroupSortOrder();
-            return metadata;
+            existing.SortOrder ??= GetNextGroupSortOrder(metadata);
+            return existing;
         }
 
-        metadata = new NoteGroupData
+        var created = new NoteGroupData
         {
             GroupId = groupId,
             Name = string.Format(
                 LocalizationService.GetString("GroupTitleFormat"),
                 groupId.ToString()[..4].ToUpperInvariant()),
             BackgroundColor = DefaultGroupBackground,
-            SortOrder = GetNextGroupSortOrder()
+            SortOrder = GetNextGroupSortOrder(metadata)
         };
-        _groupMetadata[groupId] = metadata;
-        return metadata;
+        metadata[groupId] = created;
+        return created;
     }
 
-    private int GetNextGroupSortOrder()
+    private int GetNextGroupSortOrder() => GetNextGroupSortOrder(_groupMetadata);
+
+    private static int GetNextGroupSortOrder(Dictionary<Guid, NoteGroupData> metadata)
     {
-        if (_groupMetadata.Count == 0)
+        if (metadata.Count == 0)
             return 0;
 
-        return _groupMetadata.Values
+        return metadata.Values
             .Select(m => m.SortOrder ?? -1)
             .DefaultIfEmpty(-1)
             .Max() + 1;
