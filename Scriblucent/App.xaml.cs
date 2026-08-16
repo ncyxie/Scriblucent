@@ -233,6 +233,14 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         BundledModelHostService.Instance.Stop();
+
+        // Give a still-in-flight/queued notes save a bounded chance to finish before the process
+        // tears down - otherwise a relaunch soon after can race the old instance's still-writing
+        // file and see a transient I/O error that gets misreported as "file is damaged" (see
+        // MainViewModel.FlushPendingNotesSaveBeforeExit).
+        if (MainWindow?.DataContext is MainViewModel mainVm)
+            mainVm.FlushPendingNotesSaveBeforeExit(TimeSpan.FromSeconds(5));
+
         base.OnExit(e);
         AppSettingsService.Flush();
     }

@@ -3166,7 +3166,7 @@ public class MainViewModel : ViewModelBase
     public ObservableCollection<FlashcardSetViewModel> TrashedFlashcardSets { get; } = new();
     public ObservableCollection<MindMapViewModel> TrashedMindMaps { get; } = new();
     public ObservableCollection<QuizViewModel> TrashedQuizzes { get; } = new();
-    public ObservableCollection<TrashItemViewModel> TrashedItems { get; } = new();
+    public ObservableCollection<TrashItemViewModel> TrashedItems { get; } = new BulkObservableCollection<TrashItemViewModel>();
 
     public int TrashItemCount =>
         TrashedNotes.Count + TrashedFlashcardSets.Count + TrashedMindMaps.Count + TrashedQuizzes.Count;
@@ -4564,34 +4564,56 @@ public class MainViewModel : ViewModelBase
     /// and EmptyTrash perform an actual, irreversible removal.</summary>
     private void MoveNoteToTrash(NoteCardViewModel noteCard)
     {
+        MoveNoteToTrashCore(noteCard);
+        NotifyTrashChanged();
+    }
+
+    /// <summary>Mutation only, no NotifyTrashChanged() - batch callers run this in a loop and
+    /// notify once after, since NotifyTrashChanged rebuilds the whole trash list.</summary>
+    private void MoveNoteToTrashCore(NoteCardViewModel noteCard)
+    {
         noteCard.Document.IsDeleted = true;
         noteCard.Document.DeletedAt = DateTime.UtcNow;
         TrashedNotes.Add(noteCard);
-        NotifyTrashChanged();
     }
 
     private void MoveFlashcardSetToTrash(FlashcardSetViewModel set)
     {
+        MoveFlashcardSetToTrashCore(set);
+        NotifyTrashChanged();
+    }
+
+    private void MoveFlashcardSetToTrashCore(FlashcardSetViewModel set)
+    {
         set.Document.IsDeleted = true;
         set.Document.DeletedAt = DateTime.UtcNow;
         TrashedFlashcardSets.Add(set);
-        NotifyTrashChanged();
     }
 
     private void MoveMindMapToTrash(MindMapViewModel mindMap)
     {
+        MoveMindMapToTrashCore(mindMap);
+        NotifyTrashChanged();
+    }
+
+    private void MoveMindMapToTrashCore(MindMapViewModel mindMap)
+    {
         mindMap.Document.IsDeleted = true;
         mindMap.Document.DeletedAt = DateTime.UtcNow;
         TrashedMindMaps.Add(mindMap);
-        NotifyTrashChanged();
     }
 
     private void MoveQuizToTrash(QuizViewModel quiz)
     {
+        MoveQuizToTrashCore(quiz);
+        NotifyTrashChanged();
+    }
+
+    private void MoveQuizToTrashCore(QuizViewModel quiz)
+    {
         quiz.Document.IsDeleted = true;
         quiz.Document.DeletedAt = DateTime.UtcNow;
         TrashedQuizzes.Add(quiz);
-        NotifyTrashChanged();
     }
 
     private void ApplyNotesDeleteReaction()
@@ -4734,16 +4756,203 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Batched sibling of RestoreTrashItem - restoring each item individually would run
+    /// the full per-type ApplyXDeleteReaction dashboard rebuild and NotifyTrashChanged (a full
+    /// trash-list re-sort) once per item, which is what made a large batch restore freeze at
+    /// library scale. Groups by type once, bulk-removes from each trashed collection, and reacts
+    /// once per type instead.</summary>
     public void RestoreTrashItems(IEnumerable<TrashItemViewModel> items)
     {
-        foreach (var item in items.ToList())
-            RestoreTrashItem(item);
+        var list = items.ToList();
+        if (list.Count <= 1)
+        {
+            foreach (var item in list)
+                RestoreTrashItem(item);
+            return;
+        }
+
+        var notes = new List<NoteCardViewModel>();
+        var sets = new List<FlashcardSetViewModel>();
+        var maps = new List<MindMapViewModel>();
+        var quizzes = new List<QuizViewModel>();
+
+        foreach (var item in list)
+        {
+            switch (item.Source)
+            {
+                case NoteCardViewModel note:
+                    notes.Add(note);
+                    break;
+                case FlashcardSetViewModel set:
+                    sets.Add(set);
+                    break;
+                case MindMapViewModel map:
+                    maps.Add(map);
+                    break;
+                case QuizViewModel quiz:
+                    quizzes.Add(quiz);
+                    break;
+            }
+        }
+
+        if (notes.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedNotes, notes);
+            _notesBatchAddInProgress = true;
+            try
+            {
+                foreach (var note in notes)
+                {
+                    note.Document.IsDeleted = false;
+                    note.Document.DeletedAt = null;
+                    Notes.Add(note);
+                }
+            }
+            finally
+            {
+                _notesBatchAddInProgress = false;
+            }
+
+            ApplyNotesDeleteReaction();
+        }
+
+        if (sets.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedFlashcardSets, sets);
+            _flashcardBatchAddInProgress = true;
+            try
+            {
+                foreach (var set in sets)
+                {
+                    set.Document.IsDeleted = false;
+                    set.Document.DeletedAt = null;
+                    FlashcardSets.Add(set);
+                }
+            }
+            finally
+            {
+                _flashcardBatchAddInProgress = false;
+            }
+
+            ApplyFlashcardSetDeleteReaction();
+        }
+
+        if (maps.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedMindMaps, maps);
+            _mindMapBatchAddInProgress = true;
+            try
+            {
+                foreach (var map in maps)
+                {
+                    map.Document.IsDeleted = false;
+                    map.Document.DeletedAt = null;
+                    MindMaps.Add(map);
+                }
+            }
+            finally
+            {
+                _mindMapBatchAddInProgress = false;
+            }
+
+            ApplyMindMapDeleteReaction();
+        }
+
+        if (quizzes.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedQuizzes, quizzes);
+            _quizBatchAddInProgress = true;
+            try
+            {
+                foreach (var quiz in quizzes)
+                {
+                    quiz.Document.IsDeleted = false;
+                    quiz.Document.DeletedAt = null;
+                    Quizzes.Add(quiz);
+                }
+            }
+            finally
+            {
+                _quizBatchAddInProgress = false;
+            }
+
+            ApplyQuizDeleteReaction();
+        }
+
+        NotifyTrashChanged();
     }
 
+    /// <summary>Batched sibling of PurgeTrashItemPermanently - see RestoreTrashItems for why this
+    /// exists (purging each item individually paid a full trash-list re-sort, and for
+    /// FlashcardSets/MindMaps/Quizzes an unconditional full-collection re-sort inside their Save
+    /// methods, once per item).</summary>
     public void PurgeTrashItemsPermanently(IEnumerable<TrashItemViewModel> items)
     {
-        foreach (var item in items.ToList())
-            PurgeTrashItemPermanently(item);
+        var list = items.ToList();
+        if (list.Count <= 1)
+        {
+            foreach (var item in list)
+                PurgeTrashItemPermanently(item);
+            return;
+        }
+
+        var notes = new List<NoteCardViewModel>();
+        var sets = new List<FlashcardSetViewModel>();
+        var maps = new List<MindMapViewModel>();
+        var quizzes = new List<QuizViewModel>();
+
+        foreach (var item in list)
+        {
+            switch (item.Source)
+            {
+                case NoteCardViewModel note:
+                    notes.Add(note);
+                    break;
+                case FlashcardSetViewModel set:
+                    sets.Add(set);
+                    break;
+                case MindMapViewModel map:
+                    maps.Add(map);
+                    break;
+                case QuizViewModel quiz:
+                    quizzes.Add(quiz);
+                    break;
+            }
+        }
+
+        var changed = false;
+
+        if (notes.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedNotes, notes);
+            QueueSaveNotes();
+            changed = true;
+        }
+
+        if (sets.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedFlashcardSets, sets);
+            SaveFlashcardSets();
+            SweepOrphanedFlashcardMedia();
+            changed = true;
+        }
+
+        if (maps.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedMindMaps, maps);
+            SaveMindMaps();
+            changed = true;
+        }
+
+        if (quizzes.Count > 0)
+        {
+            RemoveManyFromObservableCollection(TrashedQuizzes, quizzes);
+            SaveQuizzes();
+            changed = true;
+        }
+
+        if (changed)
+            NotifyTrashChanged();
     }
 
     /// <summary>Irreversible - the caller is responsible for confirming with the user first.</summary>
@@ -4786,13 +4995,20 @@ public class MainViewModel : ViewModelBase
             NotifyTrashChanged();
     }
 
+    /// <summary>Builds the full list off to the side and swaps it in with at most two
+    /// CollectionChanged events (Clear + AddRange), instead of one event per item - mirrors
+    /// CommitBulkNotes's use of the same BulkObservableCollection idiom. Firing one event per item
+    /// here used to make every subscriber's per-event reaction (e.g. TrashPanel's ApplyFilters,
+    /// itself O(current count)) run once per item too, turning opening the Trash panel after a
+    /// large batch delete into an O(k^2) freeze.</summary>
     public void RefreshTrashedItems()
     {
-        TrashedItems.Clear();
+        var items = new List<TrashItemViewModel>(
+            TrashedNotes.Count + TrashedFlashcardSets.Count + TrashedMindMaps.Count + TrashedQuizzes.Count);
 
         foreach (var note in TrashedNotes.OrderByDescending(n => n.Document.DeletedAt ?? DateTime.MinValue))
         {
-            TrashedItems.Add(new TrashItemViewModel(
+            items.Add(new TrashItemViewModel(
                 TrashItemKind.Note,
                 note.Document.Id,
                 note.Title,
@@ -4803,7 +5019,7 @@ public class MainViewModel : ViewModelBase
 
         foreach (var set in TrashedFlashcardSets.OrderByDescending(s => s.Document.DeletedAt ?? DateTime.MinValue))
         {
-            TrashedItems.Add(new TrashItemViewModel(
+            items.Add(new TrashItemViewModel(
                 TrashItemKind.FlashcardSet,
                 set.Document.Id,
                 set.Title,
@@ -4814,7 +5030,7 @@ public class MainViewModel : ViewModelBase
 
         foreach (var map in TrashedMindMaps.OrderByDescending(m => m.Document.DeletedAt ?? DateTime.MinValue))
         {
-            TrashedItems.Add(new TrashItemViewModel(
+            items.Add(new TrashItemViewModel(
                 TrashItemKind.MindMap,
                 map.Document.Id,
                 map.Title,
@@ -4825,13 +5041,24 @@ public class MainViewModel : ViewModelBase
 
         foreach (var quiz in TrashedQuizzes.OrderByDescending(q => q.Document.DeletedAt ?? DateTime.MinValue))
         {
-            TrashedItems.Add(new TrashItemViewModel(
+            items.Add(new TrashItemViewModel(
                 TrashItemKind.Quiz,
                 quiz.Document.Id,
                 quiz.Title,
                 quiz.Document.DeletedAt,
                 quiz,
                 TrashRetentionDays));
+        }
+
+        TrashedItems.Clear();
+        if (TrashedItems is BulkObservableCollection<TrashItemViewModel> bulk)
+        {
+            bulk.AddRange(items);
+        }
+        else
+        {
+            foreach (var item in items)
+                TrashedItems.Add(item);
         }
     }
 
@@ -6159,11 +6386,10 @@ public class MainViewModel : ViewModelBase
 
     private void CommitRemoveFlashcardSetsBatch(IReadOnlyList<FlashcardSetViewModel> sets)
     {
+        RemoveManyFromObservableCollection(FlashcardSets, sets);
         foreach (var set in sets)
-        {
-            FlashcardSets.Remove(set);
-            MoveFlashcardSetToTrash(set);
-        }
+            MoveFlashcardSetToTrashCore(set);
+        NotifyTrashChanged();
     }
 
     private void DeleteSelectedMindMapsBatch()
@@ -6196,11 +6422,10 @@ public class MainViewModel : ViewModelBase
 
     private void CommitRemoveMindMapsBatch(IReadOnlyList<MindMapViewModel> maps)
     {
+        RemoveManyFromObservableCollection(MindMaps, maps);
         foreach (var map in maps)
-        {
-            MindMaps.Remove(map);
-            MoveMindMapToTrash(map);
-        }
+            MoveMindMapToTrashCore(map);
+        NotifyTrashChanged();
     }
 
     private void DeleteSelectedQuizzesBatch()
@@ -6233,11 +6458,10 @@ public class MainViewModel : ViewModelBase
 
     private void CommitRemoveQuizzesBatch(IReadOnlyList<QuizViewModel> quizzes)
     {
+        RemoveManyFromObservableCollection(Quizzes, quizzes);
         foreach (var quiz in quizzes)
-        {
-            Quizzes.Remove(quiz);
-            MoveQuizToTrash(quiz);
-        }
+            MoveQuizToTrashCore(quiz);
+        NotifyTrashChanged();
     }
 
     private void DeleteSelectedNotesBatch()
@@ -6270,11 +6494,10 @@ public class MainViewModel : ViewModelBase
 
     private void CommitRemoveNotesBatch(IReadOnlyList<NoteCardViewModel> notes)
     {
+        RemoveManyFromObservableCollection(Notes, notes);
         foreach (var note in notes)
-        {
-            Notes.Remove(note);
-            MoveNoteToTrash(note);
-        }
+            MoveNoteToTrashCore(note);
+        NotifyTrashChanged();
     }
 
     private void RemoveSelectedFromGroups()
@@ -8220,6 +8443,26 @@ public class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Bulk removal for a List-backed ObservableCollection - avoids the O(n) IndexOf+shift
+    /// that ObservableCollection.Remove() pays per call, which turned batch delete/restore/purge at
+    /// library scale (tens of thousands of items) into O(m*n). Backward index iteration means
+    /// removing from the current tail costs nothing to shift, so the common "remove almost
+    /// everything" case is O(n) total; mirrors SyncObservableCollectionOrder's own HashSet-backed
+    /// idiom below.</summary>
+    private static void RemoveManyFromObservableCollection<T>(ObservableCollection<T> collection, IReadOnlyCollection<T> itemsToRemove)
+        where T : class
+    {
+        if (itemsToRemove.Count == 0)
+            return;
+
+        var toRemove = new HashSet<T>(itemsToRemove);
+        for (var i = collection.Count - 1; i >= 0; i--)
+        {
+            if (toRemove.Contains(collection[i]))
+                collection.RemoveAt(i);
+        }
+    }
+
     private static void SyncObservableCollectionOrder<T>(ObservableCollection<T> collection, IReadOnlyList<T> desired)
         where T : class
     {
@@ -8748,6 +8991,42 @@ public class MainViewModel : ViewModelBase
         }, uiScheduler);
     }
 
+    /// <summary>Called from App.OnExit before the process is allowed to terminate. SaveNotes()
+    /// writes on a background thread and only clears _notesWriteInFlight/_notesWritePending (and
+    /// QueueSaveNotes's _saveNotesQueued) via a UI-thread continuation - with nothing pumping the
+    /// dispatcher during a normal exit, the process could terminate mid-write, and a relaunch
+    /// racing that still-finishing write was seen to throw a transient I/O exception that
+    /// ReadNotesFromDisk misreports as file corruption. Pumps the dispatcher (Dispatcher.PushFrame)
+    /// so that continuation - and any not-yet-started QueueSaveNotes callback - actually gets a
+    /// chance to run, bounded so a stuck write can never hang shutdown.</summary>
+    public void FlushPendingNotesSaveBeforeExit(TimeSpan timeout)
+    {
+        SaveNotes();
+
+        if (!_saveNotesQueued && !_notesWriteInFlight && !_notesWritePending)
+            return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+            return;
+
+        var deadline = DateTime.UtcNow + timeout;
+        var frame = new DispatcherFrame();
+        var pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        pollTimer.Tick += (_, _) =>
+        {
+            var settled = !_saveNotesQueued && !_notesWriteInFlight && !_notesWritePending;
+            if (settled || DateTime.UtcNow >= deadline)
+            {
+                pollTimer.Stop();
+                frame.Continue = false;
+            }
+        };
+        pollTimer.Start();
+        Dispatcher.PushFrame(frame);
+        pollTimer.Stop();
+    }
+
     private NotesStoreData BuildNotesStoreSnapshot()
     {
         var docs = new List<NoteDocument>();
@@ -9016,38 +9295,70 @@ public class MainViewModel : ViewModelBase
         if (!File.Exists(path))
             return new NotesLoadResult(NotesLoadStatus.NotFound, new List<NoteDocument>(), new List<NoteGroupData>());
 
-        try
+        // A previous instance's SaveNotes background write (or an antivirus/backup tool) can hold
+        // a transient lock on this exact path for a moment - retrying a few times before giving up
+        // avoids misreporting that as "file is damaged" (the file itself is fine; only genuine
+        // parse/deserialize failures below should count as real corruption).
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            // Stream the deserialize - the store can be tens of MB of photo Base64, and
-            // reading it into a string first doubles the launch allocation for nothing.
-            using var stream = File.OpenRead(path);
-            var docs = new List<NoteDocument>();
-            var groups = new List<NoteGroupData>();
-            var trashedDocs = new List<NoteDocument>();
-            var store = JsonSerializer.Deserialize<NotesStoreData>(stream);
-            if (store?.Notes != null && store.Notes.Count > 0)
+            try
             {
-                docs = store.Notes;
-                groups = store.Groups ?? new List<NoteGroupData>();
-                trashedDocs = store.TrashedNotes ?? new List<NoteDocument>();
-            }
-            else
-            {
-                stream.Position = 0;
-                var legacyDocs = JsonSerializer.Deserialize<List<NoteDocument>>(stream);
-                if (legacyDocs != null)
-                    docs = legacyDocs;
-            }
+                // Stream the deserialize - the store can be tens of MB of photo Base64, and
+                // reading it into a string first doubles the launch allocation for nothing.
+                using var stream = File.OpenRead(path);
+                var docs = new List<NoteDocument>();
+                var groups = new List<NoteGroupData>();
+                var trashedDocs = new List<NoteDocument>();
 
-            return new NotesLoadResult(NotesLoadStatus.Success, docs, groups, TrashedDocs: trashedDocs);
+                NotesStoreData? store = null;
+                try
+                {
+                    store = JsonSerializer.Deserialize<NotesStoreData>(stream);
+                }
+                catch (JsonException)
+                {
+                    // Not the current object-rooted format - fall through to the legacy bare-array
+                    // format below instead of treating this as corrupt.
+                }
+
+                // A non-null Notes list (even an empty one - e.g. every note moved to trash) means
+                // this is the current format; only a genuinely missing/null Notes property (or a
+                // failed deserialize above) means this might be the old bare-array format. Checking
+                // Notes.Count > 0 here used to misdiagnose "current format, zero live notes right
+                // now" as legacy, which then failed to parse as a bare array and got reported as a
+                // damaged file even though nothing was wrong with it.
+                if (store?.Notes != null)
+                {
+                    docs = store.Notes;
+                    groups = store.Groups ?? new List<NoteGroupData>();
+                    trashedDocs = store.TrashedNotes ?? new List<NoteDocument>();
+                }
+                else
+                {
+                    stream.Position = 0;
+                    var legacyDocs = JsonSerializer.Deserialize<List<NoteDocument>>(stream);
+                    if (legacyDocs != null)
+                        docs = legacyDocs;
+                }
+
+                return new NotesLoadResult(NotesLoadStatus.Success, docs, groups, TrashedDocs: trashedDocs);
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < maxAttempts)
+            {
+                System.Threading.Thread.Sleep(150);
+            }
+            catch
+            {
+                // File exists but couldn't be parsed - likely truncated/corrupted by a crash mid-write,
+                // or a transient lock that outlasted the retries above. Back it up rather than
+                // letting the caller silently overwrite it with a starter note.
+                var backupPath = TryBackupCorruptFile(path);
+                return new NotesLoadResult(NotesLoadStatus.ParseError, new List<NoteDocument>(), new List<NoteGroupData>(), backupPath);
+            }
         }
-        catch
-        {
-            // File exists but couldn't be parsed - likely truncated/corrupted by a crash mid-write.
-            // Back it up rather than letting the caller silently overwrite it with a starter note.
-            var backupPath = TryBackupCorruptFile(path);
-            return new NotesLoadResult(NotesLoadStatus.ParseError, new List<NoteDocument>(), new List<NoteGroupData>(), backupPath);
-        }
+
+        return new NotesLoadResult(NotesLoadStatus.ParseError, new List<NoteDocument>(), new List<NoteGroupData>(), TryBackupCorruptFile(path));
     }
 
     private static string? TryBackupCorruptFile(string path)
