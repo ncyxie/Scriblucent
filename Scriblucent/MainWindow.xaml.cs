@@ -1597,7 +1597,10 @@ namespace Scriblucent
         private void ClearDashboardListingDropVisuals()
         {
             ClearListingDropGlow();
+        }
 
+        private void ClearAllDropZoneBorderVisuals()
+        {
             foreach (var border in _dropZoneOriginalBorderBrushes.Keys.ToList())
                 RestoreDropZoneBorderVisual(border);
         }
@@ -3973,6 +3976,15 @@ namespace Scriblucent
 
         internal void DashboardGroupBorder_PreviewDragOver(object sender, DragEventArgs e)
         {
+            var canDrop = CanDropDashboardListingOnGroup(sender, e);
+            if (canDrop)
+            {
+                SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), true);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+                return;
+            }
+
             if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
                 && CanDropDashboardListing(listingElement, e))
             {
@@ -3981,9 +3993,8 @@ namespace Scriblucent
                 return;
             }
 
-            var canDrop = CanDropDashboardListingOnGroup(sender, e);
-            SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), canDrop);
-            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            SetDropZoneBorderVisual(ResolveGroupDropZoneBorder(sender as DependencyObject), false);
+            e.Effects = DragDropEffects.None;
             e.Handled = true;
         }
 
@@ -4037,6 +4048,15 @@ namespace Scriblucent
                 return;
             }
 
+            var canDrop = CanDropDashboardListingToUngrouped(e);
+            if (canDrop)
+            {
+                SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), true);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+                return;
+            }
+
             if (FindDashboardListingElementFromDragEvent(e) is FrameworkElement listingElement
                 && CanDropDashboardListing(listingElement, e))
             {
@@ -4045,9 +4065,8 @@ namespace Scriblucent
                 return;
             }
 
-            var canDrop = CanDropDashboardListingToUngrouped(e);
-            SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), canDrop);
-            e.Effects = canDrop ? DragDropEffects.Move : DragDropEffects.None;
+            SetDropZoneBorderVisual(ResolveUngroupedDropZoneBorder(sender as DependencyObject), false);
+            e.Effects = DragDropEffects.None;
             e.Handled = true;
         }
 
@@ -4632,6 +4651,7 @@ namespace Scriblucent
         internal void ClearAllDragDropVisuals()
         {
             ClearDashboardListingDropVisuals();
+            ClearAllDropZoneBorderVisuals();
             NoteCardControl.ClearDropGlowOwner();
         }
 
