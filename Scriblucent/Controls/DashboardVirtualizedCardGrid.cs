@@ -581,6 +581,13 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         MassSelectHighlightBehavior.ResetContainer(element);
         DashboardMassSelectCheckBoxBehavior.HideAllInContainer(element);
         IndicatorRevealMotionBehavior.ResetContainer(element);
+
+        // A note card's exit animation (DashboardMotionEngine.PlayCardExit) can leave transient
+        // visual state (collapsed shadow, suppressed effect) if interrupted before its own
+        // completion callback restores it - reset before this container shows a different note.
+        if (DashboardScrollRenderGate.ResolveMotionCard(element) is NoteCardControl noteCard)
+            noteCard.PrepareForReuse();
+
         base.ClearContainerForItemOverride(element, item);
     }
 

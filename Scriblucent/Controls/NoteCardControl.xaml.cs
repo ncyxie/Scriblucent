@@ -113,6 +113,23 @@ public partial class NoteCardControl : UserControl
     }
 
     /// <summary>
+    /// Resets transient per-item visual state before this container is recycled for a different
+    /// item. DashboardMotionEngine's group-move exit animation (HideCardShadowPlates/BeginMotionPrep)
+    /// sets some of this state directly, outside the normal IsBitmapMode/DataContext-driven
+    /// ApplyBitmapMode path - if that animation is interrupted before its own completion callback
+    /// restores things (e.g. the item never actually leaves the view, or something else stops the
+    /// in-flight storyboard), the state would otherwise survive onto whatever note this container
+    /// gets rebound to next. Mirrors FlashcardFlipHost.PrepareForReuse for the same reason.
+    /// </summary>
+    internal void PrepareForReuse()
+    {
+        IsHitTestVisible = true;
+        Opacity = 1;
+        UiMotion.EndMotionPrep(this);
+        ApplyBitmapMode();
+    }
+
+    /// <summary>
     /// Hides the nine-slice shadow layer while a smooth-scroll session is active (see
     /// DashboardScrollRenderGate.SetRealizedCardShadowVisibility) - the shadow is a notable
     /// part of each card's scroll-time draw cost, and flat cards during motion read the same

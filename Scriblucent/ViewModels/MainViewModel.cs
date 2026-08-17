@@ -5373,6 +5373,7 @@ public class MainViewModel : ViewModelBase
 
             NormalizeGroups();
             RebuildGroups();
+            _notesView.Refresh();
             SaveNotes();
         }
 
