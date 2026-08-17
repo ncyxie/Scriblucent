@@ -377,20 +377,17 @@ public sealed class DashboardVirtualizationHost : Decorator
     // down as columns increase keeps the compositing cost roughly window-size-invariant.
     private double ResolveViewportCachePixels()
     {
-        if (!IsSmoothScrollActive)
-            return ViewportCachePixels;
-
+        // ResolveCardBudgetPixels is a pure function of measured width/cell size - valid any time,
+        // not just mid-session - so the column-aware base applies unconditionally. Only the
+        // velocity-based lead on top of it needs an actually-active scroll to mean anything.
         var budget = ResolveCardBudgetPixels(TargetExtraCardsAhead, ViewportCachePixels);
-        return RaiseForVelocity(budget, isAheadMargin: true);
+        return IsSmoothScrollActive ? RaiseForVelocity(budget, isAheadMargin: true) : budget;
     }
 
     private double ResolveViewportCacheAbovePixels()
     {
-        if (!IsSmoothScrollActive)
-            return ViewportCacheAbovePixels;
-
         var budget = ResolveCardBudgetPixels(TargetExtraCardsBehind, ViewportCacheAbovePixels);
-        return RaiseForVelocity(budget, isAheadMargin: false);
+        return IsSmoothScrollActive ? RaiseForVelocity(budget, isAheadMargin: false) : budget;
     }
 
     /// <summary>
