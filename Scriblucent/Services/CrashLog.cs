@@ -6,6 +6,9 @@ internal static class CrashLog
 {
     public static void Append(string context, Exception ex)
     {
+        if (!DiagnosticLogging.IsEnabled)
+            return;
+
         try
         {
             var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scriblucent-crash.log");

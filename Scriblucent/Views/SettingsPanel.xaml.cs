@@ -41,8 +41,6 @@ namespace Scriblucent.Views
         private readonly OverlayPanelAnimator _overlayAnimator;
         private bool _isApplyingSettings;
         private bool _isDownloadingAiModel;
-        private bool _isDownloadingRuntime;
-        private bool _isCheckingRuntimeUpdates;
         private bool _isCheckingForUpdates;
         private string _lastSelectedFlashcardModelKey = "Qwen3.5-0.8B";
         private readonly ObservableCollection<ManagedAiToolItem> _managedAiTools = new();
@@ -99,7 +97,6 @@ namespace Scriblucent.Views
             var selectedKey = GetSelectedFlashcardModelKey() ?? _lastSelectedFlashcardModelKey;
             UpdateFlashcardModelWarning(selectedKey, machineMemoryBytes);
             UpdateAiToolsStatusText();
-            UpdateRuntimeStatusText();
         }
 
         public void ShowAnimated()
@@ -128,7 +125,6 @@ namespace Scriblucent.Views
             LoadManagedAiTools(settings);
             RefreshFlashcardModelOptions(machineMemoryBytes, settings);
             RefreshManagedAiToolDownloadState();
-            UpdateRuntimeStatusText();
             if (flashcardModelBox is not null)
                 SelectComboBoxItemByTag(flashcardModelBox, settings.FlashcardModelKey, recommendedModelKey);
             _lastSelectedFlashcardModelKey = GetSelectedFlashcardModelKey() ?? recommendedModelKey;
@@ -152,6 +148,8 @@ namespace Scriblucent.Views
                 ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
             if (EnableSpellCheckCheckBox is not null)
                 EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
+            if (EnableDiagnosticLoggingCheckBox is not null)
+                EnableDiagnosticLoggingCheckBox.IsChecked = settings.EnableDiagnosticLogging;
             LoadManagedSpellCheckLanguages(settings);
             _isApplyingSettings = false;
         }
@@ -201,7 +199,6 @@ namespace Scriblucent.Views
                 AiToolsListBox.SelectedIndex = 0;
 
             UpdateAiToolsStatusText();
-            UpdateRuntimeStatusText();
             UpdateAiActionButtons();
         }
 
@@ -241,7 +238,6 @@ namespace Scriblucent.Views
             RefreshFlashcardModelOptions(machineMemoryBytes, settings);
             UpdateFlashcardModelWarning(_lastSelectedFlashcardModelKey, machineMemoryBytes);
             UpdateAiToolsStatusText();
-            UpdateRuntimeStatusText();
             UpdateAiActionButtons();
         }
 
@@ -356,10 +352,9 @@ namespace Scriblucent.Views
             SpellCheckLanguageStatusText.Text = string.Format(LocalizationService.GetString("SpellCheckLanguageDeletedFormat"), item.DisplayName);
         }
 
-        /// <summary>Combines check-and-update into one action for every downloaded language, same
-        /// as CheckRuntimeUpdates_Click does for the llama.cpp runtime - re-checking against the
-        /// LibreOffice source and re-downloading whatever changed, rather than a separate
-        /// check-only step most users would never act on anyway.</summary>
+        /// <summary>Combines check-and-update into one action for every downloaded language -
+        /// re-checking against the LibreOffice source and re-downloading whatever changed,
+        /// rather than a separate check-only step most users would never act on anyway.</summary>
         private async void CheckSpellCheckLanguageUpdates_Click(object sender, RoutedEventArgs e)
         {
             if (_isCheckingSpellCheckUpdates || _isDownloadingSpellCheckLanguage || SpellCheckLanguageStatusText is null)
@@ -422,26 +417,6 @@ namespace Scriblucent.Views
             UpdateAiActionButtons();
         }
 
-        private void UpdateRuntimeStatusText()
-        {
-            if (RuntimeStatusText is null)
-                return;
-
-            if (_isDownloadingRuntime)
-                return;
-
-            if (_isCheckingRuntimeUpdates)
-                return;
-
-            RuntimeStatusText.Text = BundledModelHostService.IsRuntimeDownloaded()
-                ? string.Format(
-                    LocalizationService.GetString("AiToolsRuntimeReadyFormat"),
-                    BundledModelHostService.GetRuntimeInstalledVersionDisplay())
-                : LocalizationService.GetString("AiToolsRuntimeNotDownloaded");
-
-            UpdateAiActionButtons();
-        }
-
         private void UpdateAiActionButtons()
         {
             var selected = AiToolsListBox.SelectedItem as ManagedAiToolItem;
@@ -459,17 +434,6 @@ namespace Scriblucent.Views
 
             if (FindName("DeleteSelectedAiToolButton") is Button deleteModelButton)
                 deleteModelButton.IsEnabled = hasSelection && !_isDownloadingAiModel && isSelectedModelDownloaded;
-
-            var isRuntimeDownloaded = BundledModelHostService.IsRuntimeDownloaded();
-
-            if (FindName("RuntimeDownloadButton") is Button runtimeDownloadButton)
-                runtimeDownloadButton.IsEnabled = !_isDownloadingRuntime && !_isCheckingRuntimeUpdates && !isRuntimeDownloaded;
-
-            if (FindName("RuntimeDeleteButton") is Button runtimeDeleteButton)
-                runtimeDeleteButton.IsEnabled = !_isDownloadingRuntime && !_isCheckingRuntimeUpdates && isRuntimeDownloaded;
-
-            if (FindName("RuntimeUpdateButton") is Button runtimeUpdateButton)
-                runtimeUpdateButton.IsEnabled = !_isDownloadingRuntime && !_isCheckingRuntimeUpdates && isRuntimeDownloaded;
         }
 
         private void RefreshManagedAiToolDownloadState()
@@ -936,143 +900,6 @@ namespace Scriblucent.Views
             UpdateAiActionButtons();
         }
 
-        private async void DownloadRuntime_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isDownloadingRuntime)
-                return;
-
-            _isDownloadingRuntime = true;
-            RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeDownloadStarting");
-            UpdateAiActionButtons();
-
-            try
-            {
-                var progress = new Progress<BundledModelHostService.FlashcardProgress>(p =>
-                {
-                    if (p.Percent.HasValue)
-                        RuntimeStatusText.Text = string.Format(LocalizationService.GetString("AiToolsRuntimeDownloadingPercentFormat"), p.Percent.Value);
-                    else
-                        RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeDownloadPreparing");
-                });
-
-                await BundledModelHostService.Instance.EnsureRuntimeAvailableAsync(progress);
-                RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeDownloadSuccess");
-            }
-            catch (Exception ex)
-            {
-                RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeDownloadFailed");
-
-                ModernDialog.ShowError(
-                    Window.GetWindow(this),
-                    LocalizationService.GetString("Error"),
-                    ex.Message);
-            }
-            finally
-            {
-                _isDownloadingRuntime = false;
-                UpdateRuntimeStatusText();
-                UpdateAiActionButtons();
-            }
-        }
-
-        private async void CheckRuntimeUpdates_Click(object sender, RoutedEventArgs e)
-        {
-            if (_isCheckingRuntimeUpdates || _isDownloadingRuntime)
-                return;
-
-            if (!BundledModelHostService.IsRuntimeDownloaded())
-            {
-                UpdateRuntimeStatusText();
-                return;
-            }
-
-            _isCheckingRuntimeUpdates = true;
-            RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeUpdateChecking");
-            UpdateAiActionButtons();
-
-            try
-            {
-                var progress = new Progress<BundledModelHostService.FlashcardProgress>(p =>
-                {
-                    if (p.Percent.HasValue)
-                        RuntimeStatusText.Text = string.Format(LocalizationService.GetString("AiToolsRuntimeUpdateDownloadingPercentFormat"), p.Percent.Value);
-                    else if (string.Equals(p.StatusKey, "AiToolsRuntimeUpdateDownloading", StringComparison.Ordinal))
-                        RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeUpdateDownloading");
-                    else
-                        RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeUpdateChecking");
-                });
-
-                var result = await BundledModelHostService.Instance.CheckAndUpdateRuntimeAsync(progress);
-                RuntimeStatusText.Text = result.WasUpdated
-                    ? string.Format(LocalizationService.GetString("AiToolsRuntimeUpdateSuccessFormat"), result.LatestVersion)
-                    : string.Format(LocalizationService.GetString("AiToolsRuntimeUpdateNotAvailableFormat"), result.CurrentVersion);
-
-                if (result.WasUpdated)
-                {
-                    ModernDialog.ShowSuccess(
-                        Window.GetWindow(this),
-                        LocalizationService.GetString("AiToolsRuntimeUpdateTitle"),
-                        string.Format(LocalizationService.GetString("AiToolsRuntimeUpdateSuccessFormat"), result.LatestVersion));
-                }
-                else
-                {
-                    ModernDialog.ShowInfo(
-                        Window.GetWindow(this),
-                        LocalizationService.GetString("AiToolsRuntimeUpdateTitle"),
-                        string.Format(LocalizationService.GetString("AiToolsRuntimeUpdateNotAvailableFormat"), result.CurrentVersion));
-                }
-            }
-            catch (Exception ex)
-            {
-                RuntimeStatusText.Text = LocalizationService.GetString("AiToolsRuntimeUpdateFailed");
-
-                ModernDialog.ShowError(
-                    Window.GetWindow(this),
-                    LocalizationService.GetString("Error"),
-                    string.Format(LocalizationService.GetString("AiToolsRuntimeUpdateErrorDialogFormat"), ex.Message));
-            }
-            finally
-            {
-                _isCheckingRuntimeUpdates = false;
-                UpdateAiActionButtons();
-            }
-        }
-
-        private void DeleteRuntime_Click(object sender, RoutedEventArgs e)
-        {
-            var confirmed = ModernDialog.ConfirmDanger(
-                Window.GetWindow(this),
-                LocalizationService.GetString("AiToolsRuntimeDeleteTitle"),
-                LocalizationService.GetString("AiToolsRuntimeDeletePrompt"),
-                LocalizationService.GetString("Confirm"));
-
-            if (!confirmed)
-                return;
-
-            BundledModelHostService.DeleteRuntimeArtifacts();
-
-            UpdateRuntimeStatusText();
-        }
-
-        private void OpenRuntimeFolder_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var runtimeDir = BundledModelHostService.GetRuntimeDirectoryPath();
-                Directory.CreateDirectory(runtimeDir);
-
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = runtimeDir,
-                    UseShellExecute = true
-                });
-            }
-            catch
-            {
-            }
-        }
-
         private void OpenAiToolsFolder_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1418,6 +1245,16 @@ namespace Scriblucent.Views
             settings.EnableSpellCheck = enabled;
             AppSettingsService.Save(settings);
             RefreshOpenEditorSpellCheck(enabled);
+        }
+
+        private void EnableDiagnosticLoggingCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings || EnableDiagnosticLoggingCheckBox is null)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.EnableDiagnosticLogging = EnableDiagnosticLoggingCheckBox.IsChecked == true;
+            AppSettingsService.Save(settings);
         }
 
         private static void RefreshOpenEditorSpellCheck(bool enabled)

@@ -50,6 +50,19 @@ public partial class NoteEditorTabsWindow : Window
         Loaded += (_, _) => UiMotion.ConfigurePopupsForWindow(this);
         Closed += (_, _) =>
         {
+            // Safety net: FinalizeWindowClose (the normal "dispose every open tab" path) only
+            // runs via the animated-close callback, which WPF skips entirely under reduced
+            // motion (in-app setting or the Windows "Show animations" accessibility setting) -
+            // see WindowContentEnterHelper.OnWindowClosing. This handler always runs regardless
+            // of that path, so sweep any tabs that weren't already disposed (each tab's own
+            // DisposeHostedEditor() is idempotent, so re-calling it for already-closed tabs is
+            // harmless). Runs synchronously - unlike the per-tab background dispose used for a
+            // single tab closing, the whole window (likely the whole app) is tearing down here,
+            // so a bounded few-seconds wait to guarantee worker processes are actually killed
+            // beats a fire-and-forget task that may get cut off by process exit.
+            foreach (var state in _tabsByDocumentId.Values)
+                state.Editor.DisposeHostedEditor(disposeAiBackendSynchronously: true);
+
             // The editor teardown (document, coordinator, wrap engine) leaves sizeable transient
             // garbage that otherwise waits for the next incidental gen2 pass; collect off-thread
             // and return the freed pages (the app is idle at this moment).
@@ -91,7 +104,12 @@ public partial class NoteEditorTabsWindow : Window
 
         var hostedContent = editor.DetachEditorContentForHosting();
         if (hostedContent == null)
+        {
+            // editor was constructed (and with it, its own AI worker adapter/idle timer) but
+            // never got wired into a tab - dispose it now instead of abandoning it uncleaned.
+            editor.DisposeHostedEditor();
             return;
+        }
 
         var noteIcon = new AppIcon
         {

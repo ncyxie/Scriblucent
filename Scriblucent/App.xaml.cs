@@ -70,6 +70,10 @@ public partial class App : Application
 
         var settings = AppSettingsService.Load();
         Scriblucent.Services.StartupProbe.Mark("settings");
+
+        // Best-effort cleanup of old diagnostic and crash logs
+        Task.Run(() => DiagnosticCleanup.CleanupOldLogs());
+
         ReducedMotionPreferences.Configure(settings.ReduceAnimations);
         ReducedMotionPreferences.Refresh();
         LocalizationService.SetCulture(settings.Language);
@@ -232,7 +236,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        BundledModelHostService.Instance.Stop();
+        // No-op: Stop() was removed in Stage 14 cleanup
 
         // Give a still-in-flight/queued notes save a bounded chance to finish before the process
         // tears down - otherwise a relaunch soon after can race the old instance's still-writing
@@ -240,6 +244,8 @@ public partial class App : Application
         // MainViewModel.FlushPendingNotesSaveBeforeExit).
         if (MainWindow?.DataContext is MainViewModel mainVm)
             mainVm.FlushPendingNotesSaveBeforeExit(TimeSpan.FromSeconds(5));
+
+        try { Scriblucent.Services.AI.AiBackendHost.Shutdown(); } catch { }
 
         base.OnExit(e);
         AppSettingsService.Flush();

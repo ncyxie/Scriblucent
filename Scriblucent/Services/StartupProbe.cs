@@ -12,7 +12,8 @@ namespace Scriblucent.Services;
 internal static class StartupProbe
 {
     private static readonly bool Enabled =
-        Environment.GetEnvironmentVariable("SCRIBLUCENT_STARTUP_PROBE") == "1";
+        Environment.GetEnvironmentVariable("SCRIBLUCENT_STARTUP_PROBE") == "1"
+        && DiagnosticLogging.IsEnabled;
 
     private static readonly Stopwatch Clock = Stopwatch.StartNew();
     private static readonly object Gate = new();

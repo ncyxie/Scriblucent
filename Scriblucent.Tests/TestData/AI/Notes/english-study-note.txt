@@ -1,0 +1,4 @@
+Photosynthesis is the process by which green plants convert light energy into chemical energy.
+Chlorophyll absorbs light, mainly in the blue and red parts of the spectrum.
+The light-dependent reactions produce ATP and NADPH, while the Calvin cycle uses them to build sugars.
+Carbon dioxide enters the Calvin cycle and oxygen is released as a by-product of splitting water.

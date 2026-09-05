@@ -159,6 +159,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Appearance -->
@@ -640,43 +642,6 @@
                         <TextBlock x:Name="AiToolsStatusText"
                                    Margin="0,8,0,0"
                                    Style="{StaticResource FormHelperTextStyle}"/>
-
-                        <Border Height="1"
-                                Background="{DynamicResource BorderColor}"
-                                Margin="0,10,0,10"/>
-
-                        <TextBlock Text="{Binding [AiToolsRuntimeTitle], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormOptionLabelStyle}"/>
-
-                        <WrapPanel Margin="0,8,-8,-8" HorizontalAlignment="Left">
-                            <Button Content="{Binding [AiToolsRuntimeDownload], Source={StaticResource Loc}}"
-                                    x:Name="RuntimeDownloadButton"
-                                    Style="{StaticResource DialogPrimaryButtonStyle}"
-                                    Padding="12,6"
-                                    Margin="0,0,8,8"
-                                    Click="DownloadRuntime_Click"/>
-                            <Button Content="{Binding [AiToolsRuntimeCheckUpdates], Source={StaticResource Loc}}"
-                                    x:Name="RuntimeUpdateButton"
-                                    Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
-                                    Padding="12,6"
-                                    Margin="0,0,8,8"
-                                    Click="CheckRuntimeUpdates_Click"/>
-                            <Button Content="{Binding [AiToolsRuntimeOpenFolder], Source={StaticResource Loc}}"
-                                    Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
-                                    Padding="12,6"
-                                    Margin="0,0,8,8"
-                                    Click="OpenRuntimeFolder_Click"/>
-                            <Button Content="{Binding [AiToolsRuntimeDelete], Source={StaticResource Loc}}"
-                                    x:Name="RuntimeDeleteButton"
-                                    Style="{StaticResource DialogDangerButtonStyle}"
-                                    Padding="12,6"
-                                    Margin="0,0,8,8"
-                                    Click="DeleteRuntime_Click"/>
-                        </WrapPanel>
-
-                        <TextBlock x:Name="RuntimeStatusText"
-                                   Margin="0,8,0,0"
-                                   Style="{StaticResource FormHelperTextStyle}"/>
                     </StackPanel>
                 </Border>
 
@@ -807,7 +772,27 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Grid.Row="18" Margin="0,20,0,0">
+                <Border Grid.Row="18"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Diagnostics], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <CheckBox x:Name="EnableDiagnosticLoggingCheckBox"
+                                  Content="{Binding [EnableDiagnosticLogging], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  Checked="EnableDiagnosticLoggingCheckBox_Changed"
+                                  Unchecked="EnableDiagnosticLoggingCheckBox_Changed"/>
+                        <TextBlock Text="{Binding [EnableDiagnosticLoggingDescription], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Row="19" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

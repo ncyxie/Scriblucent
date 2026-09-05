@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="Scriblucent/Scriblucent.csproj" />
+  <Project Path="Scriblucent.AI.Protocol/Scriblucent.AI.Protocol.csproj" />
+  <Project Path="Scriblucent.AI.Worker/Scriblucent.AI.Worker.csproj" />
   <Project Path="Scriblucent.Tests/Scriblucent.Tests.csproj" />
 </Solution>

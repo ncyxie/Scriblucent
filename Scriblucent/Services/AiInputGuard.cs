@@ -11,6 +11,17 @@ public sealed class AiInputRejectedException : InvalidOperationException
     }
 }
 
+/// <summary>Why IsSuitableStudyText rejected a note - lets EnsureSuitableStudyText give the user
+/// a specific reason instead of one generic message regardless of which heuristic fired.</summary>
+public enum AiInputRejectionReason
+{
+    None,
+    TooShort,
+    RepeatedOrLowVariety,
+    LowTextRatio,
+    LooksLikeGibberish
+}
+
 public static class AiInputGuard
 {
     private const int MinimumLetterCount = 45;
@@ -47,48 +58,97 @@ public static class AiInputGuard
 
     public static void EnsureSuitableStudyText(string text)
     {
-        if (!IsSuitableStudyText(text))
-            throw new AiInputRejectedException(LocalizationService.GetString("AiInputRejectedInsufficientContent"));
+        var reason = IsSuitableStudyText(text);
+        if (reason != AiInputRejectionReason.None)
+            throw new AiInputRejectedException(GetRejectionMessage(reason));
+    }
+
+    private static string GetRejectionMessage(AiInputRejectionReason reason)
+    {
+        var key = reason switch
+        {
+            AiInputRejectionReason.TooShort => "AiInputRejectedTooShort",
+            AiInputRejectionReason.RepeatedOrLowVariety => "AiInputRejectedRepeatedOrLowVariety",
+            AiInputRejectionReason.LowTextRatio => "AiInputRejectedLowTextRatio",
+            AiInputRejectionReason.LooksLikeGibberish => "AiInputRejectedLooksLikeGibberish",
+            _ => "AiInputRejectedInsufficientContent"
+        };
+
+        var localized = LocalizationService.GetString(key);
+        return string.IsNullOrWhiteSpace(localized) || string.Equals(localized, key, StringComparison.Ordinal)
+            ? LocalizationService.GetString("AiInputRejectedInsufficientContent")
+            : localized;
     }
 
     public static bool IsRefusalOutput(string? output)
     {
-        if (string.IsNullOrWhiteSpace(output))
-            return false;
-
-        return output.TrimStart().StartsWith(RefusalOutput, StringComparison.OrdinalIgnoreCase);
+        return ExplainRefusalOutput(output) != RefusalReasonNone;
     }
 
-    public static bool IsSuitableStudyText(string text)
+    // TEMPORARY trace support: same classification rules as IsRefusalOutput, but reports WHICH
+    // rule matched so generation logs can show why an output was treated as a refusal. Remove
+    // alongside AiGenerationTracer once the refusal investigation is done.
+    internal const string RefusalReasonNone = "none";
+
+    internal static string ExplainRefusalOutput(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return RefusalReasonNone;
+
+        var trimmed = output.TrimStart();
+
+        // Primary: exact prefix match (grammar-constrained output)
+        if (trimmed.StartsWith(RefusalOutput, StringComparison.OrdinalIgnoreCase))
+            return "exact-prefix";
+
+        // Very short outputs are likely refusals or garbage
+        if (trimmed.Length < 20)
+            return "under-20-chars";
+
+        // Semantic: common natural-language refusal patterns
+        var lower = trimmed.ToLowerInvariant();
+        if (lower.StartsWith("i cannot ") || lower.StartsWith("i can't "))
+            return "i-cannot-prefix";
+        if (lower.Contains("insufficient") && lower.Contains("content"))
+            return "insufficient-content";
+        if (lower.Contains("not enough") && (lower.Contains("information") || lower.Contains("content") || lower.Contains("meaningful")))
+            return "not-enough-info";
+        if (lower.StartsWith("refuse") || lower.StartsWith("refusal"))
+            return "refuse-prefix";
+
+        return RefusalReasonNone;
+    }
+
+    public static AiInputRejectionReason IsSuitableStudyText(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return false;
+            return AiInputRejectionReason.TooShort;
 
         var textWithoutPlaceholders = PlaceholderRegex.Replace(text, " ");
         var normalized = Regex.Replace(textWithoutPlaceholders, @"\s+", " ").Trim();
         if (normalized.Length < 30)
-            return false;
+            return AiInputRejectionReason.TooShort;
 
         if (RepeatedCharacterRegex.IsMatch(normalized))
-            return false;
+            return AiInputRejectionReason.RepeatedOrLowVariety;
 
         if (RepeatedChunkRegex.IsMatch(normalized))
-            return false;
+            return AiInputRejectionReason.RepeatedOrLowVariety;
 
         var visibleChars = normalized.Count(c => !char.IsWhiteSpace(c));
         if (visibleChars == 0)
-            return false;
+            return AiInputRejectionReason.TooShort;
 
         var letterCount = normalized.Count(char.IsLetter);
         if (letterCount < MinimumLetterCount)
-            return false;
+            return AiInputRejectionReason.TooShort;
 
         var letterRatio = (double)letterCount / visibleChars;
         if (letterRatio < 0.35)
-            return false;
+            return AiInputRejectionReason.LowTextRatio;
 
         if (IsMostlyUnsegmentedScript(normalized, letterCount))
-            return HasEnoughUnsegmentedText(text, normalized, letterCount);
+            return CheckUnsegmentedText(text, normalized, letterCount);
 
         var words = WordRegex.Matches(normalized)
             .Select(match => match.Value.Trim().ToLowerInvariant())
@@ -96,13 +156,13 @@ public static class AiInputGuard
             .ToList();
 
         if (words.Count < MinimumMeaningfulWordCount)
-            return false;
+            return AiInputRejectionReason.TooShort;
 
         if (normalized.Length < ShortTextCharacterThreshold
             && words.Count < ShortTextMinimumWordCount
             && !HasStudyStructure(text))
         {
-            return false;
+            return AiInputRejectionReason.TooShort;
         }
 
         var uniqueWords = words
@@ -111,48 +171,48 @@ public static class AiInputGuard
             .ToList();
 
         if (uniqueWords.Count < MinimumUniqueWordCount)
-            return false;
+            return AiInputRejectionReason.RepeatedOrLowVariety;
 
         if (HasRepeatedWordRun(words) || HasRepeatedWordNgrams(words))
-            return false;
+            return AiInputRejectionReason.RepeatedOrLowVariety;
 
         var mostCommonWordShare = words
             .GroupBy(word => word, StringComparer.OrdinalIgnoreCase)
             .Max(group => (double)group.Count() / words.Count);
 
         if (mostCommonWordShare > 0.40)
-            return false;
+            return AiInputRejectionReason.RepeatedOrLowVariety;
 
         var uniqueWordShare = (double)uniqueWords.Count / words.Count;
         if (words.Count < 80)
         {
             if (uniqueWordShare < 0.30)
-                return false;
+                return AiInputRejectionReason.RepeatedOrLowVariety;
         }
         else if (uniqueWordShare < 0.22)
         {
-            return false;
+            return AiInputRejectionReason.RepeatedOrLowVariety;
         }
 
         var averageWordLength = words.Average(word => word.Length);
         if (averageWordLength > 18)
-            return false;
+            return AiInputRejectionReason.LooksLikeGibberish;
 
         if (letterCount >= 40 && IsMostlyLatinText(normalized, letterCount))
         {
             if (!HasStudyStructure(text) && words.Count < 18 && normalized.Length < 220)
-                return false;
+                return AiInputRejectionReason.TooShort;
 
             var vowelCount = normalized.Count(IsLatinVowel);
             var vowelRatio = (double)vowelCount / letterCount;
             if (vowelRatio < 0.16)
-                return false;
+                return AiInputRejectionReason.LooksLikeGibberish;
 
             if (LooksLikeLatinGibberish(words))
-                return false;
+                return AiInputRejectionReason.LooksLikeGibberish;
         }
 
-        return true;
+        return AiInputRejectionReason.None;
     }
 
     private static bool HasStudyStructure(string text)
@@ -160,15 +220,17 @@ public static class AiInputGuard
         return SentenceEndingRegex.IsMatch(text) || BulletOrHeadingRegex.IsMatch(text);
     }
 
-    private static bool HasEnoughUnsegmentedText(string originalText, string normalized, int letterCount)
+    private static AiInputRejectionReason CheckUnsegmentedText(string originalText, string normalized, int letterCount)
     {
         if (letterCount < Math.Max(MinimumLetterCount, 60))
-            return false;
+            return AiInputRejectionReason.TooShort;
 
         if (normalized.Length < ShortTextCharacterThreshold && !HasStudyStructure(originalText))
-            return false;
+            return AiInputRejectionReason.TooShort;
 
-        return !RepeatedChunkRegex.IsMatch(normalized);
+        return RepeatedChunkRegex.IsMatch(normalized)
+            ? AiInputRejectionReason.RepeatedOrLowVariety
+            : AiInputRejectionReason.None;
     }
 
     private static bool HasRepeatedWordRun(IReadOnlyList<string> words)
@@ -204,7 +266,7 @@ public static class AiInputGuard
 
             for (var i = 0; i <= words.Count - size; i++)
             {
-                var key = string.Join('\u001F', words.Skip(i).Take(size));
+                var key = string.Join('', words.Skip(i).Take(size));
                 counts[key] = counts.TryGetValue(key, out var count) ? count + 1 : 1;
             }
 
@@ -322,17 +384,17 @@ public static class AiInputGuard
 
     private static bool IsLatinLetter(char value)
     {
-        return value is >= '\u0041' and <= '\u007A'
-            or >= '\u00C0' and <= '\u024F'
-            or >= '\u1E00' and <= '\u1EFF';
+        return value is >= 'A' and <= 'z'
+            or >= 'À' and <= 'ɏ'
+            or >= 'Ḁ' and <= 'ỿ';
     }
 
     private static bool IsCjkLetter(char value)
     {
-        return value is >= '\u3040' and <= '\u30FF'
-            or >= '\u3400' and <= '\u4DBF'
-            or >= '\u4E00' and <= '\u9FFF'
-            or >= '\uAC00' and <= '\uD7AF';
+        return value is >= '぀' and <= 'ヿ'
+            or >= '㐀' and <= '䶿'
+            or >= '一' and <= '鿿'
+            or >= '가' and <= '힯';
     }
 
     private static bool IsLatinVowel(char value)

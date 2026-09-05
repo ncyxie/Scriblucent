@@ -8,15 +8,14 @@ using WeCantSpell.Hunspell;
 namespace Scriblucent.Services;
 
 /// <summary>
-/// Manages Hunspell dictionary files for the note editor's custom spell checker. Download/install
-/// handling deliberately mirrors BundledModelHostService's llama.cpp runtime management (the most
-/// robust download path already in this codebase): each language gets its own self-contained
-/// directory, downloads land in a staging directory first and are validated before an atomic
-/// directory swap commits them (with rollback on failure), transient network errors get retried,
-/// and a small metadata file (ETag/Last-Modified) enables checking the LibreOffice source for
-/// updates without re-downloading. What's deliberately NOT carried over: the runtime's native
-/// library/PE-header validation and architecture-specific zip extraction - a dictionary is just
-/// two plain text files, so "does WordList.CreateFromFiles load it" is the whole validation story.
+/// Manages Hunspell dictionary files for the note editor's custom spell checker: each language
+/// gets its own self-contained directory, downloads land in a staging directory first and are
+/// validated before an atomic directory swap commits them (with rollback on failure), transient
+/// network errors get retried, and a small metadata file (ETag/Last-Modified) enables checking
+/// the LibreOffice source for updates without re-downloading. Unlike a general-purpose binary
+/// payload, a dictionary is just two plain text files, so "does WordList.CreateFromFiles load
+/// it" is the whole validation story - no native-library/PE-header checks or archive extraction
+/// needed.
 /// </summary>
 internal static class SpellCheckDictionaryService
 {
@@ -121,9 +120,9 @@ internal static class SpellCheckDictionaryService
     public static string GetDictionariesRootDirectoryPath()
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "dictionaries");
 
-    /// <summary>Each language is a single self-contained directory (dic + aff + metadata),
-    /// mirroring GetRuntimeDirectoryPath() - lets install/update be an atomic directory swap
-    /// instead of juggling two independently-moved files that could end up mismatched.</summary>
+    /// <summary>Each language is a single self-contained directory (dic + aff + metadata) -
+    /// lets install/update be an atomic directory swap instead of juggling two independently-
+    /// moved files that could end up mismatched.</summary>
     private static string GetLanguageDirectoryPath(string key)
         => Path.Combine(GetDictionariesRootDirectoryPath(), key);
 
@@ -142,7 +141,7 @@ internal static class SpellCheckDictionaryService
     /// <summary>Downloads into a staging directory, validates the pair actually loads as a real
     /// Hunspell dictionary, then atomically swaps it into place - a failed or corrupt download
     /// never overwrites a working dictionary, and a validation failure never leaves a broken pair
-    /// where a working one used to be. Mirrors InstallRuntimePayloadAsync/CommitRuntimePayload.</summary>
+    /// where a working one used to be.</summary>
     public static async Task DownloadDictionaryAsync(string key, CancellationToken cancellationToken = default)
     {
         if (!LanguagesCurrentlyDownloading.Add(key))
@@ -233,9 +232,9 @@ internal static class SpellCheckDictionaryService
 
     /// <summary>Checks every currently-downloaded language against the LibreOffice source (a
     /// conditional HEAD request compared against the ETag/Last-Modified captured at download time)
-    /// and re-downloads any that changed - combines check-and-update into one action, same as
-    /// BundledModelHostService.CheckAndUpdateRuntimeAsync does for the runtime, since dictionaries
-    /// change rarely enough that a separate "just tell me" step isn't worth a second click.</summary>
+    /// and re-downloads any that changed - combines check-and-update into one action, since
+    /// dictionaries change rarely enough that a separate "just tell me" step isn't worth a
+    /// second click.</summary>
     public static async Task<(int Checked, int Updated)> CheckAndUpdateAllAsync(
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)

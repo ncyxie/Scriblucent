@@ -57,17 +57,38 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock x:Name="StatusIndicatorText"
-                           Grid.Row="0"
-                           Grid.Column="0"
-                           Margin="2,0,14,4"
-                           FontSize="{StaticResource Type.Caption}"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource TextColorSecondary}"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"
-                           Opacity="0"
-                           Visibility="Collapsed"/>
+                <!-- Fixed left anchor: the button is the FIRST child of this left-aligned
+                     horizontal flow, so its position is invariant - it never moves regardless of
+                     how long the status text next to it is. (Putting the button after the text
+                     instead would make its position a function of the text's length - exactly
+                     the "uncontrollable" placement this avoids.) -->
+                <StackPanel Grid.Row="0"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            Margin="2,0,0,4">
+                    <Button x:Name="AiCancelButton"
+                            Width="18"
+                            Height="18"
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource EditorDangerToolButtonStyle}"
+                            Content="{icons:Icon Kind=Close, Size=10}"
+                            ToolTip="Cancel"
+                            Visibility="Collapsed"
+                            Click="AiCancelButton_Click"/>
+
+                    <TextBlock x:Name="StatusIndicatorText"
+                               MaxWidth="320"
+                               FontSize="{StaticResource Type.Caption}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Opacity="0"
+                               Visibility="Collapsed"/>
+                </StackPanel>
 
                 <Border Grid.Column="0"
                         Grid.Row="1"
@@ -155,10 +176,13 @@
                             <Button.ContextMenu>
                                 <ContextMenu Placement="Bottom">
                                     <MenuItem Header="{Binding [ConvertToFlashcards], Source={StaticResource Loc}}"
+                                              ToolTip="{Binding [AiConvertTooltip], Source={StaticResource Loc}}"
                                               Click="ConvertToFlashcardsButton_Click"/>
                                     <MenuItem Header="{Binding [ConvertToMindMap], Source={StaticResource Loc}}"
+                                              ToolTip="{Binding [AiConvertTooltip], Source={StaticResource Loc}}"
                                               Click="ConvertToMindMapButton_Click"/>
                                     <MenuItem Header="{Binding [ConvertToTest], Source={StaticResource Loc}}"
+                                              ToolTip="{Binding [AiConvertTooltip], Source={StaticResource Loc}}"
                                               Click="ConvertToTestButton_Click"/>
                                 </ContextMenu>
                             </Button.ContextMenu>

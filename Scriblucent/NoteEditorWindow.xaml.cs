@@ -3,6 +3,7 @@ using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
+using Scriblucent.Services.AI;
 using Scriblucent.ViewModels;
 using Scriblucent.Views;
 using System.Diagnostics;
@@ -10,6 +11,8 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -143,9 +146,13 @@ namespace Scriblucent
             };
         }
 
-        private readonly FlashcardConversionService _flashcardConversionService = new();
-        private readonly MindMapConversionService _mindMapConversionService = new();
-        private readonly QuizConversionService _quizConversionService = new();
+        // App-scoped singleton (AiBackendHost) - one worker process, one model load, queued via
+        // its own SemaphoreSlim. Previous per-tab adapter meant N tabs = N processes × model RAM.
+        private readonly ITextGenerationBackend _aiBackend = AiBackendHost.Shared;
+        private FlashcardConversionService _flashcardConversionService = null!;
+        private MindMapConversionService _mindMapConversionService = null!;
+        private QuizConversionService _quizConversionService = null!;
+        private bool _isDisposed;
         private bool _isConvertingToFlashcards;
         private CancellationTokenSource? _flashcardConversionCancellationSource;
         private bool _isConvertingToMindMap;
@@ -221,7 +228,7 @@ namespace Scriblucent
         private const double PdfPageHeight = 1056;
         private const double PdfPagePadding = 60;
         private const double PdfContentTopOffset = 74;
-        private const double StatusIndicatorExpandedHeight = 20;
+        private const double StatusIndicatorExpandedHeight = 24;
         private const double UnwrappedDocumentPageWidth = 10000;
         private ScrollViewer? _contentScrollViewer;
         private DispatcherTimer? _editorScrollbarHideTimer;
@@ -252,6 +259,9 @@ namespace Scriblucent
         public NoteEditorWindow()
         {
             InitializeComponent();
+            _flashcardConversionService = new FlashcardConversionService(_aiBackend);
+            _mindMapConversionService = new MindMapConversionService(_aiBackend);
+            _quizConversionService = new QuizConversionService(_aiBackend);
             // Note editors are hosted inside NoteEditorTabsWindow (never shown as their own
             // window). Do not attach ShellWindowChrome here — that would nest a second caption.
             InitializeEditorFormattingOptions();
@@ -261,6 +271,7 @@ namespace Scriblucent
             UpdateOnlineSearchAvailability();
             DataContextChanged += NoteEditorWindow_DataContextChanged;
             AttachEditorSettingsSource(DataContext as INotifyPropertyChanged);
+            AiGenerationStateChanged += NoteEditorWindow_AiGenerationStateChanged;
             ApplyEditorTextLayout();
             ApplyCurrentLineSpacingToDocument();
             UpdateEditorToolButtonStates();
@@ -929,8 +940,19 @@ namespace Scriblucent
             return content;
         }
 
-        public void DisposeHostedEditor()
+        /// <param name="disposeAiBackendSynchronously">
+        /// Kept for compat with NoteEditorTabsWindow.Closed sweep; previously per-tab
+        /// LLamaSharpWorkerAdapter disposal could block ~3s. With app-scoped AiBackendHost
+        /// the backend is singleton and app-lifetime only (App.OnExit calls Shutdown), so
+        /// per-tab close no longer tears it down - parameter is now ignored.
+        /// </param>
+        public void DisposeHostedEditor(bool disposeAiBackendSynchronously = false)
         {
+            _isDisposed = true;
+
+            // No per-tab backend teardown: AiBackendHost.Shared is singleton, disposed only on App.OnExit.
+            _ = disposeAiBackendSynchronously;
+
             StopAutoSaveTimer();
             _counterUpdateDebounceTimer?.Stop();
             _postSaveSnapshotTimer?.Stop();
@@ -953,6 +975,7 @@ namespace Scriblucent
             _testConversionCancellationSource?.Dispose();
             _testConversionCancellationSource = null;
             ThemeManager.ThemeChanged -= ThemeManager_ThemeChanged;
+            AiGenerationStateChanged -= NoteEditorWindow_AiGenerationStateChanged;
         }
 
         private Window GetDialogOwnerWindow()
@@ -1658,9 +1681,65 @@ namespace Scriblucent
             return _isConvertingToFlashcards || _isConvertingToMindMap || _isConvertingToTest;
         }
 
+        private CancellationTokenSource? GetActiveCancellationSource()
+        {
+            if (_isConvertingToFlashcards) return _flashcardConversionCancellationSource;
+            if (_isConvertingToMindMap) return _mindMapConversionCancellationSource;
+            if (_isConvertingToTest) return _testConversionCancellationSource;
+            return null;
+        }
+
+        private void AiCancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            var cts = GetActiveCancellationSource();
+            if (cts is null)
+                return;
+
+            cts.Cancel();
+
+            // Cancelling doesn't stop the worker mid-generation (it just discards the eventual
+            // response - see LLamaSharpWorkerAdapter's RequestId filtering), so there can be a
+            // real gap between this click and the status indicator actually clearing. Disable
+            // (the style dims disabled buttons, see EditorDangerToolButtonStyle's IsEnabled
+            // trigger) and swap the tooltip immediately so the click visibly registered instead
+            // of looking inert or inviting a repeat click. The button is icon-only, so feedback
+            // goes through ToolTip/opacity rather than resizing button text to fit new content.
+            AiCancelButton.IsEnabled = false;
+            AiCancelButton.ToolTip = "Cancelling…";
+        }
+
+        /// Shown at the start of a conversion, hidden unconditionally in that conversion's
+        /// `finally` block - deliberately not tied to the generic status-indicator show/hide
+        /// helpers below, since those are also used for non-cancelable messages (e.g. "Version
+        /// restored") that have no business offering a Cancel button.
+        private void ShowAiCancelButton()
+        {
+            AiCancelButton.ToolTip = "Cancel";
+            AiCancelButton.IsEnabled = true;
+            AiCancelButton.Visibility = Visibility.Visible;
+        }
+
+        private void HideAiCancelButton()
+        {
+            AiCancelButton.Visibility = Visibility.Collapsed;
+        }
+
         private void SetAiConversionButtonsEnabled(bool isEnabled)
         {
             ConvertMenuButton.IsEnabled = isEnabled;
+        }
+
+        /// With app-scoped AiBackendHost, only one worker process exists and its SemaphoreSlim
+        /// serializes generations; this still mirrors the global IsAiGenerationInProgress flag
+        /// onto every OTHER tab's Convert button so a second generation can't be queued while
+        /// one is running. The actively-converting tab manages its own button directly in its
+        /// click handler/finally block, so it's skipped here to avoid fighting that.
+        private void NoteEditorWindow_AiGenerationStateChanged(object? sender, EventArgs e)
+        {
+            if (_isDisposed || IsAnyAiConversionInProgress())
+                return;
+
+            SetAiConversionButtonsEnabled(!IsAiGenerationInProgress);
         }
 
         private void ConvertMenuButton_Click(object sender, RoutedEventArgs e)
@@ -1683,7 +1762,7 @@ namespace Scriblucent
 
         private async void ConvertToFlashcardsButton_Click(object sender, RoutedEventArgs e)
         {
-            if (IsAnyAiConversionInProgress())
+            if (IsAnyAiConversionInProgress() || IsAiGenerationInProgress)
                 return;
 
             var plainText = GetEditorAiText();
@@ -1700,13 +1779,23 @@ namespace Scriblucent
             _isConvertingToFlashcards = true;
             BeginAiGeneration();
             SetAiConversionButtonsEnabled(false);
+            ShowAiCancelButton();
             ShowPersistentStatusIndicator(LocalizationService.GetString("ConvertToFlashcardsInProgress"));
 
-            _flashcardConversionCancellationSource?.Dispose();
-            _flashcardConversionCancellationSource = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
+            _flashcardConversionCancellationSource = cts;
 
-            var progress = new Progress<BundledModelHostService.FlashcardProgress>(status =>
+            int? flashcardsSuccessfulChunkCount = null;
+            int? flashcardsTotalChunkCount = null;
+            var progress = new Progress<AiGenerationProgress>(status =>
             {
+                if (_isDisposed) return;
+                if (status.SuccessfulChunkCount.HasValue)
+                {
+                    flashcardsSuccessfulChunkCount = status.SuccessfulChunkCount;
+                    flashcardsTotalChunkCount = status.TotalChunkCount;
+                }
+
                 var text = BuildAiProgressText(status, null, null, out var useAnimation);
 
                 if (useAnimation)
@@ -1723,8 +1812,10 @@ namespace Scriblucent
                 var flashcards = await _flashcardConversionService.ConvertToFlashcardsAsync(
                     plainText,
                     progress,
-                    _flashcardConversionCancellationSource.Token);
+                    cts.Token);
                 RestoreAutoSaveAfterAi(ref restoreAutoSave);
+
+                if (_isDisposed) return;
 
                 if (flashcards.Count == 0)
                 {
@@ -1762,21 +1853,26 @@ namespace Scriblucent
                     flashcardsMainViewModel.AddOrUpdateFlashcardSet(document);
                 }
 
-                ShowStatusIndicator(LocalizationService.GetString("ConvertToFlashcardsSuccess"));
+                ShowStatusIndicator(BuildAiSuccessText(
+                    "ConvertToFlashcardsSuccess",
+                    "ConvertToFlashcardsSuccessPartialFormat",
+                    flashcardsSuccessfulChunkCount,
+                    flashcardsTotalChunkCount));
             }
-            catch (OperationCanceledException ex)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 HideStatusIndicator();
-                if (_flashcardConversionCancellationSource?.IsCancellationRequested == true)
-                    return;
-
+            }
+            catch (OperationCanceledException ex) when (!_isDisposed)
+            {
+                HideStatusIndicator();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
-            catch (AiInputRejectedException ex)
+            catch (AiInputRejectedException ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
@@ -1785,7 +1881,7 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
-            catch (TimeoutException ex)
+            catch (TimeoutException ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
@@ -1794,11 +1890,11 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
-                    $"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}",
+                    AppendDiagnosticPathIfPresent($"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}", ex),
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -1809,14 +1905,16 @@ namespace Scriblucent
                 _isConvertingToFlashcards = false;
                 EndAiGeneration();
                 SetAiConversionButtonsEnabled(true);
-                _flashcardConversionCancellationSource?.Dispose();
-                _flashcardConversionCancellationSource = null;
+                HideAiCancelButton();
+                cts.Dispose();
+                if (_flashcardConversionCancellationSource == cts)
+                    _flashcardConversionCancellationSource = null;
             }
         }
 
         private async void ConvertToMindMapButton_Click(object sender, RoutedEventArgs e)
         {
-            if (IsAnyAiConversionInProgress())
+            if (IsAnyAiConversionInProgress() || IsAiGenerationInProgress)
                 return;
 
             var plainText = GetEditorAiText();
@@ -1833,13 +1931,23 @@ namespace Scriblucent
             _isConvertingToMindMap = true;
             BeginAiGeneration();
             SetAiConversionButtonsEnabled(false);
+            ShowAiCancelButton();
             ShowPersistentStatusIndicator(LocalizationService.GetString("ConvertToMindMapInProgress"));
 
-            _mindMapConversionCancellationSource?.Dispose();
-            _mindMapConversionCancellationSource = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
+            _mindMapConversionCancellationSource = cts;
 
-            var progress = new Progress<BundledModelHostService.FlashcardProgress>(status =>
+            int? mindMapSuccessfulChunkCount = null;
+            int? mindMapTotalChunkCount = null;
+            var progress = new Progress<AiGenerationProgress>(status =>
             {
+                if (_isDisposed) return;
+                if (status.SuccessfulChunkCount.HasValue)
+                {
+                    mindMapSuccessfulChunkCount = status.SuccessfulChunkCount;
+                    mindMapTotalChunkCount = status.TotalChunkCount;
+                }
+
                 var text = BuildAiProgressText(
                     status,
                     processingStatusKey: "ConvertToMindMapStatusProcessing",
@@ -1861,8 +1969,10 @@ namespace Scriblucent
                     documentTitle,
                     plainText,
                     progress,
-                    _mindMapConversionCancellationSource.Token);
+                    cts.Token);
                 RestoreAutoSaveAfterAi(ref restoreAutoSave);
+
+                if (_isDisposed) return;
 
                 if (mindMap is null || mindMap.Children.Count == 0)
                 {
@@ -1905,21 +2015,26 @@ namespace Scriblucent
                     mainViewModel.AddOrUpdateMindMap(document);
                 }
 
-                ShowStatusIndicator(LocalizationService.GetString("ConvertToMindMapSuccess"));
+                ShowStatusIndicator(BuildAiSuccessText(
+                    "ConvertToMindMapSuccess",
+                    "ConvertToMindMapSuccessPartialFormat",
+                    mindMapSuccessfulChunkCount,
+                    mindMapTotalChunkCount));
             }
-            catch (OperationCanceledException ex)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 HideStatusIndicator();
-                if (_mindMapConversionCancellationSource?.IsCancellationRequested == true)
-                    return;
-
+            }
+            catch (OperationCanceledException ex) when (!_isDisposed)
+            {
+                HideStatusIndicator();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
-            catch (AiInputRejectedException ex)
+            catch (AiInputRejectedException ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
@@ -1928,7 +2043,7 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
-            catch (TimeoutException ex)
+            catch (TimeoutException ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
@@ -1937,11 +2052,11 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
-                    $"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}",
+                    AppendDiagnosticPathIfPresent($"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}", ex),
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -1952,14 +2067,16 @@ namespace Scriblucent
                 _isConvertingToMindMap = false;
                 EndAiGeneration();
                 SetAiConversionButtonsEnabled(true);
-                _mindMapConversionCancellationSource?.Dispose();
-                _mindMapConversionCancellationSource = null;
+                HideAiCancelButton();
+                cts.Dispose();
+                if (_mindMapConversionCancellationSource == cts)
+                    _mindMapConversionCancellationSource = null;
             }
         }
 
         private async void ConvertToTestButton_Click(object sender, RoutedEventArgs e)
         {
-            if (IsAnyAiConversionInProgress())
+            if (IsAnyAiConversionInProgress() || IsAiGenerationInProgress)
                 return;
 
             var plainText = GetEditorAiText();
@@ -1976,13 +2093,23 @@ namespace Scriblucent
             _isConvertingToTest = true;
             BeginAiGeneration();
             SetAiConversionButtonsEnabled(false);
+            ShowAiCancelButton();
             ShowPersistentStatusIndicator(LocalizationService.GetString("ConvertToTestInProgress"));
 
-            _testConversionCancellationSource?.Dispose();
-            _testConversionCancellationSource = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
+            _testConversionCancellationSource = cts;
 
-            var progress = new Progress<BundledModelHostService.FlashcardProgress>(status =>
+            int? quizSuccessfulChunkCount = null;
+            int? quizTotalChunkCount = null;
+            var progress = new Progress<AiGenerationProgress>(status =>
             {
+                if (_isDisposed) return;
+                if (status.SuccessfulChunkCount.HasValue)
+                {
+                    quizSuccessfulChunkCount = status.SuccessfulChunkCount;
+                    quizTotalChunkCount = status.TotalChunkCount;
+                }
+
                 var text = BuildAiProgressText(
                     status,
                     processingStatusKey: "ConvertToTestStatusProcessing",
@@ -2005,8 +2132,10 @@ namespace Scriblucent
                     plainText,
                     _currentDocument?.Id,
                     progress,
-                    _testConversionCancellationSource.Token);
+                    cts.Token);
                 RestoreAutoSaveAfterAi(ref restoreAutoSave);
+
+                if (_isDisposed) return;
 
                 if (quiz is null || quiz.Questions.Count == 0)
                 {
@@ -2044,21 +2173,26 @@ namespace Scriblucent
                     quizMainViewModel.AddOrUpdateQuiz(preview.ToDocument());
                 }
 
-                ShowStatusIndicator(LocalizationService.GetString("ConvertToTestSuccess"));
+                ShowStatusIndicator(BuildAiSuccessText(
+                    "ConvertToTestSuccess",
+                    "ConvertToTestSuccessPartialFormat",
+                    quizSuccessfulChunkCount,
+                    quizTotalChunkCount));
             }
-            catch (OperationCanceledException ex)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
                 HideStatusIndicator();
-                if (_testConversionCancellationSource?.IsCancellationRequested == true)
-                    return;
-
+            }
+            catch (OperationCanceledException ex) when (!_isDisposed)
+            {
+                HideStatusIndicator();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
-            catch (AiInputRejectedException ex)
+            catch (AiInputRejectedException ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
@@ -2067,7 +2201,7 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
-            catch (TimeoutException ex)
+            catch (TimeoutException ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
@@ -2076,11 +2210,11 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
-                    $"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}",
+                    AppendDiagnosticPathIfPresent($"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}", ex),
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -2091,30 +2225,30 @@ namespace Scriblucent
                 _isConvertingToTest = false;
                 EndAiGeneration();
                 SetAiConversionButtonsEnabled(true);
-                _testConversionCancellationSource?.Dispose();
-                _testConversionCancellationSource = null;
+                HideAiCancelButton();
+                cts.Dispose();
+                if (_testConversionCancellationSource == cts)
+                    _testConversionCancellationSource = null;
             }
         }
 
         private static string BuildAiProgressText(
-            BundledModelHostService.FlashcardProgress status,
+            AiGenerationProgress status,
             string? processingStatusKey,
             string? finalizingStatusKey,
             out bool useAnimation)
         {
-            var statusKey = status.StatusKey;
-            if (processingStatusKey is not null
-                && string.Equals(statusKey, "ConvertToFlashcardsStatusProcessing", StringComparison.Ordinal))
+            var baseText = status.Status switch
             {
-                statusKey = processingStatusKey;
-            }
-            else if (finalizingStatusKey is not null
-                && string.Equals(statusKey, "ConvertToFlashcardsStatusFinalizing", StringComparison.Ordinal))
-            {
-                statusKey = finalizingStatusKey;
-            }
-
-            var baseText = LocalizationService.GetString(statusKey);
+                AiGenerationStatus.Processing => LocalizationService.GetString(
+                    processingStatusKey ?? "ConvertToFlashcardsStatusProcessing"),
+                AiGenerationStatus.Repairing => LocalizationService.GetString("ConvertToFlashcardsStatusRepairing"),
+                AiGenerationStatus.Finalizing => LocalizationService.GetString(
+                    finalizingStatusKey ?? "ConvertToFlashcardsStatusFinalizing"),
+                AiGenerationStatus.PreparingAssets => LocalizationService.GetString("ConvertToFlashcardsStatusPreparingAssets"),
+                AiGenerationStatus.AssetsReady => LocalizationService.GetString("ConvertToFlashcardsStatusAssetsReady"),
+                _ => ""
+            };
             useAnimation = true;
 
             if (status.ChunkIndex.HasValue
@@ -2141,6 +2275,45 @@ namespace Scriblucent
             }
 
             return baseText;
+        }
+
+        /// Plain success text, unless the job only got partial chunk coverage (some sections
+        /// contributed nothing even after repair) - then a "used N of M sections" variant so a
+        /// truncated result isn't presented as if it were complete.
+        private static string BuildAiSuccessText(
+            string successKey,
+            string partialFormatKey,
+            int? successfulChunkCount,
+            int? totalChunkCount)
+        {
+            if (successfulChunkCount.HasValue
+                && totalChunkCount.HasValue
+                && successfulChunkCount.Value < totalChunkCount.Value)
+            {
+                return string.Format(
+                    LocalizationService.GetString(partialFormatKey),
+                    successfulChunkCount.Value,
+                    totalChunkCount.Value);
+            }
+
+            return LocalizationService.GetString(successKey);
+        }
+
+        /// AiGenerationPipeline/MindMapConversionService set ex.Data["DiagnosticPath"] when a
+        /// parse-failure diagnostic log was written (only when diagnostic logging is enabled in
+        /// Settings) - previously never surfaced anywhere, so the log's existence was invisible
+        /// to the user. Appends the path when present; returns the message unchanged otherwise.
+        private static string AppendDiagnosticPathIfPresent(string message, Exception ex)
+        {
+            if (ex.Data["DiagnosticPath"] is string diagnosticPath && !string.IsNullOrWhiteSpace(diagnosticPath))
+            {
+                return string.Format(
+                    LocalizationService.GetString("AiGenerationDiagnosticPathFormat"),
+                    message,
+                    diagnosticPath);
+            }
+
+            return message;
         }
 
         private void ShowPersistentStatusIndicator(string message, bool pulse = false)
@@ -3934,19 +4107,17 @@ namespace Scriblucent
 
         private static void BeginAiGeneration()
         {
-            _activeAiGenerationCount++;
-            if (_activeAiGenerationCount == 1)
+            if (Interlocked.Increment(ref _activeAiGenerationCount) == 1)
                 AiGenerationStateChanged?.Invoke(null, EventArgs.Empty);
         }
 
         private static void EndAiGeneration()
         {
-            if (_activeAiGenerationCount <= 0)
-                return;
-
-            _activeAiGenerationCount--;
-            if (_activeAiGenerationCount == 0)
+            if (Interlocked.Decrement(ref _activeAiGenerationCount) <= 0)
+            {
+                _activeAiGenerationCount = 0;
                 AiGenerationStateChanged?.Invoke(null, EventArgs.Empty);
+            }
         }
 
         private bool TemporarilyDisableAutoSaveForAi()
@@ -4103,9 +4274,18 @@ namespace Scriblucent
         {
             var sb = new StringBuilder();
             foreach (Block block in ContentTextBox.Document.Blocks)
-                AppendBlockTextForAi(block, sb);
+                AppendBlockTextForAi(block, sb, 0);
 
             var text = sb.ToString().Replace('\uFFFC', ' ');
+
+            // Collapse multiple spaces (from uFFFC replacement or formatting)
+            text = Regex.Replace(text, @"[^\S\n]+", " ");
+
+            // Collapse multiple blank lines into one
+            text = Regex.Replace(text, @"\n{3,}", "\n\n");
+
+            // Remove trailing whitespace on each line
+            text = Regex.Replace(text, @"[ \t]+\n", "\n");
 
             if (text.EndsWith("\r\n", StringComparison.Ordinal))
                 text = text[..^2];
@@ -4115,7 +4295,7 @@ namespace Scriblucent
             return text.Trim();
         }
 
-        private static void AppendBlockTextForAi(Block block, StringBuilder target)
+        private static void AppendBlockTextForAi(Block block, StringBuilder target, int depth)
         {
             switch (block)
             {
@@ -4125,14 +4305,18 @@ namespace Scriblucent
                     break;
                 case Section section:
                     foreach (Block child in section.Blocks)
-                        AppendBlockTextForAi(child, target);
+                        AppendBlockTextForAi(child, target, depth);
                     target.AppendLine();
                     break;
                 case System.Windows.Documents.List list:
+                    var itemIndex = 0;
                     foreach (ListItem item in list.ListItems)
                     {
+                        itemIndex++;
+                        var marker = GetListMarker(list.MarkerStyle, itemIndex, depth);
+                        target.Append(marker);
                         foreach (Block child in item.Blocks)
-                            AppendBlockTextForAi(child, target);
+                            AppendBlockTextForAi(child, target, depth + 1);
                     }
                     target.AppendLine();
                     break;
@@ -4144,12 +4328,62 @@ namespace Scriblucent
             }
         }
 
+        private static string GetListMarker(TextMarkerStyle style, int index, int depth)
+        {
+            var indent = new string(' ', depth * 2);
+            return style switch
+            {
+                TextMarkerStyle.Disc => $"{indent}- ",
+                TextMarkerStyle.Circle => $"{indent}• ",
+                TextMarkerStyle.Square => $"{indent}■ ",
+                TextMarkerStyle.Decimal => $"{indent}{index}. ",
+                TextMarkerStyle.LowerLatin => $"{indent}{(char)('a' + index - 1)}. ",
+                TextMarkerStyle.UpperLatin => $"{indent}{(char)('A' + index - 1)}. ",
+                TextMarkerStyle.LowerRoman => $"{indent}{ToRoman(index).ToLowerInvariant()}. ",
+                TextMarkerStyle.UpperRoman => $"{indent}{ToRoman(index)}. ",
+                _ => $"{indent}- "
+            };
+        }
+
+        private static string ToRoman(int number)
+        {
+            if (number < 1 || number > 3999) return number.ToString();
+            var sb = new StringBuilder();
+            var vals = new[] { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
+            var syms = new[] { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
+            for (var i = 0; i < vals.Length; i++)
+            {
+                while (number >= vals[i])
+                {
+                    sb.Append(syms[i]);
+                    number -= vals[i];
+                }
+            }
+            return sb.ToString();
+        }
+
         private static void AppendInlineTextForAi(InlineCollection inlines, StringBuilder target)
         {
             foreach (Inline inline in inlines)
             {
                 switch (inline)
                 {
+                    case Hyperlink hyperlink:
+                        // Include display text and URL for AI context
+                        var displayText = new StringBuilder();
+                        foreach (var child in hyperlink.Inlines)
+                        {
+                            if (child is Run run)
+                                displayText.Append(run.Text);
+                            else if (child is Span span)
+                                AppendInlineTextForAi(span.Inlines, displayText);
+                        }
+                        var linkText = displayText.ToString().Trim();
+                        if (!string.IsNullOrWhiteSpace(linkText) && hyperlink.NavigateUri is not null)
+                            target.Append($"{linkText} ({hyperlink.NavigateUri})");
+                        else if (!string.IsNullOrWhiteSpace(linkText))
+                            target.Append(linkText);
+                        break;
                     case Run run:
                         target.Append(run.Text);
                         break;
@@ -4161,7 +4395,7 @@ namespace Scriblucent
                         break;
                     case AnchoredBlock anchoredBlock:
                         foreach (Block block in anchoredBlock.Blocks)
-                            AppendBlockTextForAi(block, target);
+                            AppendBlockTextForAi(block, target, 0);
                         break;
                     case InlineUIContainer:
                         break;
@@ -4171,6 +4405,7 @@ namespace Scriblucent
 
         private static void AppendTableTextForAi(Table table, StringBuilder target)
         {
+            var isFirstRow = true;
             foreach (TableRowGroup rowGroup in table.RowGroups)
             {
                 foreach (TableRow row in rowGroup.Rows)
@@ -4180,6 +4415,13 @@ namespace Scriblucent
                         cells.Add(GetTableCellPlainText(cell));
 
                     target.AppendLine(string.Join('\t', cells));
+
+                    if (isFirstRow)
+                    {
+                        // Add separator after header row
+                        target.AppendLine(string.Join('\t', Enumerable.Repeat("---", cells.Count)));
+                        isFirstRow = false;
+                    }
                 }
             }
         }
@@ -4192,7 +4434,7 @@ namespace Scriblucent
                 if (child is Paragraph paragraph)
                     AppendInlineTextForAi(paragraph.Inlines, sb);
                 else
-                    AppendBlockTextForAi(child, sb);
+                    AppendBlockTextForAi(child, sb, 0);
             }
 
             return sb.ToString()

@@ -19,10 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Assets\ModelRuntime\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </None>
     <None Include="Assets\Models\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -37,8 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LLamaSharp" Version="0.26.0" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.26.0" />
+    <PackageReference Include="LLamaSharp" Version="0.27.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
     <PackageReference Include="MahApps.Metro.IconPacks.Lucide" Version="6.2.1" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="SharpVectors.Wpf" Version="1.8.5" />
@@ -46,5 +42,55 @@
     <PackageReference Include="SkiaSharp.HarfBuzz" Version="4.151.1" />
     <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
   </ItemGroup>
+
+  <!-- Build the AI worker and copy its output to the main app's output directory. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Scriblucent.AI.Worker\Scriblucent.AI.Worker.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true" />
+    <ProjectReference Include="..\Scriblucent.AI.Protocol\Scriblucent.AI.Protocol.csproj" />
+  </ItemGroup>
+
+  <!--
+    ReferenceOutputAssembly="false" above keeps the worker's managed assembly (and transitively
+    LLamaSharp/native llama.cpp) out of this project's own compile-time references, but it also
+    suppresses MSBuild's normal copy-referenced-project's-output-to-my-output-directory behavior.
+    Without an explicit copy, only a handful of apphost-related files for the worker end up next
+    to Scriblucent.exe - not its managed DLL or any of its dependencies - so the worker process
+    fails to launch at all. Copy its full output directory ourselves instead.
+  -->
+  <PropertyGroup>
+    <AiWorkerOutputPath>..\Scriblucent.AI.Worker\bin\$(Configuration)\$(TargetFramework)\</AiWorkerOutputPath>
+  </PropertyGroup>
+
+  <Target Name="CopyAiWorkerBuildOutput" AfterTargets="Build" DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <!-- Use **\* not **\*.* to include extensionless native assets -->
+      <AiWorkerBuildOutputFiles Include="$(AiWorkerOutputPath)**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AiWorkerBuildOutputFiles)"
+          DestinationFolder="$(OutDir)%(RecursiveDir)"
+          SkipUnchangedFiles="true"
+          UseHardlinksIfPossible="false" />
+  </Target>
+
+  <Target Name="CopyAiWorkerPublishOutput" AfterTargets="Publish" DependsOnTargets="CopyAiWorkerBuildOutput">
+    <ItemGroup>
+      <AiWorkerPublishOutputFiles Include="$(AiWorkerOutputPath)**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AiWorkerPublishOutputFiles)"
+          DestinationFolder="$(PublishDir)%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Clean stale worker files that were removed from worker output but remain in OutDir/PublishDir due to SkipUnchangedFiles -->
+  <Target Name="CleanAiWorkerOutput" BeforeTargets="Clean">
+    <ItemGroup>
+      <AiWorkerStaleFiles Include="$(OutDir)Scriblucent.AI.Worker.*" />
+      <AiWorkerStalePublishFiles Include="$(PublishDir)Scriblucent.AI.Worker.*" Condition="Exists('$(PublishDir)')" />
+    </ItemGroup>
+    <Delete Files="@(AiWorkerStaleFiles)" Condition="Exists('%(Identity)')" />
+    <Delete Files="@(AiWorkerStalePublishFiles)" Condition="Exists('%(Identity)')" />
+  </Target>
 
 </Project>

@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Scriblucent\Scriblucent.csproj" />
+    <ProjectReference Include="..\Scriblucent.AI.Protocol\Scriblucent.AI.Protocol.csproj" />
   </ItemGroup>
 
   <ItemGroup>

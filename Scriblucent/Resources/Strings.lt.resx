@@ -172,6 +172,9 @@
   <data name="SpellCheck" xml:space="preserve"><value>Rašybos tikrinimas</value></data>
   <data name="EnableSpellCheck" xml:space="preserve"><value>Įjungti rašybos tikrinimą</value></data>
   <data name="SpellCheckDescription" xml:space="preserve"><value>Pabraukti klaidingai parašytus žodžius užrašų rengyklėje. Atsisiųskite kalbą žemiau ir pasirinkite ją tikrinimui - panašiai kaip Word ar LibreOffice rašybos tikrinimo kalba.</value></data>
+  <data name="Diagnostics" xml:space="preserve"><value>Diagnostika</value></data>
+  <data name="EnableDiagnosticLogging" xml:space="preserve"><value>Įjungti diagnostikos žurnalus</value></data>
+  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Įrašo klaidų žurnalą, o kai nepavyksta apdoroti DI atsakymo - vietinį žurnalą su užrašo tekstu ir modelio atsakymu, padedantį spręsti problemas. Lieka šiame įrenginyje ir niekur nesiunčiamas. Išjunkite, jei norite visiškai atsisakyti vietinių žurnalų.</value></data>
   <data name="SpellCheckLanguages" xml:space="preserve"><value>Kalbos</value></data>
   <data name="SpellCheckLanguagesDescription" xml:space="preserve"><value>Pasirinkite vieną kalbą, pagal kurią bus tikrinama. Kiekvienai pirmą kartą atsisiunčiamas žodynas.</value></data>
   <data name="SpellCheckLanguageDownload" xml:space="preserve"><value>Atsisiųsti</value></data>
@@ -622,11 +625,13 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ConvertToFlashcardsUnavailable" xml:space="preserve"><value>Su programėle pateiktas Qwen modelis kortelių nesugeneravo.</value></data>
   <data name="ConvertToFlashcardsFailed" xml:space="preserve"><value>Nepavyko paversti užrašo į mokymosi korteles naudojant su programėle pateiktą Qwen modelį.</value></data>
   <data name="ConvertToFlashcardsSuccess" xml:space="preserve"><value>Mokymosi kortelės sugeneruotos</value></data>
+  <data name="ConvertToFlashcardsSuccessPartialFormat" xml:space="preserve"><value>Mokymosi kortelės sugeneruotos (panaudota {0} iš {1} dalių)</value></data>
   <data name="ConvertToMindMap" xml:space="preserve"><value>Paversti į minčių žemėlapį</value></data>
   <data name="ConvertToMindMapEmpty" xml:space="preserve"><value>Prieš konvertuodami į minčių žemėlapį, įrašykite užrašo tekstą.</value></data>
   <data name="ConvertToMindMapInProgress" xml:space="preserve"><value>Generuojamas minčių žemėlapis...</value></data>
   <data name="ConvertToMindMapFailed" xml:space="preserve"><value>Nepavyko paversti užrašo į minčių žemėlapį naudojant su programėle pateiktą Qwen modelį.</value></data>
   <data name="ConvertToMindMapSuccess" xml:space="preserve"><value>Minčių žemėlapis sugeneruotas</value></data>
+  <data name="ConvertToMindMapSuccessPartialFormat" xml:space="preserve"><value>Minčių žemėlapis sugeneruotas (panaudota {0} iš {1} dalių)</value></data>
   <data name="ConvertToMindMapParseFailed" xml:space="preserve"><value>DI atsakyme nerasta tinkamos minčių žemėlapio struktūros.</value></data>
   <data name="ConvertToMindMapStatusProcessing" xml:space="preserve"><value>DI generuoja minčių žemėlapį...</value></data>
   <data name="ConvertToMindMapStatusFinalizing" xml:space="preserve"><value>Baigiamas formuoti minčių žemėlapis...</value></data>
@@ -636,15 +641,30 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ConvertToTestInProgress" xml:space="preserve"><value>Generuojama viktorina...</value></data>
   <data name="ConvertToTestFailed" xml:space="preserve"><value>Nepavyko paversti užrašo į viktoriną naudojant su programėle pateiktą Qwen modelį.</value></data>
   <data name="ConvertToTestSuccess" xml:space="preserve"><value>Viktorina sugeneruota</value></data>
+  <data name="ConvertToTestSuccessPartialFormat" xml:space="preserve"><value>Viktorina sugeneruota (panaudota {0} iš {1} dalių)</value></data>
   <data name="ConvertToTestParseFailed" xml:space="preserve"><value>DI atsakyme nerasta tinkamos viktorinos.</value></data>
   <data name="ConvertToTestStatusProcessing" xml:space="preserve"><value>DI generuoja viktoriną...</value></data>
   <data name="ConvertToTestStatusFinalizing" xml:space="preserve"><value>Baigiama formuoti viktorina...</value></data>
   <data name="ConvertToTestStatusRepairing" xml:space="preserve"><value>DI generuoja viktoriną... (repair)</value></data>
   <data name="AiInputRejectedTitle" xml:space="preserve"><value>DI generavimas atmestas</value></data>
   <data name="AiInputRejectedInsufficientContent" xml:space="preserve"><value>Užraše nėra pakankamai prasmingo teksto mokymosi medžiagai sugeneruoti. Įrašykite rišlų tekstinį turinį ir bandykite dar kartą.</value></data>
+  <data name="AiInputRejectedTooShort" xml:space="preserve"><value>Užrašas per trumpas mokymosi medžiagai sugeneruoti. Įrašykite daugiau teksto ir bandykite dar kartą.</value></data>
+  <data name="AiInputRejectedRepeatedOrLowVariety" xml:space="preserve"><value>Užrašas per daug pasikartojantis mokymosi medžiagai sugeneruoti. Įrašykite įvairesnio turinio ir bandykite dar kartą.</value></data>
+  <data name="AiInputRejectedLowTextRatio" xml:space="preserve"><value>Užraše nėra pakankamai skaitomo teksto (per daug skaičių ar simbolių) mokymosi medžiagai sugeneruoti.</value></data>
+  <data name="AiInputRejectedLooksLikeGibberish" xml:space="preserve"><value>Užrašas nepanašus į skaitomą tekstą. Įrašykite rišlų turinį ir bandykite dar kartą.</value></data>
   <data name="AiGenerationTimedOut" xml:space="preserve"><value>DI generavimas sustabdytas, nes modelis laiku nepateikė tinkamo atsakymo.</value></data>
+  <data name="AiGenerationParseFailed" xml:space="preserve"><value>DI modelis pateikė output, kurio nepavyko suparse į reikiamą formatą. Bandykite dar kartą su kitu užrašo turiniu.</value></data>
+  <data name="AiGenerationDiagnosticPathFormat" xml:space="preserve"><value>{0}&#10;&#10;Išsami informacija išsaugota: {1}</value></data>
+  <data name="AiGenerationPartialResults" xml:space="preserve"><value>Kai kurie skyriai nepavyko konvertuoti. Rodomi daliniai rezultatai.</value></data>
+  <data name="AiGenerationRetry" xml:space="preserve"><value>Bandyti dar kartą</value></data>
+  <data name="AiGenerationDismiss" xml:space="preserve"><value>Uždaryti</value></data>
+  <data name="AiPrivacyNote" xml:space="preserve"><value>Jūsų užrašai niekada nepalieką jūsų įrenginio. DI veikia visiškai jūsų kompiuteryje.</value></data>
+  <data name="AiModelDiskUsage" xml:space="preserve"><value>Modelio disko naudojimas: {0}</value></data>
+  <data name="AiConvertTooltip" xml:space="preserve"><value>Konvertuoti šį užrašą į mokymosi medžiagą naudojant DI</value></data>
+  <data name="AiModel08BDescriptionDetail" xml:space="preserve"><value>Greičiausias modelis. Geriausias greitam paprastų užrašų konvertavimui.</value></data>
+  <data name="AiModel2BDescriptionDetail" xml:space="preserve"><value>Subalansuotas greitis ir kokybė. Tinka daugumai studijų užrašų.</value></data>
+  <data name="AiModel4BDescriptionDetail" xml:space="preserve"><value>Aukščiausia kokybė. Geriausias sudėtingiems arba detaliems užrašams.</value></data>
   <data name="ConvertToFlashcardsStatusPreparingAssets" xml:space="preserve"><value>Paruošiami DI resursai...</value></data>
-  <data name="ConvertToFlashcardsStatusDownloadingRuntime" xml:space="preserve"><value>Atsiunčiamas DI vykdymo modulis...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel" xml:space="preserve"><value>Atsiunčiamas pasirinktas Qwen modelis...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel08B" xml:space="preserve"><value>Atsiunčiamas Qwen3.5-0.8B modelis...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel2B" xml:space="preserve"><value>Atsiunčiamas Qwen3.5-2B modelis...</value></data>
@@ -1032,27 +1052,4 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="AiToolsDownloadErrorDialogFormat" xml:space="preserve"><value>Nepavyko atsiųsti {0}: {1}</value></data>
   <data name="AiToolsDeleteTitle" xml:space="preserve"><value>Ištrinti DI įrankį</value></data>
   <data name="AiToolsDeletePromptFormat" xml:space="preserve"><value>Ar tikrai norite pašalinti „{0}“ iš DI įrankių?</value></data>
-  <data name="AiToolsRuntimeTitle" xml:space="preserve"><value>llama.cpp vykdymo modulis</value></data>
-  <data name="AiToolsRuntimeReady" xml:space="preserve"><value>Vykdymo modulis atsiųstas ir paruoštas.</value></data>
-  <data name="AiToolsRuntimeReadyFormat" xml:space="preserve"><value>Vykdymo modulis atsiųstas ir paruoštas. Versija: {0}</value></data>
-  <data name="AiToolsRuntimeNotDownloaded" xml:space="preserve"><value>Vykdymo modulis dar neatsiųstas.</value></data>
-  <data name="AiToolsRuntimeDownload" xml:space="preserve"><value>Atsiųsti</value></data>
-  <data name="AiToolsRuntimeCheckUpdates" xml:space="preserve"><value>Tikrinti atnaujinimus</value></data>
-  <data name="AiToolsRuntimeOpenFolder" xml:space="preserve"><value>Atverti aplanką</value></data>
-  <data name="AiToolsRuntimeDelete" xml:space="preserve"><value>Ištrinti</value></data>
-  <data name="AiToolsRuntimeDownloadStarting" xml:space="preserve"><value>Pradedamas vykdymo modulio atsisiuntimas...</value></data>
-  <data name="AiToolsRuntimeDownloadPreparing" xml:space="preserve"><value>Ruošiamas vykdymo modulio atsisiuntimas...</value></data>
-  <data name="AiToolsRuntimeDownloadingPercentFormat" xml:space="preserve"><value>Atsiunčiamas vykdymo modulis: {0}%</value></data>
-  <data name="AiToolsRuntimeDownloadSuccess" xml:space="preserve"><value>Vykdymo modulis sėkmingai atsiųstas.</value></data>
-  <data name="AiToolsRuntimeDownloadFailed" xml:space="preserve"><value>Nepavyko atsiųsti vykdymo modulio.</value></data>
-  <data name="AiToolsRuntimeDeleteTitle" xml:space="preserve"><value>Ištrinti vykdymo modulį</value></data>
-  <data name="AiToolsRuntimeDeletePrompt" xml:space="preserve"><value>Ar tikrai norite ištrinti llama.cpp vykdymo modulio failus?</value></data>
-  <data name="AiToolsRuntimeUpdateTitle" xml:space="preserve"><value>llama.cpp modulio atnaujinimas</value></data>
-  <data name="AiToolsRuntimeUpdateChecking" xml:space="preserve"><value>Tikrinami llama.cpp modulio atnaujinimai...</value></data>
-  <data name="AiToolsRuntimeUpdateDownloading" xml:space="preserve"><value>Atsiunčiamas llama.cpp modulio atnaujinimas...</value></data>
-  <data name="AiToolsRuntimeUpdateDownloadingPercentFormat" xml:space="preserve"><value>Atsiunčiamas modulio atnaujinimas: {0}%</value></data>
-  <data name="AiToolsRuntimeUpdateSuccessFormat" xml:space="preserve"><value>llama.cpp modulis atnaujintas į {0}.</value></data>
-  <data name="AiToolsRuntimeUpdateNotAvailableFormat" xml:space="preserve"><value>llama.cpp modulis jau naujausias ({0}).</value></data>
-  <data name="AiToolsRuntimeUpdateFailed" xml:space="preserve"><value>Nepavyko atnaujinti modulio.</value></data>
-  <data name="AiToolsRuntimeUpdateErrorDialogFormat" xml:space="preserve"><value>Nepavyko automatiškai atnaujinti llama.cpp modulio. Informacija: {0}</value></data>
 </root>

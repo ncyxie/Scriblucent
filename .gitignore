@@ -11,6 +11,11 @@
 *.sln.docstates
 *.env
 
+# Local AI-assistant settings and generated planning notes
+.claude/
+.opencode/
+/Microsoft/
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

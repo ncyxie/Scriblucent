@@ -13,7 +13,8 @@ namespace Scriblucent.Services;
 internal static class ScrollPerfDiag
 {
     public static readonly bool Enabled =
-        Environment.GetEnvironmentVariable("SCRIBLUCENT_SCROLL_DIAG") == "1";
+        Environment.GetEnvironmentVariable("SCRIBLUCENT_SCROLL_DIAG") == "1"
+        && DiagnosticLogging.IsEnabled;
 
     private const int Capacity = 8192;
     private const int Fields = 12; // ticks, eventId, a..j

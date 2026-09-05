@@ -124,6 +124,12 @@ public class AppSettings
     /// language is actually checked against is SpellCheckLanguageKey.</summary>
     public bool EnableSpellCheck { get; set; } = true;
 
+    /// <summary>Master on/off switch for all local diagnostic/crash logging (crash log, AI
+    /// parse-failure logs) - on by default so troubleshooting works out of the box, but a single
+    /// switch to turn off entirely for users who don't want anything written to disk. Checked via
+    /// DiagnosticLogging.IsEnabled rather than read directly.</summary>
+    public bool EnableDiagnosticLogging { get; set; } = true;
+
     /// <summary>The one active spell-check language, matching Word/LibreOffice's model of a single
     /// proofing language rather than checking against several dictionaries at once - empty means
     /// no language is selected yet. Key into SpellCheckDictionaryService's catalog (e.g. "en_US").</summary>

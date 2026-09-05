@@ -1,199 +1,180 @@
-using Scriblucent.Localization;
+﻿using Scriblucent.Localization;
 using Scriblucent.Models;
-using System.IO;
-using System.Text;
+using Scriblucent.Services.AI;
 using System.Text.RegularExpressions;
 
 namespace Scriblucent.Services;
 
-public sealed class FlashcardConversionService
+internal sealed class FlashcardConversionService
 {
-    public async Task<IReadOnlyList<FlashcardItem>> ConvertToFlashcardsAsync(
+    private readonly ITextGenerationBackend _backend;
+
+    public FlashcardConversionService(ITextGenerationBackend backend)
+    {
+        _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+    }
+
+    public Task<IReadOnlyList<FlashcardItem>> ConvertToFlashcardsAsync(
         string noteText,
-        IProgress<BundledModelHostService.FlashcardProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        IProgress<AiGenerationProgress>? progress = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(noteText))
-            return Array.Empty<FlashcardItem>();
-
-        AiInputGuard.EnsureSuitableStudyText(noteText);
-
-        var chunkingProfile = BundledModelHostService.Instance.GetSelectedChunkingProfile();
-        var chunks = AiTextChunker.Split(noteText, AiChunkingPurpose.Flashcards, chunkingProfile)
-            .Where(AiInputGuard.IsSuitableStudyText)
-            .ToList();
-
-        if (chunks.Count == 0)
-            throw new AiInputRejectedException(LocalizationService.GetString("AiInputRejectedInsufficientContent"));
+            return Task.FromResult<IReadOnlyList<FlashcardItem>>(Array.Empty<FlashcardItem>());
 
         var cards = new List<FlashcardItem>();
-        var outputs = new List<string>();
+        var profile = SamplingProfiles.Default;
+        var repairProfile = SamplingProfiles.Repair;
 
-        for (var i = 0; i < chunks.Count; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var chunkProgress = CreateChunkProgress(progress, i + 1, chunks.Count);
-            var chunkPrompt = BuildPrompt(chunks[i], i + 1, chunks.Count);
-            var result = await BundledModelHostService.Instance.CompleteAsync(
-                chunkPrompt, nPredict: 1200, temperature: 0.25, progress: chunkProgress, cancellationToken);
-
-            outputs.Add(result);
-            if (AiInputGuard.IsRefusalOutput(result))
-                continue;
-
-            AddParsedFlashcards(cards, result, i + 1);
-        }
-
-        if (cards.Count > 0)
-            return DeduplicateFlashcards(cards);
-
-        if (outputs.Any(AiInputGuard.IsRefusalOutput))
-            throw new AiInputRejectedException(LocalizationService.GetString("AiInputRejectedInsufficientContent"));
-
-        // Repair pass over the full note, but still ask for a bounded set of cards.
-        var repairPrompt = BuildRepairPrompt(noteText);
-        var repairProgress = CreateRepairProgress(progress, "ConvertToFlashcardsStatusRepairing");
-        var repaired = await BundledModelHostService.Instance.CompleteAsync(
-            repairPrompt, nPredict: 1500, temperature: 0.1, progress: repairProgress, cancellationToken);
-
-        if (AiInputGuard.IsRefusalOutput(repaired))
-            throw new AiInputRejectedException(LocalizationService.GetString("AiInputRejectedInsufficientContent"));
-
-        var repairedParsed = ParseFlashcards(repaired);
-        if (repairedParsed.Count > 0)
-            return repairedParsed
-                .Select(card => new FlashcardItem
+        return AiGenerationPipeline.RunAsync<IReadOnlyList<FlashcardItem>>(
+            noteText,
+            AiChunkingPurpose.Flashcards,
+            _backend,
+            new AiGenerationCallbacks
+            {
+                BuildChunkPrompt = (chunk, _) =>
                 {
-                    Question = card.Question,
-                    Answer = card.Answer,
-                    SetIndex = 1
-                })
-                .ToList();
-
-        var diagnosticPath = WriteParseDiagnostic(noteText, string.Join("\n\n--- CHUNK OUTPUT ---\n\n", outputs), repaired);
-        throw new InvalidOperationException($"Unable to parse AI output into valid flashcards. Diagnostic log: {diagnosticPath}");
+                    var (min, max) = CalculateTargetFlashcardCountRange(chunk.Text);
+                    return BuildPrompt(chunk.Text, min, max, chunk.Index + 1, chunk.TotalCount);
+                },
+                BuildRepairPrompt = (failedChunkText, _, _) => BuildRepairPrompt(failedChunkText),
+                BuildChunkGrammar = chunk =>
+                {
+                    var (min, max) = CalculateTargetFlashcardCountRange(chunk.Text);
+                    return OutputGrammars.FlashcardGrammar(min, max);
+                },
+                BuildRepairGrammar = failedChunkText =>
+                {
+                    var (min, max) = CalculateTargetFlashcardCountRange(failedChunkText);
+                    return OutputGrammars.FlashcardGrammar(min, max);
+                },
+                MaxTokens = 1600,
+                RepairMaxTokens = 1800,
+                Temperature = profile.Temperature,
+                RepairTemperature = repairProfile.Temperature,
+                TopP = profile.TopP,
+                RepairTopP = repairProfile.TopP,
+                TopK = profile.TopK,
+                RepairTopK = repairProfile.TopK,
+                PresencePenalty = profile.PresencePenalty,
+                RepairPresencePenalty = repairProfile.PresencePenalty,
+                RepetitionPenalty = profile.RepetitionPenalty,
+                RepairRepetitionPenalty = repairProfile.RepetitionPenalty,
+                GrammarRoot = OutputGrammars.FlashcardRoot,
+                OnChunkGenerated = (output, chunks, index) =>
+                {
+                    var added = AddParsedFlashcards(cards, output, index + 1);
+                    return Task.FromResult(added);
+                },
+                OnRepairGenerated = async (repaired, totalChunkCount, ct) =>
+                {
+                    // Repair now only resubmits the chunks that failed - append what it recovers
+                    // instead of clearing, so cards from chunks that already succeeded survive.
+                    // Stamped with a set index past the real chunks, since a single batched repair
+                    // response has no attribution back to which specific chunk it recovered.
+                    var parsed = FlashcardOutputParser.Parse(repaired);
+                    var repairSetIndex = totalChunkCount + 1;
+                    foreach (var card in parsed)
+                        cards.Add(new FlashcardItem
+                        {
+                            Question = card.Question,
+                            Answer = card.Answer,
+                            SetIndex = repairSetIndex
+                        });
+                    return parsed.Count > 0 ? "repaired" : "";
+                },
+                Finalize = () =>
+                {
+                    var deduplicated = DeduplicateFlashcards(cards);
+                    // An empty (not just null) result must signal "nothing yet" so the pipeline's
+                    // all-refusal check, repair pass, and diagnostic log stay reachable - matching
+                    // QuizConversionService's Finalize, which already gets this right.
+                    return Task.FromResult<object?>(deduplicated.Count > 0 ? deduplicated : null);
+                },
+                DiagnosticTag = _ => "flashcard"
+            },
+            progress, ct);
     }
 
-    private static IProgress<BundledModelHostService.FlashcardProgress>? CreateChunkProgress(
-        IProgress<BundledModelHostService.FlashcardProgress>? progress,
-        int chunkIndex,
-        int chunkCount)
+    private static string BuildPrompt(string noteText, int minCount, int maxCount, int chunkIndex = 1, int chunkCount = 1)
     {
-        if (progress is null)
-            return progress;
+        var section = chunkCount > 1
+            ? $"Section {chunkIndex} of {chunkCount}. "
+            : "";
 
-        return new Progress<BundledModelHostService.FlashcardProgress>(status =>
-            progress.Report(status with
-            {
-                ChunkIndex = Math.Max(1, chunkIndex),
-                ChunkCount = Math.Max(1, chunkCount)
-            }));
-    }
-
-    private static IProgress<BundledModelHostService.FlashcardProgress>? CreateRepairProgress(
-        IProgress<BundledModelHostService.FlashcardProgress>? progress,
-        string repairStatusKey)
-    {
-        if (progress is null)
-            return progress;
-
-        progress.Report(new BundledModelHostService.FlashcardProgress(repairStatusKey));
-
-        return new Progress<BundledModelHostService.FlashcardProgress>(status =>
-            progress.Report(status with
-            {
-                StatusKey = repairStatusKey
-            }));
-    }
-
-    private static string BuildPrompt(string noteText, int chunkIndex = 1, int chunkCount = 1)
-    {
         return $"""
-You are a strict flashcard generator. 
-Never think out loud. Never explain. Never output reasoning, analysis, <think> tags or any extra text.
+{section}Generate between {minCount} and {maxCount} flashcards from the note below - cover the
+key points, don't pad with minor or repeated details. Each card must cover a different point -
+never reuse the same question wording for multiple cards. Use the exact format shown (the example
+below is a generic placeholder, not real content - replace it).
 
-You are processing section {chunkIndex} of {chunkCount} from a longer note.
-Cover every important fact in this section from beginning to end.
-Do not focus only on the opening lines.
-Create as many high-quality flashcards as needed from this section.
-Use ONLY facts from SOURCE NOTE. Make every card atomic and useful for spaced repetition.
-Use SOURCE NOTE's language and script for every question and answer; use English only for the format keys.
-Keep format keys exactly as shown: q, a.
-If SOURCE NOTE is random, incoherent, mostly symbols, image placeholders, only a few words, only one thin sentence, or does not contain enough meaningful study content, output exactly:
-{AiInputGuard.RefusalOutput}
-Do not invent context to make unsuitable text look useful.
+q: [specific question about one point in the note]
+a: [answer to that question]
 
-Output **ONLY** in this exact format, nothing else:
-
-q: [clear concise question]
-a: [short accurate answer]
-
-SOURCE NOTE:
+Note:
 {noteText}
 """;
     }
 
     private static string BuildRepairPrompt(string sourceNote)
     {
-        return $"""
-You repair flashcard output. 
-Ignore any previous noisy text or thinking.
-Never think out loud. Never explain. Never output reasoning or extra text.
+        var (min, max) = CalculateTargetFlashcardCountRange(sourceNote);
 
-Use ONLY information from SOURCE NOTE.
-Use SOURCE NOTE's language and script for every repaired question and answer; use English only for the format keys.
-Keep format keys exactly as shown: q, a.
-If SOURCE NOTE is random, incoherent, mostly symbols, image placeholders, only a few words, only one thin sentence, or does not contain enough meaningful study content, output exactly:
-{AiInputGuard.RefusalOutput}
-Do not invent context to make unsuitable text look useful.
-Create **exactly 3 to 8** flashcards in the exact format:
+        return $"""
+Repair the flashcards below. Generate between {min} and {max} cards.
 
 q: [question]
 a: [answer]
 
-SOURCE NOTE:
+Source note:
 {sourceNote}
 """;
     }
 
-    private static IReadOnlyList<FlashcardItem> ParseFlashcards(string rawOutput)
+    internal static int CalculateTargetFlashcardCount(string sourceNote)
     {
-        if (string.IsNullOrWhiteSpace(rawOutput))
-            return Array.Empty<FlashcardItem>();
+        var wordCount = CountWords(sourceNote);
+        if (wordCount < 30) return 2;
 
-        var cleaned = RemoveThinkAndArtifacts(rawOutput);
+        var uniqueWords = CountUniqueWords(sourceNote);
+        var uniqueRatio = wordCount > 0 ? (double)uniqueWords / wordCount : 0.5;
 
-        var pattern = new Regex(
-            @"(?im)^\s*(?:q|question|klausimas)\s*[:：-]\s*(?<q>.+?)\s*(?:\r?\n)+\s*(?:a|answer|atsakymas)\s*[:：-]\s*(?<a>.+?)(?=\r?\n\s*(?:q|question|klausimas|a|answer|atsakymas)[:：-]|\z)",
-            RegexOptions.Multiline);
+        var baseCount = wordCount / 65.0;
+        var densityFactor = 0.45 + (uniqueRatio * 1.0);
+        var target = (int)Math.Round(baseCount * densityFactor);
 
-        var matches = pattern.Matches(cleaned);
-        var items = new List<FlashcardItem>();
+        var floor = Math.Max(2, (int)Math.Round(baseCount * 0.3));
+        var ceiling = Math.Max(floor + 1, Math.Min(24, (int)Math.Round(baseCount * 1.8)));
 
-        foreach (Match match in matches)
-        {
-            var question = NormalizeCardText(match.Groups["q"].Value);
-            var answer = NormalizeCardText(match.Groups["a"].Value);
-
-            if (!IsValidFlashcard(question, answer))
-                continue;
-
-            items.Add(new FlashcardItem { Question = question, Answer = answer });
-        }
-
-        if (items.Count == 0)
-            items.AddRange(ParseLinePairs(cleaned));
-
-        if (items.Count == 0)
-            items.AddRange(ParseInlinePairs(cleaned));
-
-        return items;
+        return Math.Clamp(target, floor, ceiling);
     }
 
-    private static void AddParsedFlashcards(ICollection<FlashcardItem> cards, string rawOutput, int setIndex)
+    // Turns the single density-adjusted target into a tight band the grammar can enforce as a hard
+    // {min,max} cap - see OutputGrammars.FlashcardGrammar's comment. A single number is only ever
+    // a suggestion the model can ignore; a grammar-enforced range is a mechanical guarantee.
+    internal static (int Min, int Max) CalculateTargetFlashcardCountRange(string sourceNote)
     {
-        foreach (var card in ParseFlashcards(rawOutput))
+        var target = CalculateTargetFlashcardCount(sourceNote);
+        return (Math.Max(2, target - 1), target + 2);
+    }
+
+    private static int CountWords(string text)
+    {
+        return Regex.Matches(text, @"[\p{L}][\p{L}\p{Mn}'’-]{1,}").Count;
+    }
+
+    private static int CountUniqueWords(string text)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match m in Regex.Matches(text, @"[\p{L}][\p{L}\p{Mn}'’-]{1,}"))
+            seen.Add(m.Value);
+        return seen.Count;
+    }
+
+    private static int AddParsedFlashcards(ICollection<FlashcardItem> cards, string rawOutput, int setIndex)
+    {
+        var parsed = FlashcardOutputParser.Parse(rawOutput);
+        foreach (var card in parsed)
         {
             cards.Add(new FlashcardItem
             {
@@ -202,17 +183,34 @@ SOURCE NOTE:
                 SetIndex = Math.Max(1, setIndex)
             });
         }
+
+        return parsed.Count;
     }
 
     private static IReadOnlyList<FlashcardItem> DeduplicateFlashcards(IEnumerable<FlashcardItem> cards)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenQuestions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var unique = new List<FlashcardItem>();
 
         foreach (var card in cards)
         {
-            var key = $"{card.SetIndex}\u001F{NormalizeCardKey(card.Question)}\u001F{NormalizeCardKey(card.Answer)}";
+            // Deliberately excludes SetIndex: adjacent chunks overlap by design (see
+            // AiChunkingPipeline's overlap window), so the same card can legitimately be
+            // generated from two different chunks - keying on content alone is what catches that.
+            var key = $"{NormalizeCardKey(card.Question)}||{NormalizeCardKey(card.Answer)}";
             if (!seen.Add(key))
+                continue;
+
+            // A second, question-only check: the model can reuse the same generic question text
+            // (e.g. "What is the main concept?") across multiple cards with genuinely different
+            // answers, which the combined key above doesn't catch since the answers differ. A set
+            // of cards that all ask the same thing is a bad flashcard set regardless of whether
+            // the answers happen to differ, so this drops every repeat after the first - a
+            // deliberately exact-match-only check, never a fuzzy similarity one, so it only ever
+            // removes genuinely identical question phrasing.
+            var questionKey = NormalizeCardKey(card.Question);
+            if (!seenQuestions.Add(questionKey))
                 continue;
 
             unique.Add(card);
@@ -226,241 +224,4 @@ SOURCE NOTE:
         var normalized = Regex.Replace(value.Trim(), @"\s+", " ");
         return normalized.ToLowerInvariant();
     }
-
-    private static IEnumerable<FlashcardItem> ParseInlinePairs(string text)
-    {
-        var inlinePattern = new Regex(
-            @"(?ims)(?:Q(?:uestion)?|Klausimas)\s*[:：\-]\s*(?<q>.+?)\s+(?:A(?:nswer)?|Atsakymas)\s*[:：\-]\s*(?<a>.+?)(?=(?:\s+(?:Card\s*\d+|Q(?:uestion)?|Klausimas)\s*[:：\-])|\z)",
-            RegexOptions.Multiline);
-
-        foreach (Match match in inlinePattern.Matches(text))
-        {
-            var question = NormalizeCardText(match.Groups["q"].Value);
-            var answer = NormalizeCardText(match.Groups["a"].Value);
-
-            if (!IsValidFlashcard(question, answer))
-                continue;
-
-            yield return new FlashcardItem
-            {
-                Question = question,
-                Answer = answer
-            };
-        }
-    }
-
-    private static IEnumerable<FlashcardItem> ParseLinePairs(string text)
-    {
-        var lines = text
-            .Replace("\r", "", StringComparison.Ordinal)
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        string? currentQuestion = null;
-        foreach (var line in lines)
-        {
-            if (IsQuestionLine(line, out var q))
-            {
-                currentQuestion = NormalizeCardText(q);
-                continue;
-            }
-
-            if (currentQuestion is not null && IsAnswerLine(line, out var a))
-            {
-                var question = NormalizeCardText(currentQuestion);
-                var answer = NormalizeCardText(a);
-
-                currentQuestion = null;
-
-                if (!IsValidFlashcard(question, answer))
-                    continue;
-
-                yield return new FlashcardItem
-                {
-                    Question = question,
-                    Answer = answer
-                };
-            }
-        }
-    }
-
-    private static bool IsQuestionLine(string line, out string content)
-    {
-        return TryStripPrefix(line, ["q", "question", "klausimas", "k"], out content);
-    }
-
-    private static bool IsAnswerLine(string line, out string content)
-    {
-        return TryStripPrefix(line, ["a", "answer", "atsakymas", "ats"], out content);
-    }
-
-    private static bool TryStripPrefix(string line, string[] keywords, out string content)
-    {
-        var trimmed = line.Trim();
-
-        foreach (var keyword in keywords)
-        {
-            var match = Regex.Match(trimmed, $@"^(?:[-*]\s*)?(?:{Regex.Escape(keyword)})\s*[:：\-]\s*(.+)$", RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                content = match.Groups[1].Value.Trim();
-                return true;
-            }
-        }
-
-        content = string.Empty;
-        return false;
-    }
-
-    private static string RemoveThinkAndArtifacts(string text)
-    {
-        var withoutAnsi = Regex.Replace(text, @"\x1B\[[0-9;]*[A-Za-z]", string.Empty);
-
-        var withoutThink = Regex.Replace(withoutAnsi, @"<think>.*?</think>", string.Empty, RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        withoutThink = withoutThink.Replace("<think>", string.Empty, StringComparison.OrdinalIgnoreCase);
-        withoutThink = withoutThink.Replace("</think>", string.Empty, StringComparison.OrdinalIgnoreCase);
-        withoutThink = Regex.Replace(withoutThink, @"\[Start thinking\].*$", string.Empty, RegexOptions.Singleline | RegexOptions.IgnoreCase);
-        withoutThink = Regex.Replace(withoutThink, @"^\s*>.*$", string.Empty, RegexOptions.Multiline);
-        withoutThink = Regex.Replace(withoutThink, @"^\s*Thinking Process:.*$", string.Empty, RegexOptions.Multiline | RegexOptions.IgnoreCase);
-        withoutThink = Regex.Replace(withoutThink, @"^\s*\[?end of text\]?\s*$", string.Empty, RegexOptions.Multiline | RegexOptions.IgnoreCase);
-        withoutThink = Regex.Replace(withoutThink, @"^\s*<\|end\|>\s*$", string.Empty, RegexOptions.Multiline | RegexOptions.IgnoreCase);
-        withoutThink = Regex.Replace(withoutThink, @"^\s*EOF\s*$", string.Empty, RegexOptions.Multiline | RegexOptions.IgnoreCase);
-        withoutThink = withoutThink.Replace("EOF by user", string.Empty, StringComparison.OrdinalIgnoreCase);
-        withoutThink = withoutThink.Replace("Interrupted by user", string.Empty, StringComparison.OrdinalIgnoreCase);
-        return RemoveTrailingArtifacts(withoutThink.Trim());
-    }
-
-    private static string NormalizeCardText(string value)
-    {
-        var normalized = value.Replace("\r", "", StringComparison.Ordinal).Trim();
-        normalized = Regex.Replace(normalized, @"^\s*(?:Q(?:uestion)?|Klausimas|A(?:nswer)?|Atsakymas)\s*[:：\-]\s*", string.Empty, RegexOptions.IgnoreCase);
-        normalized = Regex.Replace(normalized, @"\s*\[?end of text\]?\s*$", string.Empty, RegexOptions.IgnoreCase);
-        normalized = Regex.Replace(normalized, @"\s*<\|end\|>\s*$", string.Empty, RegexOptions.IgnoreCase);
-        normalized = Regex.Replace(normalized, @"\s*EOF\s*$", string.Empty, RegexOptions.IgnoreCase);
-        normalized = Regex.Replace(normalized, @"\n{3,}", "\n\n");
-        return RemoveTrailingArtifacts(normalized);
-    }
-
-    private static string RemoveTrailingArtifacts(string text)
-    {
-        var result = text.Trim();
-
-        string[] trailingArtifacts =
-        [
-            "[end of text]",
-            "end of text",
-            "<|end|>",
-            "EOF",
-            "EOF by user",
-            "Interrupted by user"
-        ];
-
-        foreach (var artifact in trailingArtifacts)
-        {
-            while (result.EndsWith(artifact, StringComparison.OrdinalIgnoreCase))
-            {
-                result = result[..^artifact.Length].TrimEnd();
-            }
-        }
-
-        return result;
-    }
-
-    private static bool IsValidFlashcard(string question, string answer)
-    {
-        if (string.IsNullOrWhiteSpace(question) || string.IsNullOrWhiteSpace(answer))
-            return false;
-
-        if (question.Length < 6 || answer.Length < 3)
-            return false;
-
-        if (question.Equals("...", StringComparison.Ordinal) || answer.Equals("...", StringComparison.Ordinal))
-            return false;
-
-        if (Regex.IsMatch(question, @"^\s*(?:A(?:nswer)?|Atsakymas)\s*[:：\-]", RegexOptions.IgnoreCase))
-            return false;
-
-        if (Regex.IsMatch(answer, @"^\s*(?:Q(?:uestion)?|Klausimas)\s*[:：\-]", RegexOptions.IgnoreCase))
-            return false;
-
-        if (LooksLikePromptLeak(question, answer))
-            return false;
-
-        return true;
-    }
-
-    private static bool LooksLikePromptLeak(string question, string answer)
-    {
-        var q = question.ToLowerInvariant();
-        var a = answer.ToLowerInvariant();
-
-        if (q.Contains("<question>") || a.Contains("<answer>") || q.Contains("q: question") || a.Contains("a: answer"))
-            return true;
-
-        string[] leakMarkers =
-        [
-            "focus on definitions",
-            "avoid markdown",
-            "no markdown",
-            "no bullet lists",
-            "no numbering",
-            "no reasoning",
-            "no analysis",
-            "source note",
-            "use only information",
-            "do not use outside",
-            "output format",
-            "formatting rules",
-            "every card must be exactly 2 lines",
-            "do not output reasoning",
-            "output contract"
-        ];
-
-        if (q.Contains("begin_flashcards") || a.Contains("begin_flashcards") || q.Contains("end_flashcards") || a.Contains("end_flashcards") || q.Contains("<<flashcards>>") || a.Contains("<<flashcards>>") || q.Contains("<<end_flashcards>>") || a.Contains("<<end_flashcards>>"))
-            return true;
-
-        return leakMarkers.Any(m => q.Contains(m) || a.Contains(m));
-    }
-
-    private static string WriteParseDiagnostic(string sourceNote, string firstOutput, string repairedOutput)
-    {
-        try
-        {
-            var diagnosticsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Scriblucent",
-                "AiCache",
-                "diagnostics");
-
-            Directory.CreateDirectory(diagnosticsDir);
-            var path = Path.Combine(diagnosticsDir, $"parse-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
-
-            var firstCleaned = RemoveThinkAndArtifacts(firstOutput);
-            var secondCleaned = RemoveThinkAndArtifacts(repairedOutput);
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"TimestampUtc: {DateTime.UtcNow:O}");
-            sb.AppendLine("--- SOURCE NOTE ---");
-            sb.AppendLine(sourceNote);
-            sb.AppendLine();
-            sb.AppendLine("--- FIRST RAW OUTPUT ---");
-            sb.AppendLine(firstOutput);
-            sb.AppendLine();
-            sb.AppendLine("--- FIRST CLEANED/EXTRACTED ---");
-            sb.AppendLine(firstCleaned);
-            sb.AppendLine();
-            sb.AppendLine("--- REPAIR RAW OUTPUT ---");
-            sb.AppendLine(repairedOutput);
-            sb.AppendLine();
-            sb.AppendLine("--- REPAIR CLEANED/EXTRACTED ---");
-            sb.AppendLine(secondCleaned);
-
-            File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
-            return path;
-        }
-        catch
-        {
-            return "(failed to write parse diagnostic log)";
-        }
-    }
-
 }
