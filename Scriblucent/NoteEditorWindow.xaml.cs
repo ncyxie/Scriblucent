@@ -1776,6 +1776,9 @@ namespace Scriblucent
                 return;
             }
 
+            if (!TryConfirmSelectedAiModelDownload(out var selectedModel))
+                return;
+
             _isConvertingToFlashcards = true;
             BeginAiGeneration();
             SetAiConversionButtonsEnabled(false);
@@ -1808,6 +1811,7 @@ namespace Scriblucent
             try
             {
                 restoreAutoSave = TemporarilyDisableAutoSaveForAi();
+                await EnsureAiModelAvailableAsync(selectedModel, progress, cts.Token);
                 var documentTitle = ResolveEditorTitleForPrompt();
                 var flashcards = await _flashcardConversionService.ConvertToFlashcardsAsync(
                     plainText,
@@ -1890,6 +1894,11 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
+            catch (AiModelDownloadException ex) when (!_isDisposed)
+            {
+                HideStatusIndicator();
+                ModernDialog.ShowError(GetDialogOwnerWindow(), LocalizationService.GetString("Error"), ex.Message);
+            }
             catch (Exception ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
@@ -1928,6 +1937,9 @@ namespace Scriblucent
                 return;
             }
 
+            if (!TryConfirmSelectedAiModelDownload(out var selectedModel))
+                return;
+
             _isConvertingToMindMap = true;
             BeginAiGeneration();
             SetAiConversionButtonsEnabled(false);
@@ -1964,6 +1976,7 @@ namespace Scriblucent
             try
             {
                 restoreAutoSave = TemporarilyDisableAutoSaveForAi();
+                await EnsureAiModelAvailableAsync(selectedModel, progress, cts.Token);
                 var documentTitle = ResolveEditorTitleForPrompt();
                 var mindMap = await _mindMapConversionService.ConvertToMindMapAsync(
                     documentTitle,
@@ -2052,6 +2065,11 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
+            catch (AiModelDownloadException ex) when (!_isDisposed)
+            {
+                HideStatusIndicator();
+                ModernDialog.ShowError(GetDialogOwnerWindow(), LocalizationService.GetString("Error"), ex.Message);
+            }
             catch (Exception ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
@@ -2090,6 +2108,9 @@ namespace Scriblucent
                 return;
             }
 
+            if (!TryConfirmSelectedAiModelDownload(out var selectedModel))
+                return;
+
             _isConvertingToTest = true;
             BeginAiGeneration();
             SetAiConversionButtonsEnabled(false);
@@ -2126,6 +2147,7 @@ namespace Scriblucent
             try
             {
                 restoreAutoSave = TemporarilyDisableAutoSaveForAi();
+                await EnsureAiModelAvailableAsync(selectedModel, progress, cts.Token);
                 var documentTitle = ResolveEditorTitleForPrompt();
                 var quiz = await _quizConversionService.ConvertToQuizAsync(
                     documentTitle,
@@ -2210,6 +2232,11 @@ namespace Scriblucent
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
+            catch (AiModelDownloadException ex) when (!_isDisposed)
+            {
+                HideStatusIndicator();
+                ModernDialog.ShowError(GetDialogOwnerWindow(), LocalizationService.GetString("Error"), ex.Message);
+            }
             catch (Exception ex) when (!_isDisposed)
             {
                 HideStatusIndicator();
@@ -2246,6 +2273,7 @@ namespace Scriblucent
                 AiGenerationStatus.Finalizing => LocalizationService.GetString(
                     finalizingStatusKey ?? "ConvertToFlashcardsStatusFinalizing"),
                 AiGenerationStatus.PreparingAssets => LocalizationService.GetString("ConvertToFlashcardsStatusPreparingAssets"),
+                AiGenerationStatus.DownloadingModel => LocalizationService.GetString("ConvertToFlashcardsStatusDownloadingModel"),
                 AiGenerationStatus.AssetsReady => LocalizationService.GetString("ConvertToFlashcardsStatusAssetsReady"),
                 _ => ""
             };
@@ -2275,6 +2303,72 @@ namespace Scriblucent
             }
 
             return baseText;
+        }
+
+        private bool TryConfirmSelectedAiModelDownload(out AiModelInfo selectedModel)
+        {
+            selectedModel = AiModelManifest.Instance.GetSelectedModel(AppSettingsService.Load());
+            if (BundledModelHostService.IsModelDownloaded(selectedModel.Key))
+                return true;
+
+            var minimumSizeMb = Math.Max(1, (selectedModel.MinimumBytes + (1024L * 1024L) - 1) / (1024L * 1024L));
+            var message = string.Format(
+                LocalizationService.GetString("AiModelDownloadRequiredMessageFormat"),
+                selectedModel.DisplayName,
+                minimumSizeMb);
+
+            return ModernDialog.Show(
+                GetDialogOwnerWindow(),
+                LocalizationService.GetString("AiModelDownloadRequiredTitle"),
+                message,
+                ModernDialogTone.Question,
+                LocalizationService.GetString("AiModelDownloadAndContinue"),
+                LocalizationService.GetString("Cancel"),
+                defaultChoice: ModernDialogResult.Cancel) == ModernDialogResult.Primary;
+        }
+
+        private static async Task EnsureAiModelAvailableAsync(
+            AiModelInfo selectedModel,
+            IProgress<AiGenerationProgress> progress,
+            CancellationToken cancellationToken)
+        {
+            if (BundledModelHostService.IsModelDownloaded(selectedModel.Key))
+                return;
+
+            progress.Report(new AiGenerationProgress(AiGenerationStatus.PreparingAssets));
+            var downloadProgress = new Progress<BundledModelHostService.FlashcardProgress>(status =>
+                progress.Report(new AiGenerationProgress(AiGenerationStatus.DownloadingModel, status.Percent)));
+
+            try
+            {
+                await BundledModelHostService.Instance.EnsureModelAvailableAsync(
+                    selectedModel.Key,
+                    downloadProgress,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new AiModelDownloadException(
+                    string.Format(
+                        LocalizationService.GetString("AiModelDownloadFailedForTaskFormat"),
+                        selectedModel.DisplayName,
+                        ex.Message),
+                    ex);
+            }
+
+            progress.Report(new AiGenerationProgress(AiGenerationStatus.AssetsReady));
+        }
+
+        private sealed class AiModelDownloadException : Exception
+        {
+            public AiModelDownloadException(string message, Exception innerException)
+                : base(message, innerException)
+            {
+            }
         }
 
         /// Plain success text, unless the job only got partial chunk coverage (some sections

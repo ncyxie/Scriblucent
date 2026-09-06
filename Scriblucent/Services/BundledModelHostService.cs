@@ -197,7 +197,7 @@ public sealed class BundledModelHostService
     private static IReadOnlyList<string> ResolveModelDownloadUrls(IEnumerable<string> modelUrls)
     {
         var safeDefaults = modelUrls
-            .Where(IsSafeModelDownloadUrl)
+            .Where(IsSafeConfiguredModelDownloadUrl)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -223,7 +223,17 @@ public sealed class BundledModelHostService
 #endif
     }
 
-    private static bool IsSafeModelDownloadUrl(string url)
+    internal static bool IsSafeConfiguredModelDownloadUrl(string url)
+    {
+        return IsSafeModelDownloadUrl(url, allowHuggingFaceCdn: false);
+    }
+
+    internal static bool IsSafeModelRedirectUrl(string url)
+    {
+        return IsSafeModelDownloadUrl(url, allowHuggingFaceCdn: true);
+    }
+
+    private static bool IsSafeModelDownloadUrl(string url, bool allowHuggingFaceCdn)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             return false;
@@ -239,14 +249,20 @@ public sealed class BundledModelHostService
             return false;
 
         var host = uri.Host;
-        // Allow huggingface.co and any subdomain (cdn-lfs.huggingface.co, cas-bridge.xethub.huggingface.co)
-        // but not evil-huggingface.co (must be exact or dot-prefix)
+        // Allow Hugging Face's resolver host, but not a lookalike such as evil-huggingface.co.
         if (string.Equals(host, "huggingface.co", StringComparison.OrdinalIgnoreCase)
             || host.EndsWith(".huggingface.co", StringComparison.OrdinalIgnoreCase))
             return true;
 
         if (string.Equals(host, "hf-mirror.com", StringComparison.OrdinalIgnoreCase)
             || host.EndsWith(".hf-mirror.com", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Hugging Face currently resolves Xet-hosted files to CDN hosts such as
+        // us.aws.cdn.hf.co. Only accept these hosts after an allowlisted source redirects us.
+        if (allowHuggingFaceCdn
+            && (string.Equals(host, "hf.co", StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith(".hf.co", StringComparison.OrdinalIgnoreCase)))
             return true;
 
         return false;
@@ -279,7 +295,8 @@ public sealed class BundledModelHostService
             }
         }
 
-        throw new InvalidOperationException($"Failed to download file from '{url}'.", lastError);
+        var failureDetail = lastError is null ? string.Empty : $" Last error: {lastError.Message}";
+        throw new InvalidOperationException($"Failed to download file from '{url}' after 3 attempts.{failureDetail}", lastError);
     }
 
     private static bool IsRedirectStatusCode(System.Net.HttpStatusCode statusCode)
@@ -319,7 +336,7 @@ public sealed class BundledModelHostService
                     ? location.ToString()
                     : new Uri(new Uri(currentUrl), location).ToString();
 
-                if (!IsSafeModelDownloadUrl(nextUrl))
+                if (!IsSafeModelRedirectUrl(nextUrl))
                     throw new InvalidOperationException($"Redirect to non-allowlisted URL blocked: '{nextUrl}' (from '{currentUrl}').");
 
                 currentUrl = nextUrl;
@@ -328,8 +345,8 @@ public sealed class BundledModelHostService
 
             response.EnsureSuccessStatusCode();
 
-            // Defense-in-depth: final URL must still be allowlisted (initial url was pre-validated in ResolveModelDownloadUrls, but double-check)
-            if (!IsSafeModelDownloadUrl(currentUrl))
+            // Defense-in-depth: final URL must still be allowlisted. Redirects may target Hugging Face's CDN.
+            if (!IsSafeModelRedirectUrl(currentUrl))
                 throw new InvalidOperationException($"Download URL not allowlisted: '{currentUrl}'.");
 
             await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);

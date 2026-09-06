@@ -659,6 +659,10 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="AiGenerationRetry" xml:space="preserve"><value>Bandyti dar kartą</value></data>
   <data name="AiGenerationDismiss" xml:space="preserve"><value>Uždaryti</value></data>
   <data name="AiPrivacyNote" xml:space="preserve"><value>Jūsų užrašai niekada nepalieką jūsų įrenginio. DI veikia visiškai jūsų kompiuteryje.</value></data>
+  <data name="AiModelDownloadRequiredTitle" xml:space="preserve"><value>Atsiųsti DI modelį</value></data>
+  <data name="AiModelDownloadRequiredMessageFormat" xml:space="preserve"><value>Kad sukurtų mokymosi medžiagą, Scriblucent turi atsiųsti vietinį {0} modelį (mažiausiai {1} MB). Jūsų užrašai lieka šiame įrenginyje, o pasirinkta užduotis prasidės pasibaigus atsisiuntimui.</value></data>
+  <data name="AiModelDownloadAndContinue" xml:space="preserve"><value>Atsiųsti ir tęsti</value></data>
+  <data name="AiModelDownloadFailedForTaskFormat" xml:space="preserve"><value>Nepavyko atsiųsti reikalingo {0} DI modelio. Pasirinkta užduotis nebuvo pradėta.&#10;&#10;{1}</value></data>
   <data name="AiModelDiskUsage" xml:space="preserve"><value>Modelio disko naudojimas: {0}</value></data>
   <data name="AiConvertTooltip" xml:space="preserve"><value>Konvertuoti šį užrašą į mokymosi medžiagą naudojant DI</value></data>
   <data name="AiModel08BDescriptionDetail" xml:space="preserve"><value>Greičiausias modelis. Geriausias greitam paprastų užrašų konvertavimui.</value></data>

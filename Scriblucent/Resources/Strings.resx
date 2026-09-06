@@ -688,6 +688,10 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="AiGenerationRetry" xml:space="preserve"><value>Retry</value></data>
   <data name="AiGenerationDismiss" xml:space="preserve"><value>Dismiss</value></data>
   <data name="AiPrivacyNote" xml:space="preserve"><value>Your notes never leave your device. AI runs entirely on your computer.</value></data>
+  <data name="AiModelDownloadRequiredTitle" xml:space="preserve"><value>Download AI model</value></data>
+  <data name="AiModelDownloadRequiredMessageFormat" xml:space="preserve"><value>To create study material, Scriblucent needs to download the local {0} model (at least {1} MB). Your notes stay on this device, and the requested task will start after the download finishes.</value></data>
+  <data name="AiModelDownloadAndContinue" xml:space="preserve"><value>Download and continue</value></data>
+  <data name="AiModelDownloadFailedForTaskFormat" xml:space="preserve"><value>Could not download the required {0} AI model. The requested task was not started.&#10;&#10;{1}</value></data>
   <data name="AiModelDiskUsage" xml:space="preserve"><value>Model disk usage: {0}</value></data>
   <data name="AiConvertTooltip" xml:space="preserve"><value>Convert this note to study materials using AI</value></data>
   <data name="AiModel08BDescriptionDetail" xml:space="preserve"><value>Fastest model. Best for quick conversion of simple notes.</value></data>
