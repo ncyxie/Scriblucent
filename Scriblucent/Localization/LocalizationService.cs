@@ -37,6 +37,18 @@ public static class LocalizationService
         return LocalizationProvider.Instance[key];
     }
 
+    public static string FormatAiGeneratedTooltip(
+        string generatedWithFormatKey,
+        string modelDisplayName,
+        bool includeReviewDisclaimer = true)
+    {
+        var generated = string.Format(GetString(generatedWithFormatKey), modelDisplayName.Trim());
+        if (!includeReviewDisclaimer)
+            return generated;
+
+        return generated + Environment.NewLine + GetString("AiReviewDisclaimer");
+    }
+
     public static string NormalizeLanguage(string? language)
     {
         return string.Equals(language, Lithuanian, StringComparison.OrdinalIgnoreCase)

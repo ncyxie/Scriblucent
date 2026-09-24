@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,5 +36,23 @@
          committed here so tests are deterministic and don't need network access. -->
     <None Include="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The app's worker project is a deployment-only reference, so its managed entry assembly
+       does not flow transitively into the test output. RealModel tests launch that worker. -->
+  <Target Name="BuildAiWorkerForRealModelTests" BeforeTargets="CopyAiWorkerForRealModelTests">
+    <MSBuild Projects="..\Scriblucent.AI.Worker\Scriblucent.AI.Worker.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=win-x64" />
+  </Target>
+
+  <Target Name="CopyAiWorkerForRealModelTests" AfterTargets="Build">
+    <RemoveDir Directories="$(OutDir)AIWorker" Condition="Exists('$(OutDir)AIWorker')" />
+    <ItemGroup>
+      <AiWorkerTestFiles Include="..\Scriblucent.AI.Worker\bin\$(Configuration)\$(TargetFramework)\win-x64\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AiWorkerTestFiles)"
+          DestinationFolder="$(OutDir)AIWorker\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

@@ -66,12 +66,15 @@
   <data name="AutoSaveUnitMinutes" xml:space="preserve"><value>minutes</value></data>
   <data name="AutoSaveUnitHours" xml:space="preserve"><value>hours</value></data>
   <data name="FlashcardModel" xml:space="preserve"><value>AI model:</value></data>
-  <data name="FlashcardModel08BDescription" xml:space="preserve"><value>faster, light</value></data>
-  <data name="FlashcardModel2BDescription" xml:space="preserve"><value>balanced, better quality</value></data>
-  <data name="FlashcardModel4BDescription" xml:space="preserve"><value>more quality, slower</value></data>
-  <data name="FlashcardModel08B" xml:space="preserve"><value>Qwen3.5-0.8B — faster, light</value></data>
-  <data name="FlashcardModel2B" xml:space="preserve"><value>Qwen3.5-2B — balanced, better quality</value></data>
-  <data name="FlashcardModel4B" xml:space="preserve"><value>Qwen3.5-4B — more quality, slower</value></data>
+  <data name="FlashcardModel08BDescription" xml:space="preserve"><value>Basic</value></data>
+  <data name="FlashcardModel2BDescription" xml:space="preserve"><value>Compact</value></data>
+  <data name="FlashcardModel4BDescription" xml:space="preserve"><value>Recommended</value></data>
+  <data name="FlashcardModel9BDescription" xml:space="preserve"><value>Advanced</value></data>
+  <data name="FlashcardModel08B" xml:space="preserve"><value>Qwen3.5-0.8B — Basic</value></data>
+  <data name="FlashcardModel2B" xml:space="preserve"><value>Qwen3.5-2B — Compact</value></data>
+  <data name="AiModelBetaBadge" xml:space="preserve"><value>BETA</value></data>
+  <data name="AiModelClozeOnlyBadge" xml:space="preserve"><value>CLOZE ONLY</value></data>
+  <data name="FlashcardModel4B" xml:space="preserve"><value>Qwen3.5-4B — Recommended</value></data>
   <data name="FlashcardModelWarningTitle" xml:space="preserve"><value>Model compatibility warning</value></data>
   <data name="FlashcardModelWarningText" xml:space="preserve"><value>Warning: {0} may be too heavy for this computer.</value></data>
   <data name="FlashcardModelWarningPrompt" xml:space="preserve"><value>This computer may not have enough RAM for {0}. Continue anyway?</value></data>
@@ -174,7 +177,12 @@
   <data name="SpellCheckDescription" xml:space="preserve"><value>Underline misspelled words in the note editor. Download a language below and select it to check against, like Word or LibreOffice's proofing language.</value></data>
   <data name="Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
   <data name="EnableDiagnosticLogging" xml:space="preserve"><value>Enable diagnostic logging</value></data>
-  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Writes a crash log and, when AI generation fails to parse, a local log with the note text and model output to help troubleshoot. Stays on this device and is never sent anywhere. Turn off to disable all local logging.</value></data>
+  <data name="UseGpuAcceleration" xml:space="preserve"><value>Use GPU acceleration</value></data>
+  <data name="UseGpuAccelerationDescription" xml:space="preserve"><value>Uses Vulkan on supported Windows PCs for faster, smoother AI generation. Automatically falls back to CPU when unavailable.</value></data>
+  <data name="AiStatusFallingBackToCpu" xml:space="preserve"><value>GPU acceleration is unavailable. Continuing with CPU...</value></data>
+  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Writes local crash and AI failure metadata to help troubleshoot. Stays on this device and is never sent anywhere.</value></data>
+  <data name="EnableAiContentDiagnostics" xml:space="preserve"><value>Include note content in AI diagnostics</value></data>
+  <data name="EnableAiContentDiagnosticsDescription" xml:space="preserve"><value>Includes source notes and model output in parse-failure logs. Off by default because notes may contain private information.</value></data>
   <data name="SpellCheckLanguages" xml:space="preserve"><value>Languages</value></data>
   <data name="SpellCheckLanguagesDescription" xml:space="preserve"><value>Choose one language to check against. Each one downloads its dictionary the first time.</value></data>
   <data name="SpellCheckLanguageDownload" xml:space="preserve"><value>Download</value></data>
@@ -496,6 +504,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="AiToolsSelectModelToManage" xml:space="preserve"><value>Select a model to manage download state.</value></data>
   <data name="AiToolsModelReadyFormat" xml:space="preserve"><value>{0} is downloaded and ready to use.</value></data>
   <data name="AiToolsModelNotDownloadedFormat" xml:space="preserve"><value>{0} is not downloaded yet.</value></data>
+  <data name="AiToolsModelUnsupportedMemoryFormat" xml:space="preserve"><value>{0} requires at least {1} GB of physical memory on this computer.</value></data>
   <data name="AiToolsDownloadStartingFormat" xml:space="preserve"><value>Starting download for {0}...</value></data>
   <data name="AiToolsDownloadPreparingFormat" xml:space="preserve"><value>Preparing {0} download...</value></data>
   <data name="AiToolsDownloadingPercentFormat" xml:space="preserve"><value>Downloading {0}: {1}%</value></data>
@@ -661,20 +670,18 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ConvertToMindMapFailed" xml:space="preserve"><value>Failed to convert note into a mind map with the bundled Qwen model.</value></data>
   <data name="ConvertToMindMapSuccess" xml:space="preserve"><value>Mind map generated</value></data>
   <data name="ConvertToMindMapSuccessPartialFormat" xml:space="preserve"><value>Mind map generated (used {0} of {1} sections)</value></data>
-  <data name="ConvertToMindMapParseFailed" xml:space="preserve"><value>AI response did not contain a usable mind map structure.</value></data>
+  <data name="ConvertToMindMapParseFailed" xml:space="preserve"><value>The note did not produce enough grounded study points for a mind map.</value></data>
   <data name="ConvertToMindMapStatusProcessing" xml:space="preserve"><value>AI is generating a mind map...</value></data>
   <data name="ConvertToMindMapStatusFinalizing" xml:space="preserve"><value>Finalizing mind map...</value></data>
-  <data name="ConvertToMindMapStatusRepairing" xml:space="preserve"><value>AI is generating a mind map... (repair)</value></data>
   <data name="ConvertToTest" xml:space="preserve"><value>Convert to quiz</value></data>
   <data name="ConvertToTestEmpty" xml:space="preserve"><value>Add note text before converting to a quiz.</value></data>
   <data name="ConvertToTestInProgress" xml:space="preserve"><value>Generating quiz...</value></data>
   <data name="ConvertToTestFailed" xml:space="preserve"><value>Failed to convert note into a quiz with the bundled Qwen model.</value></data>
   <data name="ConvertToTestSuccess" xml:space="preserve"><value>Quiz generated</value></data>
   <data name="ConvertToTestSuccessPartialFormat" xml:space="preserve"><value>Quiz generated (used {0} of {1} sections)</value></data>
-  <data name="ConvertToTestParseFailed" xml:space="preserve"><value>AI response did not contain a usable quiz.</value></data>
+  <data name="ConvertToTestParseFailed" xml:space="preserve"><value>The note did not produce enough grounded study points for a quiz.</value></data>
   <data name="ConvertToTestStatusProcessing" xml:space="preserve"><value>AI is generating a quiz...</value></data>
   <data name="ConvertToTestStatusFinalizing" xml:space="preserve"><value>Finalizing quiz...</value></data>
-  <data name="ConvertToTestStatusRepairing" xml:space="preserve"><value>AI is generating a quiz... (repair)</value></data>
   <data name="AiInputRejectedTitle" xml:space="preserve"><value>AI generation refused</value></data>
   <data name="AiInputRejectedInsufficientContent" xml:space="preserve"><value>The note does not contain enough meaningful text to generate study material. Add coherent text content and try again.</value></data>
   <data name="AiInputRejectedTooShort" xml:space="preserve"><value>The note is too short to generate study material from. Add more text and try again.</value></data>
@@ -682,7 +689,6 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="AiInputRejectedLowTextRatio" xml:space="preserve"><value>The note does not contain enough readable text (too many numbers or symbols) to generate study material from.</value></data>
   <data name="AiInputRejectedLooksLikeGibberish" xml:space="preserve"><value>The note does not look like readable text. Add coherent content and try again.</value></data>
   <data name="AiGenerationTimedOut" xml:space="preserve"><value>AI generation was stopped because the model did not produce a usable response in time.</value></data>
-  <data name="AiGenerationParseFailed" xml:space="preserve"><value>The AI model produced output that could not be parsed into the expected format. Try again with different note content.</value></data>
   <data name="AiGenerationDiagnosticPathFormat" xml:space="preserve"><value>{0}&#10;&#10;Details saved to: {1}</value></data>
   <data name="AiGenerationPartialResults" xml:space="preserve"><value>Some sections could not be converted. Partial results are shown.</value></data>
   <data name="AiGenerationRetry" xml:space="preserve"><value>Retry</value></data>
@@ -693,19 +699,32 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="AiModelDownloadAndContinue" xml:space="preserve"><value>Download and continue</value></data>
   <data name="AiModelDownloadFailedForTaskFormat" xml:space="preserve"><value>Could not download the required {0} AI model. The requested task was not started.&#10;&#10;{1}</value></data>
   <data name="AiModelDiskUsage" xml:space="preserve"><value>Model disk usage: {0}</value></data>
-  <data name="AiConvertTooltip" xml:space="preserve"><value>Convert this note to study materials using AI</value></data>
+  <data name="AiConvertTooltip" xml:space="preserve"><value>Convert this note to study materials using AI.&#10;AI can miss. Review before you study.</value></data>
+  <data name="AiReviewDisclaimer" xml:space="preserve"><value>AI can miss. Review before you study.</value></data>
+  <data name="EnableAiFeatures" xml:space="preserve"><value>AI features</value></data>
+  <data name="EnableAiFeaturesDescription" xml:space="preserve"><value>Turn off to hide Convert and models. Notes and study sets you make yourself stay.</value></data>
+  <data name="AiToolsRemoveDownloadedModels" xml:space="preserve"><value>Remove downloaded models</value></data>
+  <data name="AiToolsRemoveDownloadedModelsTitle" xml:space="preserve"><value>Remove AI models</value></data>
+  <data name="AiToolsRemoveDownloadedModelsPrompt" xml:space="preserve"><value>Remove all downloaded AI models from this computer? Your notes and study sets stay.</value></data>
   <data name="AiModel08BDescriptionDetail" xml:space="preserve"><value>Fastest model. Best for quick conversion of simple notes.</value></data>
   <data name="AiModel2BDescriptionDetail" xml:space="preserve"><value>Balanced speed and quality. Good for most study notes.</value></data>
-  <data name="AiModel4BDescriptionDetail" xml:space="preserve"><value>Highest quality. Best for complex or detailed notes.</value></data>
+  <data name="AiModel4BDescriptionDetail" xml:space="preserve"><value>High quality. Best default for complex or detailed notes.</value></data>
+  <data name="AiModel9BDescriptionDetail" xml:space="preserve"><value>Advanced optional model for powerful computers. Requires at least 8 GB RAM; 12 GB is recommended.</value></data>
   <data name="ConvertToFlashcardsStatusPreparingAssets" xml:space="preserve"><value>Preparing AI resources...</value></data>
+  <data name="AiStatusVerifyingModel" xml:space="preserve"><value>Verifying AI model integrity...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel" xml:space="preserve"><value>Downloading selected Qwen model...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel08B" xml:space="preserve"><value>Downloading Qwen3.5-0.8B model...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel2B" xml:space="preserve"><value>Downloading Qwen3.5-2B model...</value></data>
   <data name="ConvertToFlashcardsStatusDownloadingModel4B" xml:space="preserve"><value>Downloading Qwen3.5-4B model...</value></data>
+  <data name="ConvertToFlashcardsStatusDownloadingModel9B" xml:space="preserve"><value>Downloading Qwen3.5-9B model...</value></data>
   <data name="ConvertToFlashcardsStatusAssetsReady" xml:space="preserve"><value>AI resources ready.</value></data>
+  <data name="AiStatusAnalyzingStudyFacts" xml:space="preserve"><value>Identifying study facts...</value></data>
+  <data name="AiStatusCheckingQuestionAnswer" xml:space="preserve"><value>Checking question-answer fit...</value></data>
+  <data name="AiStatusSelectingStudyPoints" xml:space="preserve"><value>Selecting study points...</value></data>
+  <data name="AiStatusWritingQuestions" xml:space="preserve"><value>Writing questions...</value></data>
+  <data name="AiStatusGroundingAnswers" xml:space="preserve"><value>Grounding answers in the note...</value></data>
   <data name="ConvertToFlashcardsStatusProcessing" xml:space="preserve"><value>AI is generating flashcards...</value></data>
   <data name="ConvertToFlashcardsStatusFinalizing" xml:space="preserve"><value>Finalizing flashcards...</value></data>
-  <data name="ConvertToFlashcardsStatusRepairing" xml:space="preserve"><value>AI is generating flashcards... (repair)</value></data>
   <data name="ConvertToFlashcardsStatusPercentFormat" xml:space="preserve"><value>{0} ({1}%)</value></data>
   <data name="ConvertToFlashcardsStatusGeneratedCharsFormat" xml:space="preserve"><value>{0} ({1} chars)</value></data>
   <data name="FlashcardsPreviewTitle" xml:space="preserve"><value>Flashcard Editor</value></data>
@@ -742,7 +761,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardMediaAttachError" xml:space="preserve"><value>Couldn't attach that file - it may be corrupted or an unsupported format.</value></data>
   <data name="FlashcardAudioPlaybackError" xml:space="preserve"><value>Couldn't play this audio: {0}</value></data>
   <data name="Remove" xml:space="preserve"><value>Remove</value></data>
-  <data name="ConvertToFlashcardsParseFailed" xml:space="preserve"><value>AI response did not contain valid Q/A flashcards.</value></data>
+  <data name="ConvertToFlashcardsParseFailed" xml:space="preserve"><value>The note did not produce enough grounded study points for flashcards.</value></data>
   <data name="QuizPreviewTitle" xml:space="preserve"><value>Quiz</value></data>
   <data name="QuizTitleHint" xml:space="preserve"><value>Quiz title</value></data>
   <data name="QuizUntitled" xml:space="preserve"><value>Untitled quiz</value></data>
@@ -792,6 +811,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="QuizzesDashboard" xml:space="preserve"><value>Quizzes</value></data>
   <data name="QuizzesDashboardTitle" xml:space="preserve"><value>Quizzes</value></data>
   <data name="QuizzesEmptyDashboardPrompt" xml:space="preserve"><value>Create a quiz or convert a note into a quiz to see it here.</value></data>
+  <data name="QuizzesEmptyDashboardPromptNoAi" xml:space="preserve"><value>Create a quiz to see it here.</value></data>
   <data name="CreateQuiz" xml:space="preserve"><value>Create quiz</value></data>
   <data name="QuizCountFormat" xml:space="preserve"><value>{0} quizzes</value></data>
   <data name="SortByQuizQuestionsDesc" xml:space="preserve"><value>Most questions</value></data>
@@ -914,6 +934,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapsDashboard" xml:space="preserve"><value>Mind maps</value></data>
   <data name="MindMapsDashboardTitle" xml:space="preserve"><value>Mind maps</value></data>
   <data name="MindMapsEmptyDashboardPrompt" xml:space="preserve"><value>Convert a note into a mind map to see it here.</value></data>
+  <data name="MindMapsEmptyDashboardPromptNoAi" xml:space="preserve"><value>Create a mind map to see it here.</value></data>
   <data name="CreateMindMap" xml:space="preserve"><value>Create mind map</value></data>
   <data name="MindMapUntitled" xml:space="preserve"><value>Untitled mind map</value></data>
   <data name="MindMapTitleHint" xml:space="preserve"><value>Mind map title</value></data>
@@ -1057,4 +1078,13 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="CombineQuizzes" xml:space="preserve"><value>Combine quizzes</value></data>
   <data name="QuizHistory" xml:space="preserve"><value>Quiz history</value></data>
   <data name="QuizActions" xml:space="preserve"><value>Quiz actions</value></data>
+  <data name="StudyCoverage" xml:space="preserve"><value>Study coverage</value></data>
+  <data name="StudyCoverageAuto" xml:space="preserve"><value>Auto</value></data>
+  <data name="StudyCoverageFocused" xml:space="preserve"><value>Focused</value></data>
+  <data name="StudyCoverageBalanced" xml:space="preserve"><value>Balanced</value></data>
+  <data name="StudyCoverageThorough" xml:space="preserve"><value>Thorough</value></data>
+  <data name="StudyCoverageClearPlans" xml:space="preserve"><value>Clear saved study plans</value></data>
+  <data name="StudyCoveragePlansCleared" xml:space="preserve"><value>Saved study plans cleared.</value></data>
+  <data name="MindMapAdditionalFacts" xml:space="preserve"><value>Additional facts</value></data>
+  <data name="AiGenerationItemCoverageFormat" xml:space="preserve"><value>{0} ({1} of {2} study points)</value></data>
 </root>

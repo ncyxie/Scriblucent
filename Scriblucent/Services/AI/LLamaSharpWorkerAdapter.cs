@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using Scriblucent.AI.Protocol;
 
 namespace Scriblucent.Services.AI;
@@ -8,43 +9,53 @@ namespace Scriblucent.Services.AI;
 internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
 {
     private static readonly TimeSpan IdleUnloadTimeout = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan InferenceTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan InferenceStallTimeout = TimeSpan.FromSeconds(45);
+
+    private enum WorkerBackend
+    {
+        Cpu,
+        Vulkan
+    }
 
     private Process? _workerProcess;
     private NamedPipeClientStream? _pipe;
     private WorkerLineReader? _reader;
     private string _pipeName = "";
+    private string _loadedModelPath = "";
+    private int _loadedContextSize;
+    private WorkerBackend _activeBackend = WorkerBackend.Cpu;
+    private bool _vulkanUnavailableForSession;
     private bool _disposed;
+    private readonly bool? _useGpuAccelerationOverride;
 
     private readonly SemaphoreSlim _pipeLock = new(1, 1);
     private readonly System.Threading.Timer _idleTimer;
 
-    public LLamaSharpWorkerAdapter()
+    public LLamaSharpWorkerAdapter(bool? useGpuAccelerationOverride = null)
     {
+        _useGpuAccelerationOverride = useGpuAccelerationOverride;
         _idleTimer = new System.Threading.Timer(OnIdleTimerFired, null, Timeout.Infinite, Timeout.Infinite);
     }
 
-    public Task OpenAsync(CancellationToken cancellationToken = default)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        return Task.CompletedTask;
-    }
+    internal string ActiveBackendName => _activeBackend.ToString().ToLowerInvariant();
 
-    public Task<int> CountTokensAsync(string text, CancellationToken ct = default)
-        => CountTokensAsync(text, modelKey: null, ct);
+    public int GetEffectiveContextSize(string? modelKey)
+    {
+        var requested = AiModelCapabilities.Resolve(modelKey ?? string.Empty).ContextSize;
+        return _loadedContextSize > 0 ? Math.Min(requested, _loadedContextSize) : requested;
+    }
 
     public async Task<int> CountTokensAsync(string text, string? modelKey, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var modelInfo = ResolveModelInfo(modelKey);
-        var modelPath = BundledModelHostService.GetModelFilePath(modelInfo.Key);
+        var resolvedModelKey = ResolveModelKey(modelKey);
+        var modelPath = ResolveModelPath(resolvedModelKey);
         if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath))
-            throw new InvalidOperationException($"Model file not found for key '{modelInfo.Key}'.");
+            throw new InvalidOperationException($"Model file not found for key '{resolvedModelKey}'.");
 
         // Tokenization is quick; 60s overall timeout prevents a hung worker from blocking
-        // chunking forever (mirrors the generate-path stall guard below, but shorter).
+        // counting forever (mirrors the generate-path stall guard below, but shorter).
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var linkedCt = linkedCts.Token;
@@ -52,7 +63,7 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
         await _pipeLock.WaitAsync(linkedCt);
         try
         {
-            await EnsureWorkerReadyAsync(modelPath, modelInfo.Key, linkedCt);
+            await EnsureWorkerReadyAsync(modelPath, resolvedModelKey, progress: null, linkedCt);
             ThrowIfDisposedAfterEnsureReady();
 
             try
@@ -99,26 +110,37 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
 
     public async Task<AiGenerationResponse> GenerateAsync(AiGenerationRequest request)
     {
+        try
+        {
+            return await GenerateOnceAsync(request);
+        }
+        catch (Exception ex) when (IsRecoverableVulkanFailure(ex, request.CancellationToken))
+        {
+            await DisableVulkanForSessionAsync(request.CancellationToken);
+            request.Progress?.Report(new AiGenerationProgress(AiGenerationStatus.FallingBackToCpu));
+            return await GenerateOnceAsync(request);
+        }
+    }
+
+    private async Task<AiGenerationResponse> GenerateOnceAsync(AiGenerationRequest request)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // Resolve model - request.ModelKey is set once per job by AiGenerationPipeline.RunAsync
-        // so every chunk targets the same model even if the selection changes mid-job.
-        var modelInfo = ResolveModelInfo(request.ModelKey);
-        var modelPath = BundledModelHostService.GetModelFilePath(modelInfo.Key);
+        // The coordinator sets ModelKey once so every planning call targets the same model.
+        var resolvedModelKey = ResolveModelKey(request.ModelKey);
+        var modelPath = ResolveModelPath(resolvedModelKey);
         if (string.IsNullOrWhiteSpace(modelPath) || !File.Exists(modelPath))
-            throw new InvalidOperationException($"Model file not found for key '{modelInfo.Key}'. Ensure the model is downloaded.");
+            throw new InvalidOperationException($"Model file not found for key '{resolvedModelKey}'. Ensure the model is downloaded.");
 
-        // Overall 2m timeout restores HEAD's InferenceTimeout guarantee (previously in
-        // BundledModelHostService.CompleteAsync). Without it a hung worker would block forever
-        // until the user manually cancels - a certain regression vs git version.
-        using var overallTimeoutCts = new CancellationTokenSource(InferenceTimeout);
+        var inferenceTimeout = GetInferenceTimeout(resolvedModelKey);
+        using var overallTimeoutCts = new CancellationTokenSource(inferenceTimeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(request.CancellationToken, overallTimeoutCts.Token);
         var ct = linkedCts.Token;
 
         await _pipeLock.WaitAsync(ct);
         try
         {
-            await EnsureWorkerReadyAsync(modelPath, modelInfo.Key, ct);
+            await EnsureWorkerReadyAsync(modelPath, resolvedModelKey, request.Progress, ct);
             ThrowIfDisposedAfterEnsureReady();
 
             try
@@ -136,7 +158,7 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
                     PresencePenalty = request.PresencePenalty,
                     RepeatPenalty = request.RepetitionPenalty,
                     Grammar = request.Grammar,
-                    GrammarRoot = request.GrammarRoot
+                    GrammarRoot = request.GrammarRoot,
                 };
 
                 await WorkerWire.WriteRequestAsync(_pipe!, generateRequest, ct);
@@ -147,9 +169,8 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
                 // after we've moved on - only accept responses that carry this call's RequestId.
                 while (true)
                 {
-                    // 45s stall detection restores HEAD's InferenceOutputStallTimeout /
-                    // InferenceNoOutputTimeout. If the worker stops sending tokens but doesn't close
-                    // the pipe, we time out rather than hanging until the overall 2m.
+                    // If the worker stops sending tokens without closing the pipe, fail before
+                    // the overall model-specific inference timeout expires.
                     var readTask = _reader!.ReadResponseAsync(ct);
                     var stallTask = Task.Delay(InferenceStallTimeout, ct);
                     var completed = await Task.WhenAny(readTask, stallTask);
@@ -158,7 +179,7 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
                         // Don't let the still-pending readTask continue to observe ct after we throw
                         // - it would surface as an unobserved OperationCanceledException later.
                         if (overallTimeoutCts.IsCancellationRequested)
-                            throw new TimeoutException($"AI generation timed out after {InferenceTimeout.TotalSeconds:F0}s.");
+                            throw new TimeoutException($"AI generation timed out after {inferenceTimeout.TotalMinutes:F0} minutes.");
 
                         throw new TimeoutException($"AI generation stalled - no output for {InferenceStallTimeout.TotalSeconds:F0}s.");
                     }
@@ -211,7 +232,7 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
             catch (OperationCanceledException) when (overallTimeoutCts.IsCancellationRequested && !request.CancellationToken.IsCancellationRequested)
             {
                 PoisonConnection();
-                throw new TimeoutException($"AI generation timed out after {InferenceTimeout.TotalSeconds:F0}s.");
+                throw new TimeoutException($"AI generation timed out after {inferenceTimeout.TotalMinutes:F0} minutes.");
             }
             catch
             {
@@ -275,8 +296,10 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
         _reader = null;
         var process = _workerProcess;
         _workerProcess = null;
+        _loadedModelPath = "";
+        _loadedContextSize = 0;
 
-        // No graceful WorkerShutdownRequest here, and no WaitForExit grace period - this path can
+        // No WaitForExit grace period here - this path can
         // run concurrently with an in-flight GenerateAsync still reading this same pipe on another
         // thread (Dispose() doesn't wait for the lock), and the worker can't even read a shutdown
         // message while it's mid-generation anyway (it's not back at its request loop yet). Since
@@ -311,13 +334,23 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
         throw new ObjectDisposedException(nameof(LLamaSharpWorkerAdapter));
     }
 
-    private static AiModelInfo ResolveModelInfo(string? modelKey)
+    private string ResolveModelKey(string? modelKey)
     {
         if (!string.IsNullOrWhiteSpace(modelKey))
-            return AiModelManifest.Instance.FindByKey(modelKey) ?? AiModelManifest.Instance.GetSelectedModel();
+        {
+            if (AiModelManifest.Instance.FindByKey(modelKey) is not null)
+            {
+                return modelKey;
+            }
 
-        return AiModelManifest.Instance.GetSelectedModel();
+            throw new ArgumentException($"Unknown AI model key '{modelKey}'.", nameof(modelKey));
+        }
+
+        return AiModelManifest.Instance.GetSelectedModel().Key;
     }
+
+    private static string? ResolveModelPath(string modelKey)
+        => BundledModelHostService.GetModelFilePath(modelKey);
 
     /// Best-effort teardown of a connection that may be desynchronized or partially broken -
     /// caller must hold _pipeLock. Deliberately does not touch _workerProcess: a poisoned pipe
@@ -330,21 +363,43 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
     }
 
     /// Caller must hold _pipeLock.
-    private async Task EnsureWorkerReadyAsync(string modelPath, string modelKey, CancellationToken ct)
+    private async Task EnsureWorkerReadyAsync(
+        string modelPath,
+        string modelKey,
+        IProgress<AiGenerationProgress>? progress,
+        CancellationToken ct)
     {
+        var desiredBackend = GetDesiredBackend();
+        if (_workerProcess is { HasExited: false } && _activeBackend != desiredBackend)
+            ForceTeardownCurrentWorker();
+
         if (_workerProcess is null || _workerProcess.HasExited)
         {
-            await StartWorkerAsync(modelPath, modelKey, ct);
+            try
+            {
+                await StartWorkerAsync(modelPath, modelKey, desiredBackend, ct);
+            }
+            catch when (desiredBackend == WorkerBackend.Vulkan && !ct.IsCancellationRequested)
+            {
+                ForceTeardownCurrentWorker();
+                _vulkanUnavailableForSession = true;
+                progress?.Report(new AiGenerationProgress(AiGenerationStatus.FallingBackToCpu));
+                await StartWorkerAsync(modelPath, modelKey, WorkerBackend.Cpu, ct);
+            }
             return;
         }
 
         if (_pipe is null || !_pipe.IsConnected)
         {
-            await ReconnectWorkerAsync(modelPath, ct);
+            await ReconnectWorkerAsync(modelPath, modelKey, ct);
+            return;
         }
+
+        if (!string.Equals(_loadedModelPath, modelPath, StringComparison.OrdinalIgnoreCase))
+            await LoadModelAsync(modelPath, modelKey, ct);
     }
 
-    private async Task StartWorkerAsync(string modelPath, string modelKey, CancellationToken ct)
+    private async Task StartWorkerAsync(string modelPath, string modelKey, WorkerBackend backend, CancellationToken ct)
     {
         // Reached when the previous worker process crashed/exited on its own (EnsureWorkerReadyAsync's
         // HasExited check) rather than through PoisonConnection/Dispose - dispose whatever's left
@@ -357,27 +412,32 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
 
         _pipeName = $"scriblucent-ai-worker-{Guid.NewGuid():N}";
 
-        var workerExePath = Path.Combine(AppContext.BaseDirectory, "Scriblucent.AI.Worker.exe");
+        var workerExePath = Path.Combine(AppContext.BaseDirectory, "AIWorker", "Scriblucent.AI.Worker.exe");
         if (!File.Exists(workerExePath))
             throw new FileNotFoundException("Worker executable not found.", workerExePath);
 
-        var process = new Process
+        var startInfo = new ProcessStartInfo
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = workerExePath,
-                Arguments = $"--pipe {_pipeName}",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = false,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false
-            }
+            FileName = workerExePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = false,
+            RedirectStandardOutput = false,
+            RedirectStandardError = false
         };
+        startInfo.ArgumentList.Add("--pipe");
+        startInfo.ArgumentList.Add(_pipeName);
+        startInfo.ArgumentList.Add("--backend");
+        startInfo.ArgumentList.Add(backend.ToString().ToLowerInvariant());
+
+        var process = new Process { StartInfo = startInfo };
 
         process.Start();
         WorkerProcessJobObject.Track(process);
+        try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
+        catch { /* Some systems deny priority changes; inference can still proceed. */ }
         _workerProcess = process;
+        _activeBackend = backend;
 
         // Connect to worker's named pipe
         var pipe = new NamedPipeClientStream(
@@ -390,20 +450,16 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
         _pipe = pipe;
         _reader = new WorkerLineReader(pipe);
 
-        var startRequest = new WorkerStartRequest
-        {
-            ModelPath = modelPath,
-            ContextSize = 4096
-        };
-
-        await WorkerWire.WriteRequestAsync(pipe, startRequest, ct);
-        await WaitForStartedResponseAsync(_reader, ct);
+        var started = await StartModelWithContextFallbackAsync(pipe, _reader, modelPath, modelKey, ct);
+        ValidateStartedBackend(started, backend);
+        _loadedModelPath = modelPath;
+        _loadedContextSize = started.ContextSize;
     }
 
     /// Reconnects to an already-running worker process (post idle-unload) on its existing
     /// pipe name, instead of spawning a new process - see Program.cs's RunPipeServerAsync,
     /// which keeps listening on the same pipe name after a WorkerStopRequest unloads the model.
-    private async Task ReconnectWorkerAsync(string modelPath, CancellationToken ct)
+    private async Task ReconnectWorkerAsync(string modelPath, string modelKey, CancellationToken ct)
     {
         _pipe?.Dispose();
         var pipe = new NamedPipeClientStream(
@@ -416,17 +472,49 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
         _pipe = pipe;
         _reader = new WorkerLineReader(pipe);
 
-        var startRequest = new WorkerStartRequest
-        {
-            ModelPath = modelPath,
-            ContextSize = 4096
-        };
-
-        await WorkerWire.WriteRequestAsync(pipe, startRequest, ct);
-        await WaitForStartedResponseAsync(_reader, ct);
+        var started = await StartModelWithContextFallbackAsync(pipe, _reader, modelPath, modelKey, ct);
+        ValidateStartedBackend(started, _activeBackend);
+        _loadedModelPath = modelPath;
+        _loadedContextSize = started.ContextSize;
     }
 
-    private static async Task WaitForStartedResponseAsync(WorkerLineReader reader, CancellationToken ct)
+    private async Task LoadModelAsync(string modelPath, string modelKey, CancellationToken ct)
+    {
+        var started = await StartModelWithContextFallbackAsync(_pipe!, _reader!, modelPath, modelKey, ct);
+        ValidateStartedBackend(started, _activeBackend);
+        _loadedModelPath = modelPath;
+        _loadedContextSize = started.ContextSize;
+    }
+
+    private static async Task<WorkerStartedResponse> StartModelWithContextFallbackAsync(
+        Stream pipe,
+        WorkerLineReader reader,
+        string modelPath,
+        string modelKey,
+        CancellationToken ct)
+    {
+        Exception? lastError = null;
+        foreach (var contextSize in AiModelCapabilities.Resolve(modelKey).ContextFallbackSizes)
+        {
+            try
+            {
+                await WorkerWire.WriteRequestAsync(pipe, new WorkerStartRequest
+                {
+                    ModelPath = modelPath,
+                    ContextSize = contextSize
+                }, ct);
+                return await WaitForStartedResponseAsync(reader, ct);
+            }
+            catch (InvalidOperationException ex) when (contextSize > 4096 && !ct.IsCancellationRequested)
+            {
+                lastError = ex;
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException("Worker could not load the requested model context.");
+    }
+
+    private static async Task<WorkerStartedResponse> WaitForStartedResponseAsync(WorkerLineReader reader, CancellationToken ct)
     {
         while (true)
         {
@@ -436,8 +524,8 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
 
             switch (response)
             {
-                case WorkerStartedResponse:
-                    return;
+                case WorkerStartedResponse started:
+                    return started;
 
                 case WorkerErrorResponse error:
                     throw new InvalidOperationException($"Worker failed to start: {error.Message}");
@@ -446,6 +534,47 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
                     throw new InvalidOperationException($"Unexpected response during startup: {response.GetType().Name}");
             }
         }
+    }
+
+    private WorkerBackend GetDesiredBackend()
+    {
+        var enabled = _useGpuAccelerationOverride ?? AppSettingsService.Load().UseGpuAcceleration;
+        return enabled
+            && !_vulkanUnavailableForSession
+            && RuntimeInformation.ProcessArchitecture == Architecture.X64
+                ? WorkerBackend.Vulkan
+                : WorkerBackend.Cpu;
+    }
+
+    private static TimeSpan GetInferenceTimeout(string modelKey)
+        => AiModelCapabilities.Resolve(modelKey).InferenceTimeout;
+
+    private bool IsRecoverableVulkanFailure(Exception ex, CancellationToken requestCancellationToken)
+        => _activeBackend == WorkerBackend.Vulkan
+           && !_vulkanUnavailableForSession
+           && !requestCancellationToken.IsCancellationRequested
+           && ex is IOException or InvalidOperationException or TimeoutException;
+
+    private async Task DisableVulkanForSessionAsync(CancellationToken ct)
+    {
+        await _pipeLock.WaitAsync(ct);
+        try
+        {
+            _vulkanUnavailableForSession = true;
+            ForceTeardownCurrentWorker();
+        }
+        finally
+        {
+            _pipeLock.Release();
+        }
+    }
+
+    private static void ValidateStartedBackend(WorkerStartedResponse started, WorkerBackend expected)
+    {
+        var expectedName = expected.ToString().ToLowerInvariant();
+        if (!string.Equals(started.Backend, expectedName, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Worker started with backend '{started.Backend}', expected '{expectedName}'.");
     }
 
     private void RearmIdleTimer()
@@ -500,5 +629,6 @@ internal sealed class LLamaSharpWorkerAdapter : ITextGenerationBackend
         _pipe?.Dispose();
         _pipe = null;
         _reader = null;
+        _loadedModelPath = "";
     }
 }

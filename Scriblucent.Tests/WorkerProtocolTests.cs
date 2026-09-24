@@ -59,13 +59,14 @@ public sealed class WorkerProtocolTests
     [Fact]
     public void StartedResponse_SerializesWithCorrectTypeDiscriminator()
     {
-        var response = new WorkerStartedResponse { ModelKey = "Qwen3.5-0.8B" };
+        var response = new WorkerStartedResponse { Backend = "vulkan" };
         var json = WorkerWire.SerializeResponse(response);
         var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
         Assert.Equal("started", root.GetProperty("type").GetString());
-        Assert.Equal("Qwen3.5-0.8B", root.GetProperty("modelKey").GetString());
+        Assert.False(root.TryGetProperty("modelKey", out _));
+        Assert.Equal("vulkan", root.GetProperty("backend").GetString());
     }
 
     [Fact]
@@ -163,11 +164,11 @@ public sealed class WorkerProtocolTests
     [Fact]
     public void DeserializeResponse_StartedResponse()
     {
-        var json = """{"type":"started","modelKey":"Qwen3.5-2B"}""";
+        var json = """{"type":"started","backend":"cpu","contextSize":4096}""";
         var response = WorkerWire.DeserializeResponse(json);
 
         Assert.IsType<WorkerStartedResponse>(response);
-        Assert.Equal("Qwen3.5-2B", ((WorkerStartedResponse)response!).ModelKey);
+        Assert.Equal("cpu", ((WorkerStartedResponse)response!).Backend);
     }
 
     [Fact]
@@ -205,7 +206,7 @@ public sealed class WorkerProtocolTests
     {
         WorkerResponse[] responses =
         [
-            new WorkerStartedResponse { ModelKey = "key" },
+            new WorkerStartedResponse { Backend = "cpu" },
             new WorkerTokenResponse { RequestId = "r1", Text = "tok", GeneratedChars = 3 },
             new WorkerGenerateCompleteResponse { RequestId = "r1", Output = "out", GeneratedChars = 5, ElapsedMs = 100 },
             new WorkerErrorResponse { RequestId = "r1", Message = "err" }

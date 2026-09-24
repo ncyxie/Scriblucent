@@ -12,11 +12,12 @@ if (Test-Path $outputRoot) {
     Remove-Item -Recurse -Force $outputRoot
 }
 
-$profiles = @("Portable-win-x64", "Portable-win-arm64")
+$runtimeIdentifiers = @("win-x64", "win-arm64")
 
-foreach ($profile in $profiles) {
-    Write-Host "==> Publishing profile: $profile" -ForegroundColor Cyan
-    dotnet publish $project -c $Configuration /p:PublishProfile=$profile
+foreach ($runtimeIdentifier in $runtimeIdentifiers) {
+    $output = Join-Path $outputRoot $runtimeIdentifier
+    Write-Host "==> Publishing runtime: $runtimeIdentifier" -ForegroundColor Cyan
+    dotnet publish $project -c $Configuration -r $runtimeIdentifier --self-contained false -o $output
 }
 
 Write-Host "==> Portable builds ready:" -ForegroundColor Green

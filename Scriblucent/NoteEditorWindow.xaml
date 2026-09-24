@@ -171,10 +171,25 @@
                         <Button x:Name="ConvertMenuButton"
                                 Content="{icons:Icon AiGenerated}"
                                 Style="{StaticResource EditorToolIconButtonStyle}"
-                                ToolTip="{Binding [Convert], Source={StaticResource Loc}}"
+                                ToolTip="{Binding [AiConvertTooltip], Source={StaticResource Loc}}"
                                 Click="ConvertMenuButton_Click">
                             <Button.ContextMenu>
                                 <ContextMenu Placement="Bottom">
+                                    <MenuItem x:Name="ConvertAiReviewMenuItem"
+                                              IsHitTestVisible="True"
+                                              Focusable="False"
+                                              StaysOpenOnClick="True">
+                                        <MenuItem.Template>
+                                            <ControlTemplate TargetType="MenuItem">
+                                                <Border Margin="4,4,4,2">
+                                                    <controls:AiReviewNotice MinWidth="248"
+                                                                             AllowDismiss="True"
+                                                                             Dismissed="ConvertAiReviewNotice_Dismissed"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </MenuItem.Template>
+                                    </MenuItem>
+                                    <Separator x:Name="ConvertAiReviewSeparator"/>
                                     <MenuItem Header="{Binding [ConvertToFlashcards], Source={StaticResource Loc}}"
                                               ToolTip="{Binding [AiConvertTooltip], Source={StaticResource Loc}}"
                                               Click="ConvertToFlashcardsButton_Click"/>
@@ -184,6 +199,24 @@
                                     <MenuItem Header="{Binding [ConvertToTest], Source={StaticResource Loc}}"
                                               ToolTip="{Binding [AiConvertTooltip], Source={StaticResource Loc}}"
                                               Click="ConvertToTestButton_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="{Binding [StudyCoverage], Source={StaticResource Loc}}">
+                                        <MenuItem x:Name="StudyCoverageAutoMenuItem"
+                                                  Header="{Binding [StudyCoverageAuto], Source={StaticResource Loc}}"
+                                                  Tag="Auto"
+                                                  IsCheckable="True"
+                                                  Click="StudyCoverageMenuItem_Click"/>
+                                        <MenuItem x:Name="StudyCoverageBalancedMenuItem"
+                                                  Header="{Binding [StudyCoverageBalanced], Source={StaticResource Loc}}"
+                                                  Tag="Balanced"
+                                                  IsCheckable="True"
+                                                  Click="StudyCoverageMenuItem_Click"/>
+                                        <MenuItem x:Name="StudyCoverageThoroughMenuItem"
+                                                  Header="{Binding [StudyCoverageThorough], Source={StaticResource Loc}}"
+                                                  Tag="Thorough"
+                                                  IsCheckable="True"
+                                                  Click="StudyCoverageMenuItem_Click"/>
+                                    </MenuItem>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>

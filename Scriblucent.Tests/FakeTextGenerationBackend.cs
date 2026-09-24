@@ -7,9 +7,10 @@ internal sealed class FakeTextGenerationBackend : ITextGenerationBackend
     private readonly Queue<AiGenerationResponse> _responses = new();
     private bool _disposed;
 
-    public int OpenCallCount { get; private set; }
     public int GenerateCallCount { get; private set; }
     public List<AiGenerationRequest> Requests { get; } = new();
+    public int? TokenCountOverride { get; set; }
+    public int EffectiveContextSize { get; set; } = 8192;
 
     public void EnqueueResponse(string output)
     {
@@ -25,12 +26,6 @@ internal sealed class FakeTextGenerationBackend : ITextGenerationBackend
             EnqueueResponse(output);
     }
 
-    public Task OpenAsync(CancellationToken cancellationToken = default)
-    {
-        OpenCallCount++;
-        return Task.CompletedTask;
-    }
-
     public Task<AiGenerationResponse> GenerateAsync(AiGenerationRequest request)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -43,6 +38,12 @@ internal sealed class FakeTextGenerationBackend : ITextGenerationBackend
 
         return Task.FromResult(_responses.Dequeue());
     }
+
+    public Task<int> CountTokensAsync(string text, string? modelKey, CancellationToken ct = default)
+        => Task.FromResult(TokenCountOverride
+            ?? Math.Max(1, (int)Math.Ceiling(text.Length / 3.25)));
+
+    public int GetEffectiveContextSize(string? modelKey) => EffectiveContextSize;
 
     public void Dispose()
     {

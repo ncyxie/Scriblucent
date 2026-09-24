@@ -1,0 +1,6 @@
+- DHCP assigns temporary network addresses and keeps each lease for 24 hours.
+- DNS translates domain names into IP addresses and caches successful responses.
+- TLS verifies the server certificate before encrypted application data is exchanged.
+- The backup service runs every 6 hours and retains 14 copies.
+- During an outage, the technician reviews gateway logs and isolates the failing switch.
+- The team rolls back the deployment if median latency exceeds 200 milliseconds.

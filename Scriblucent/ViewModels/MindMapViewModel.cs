@@ -1,5 +1,6 @@
 using Scriblucent.Localization;
 using Scriblucent.Models;
+using Scriblucent.Services;
 
 namespace Scriblucent.ViewModels;
 
@@ -107,8 +108,13 @@ public sealed class MindMapViewModel : ViewModelBase
 
     public bool IsAiGenerated => !string.IsNullOrWhiteSpace(Document.AiModelDisplayName);
 
+    public bool ShowAiGeneratedChrome => IsAiGenerated && AiFeatureGate.IsEnabled;
+
     public string AiGeneratedTooltip => IsAiGenerated
-        ? string.Format(LocalizationService.GetString("MindMapGeneratedWithModel"), Document.AiModelDisplayName.Trim())
+        ? LocalizationService.FormatAiGeneratedTooltip(
+            "MindMapGeneratedWithModel",
+            Document.AiModelDisplayName,
+            includeReviewDisclaimer: !Document.AiReviewNoticeDismissed)
         : string.Empty;
 
     public void NotifyChanged()
@@ -133,6 +139,7 @@ public sealed class MindMapViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasSchedule));
         OnPropertyChanged(nameof(NextScheduleDisplay));
         OnPropertyChanged(nameof(IsAiGenerated));
+        OnPropertyChanged(nameof(ShowAiGeneratedChrome));
         OnPropertyChanged(nameof(AiGeneratedTooltip));
     }
 

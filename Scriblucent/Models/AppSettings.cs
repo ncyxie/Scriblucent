@@ -1,3 +1,5 @@
+using Scriblucent.Services.AI;
+
 namespace Scriblucent.Models;
 
 public class AppSettings
@@ -144,6 +146,12 @@ public class AppSettings
     public double PreferredIndentSize { get; set; } = 48.0;
 
     public string FlashcardModelKey { get; set; } = "AutoSelect";
+    public bool UseGpuAcceleration { get; set; } = true;
+    /// <summary>When false, Convert, model download, and AI chrome are hidden so the app is a
+    /// classical notes-and-study editor. On by default. Existing generated sets are kept.</summary>
+    public bool EnableAiFeatures { get; set; } = true;
+    public bool EnableAiContentDiagnostics { get; set; } = false;
+    public StudyCoverageMode StudyCoverage { get; set; } = StudyCoverageMode.Auto;
     public List<AiToolSettingsItem> AiTools { get; set; } = new();
     public string? LastView { get; set; }
 

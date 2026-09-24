@@ -1,7 +1,10 @@
+using System.Collections.Concurrent;
+using System.Buffers;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Scriblucent.Models;
 using Scriblucent.Services.AI;
 
@@ -9,12 +12,11 @@ namespace Scriblucent.Services;
 
 public sealed class BundledModelHostService
 {
+    internal const string ModelVerificationStatusKey = "AiStatusVerifyingModel";
+
     public sealed record FlashcardProgress(
         string StatusKey,
-        int? Percent = null,
-        int? GeneratedChars = null,
-        int? ChunkIndex = null,
-        int? ChunkCount = null);
+        int? Percent = null);
     public sealed record FlashcardToolInfo(string Key, string DisplayName);
 
     private readonly SemaphoreSlim _sync = new(1, 1);
@@ -26,6 +28,10 @@ public sealed class BundledModelHostService
     public static BundledModelHostService Instance { get; } = new();
 
     private const string CacheFolderName = "AiCache";
+    private static readonly ConcurrentDictionary<string, ModelFileFingerprint> VerifiedModelFiles = new(
+        StringComparer.OrdinalIgnoreCase);
+
+    private sealed record ModelFileFingerprint(long Length, DateTime LastWriteTimeUtc);
 
     static BundledModelHostService()
     {
@@ -84,6 +90,16 @@ public sealed class BundledModelHostService
         return AiModelManifest.Instance.GetModelRequiredMemoryBytes(key);
     }
 
+    public static long GetFlashcardModelMinimumSupportedMemoryBytes(string key)
+    {
+        return AiModelManifest.Instance.GetModelMinimumSupportedMemoryBytes(key);
+    }
+
+    public static bool IsFlashcardModelSupportedWithMemory(string key, long totalPhysicalMemoryBytes)
+    {
+        return AiModelManifest.Instance.IsModelSupportedWithMemory(key, totalPhysicalMemoryBytes);
+    }
+
     public static bool IsFlashcardModelCompatibleWithMemory(string key, long totalPhysicalMemoryBytes)
     {
         return totalPhysicalMemoryBytes >= GetFlashcardModelRequiredMemoryBytes(key);
@@ -93,6 +109,12 @@ public sealed class BundledModelHostService
     {
         try
         {
+            if (GetPhysicallyInstalledSystemMemory(out var installedKilobytes)
+                && installedKilobytes <= (ulong)(long.MaxValue / 1024L))
+            {
+                return (long)installedKilobytes * 1024L;
+            }
+
             var memoryStatus = new MEMORYSTATUSEX();
             memoryStatus.dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>();
             if (GlobalMemoryStatusEx(ref memoryStatus))
@@ -123,21 +145,13 @@ public sealed class BundledModelHostService
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetPhysicallyInstalledSystemMemory(out ulong totalMemoryInKilobytes);
+
     public string GetSelectedModelDisplayName()
     {
         return GetSelectedModelInfo().DisplayName;
-    }
-
-    internal AiChunkingModelProfile GetSelectedChunkingProfile(string? modelKey = null)
-    {
-        var selectedKey = modelKey ?? GetSelectedModelInfo().Key;
-        if (selectedKey.Contains("0.8B", StringComparison.OrdinalIgnoreCase))
-            return AiChunkingModelProfile.Small;
-
-        if (selectedKey.Contains("2B", StringComparison.OrdinalIgnoreCase))
-            return AiChunkingModelProfile.Medium;
-
-        return AiChunkingModelProfile.Large;
     }
 
     private static async Task EnsureModelAssetAsync(
@@ -148,14 +162,15 @@ public sealed class BundledModelHostService
         CancellationToken cancellationToken)
     {
         var cacheModelPath = Path.Combine(modelsCacheDir, selectedModel.FileName);
-        if (IsModelFileValid(cacheModelPath, selectedModel))
+        progress?.Report(new FlashcardProgress(ModelVerificationStatusKey));
+        if (await IsModelFileValidAsync(cacheModelPath, selectedModel, cancellationToken))
             return;
 
         var bundledModelPath = Path.Combine(modelsAssetsDir, selectedModel.FileName);
-        if (IsModelFileValid(bundledModelPath, selectedModel))
+        if (await IsModelFileValidAsync(bundledModelPath, selectedModel, cancellationToken))
         {
-            CopyToCache(bundledModelPath, cacheModelPath);
-            if (IsModelFileValid(cacheModelPath, selectedModel))
+            await CopyToCacheAsync(bundledModelPath, cacheModelPath, cancellationToken);
+            if (await IsModelFileValidAsync(cacheModelPath, selectedModel, cancellationToken))
                 return;
         }
 
@@ -178,9 +193,18 @@ public sealed class BundledModelHostService
             try
             {
                 await DownloadFileWithRetryAsync(modelUrl, tempPath, model.DownloadStatusKey, progress, cancellationToken);
-                ValidateDownloadedModelFile(tempPath, model);
+                progress?.Report(new FlashcardProgress(ModelVerificationStatusKey));
+                await ValidateDownloadedModelFileAsync(tempPath, model, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 File.Move(tempPath, modelPath, overwrite: true);
+                var fileInfo = new FileInfo(modelPath);
+                VerifiedModelFiles[modelPath] = new ModelFileFingerprint(fileInfo.Length, fileInfo.LastWriteTimeUtc);
                 return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                TryDeleteFile(tempPath);
+                throw;
             }
             catch (Exception ex)
             {
@@ -283,6 +307,10 @@ public sealed class BundledModelHostService
             {
                 await DownloadFileAsync(url, destinationPath, statusKey, progress, cancellationToken);
                 return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex) when (attempt < 3)
             {
@@ -412,7 +440,10 @@ public sealed class BundledModelHostService
     public static bool IsModelDownloaded(string key)
     {
         var path = GetModelFilePath(key);
-        return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+        var model = AiModelManifest.Instance.FindByKey(key);
+        return !string.IsNullOrWhiteSpace(path)
+               && model is not null
+               && HasPlausibleModelFile(path, model);
     }
 
     public static void DeleteModelArtifacts(string key)
@@ -426,6 +457,8 @@ public sealed class BundledModelHostService
 
         TryDeleteFile(cachePath);
         TryDeleteFile(bundledPath);
+        VerifiedModelFiles.TryRemove(cachePath, out _);
+        VerifiedModelFiles.TryRemove(bundledPath, out _);
 
         try
         {
@@ -446,12 +479,22 @@ public sealed class BundledModelHostService
         IProgress<FlashcardProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        AiFeatureGate.ThrowIfDisabled();
+
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Model key is required.", nameof(key));
 
         var selectedModel = AiModelManifest.Instance.FindByKey(key);
         if (selectedModel is null)
             throw new InvalidOperationException($"Unsupported model key '{key}'.");
+
+        var memoryBytes = GetTotalPhysicalMemoryBytesForCurrentMachine();
+        if (!IsFlashcardModelSupportedWithMemory(key, memoryBytes))
+        {
+            var requiredGb = selectedModel.MinimumSupportedMemoryBytes / (1024L * 1024L * 1024L);
+            throw new InvalidOperationException(
+                $"{selectedModel.DisplayName} requires at least {requiredGb} GB of physical memory.");
+        }
 
         await _sync.WaitAsync(cancellationToken);
         try
@@ -471,7 +514,7 @@ public sealed class BundledModelHostService
         }
     }
 
-    private static void CopyToCache(string sourcePath, string cachePath)
+    private static async Task CopyToCacheAsync(string sourcePath, string cachePath, CancellationToken cancellationToken)
     {
         try
         {
@@ -479,21 +522,34 @@ public sealed class BundledModelHostService
             if (!string.IsNullOrWhiteSpace(cacheDir))
                 Directory.CreateDirectory(cacheDir);
 
-            File.Copy(sourcePath, cachePath, overwrite: true);
+            await using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            await using var destination = new FileStream(cachePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await source.CopyToAsync(destination, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
         }
     }
 
-    private static void ValidateDownloadedModelFile(string filePath, AiModelInfo? model = null)
+    internal static Task ValidateDownloadedModelFileAsync(
+        string filePath,
+        AiModelInfo? model = null,
+        CancellationToken cancellationToken = default)
+        => Task.Run(() => ValidateDownloadedModelFile(filePath, model, cancellationToken), cancellationToken);
+
+    private static void ValidateDownloadedModelFile(string filePath, AiModelInfo? model, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var fileInfo = new FileInfo(filePath);
         var minBytes = model?.MinimumBytes ?? (1024L * 1024L);
         if (!fileInfo.Exists || fileInfo.Length < minBytes)
             throw new InvalidDataException("Downloaded Qwen model file is invalid or too small.");
 
-        using var stream = File.OpenRead(filePath);
+        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.SequentialScan);
         Span<byte> header = stackalloc byte[4];
         var bytesRead = stream.Read(header);
         if (bytesRead < 4 || header[0] != (byte)'G' || header[1] != (byte)'G' || header[2] != (byte)'U' || header[3] != (byte)'F')
@@ -502,8 +558,24 @@ public sealed class BundledModelHostService
         if (!string.IsNullOrWhiteSpace(model?.ExpectedSha256))
         {
             stream.Position = 0;
-            using var sha = System.Security.Cryptography.SHA256.Create();
-            var hash = sha.ComputeHash(stream);
+            using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var buffer = ArrayPool<byte>.Shared.Rent(1024 * 1024);
+            try
+            {
+                int read;
+                while ((read = stream.Read(buffer, 0, buffer.Length)) != 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    sha.AppendData(buffer.AsSpan(0, read));
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var hash = sha.GetHashAndReset();
             var hex = Convert.ToHexString(hash);
             if (!string.Equals(hex, model.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(
@@ -511,12 +583,53 @@ public sealed class BundledModelHostService
         }
     }
 
-    private static bool IsModelFileValid(string filePath, AiModelInfo? model = null)
+    private static async Task<bool> IsModelFileValidAsync(
+        string filePath,
+        AiModelInfo? model,
+        CancellationToken cancellationToken)
     {
         try
         {
-            ValidateDownloadedModelFile(filePath, model);
+            cancellationToken.ThrowIfCancellationRequested();
+            var fileInfo = new FileInfo(filePath);
+            var fingerprint = new ModelFileFingerprint(fileInfo.Length, fileInfo.LastWriteTimeUtc);
+            if (VerifiedModelFiles.TryGetValue(filePath, out var verified)
+                && verified == fingerprint)
+            {
+                return true;
+            }
+
+            await ValidateDownloadedModelFileAsync(filePath, model, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            VerifiedModelFiles[filePath] = fingerprint;
             return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            VerifiedModelFiles.TryRemove(filePath, out _);
+            return false;
+        }
+    }
+
+    private static bool HasPlausibleModelFile(string filePath, AiModelInfo model)
+    {
+        try
+        {
+            var fileInfo = new FileInfo(filePath);
+            if (!fileInfo.Exists || fileInfo.Length < model.MinimumBytes)
+                return false;
+
+            using var stream = File.OpenRead(filePath);
+            Span<byte> header = stackalloc byte[4];
+            return stream.Read(header) == 4
+                   && header[0] == (byte)'G'
+                   && header[1] == (byte)'G'
+                   && header[2] == (byte)'U'
+                   && header[3] == (byte)'F';
         }
         catch
         {
@@ -526,6 +639,7 @@ public sealed class BundledModelHostService
 
     private static void TryDeleteFile(string path)
     {
+        VerifiedModelFiles.TryRemove(path, out _);
         try
         {
             if (File.Exists(path))

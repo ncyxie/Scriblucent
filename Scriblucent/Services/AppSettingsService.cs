@@ -1,4 +1,5 @@
 using Scriblucent.Models;
+using Scriblucent.Services.AI;
 using System;
 using System.IO;
 using System.Linq;
@@ -73,6 +74,8 @@ public static class AppSettingsService
             var defaultTools = BundledModelHostService.BuildDefaultAiToolSettings();
             if (settings.AiTools is null || settings.AiTools.Count == 0)
                 settings.AiTools = defaultTools;
+            else
+                AiModelManifest.Instance.MergeMissingCatalogTools(settings);
 
             if (string.IsNullOrWhiteSpace(settings.FlashcardModelKey)
                 || settings.AiTools.All(tool => tool.IsRemoved || !tool.IsEnabled || !string.Equals(tool.Key, settings.FlashcardModelKey, StringComparison.OrdinalIgnoreCase)))
@@ -83,6 +86,11 @@ public static class AppSettingsService
 
             settings.FlashcardFlipDelayMilliseconds = AppSettings.NormalizeFlashcardFlipDelayMilliseconds(
                 settings.FlashcardFlipDelayMilliseconds);
+
+            if (!Enum.IsDefined(settings.StudyCoverage))
+                settings.StudyCoverage = StudyCoverageMode.Auto;
+            else
+                settings.StudyCoverage = StudyPlanCoordinator.NormalizeCoverage(settings.StudyCoverage);
 
             return settings;
         }

@@ -70,6 +70,7 @@ namespace Scriblucent
         private string _lastSavedSnapshot = string.Empty;
         private DispatcherTimer? _postSaveSnapshotTimer;
         private NoteDocument? _currentDocument;
+        private bool _aiReviewNoticeDismissedWithoutDocument;
         private readonly FloatingImageCoordinator _floatingImages = new();
         private NoteWrapLayoutEngine? _wrapLayout;
         private bool _isInsertingPicture;
@@ -146,12 +147,12 @@ namespace Scriblucent
             };
         }
 
-        // App-scoped singleton (AiBackendHost) - one worker process, one model load, queued via
-        // its own SemaphoreSlim. Previous per-tab adapter meant N tabs = N processes × model RAM.
+        // Share one serialized worker adapter across editor tabs.
         private readonly ITextGenerationBackend _aiBackend = AiBackendHost.Shared;
         private FlashcardConversionService _flashcardConversionService = null!;
         private MindMapConversionService _mindMapConversionService = null!;
         private QuizConversionService _quizConversionService = null!;
+        private StudyPlanCoordinator _studyPlanCoordinator = null!;
         private bool _isDisposed;
         private bool _isConvertingToFlashcards;
         private CancellationTokenSource? _flashcardConversionCancellationSource;
@@ -259,9 +260,11 @@ namespace Scriblucent
         public NoteEditorWindow()
         {
             InitializeComponent();
-            _flashcardConversionService = new FlashcardConversionService(_aiBackend);
+            var groundedQuestionPlanner = new GroundedQuestionPlanner();
+            _flashcardConversionService = new FlashcardConversionService(_aiBackend, groundedQuestionPlanner);
             _mindMapConversionService = new MindMapConversionService(_aiBackend);
-            _quizConversionService = new QuizConversionService(_aiBackend);
+            _quizConversionService = new QuizConversionService(_aiBackend, groundedQuestionPlanner);
+            _studyPlanCoordinator = new StudyPlanCoordinator(_aiBackend);
             // Note editors are hosted inside NoteEditorTabsWindow (never shown as their own
             // window). Do not attach ShellWindowChrome here — that would nest a second caption.
             InitializeEditorFormattingOptions();
@@ -305,6 +308,8 @@ namespace Scriblucent
             Deactivated += (_, _) => SetHyperlinkCtrlHintsVisible(false);
             Loaded += NoteEditorWindow_Loaded;
             RootGrid.Loaded += NoteEditorWindow_Loaded;
+            AiFeatureGate.Changed += NoteEditorWindow_AiFeatureGateChanged;
+            ApplyAiConvertVisibility();
 
             _floatingImages.Attach(FloatingImageOverlay, ContentTextBox, EditorSurface);
             _floatingImages.ImagesChanged += (_, _) =>
@@ -976,6 +981,7 @@ namespace Scriblucent
             _testConversionCancellationSource = null;
             ThemeManager.ThemeChanged -= ThemeManager_ThemeChanged;
             AiGenerationStateChanged -= NoteEditorWindow_AiGenerationStateChanged;
+            AiFeatureGate.Changed -= NoteEditorWindow_AiFeatureGateChanged;
         }
 
         private Window GetDialogOwnerWindow()
@@ -1726,7 +1732,47 @@ namespace Scriblucent
 
         private void SetAiConversionButtonsEnabled(bool isEnabled)
         {
+            if (!AiFeatureGate.IsEnabled)
+            {
+                ConvertMenuButton.IsEnabled = false;
+                return;
+            }
+
             ConvertMenuButton.IsEnabled = isEnabled;
+        }
+
+        private void ApplyAiConvertVisibility()
+        {
+            if (ConvertMenuButton is null)
+                return;
+
+            var enabled = AiFeatureGate.IsEnabled;
+            ConvertMenuButton.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            if (!enabled)
+            {
+                ConvertMenuButton.IsEnabled = false;
+                CancelInFlightAiConversion();
+                return;
+            }
+
+            if (!IsAnyAiConversionInProgress())
+                ConvertMenuButton.IsEnabled = !IsAiGenerationInProgress;
+        }
+
+        private void CancelInFlightAiConversion()
+        {
+            if (!IsAnyAiConversionInProgress())
+                return;
+
+            GetActiveCancellationSource()?.Cancel();
+        }
+
+        private void NoteEditorWindow_AiFeatureGateChanged(object? sender, EventArgs e)
+        {
+            if (_isDisposed)
+                return;
+
+            Dispatcher.Invoke(ApplyAiConvertVisibility);
         }
 
         /// With app-scoped AiBackendHost, only one worker process exists and its SemaphoreSlim
@@ -1744,8 +1790,32 @@ namespace Scriblucent
 
         private void ConvertMenuButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!AiFeatureGate.IsEnabled)
+                return;
+
+            UpdateStudyCoverageMenuChecks();
             if (sender is Button { ContextMenu: { } menu } button)
                 UiMotion.OpenContextMenu(menu, button);
+        }
+
+        private void StudyCoverageMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem { Tag: string tag }
+                || !Enum.TryParse<StudyCoverageMode>(tag, ignoreCase: true, out var coverage))
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.StudyCoverage = StudyPlanCoordinator.NormalizeCoverage(coverage);
+            AppSettingsService.Save(settings);
+            UpdateStudyCoverageMenuChecks();
+        }
+
+        private void UpdateStudyCoverageMenuChecks()
+        {
+            var coverage = StudyPlanCoordinator.NormalizeCoverage(AppSettingsService.Load().StudyCoverage);
+            StudyCoverageAutoMenuItem.IsChecked = coverage == StudyCoverageMode.Auto;
+            StudyCoverageBalancedMenuItem.IsChecked = coverage == StudyCoverageMode.Balanced;
+            StudyCoverageThoroughMenuItem.IsChecked = coverage == StudyCoverageMode.Thorough;
         }
 
         private void FileMenuButton_Click(object sender, RoutedEventArgs e)
@@ -1762,6 +1832,9 @@ namespace Scriblucent
 
         private async void ConvertToFlashcardsButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!AiFeatureGate.IsEnabled)
+                return;
+
             if (IsAnyAiConversionInProgress() || IsAiGenerationInProgress)
                 return;
 
@@ -1788,15 +1861,15 @@ namespace Scriblucent
             var cts = new CancellationTokenSource();
             _flashcardConversionCancellationSource = cts;
 
-            int? flashcardsSuccessfulChunkCount = null;
-            int? flashcardsTotalChunkCount = null;
+            int? flashcardsSuccessfulPacketCount = null;
+            int? flashcardsTotalPacketCount = null;
             var progress = new Progress<AiGenerationProgress>(status =>
             {
                 if (_isDisposed) return;
-                if (status.SuccessfulChunkCount.HasValue)
+                if (status.SuccessfulPacketCount.HasValue)
                 {
-                    flashcardsSuccessfulChunkCount = status.SuccessfulChunkCount;
-                    flashcardsTotalChunkCount = status.TotalChunkCount;
+                    flashcardsSuccessfulPacketCount = status.SuccessfulPacketCount;
+                    flashcardsTotalPacketCount = status.TotalPacketCount;
                 }
 
                 var text = BuildAiProgressText(status, null, null, out var useAnimation);
@@ -1813,8 +1886,14 @@ namespace Scriblucent
                 restoreAutoSave = TemporarilyDisableAutoSaveForAi();
                 await EnsureAiModelAvailableAsync(selectedModel, progress, cts.Token);
                 var documentTitle = ResolveEditorTitleForPrompt();
-                var flashcards = await _flashcardConversionService.ConvertToFlashcardsAsync(
+                var studyContext = await _studyPlanCoordinator.GetOrCreateAsync(
                     plainText,
+                    selectedModel.Key,
+                    AppSettingsService.Load().StudyCoverage,
+                    progress,
+                    cts.Token);
+                var flashcards = await _flashcardConversionService.ConvertToFlashcardsAsync(
+                    studyContext,
                     progress,
                     cts.Token);
                 RestoreAutoSaveAfterAi(ref restoreAutoSave);
@@ -1860,8 +1939,10 @@ namespace Scriblucent
                 ShowStatusIndicator(BuildAiSuccessText(
                     "ConvertToFlashcardsSuccess",
                     "ConvertToFlashcardsSuccessPartialFormat",
-                    flashcardsSuccessfulChunkCount,
-                    flashcardsTotalChunkCount));
+                    flashcardsSuccessfulPacketCount,
+                    flashcardsTotalPacketCount,
+                    flashcards.Count,
+                    studyContext.TargetCount));
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
@@ -1903,7 +1984,7 @@ namespace Scriblucent
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
-                    AppendDiagnosticPathIfPresent($"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}", ex),
+                    $"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -1923,6 +2004,9 @@ namespace Scriblucent
 
         private async void ConvertToMindMapButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!AiFeatureGate.IsEnabled)
+                return;
+
             if (IsAnyAiConversionInProgress() || IsAiGenerationInProgress)
                 return;
 
@@ -1949,15 +2033,15 @@ namespace Scriblucent
             var cts = new CancellationTokenSource();
             _mindMapConversionCancellationSource = cts;
 
-            int? mindMapSuccessfulChunkCount = null;
-            int? mindMapTotalChunkCount = null;
+            int? mindMapSuccessfulPacketCount = null;
+            int? mindMapTotalPacketCount = null;
             var progress = new Progress<AiGenerationProgress>(status =>
             {
                 if (_isDisposed) return;
-                if (status.SuccessfulChunkCount.HasValue)
+                if (status.SuccessfulPacketCount.HasValue)
                 {
-                    mindMapSuccessfulChunkCount = status.SuccessfulChunkCount;
-                    mindMapTotalChunkCount = status.TotalChunkCount;
+                    mindMapSuccessfulPacketCount = status.SuccessfulPacketCount;
+                    mindMapTotalPacketCount = status.TotalPacketCount;
                 }
 
                 var text = BuildAiProgressText(
@@ -1978,9 +2062,15 @@ namespace Scriblucent
                 restoreAutoSave = TemporarilyDisableAutoSaveForAi();
                 await EnsureAiModelAvailableAsync(selectedModel, progress, cts.Token);
                 var documentTitle = ResolveEditorTitleForPrompt();
+                var studyContext = await _studyPlanCoordinator.GetOrCreateAsync(
+                    plainText,
+                    selectedModel.Key,
+                    AppSettingsService.Load().StudyCoverage,
+                    progress,
+                    cts.Token);
                 var mindMap = await _mindMapConversionService.ConvertToMindMapAsync(
                     documentTitle,
-                    plainText,
+                    studyContext,
                     progress,
                     cts.Token);
                 RestoreAutoSaveAfterAi(ref restoreAutoSave);
@@ -2031,8 +2121,10 @@ namespace Scriblucent
                 ShowStatusIndicator(BuildAiSuccessText(
                     "ConvertToMindMapSuccess",
                     "ConvertToMindMapSuccessPartialFormat",
-                    mindMapSuccessfulChunkCount,
-                    mindMapTotalChunkCount));
+                    mindMapSuccessfulPacketCount,
+                    mindMapTotalPacketCount,
+                    studyContext.TargetCount,
+                    studyContext.TargetCount));
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
@@ -2074,7 +2166,7 @@ namespace Scriblucent
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
-                    AppendDiagnosticPathIfPresent($"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}", ex),
+                    $"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -2094,6 +2186,9 @@ namespace Scriblucent
 
         private async void ConvertToTestButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!AiFeatureGate.IsEnabled)
+                return;
+
             if (IsAnyAiConversionInProgress() || IsAiGenerationInProgress)
                 return;
 
@@ -2120,15 +2215,15 @@ namespace Scriblucent
             var cts = new CancellationTokenSource();
             _testConversionCancellationSource = cts;
 
-            int? quizSuccessfulChunkCount = null;
-            int? quizTotalChunkCount = null;
+            int? quizSuccessfulPacketCount = null;
+            int? quizTotalPacketCount = null;
             var progress = new Progress<AiGenerationProgress>(status =>
             {
                 if (_isDisposed) return;
-                if (status.SuccessfulChunkCount.HasValue)
+                if (status.SuccessfulPacketCount.HasValue)
                 {
-                    quizSuccessfulChunkCount = status.SuccessfulChunkCount;
-                    quizTotalChunkCount = status.TotalChunkCount;
+                    quizSuccessfulPacketCount = status.SuccessfulPacketCount;
+                    quizTotalPacketCount = status.TotalPacketCount;
                 }
 
                 var text = BuildAiProgressText(
@@ -2149,9 +2244,15 @@ namespace Scriblucent
                 restoreAutoSave = TemporarilyDisableAutoSaveForAi();
                 await EnsureAiModelAvailableAsync(selectedModel, progress, cts.Token);
                 var documentTitle = ResolveEditorTitleForPrompt();
+                var studyContext = await _studyPlanCoordinator.GetOrCreateAsync(
+                    plainText,
+                    selectedModel.Key,
+                    AppSettingsService.Load().StudyCoverage,
+                    progress,
+                    cts.Token);
                 var quiz = await _quizConversionService.ConvertToQuizAsync(
                     documentTitle,
-                    plainText,
+                    studyContext,
                     _currentDocument?.Id,
                     progress,
                     cts.Token);
@@ -2198,8 +2299,10 @@ namespace Scriblucent
                 ShowStatusIndicator(BuildAiSuccessText(
                     "ConvertToTestSuccess",
                     "ConvertToTestSuccessPartialFormat",
-                    quizSuccessfulChunkCount,
-                    quizTotalChunkCount));
+                    quizSuccessfulPacketCount,
+                    quizTotalPacketCount,
+                    quiz.Questions.Count,
+                    studyContext.TargetCount));
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
@@ -2241,7 +2344,7 @@ namespace Scriblucent
             {
                 HideStatusIndicator();
                 ModernMessageBox.Show(
-                    AppendDiagnosticPathIfPresent($"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}", ex),
+                    $"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -2269,26 +2372,37 @@ namespace Scriblucent
             {
                 AiGenerationStatus.Processing => LocalizationService.GetString(
                     processingStatusKey ?? "ConvertToFlashcardsStatusProcessing"),
-                AiGenerationStatus.Repairing => LocalizationService.GetString("ConvertToFlashcardsStatusRepairing"),
                 AiGenerationStatus.Finalizing => LocalizationService.GetString(
                     finalizingStatusKey ?? "ConvertToFlashcardsStatusFinalizing"),
                 AiGenerationStatus.PreparingAssets => LocalizationService.GetString("ConvertToFlashcardsStatusPreparingAssets"),
+                AiGenerationStatus.VerifyingModel => LocalizationService.GetString(BundledModelHostService.ModelVerificationStatusKey),
                 AiGenerationStatus.DownloadingModel => LocalizationService.GetString("ConvertToFlashcardsStatusDownloadingModel"),
                 AiGenerationStatus.AssetsReady => LocalizationService.GetString("ConvertToFlashcardsStatusAssetsReady"),
+                AiGenerationStatus.AnalyzingSource => LocalizationService.GetString("AiStatusAnalyzingStudyFacts"),
+                AiGenerationStatus.ValidatingQuestionAnswer => LocalizationService.GetString("AiStatusCheckingQuestionAnswer"),
+                AiGenerationStatus.SelectingStudyPoints => LocalizationService.GetString("AiStatusSelectingStudyPoints"),
+                AiGenerationStatus.WritingQuestions => LocalizationService.GetString("AiStatusWritingQuestions"),
+                AiGenerationStatus.GroundingAnswers => LocalizationService.GetString("AiStatusGroundingAnswers"),
+                AiGenerationStatus.FallingBackToCpu => LocalizationService.GetString("AiStatusFallingBackToCpu"),
                 _ => ""
             };
             useAnimation = true;
 
-            if (status.ChunkIndex.HasValue
-                && status.ChunkCount.HasValue
-                && status.ChunkCount.Value > 0)
+            if (status.PacketIndex.HasValue
+                && status.PacketCount.HasValue
+                && status.PacketCount.Value > 0)
             {
-                var chunkCount = Math.Max(1, status.ChunkCount.Value);
-                var chunkIndex = Math.Clamp(status.ChunkIndex.Value, 1, chunkCount);
-                baseText = $"({chunkIndex}/{chunkCount}) {baseText}";
+                var packetCount = Math.Max(1, status.PacketCount.Value);
+                var packetIndex = Math.Clamp(status.PacketIndex.Value, 1, packetCount);
+                baseText = $"({packetIndex}/{packetCount}) {baseText}";
             }
 
-            if (status.GeneratedChars.HasValue)
+            if (status.GeneratedChars.HasValue
+                && status.Status is AiGenerationStatus.Processing
+                    or AiGenerationStatus.ValidatingQuestionAnswer
+                    or AiGenerationStatus.SelectingStudyPoints
+                    or AiGenerationStatus.WritingQuestions
+                    or AiGenerationStatus.GroundingAnswers)
             {
                 return string.Format(
                     LocalizationService.GetString("ConvertToFlashcardsStatusGeneratedCharsFormat"),
@@ -2332,12 +2446,13 @@ namespace Scriblucent
             IProgress<AiGenerationProgress> progress,
             CancellationToken cancellationToken)
         {
-            if (BundledModelHostService.IsModelDownloaded(selectedModel.Key))
-                return;
-
             progress.Report(new AiGenerationProgress(AiGenerationStatus.PreparingAssets));
             var downloadProgress = new Progress<BundledModelHostService.FlashcardProgress>(status =>
-                progress.Report(new AiGenerationProgress(AiGenerationStatus.DownloadingModel, status.Percent)));
+                progress.Report(new AiGenerationProgress(
+                    status.StatusKey == BundledModelHostService.ModelVerificationStatusKey
+                        ? AiGenerationStatus.VerifyingModel
+                        : AiGenerationStatus.DownloadingModel,
+                    status.Percent)));
 
             try
             {
@@ -2371,43 +2486,38 @@ namespace Scriblucent
             }
         }
 
-        /// Plain success text, unless the job only got partial chunk coverage (some sections
-        /// contributed nothing even after repair) - then a "used N of M sections" variant so a
-        /// truncated result isn't presented as if it were complete.
+        /// Plain success text unless the planner covered only some contextual packets; then use
+        /// the localized partial-coverage variant so the result is not presented as complete.
         private static string BuildAiSuccessText(
             string successKey,
             string partialFormatKey,
-            int? successfulChunkCount,
-            int? totalChunkCount)
+            int? successfulPacketCount,
+            int? totalPacketCount,
+            int? generatedItemCount = null,
+            int? targetItemCount = null)
         {
-            if (successfulChunkCount.HasValue
-                && totalChunkCount.HasValue
-                && successfulChunkCount.Value < totalChunkCount.Value)
+            string message;
+            if (successfulPacketCount.HasValue
+                && totalPacketCount.HasValue
+                && successfulPacketCount.Value < totalPacketCount.Value)
             {
-                return string.Format(
+                message = string.Format(
                     LocalizationService.GetString(partialFormatKey),
-                    successfulChunkCount.Value,
-                    totalChunkCount.Value);
+                    successfulPacketCount.Value,
+                    totalPacketCount.Value);
             }
-
-            return LocalizationService.GetString(successKey);
-        }
-
-        /// AiGenerationPipeline/MindMapConversionService set ex.Data["DiagnosticPath"] when a
-        /// parse-failure diagnostic log was written (only when diagnostic logging is enabled in
-        /// Settings) - previously never surfaced anywhere, so the log's existence was invisible
-        /// to the user. Appends the path when present; returns the message unchanged otherwise.
-        private static string AppendDiagnosticPathIfPresent(string message, Exception ex)
-        {
-            if (ex.Data["DiagnosticPath"] is string diagnosticPath && !string.IsNullOrWhiteSpace(diagnosticPath))
+            else
             {
-                return string.Format(
-                    LocalizationService.GetString("AiGenerationDiagnosticPathFormat"),
-                    message,
-                    diagnosticPath);
+                message = LocalizationService.GetString(successKey);
             }
 
-            return message;
+            return generatedItemCount.HasValue && targetItemCount.HasValue && targetItemCount.Value > 0
+                ? string.Format(
+                    LocalizationService.GetString("AiGenerationItemCoverageFormat"),
+                    message,
+                    generatedItemCount.Value,
+                    targetItemCount.Value)
+                : message;
         }
 
         private void ShowPersistentStatusIndicator(string message, bool pulse = false)
@@ -2844,6 +2954,7 @@ namespace Scriblucent
                         persist: false);
                     SetTagsPanelOpen(document.IsEditorTagsPanelOpen ?? false, animate: false, persist: false);
                     _lastSavedTagsPanelOpen = _isTagsPanelOpen;
+                    ApplyAiReviewNoticeVisibility();
 
                     var preferredFontFamily = string.IsNullOrWhiteSpace(settings.PreferredFontFamily)
                         ? DefaultEditorFontFamily
@@ -4627,6 +4738,7 @@ namespace Scriblucent
         public void SetCurrentDocument(NoteDocument document)
         {
             _currentDocument = document;
+            ApplyAiReviewNoticeVisibility();
             MarkCurrentStateSaved();
         }
 
@@ -4879,6 +4991,7 @@ namespace Scriblucent
                 IsEditorFontPanelOpen = _isFontPanelOpen,
                 IsEditorTagsPanelOpen = _isTagsPanelOpen,
                 IsWordWrapEnabled = _isWordWrapEnabled,
+                AiReviewNoticeDismissed = _currentDocument?.AiReviewNoticeDismissed == true,
                 CreatedAt = _currentDocument?.CreatedAt ?? DateTime.UtcNow,
                 LastModified = DateTime.Now
             };
@@ -8099,6 +8212,34 @@ namespace Scriblucent
             var settings = AppSettingsService.Load();
             settings.IsEditorWordWrapEnabled = isEnabled;
             AppSettingsService.Save(settings);
+        }
+
+        private void ConvertAiReviewNotice_Dismissed(object sender, RoutedEventArgs e)
+        {
+            if (_currentDocument is null)
+            {
+                _aiReviewNoticeDismissedWithoutDocument = true;
+            }
+            else
+            {
+                _currentDocument.AiReviewNoticeDismissed = true;
+                if (Application.Current?.MainWindow?.DataContext is MainViewModel mainViewModel)
+                    mainViewModel.SaveNotes();
+            }
+
+            ApplyAiReviewNoticeVisibility();
+        }
+
+        private void ApplyAiReviewNoticeVisibility()
+        {
+            if (ConvertAiReviewMenuItem is null || ConvertAiReviewSeparator is null)
+                return;
+
+            var dismissed = _currentDocument?.AiReviewNoticeDismissed == true
+                || (_currentDocument is null && _aiReviewNoticeDismissedWithoutDocument);
+            var visibility = dismissed ? Visibility.Collapsed : Visibility.Visible;
+            ConvertAiReviewMenuItem.Visibility = visibility;
+            ConvertAiReviewSeparator.Visibility = visibility;
         }
 
         private void PersistCurrentDocumentEditorUiState()

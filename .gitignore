@@ -15,6 +15,11 @@
 .claude/
 .opencode/
 /Microsoft/
+/agent-tools/
+/mcps/
+/terminals/
+/.agents/
+/.codex/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

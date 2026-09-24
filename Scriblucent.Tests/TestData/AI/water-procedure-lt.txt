@@ -1,0 +1,5 @@
+- Vandens mėginys laikomas steriliame inde ir į laboratoriją pristatomas per 6 valandas.
+- Laborantas išmatuoja mėginio rūgštingumą ir užrašo vandens temperatūrą.
+- Kiekvienam mėginiui atliekami 3 pakartotiniai matavimai.
+- Filtras pakeičiamas, kai slėgio skirtumas viršija 20 procentų.
+- Ataskaitoje nurodoma mėginio vieta, paėmimo data ir galutinis rezultatas.

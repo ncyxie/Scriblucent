@@ -1,0 +1,189 @@
+[
+  {
+    "key": "biography-en",
+    "title": "Elena Maris",
+    "language": "English",
+    "sourceFile": "fact-rich-biography.txt",
+    "expectedTargets": [
+      { "label": "birth year", "answers": ["1978"] },
+      { "label": "birthplace", "answers": ["Bellhaven"] },
+      { "label": "mother's occupation", "answers": ["taught mathematics", "mathematics"] },
+      { "label": "father's occupation", "answers": ["repaired navigation instruments", "navigation instruments"] },
+      { "label": "childhood tide gauge", "answers": ["simple tide gauge", "tide gauge"] },
+      { "label": "tide-gauge materials", "answers": ["glass tube and salvaged clock parts", "glass tube", "salvaged clock parts"] },
+      { "label": "measurement interval", "answers": ["every fifteen minutes", "fifteen minutes"] },
+      { "label": "regional science prize year", "answers": ["1991"] },
+      { "label": "university", "answers": ["Northbridge University"] },
+      { "label": "university entry year", "answers": ["1996"] },
+      { "label": "field of study", "answers": ["environmental engineering"] },
+      { "label": "undergraduate completion year", "answers": ["2000"] },
+      { "label": "final-project subject", "answers": ["removing salt from groundwater", "three methods for removing salt"] },
+      { "label": "post-graduation employer", "answers": ["Harbor Research Institute"] },
+      { "label": "post-graduation role", "answers": ["laboratory assistant"] },
+      { "label": "first-paper year", "answers": ["2003"] },
+      { "label": "first-paper subject", "answers": ["low-cost ceramic filters", "ceramic filters"] },
+      { "label": "drought period", "answers": ["between 2004 and 2006", "2004 and 2006"] },
+      { "label": "purification-unit count", "answers": ["forty solar-powered purification units", "forty"] },
+      { "label": "purification capacity", "answers": ["approximately 800 liters of water per day", "800 liters"] },
+      { "label": "project result", "answers": ["reduced the villages' dependence on trucked water", "dependence on trucked water"] },
+      { "label": "engineering medal", "answers": ["National Engineering Medal"] },
+      { "label": "engineering medal year", "answers": ["2007"] },
+      { "label": "Clear Current founding", "answers": ["Clear Current"] },
+      { "label": "Clear Current founding year", "answers": ["2009"] },
+      { "label": "Clear Current purpose", "answers": ["community water systems"] },
+      { "label": "local training model", "answers": ["local technicians", "visiting engineers"] },
+      { "label": "regions reached by 2015", "answers": ["eleven regions"] },
+      { "label": "technicians trained by 2015", "answers": ["more than 300 technicians", "300 technicians"] },
+      { "label": "executive-director departure", "answers": ["2018"] },
+      { "label": "continued advisory role", "answers": ["chair of its technical advisory board", "technical advisory board"] },
+      { "label": "professorship", "answers": ["professor in 2012", "2012"] },
+      { "label": "sensor detection method", "answers": ["electrical conductivity", "measuring changes in electrical conductivity"] },
+      { "label": "open-hardware release year", "answers": ["2016"] },
+      { "label": "sensor cost", "answers": ["less than fifty dollars", "fifty dollars"] },
+      { "label": "standards appointment", "answers": ["International Water Council"] },
+      { "label": "standards appointment year", "answers": ["2019"] },
+      { "label": "maintenance guidelines", "answers": ["small solar purification systems", "maintaining small solar purification systems"] },
+      { "label": "inspection schedule", "answers": ["monthly filter inspections", "annual water-quality testing"] },
+      { "label": "civic award year", "answers": ["2022"] },
+      { "label": "civic award", "answers": ["Bellhaven Civic Award"] },
+      { "label": "award rationale", "answers": ["combining scientific research with local training", "scientific research with local training"] },
+      { "label": "current work", "answers": ["teach, advise Clear Current, and study affordable monitoring equipment", "affordable monitoring equipment"] }
+    ]
+  },
+  {
+    "key": "photosynthesis-en",
+    "title": "Photosynthesis",
+    "language": "English",
+    "sourceFile": "Notes/english-study-note.txt",
+    "expectedTargets": [
+      { "label": "photosynthesis energy conversion", "answers": ["light energy into chemical energy", "chemical energy"] },
+      { "label": "organisms performing photosynthesis", "answers": ["green plants"] },
+      { "label": "chlorophyll absorption", "answers": ["blue and red parts of the spectrum", "blue and red"] },
+      { "label": "light-reaction products", "answers": ["ATP and NADPH"] },
+      { "label": "Calvin-cycle product", "answers": ["build sugars", "sugars"] },
+      { "label": "carbon-dioxide destination", "answers": ["Calvin cycle"] },
+      { "label": "oxygen source", "answers": ["splitting water", "oxygen is released"] }
+    ]
+  },
+  {
+    "key": "photosynthesis-lt",
+    "title": "Fotosinteze",
+    "language": "Lithuanian",
+    "sourceFile": "Notes/lithuanian-study-note.txt",
+    "expectedTargets": [
+      { "label": "photosynthesis energy conversion", "answers": ["šviesos energiją paverčia chemine energija", "chemine energija"] },
+      { "label": "organisms performing photosynthesis", "answers": ["žalieji augalai"] },
+      { "label": "chlorophyll absorption", "answers": ["mėlynoje ir raudonoje spektro dalyje", "mėlynoje ir raudonoje"] },
+      { "label": "light-reaction products", "answers": ["ATP ir NADPH"] },
+      { "label": "Calvin-cycle product", "answers": ["cukrams sintetinti", "cukrams"] },
+      { "label": "carbon-dioxide destination", "answers": ["Kalvino ciklą"] },
+      { "label": "oxygen source", "answers": ["skaidant vandenį", "išsiskiria deguonis"] }
+    ]
+  },
+  {
+    "key": "seed-hydration-en",
+    "title": "Seed hydration protocol",
+    "language": "English",
+    "sourceFile": "seed-hydration-protocol-en.txt",
+    "expectedTargets": [
+      { "label": "protocol leader", "answers": ["Maya Chen"] },
+      { "label": "dryness definition", "answers": ["rapid loss of water and minerals", "loss of water and minerals"] },
+      { "label": "initial amount", "answers": ["500 milliliters"] },
+      { "label": "watering interval", "answers": ["8 hours"] },
+      { "label": "reduced amount", "answers": ["250 milliliters"] },
+      { "label": "temperature interval", "answers": ["4 hours"] },
+      { "label": "stop condition", "answers": ["spreading mold"] },
+      { "label": "follow-up interval", "answers": ["14 days"] },
+      { "label": "assessment comparison", "answers": ["water intake, leaf curling, and soil pressure", "initial measurements"] }
+    ]
+  },
+  {
+    "key": "network-procedure-en",
+    "title": "Network operations",
+    "language": "English",
+    "sourceFile": "network-procedure-en.txt",
+    "expectedTargets": [
+      { "label": "lease duration", "answers": ["24 hours"] },
+      { "label": "DNS result", "answers": ["IP addresses"] },
+      { "label": "TLS verification", "answers": ["server certificate"] },
+      { "label": "backup interval", "answers": ["6 hours"] },
+      { "label": "retained copies", "answers": ["14 copies", "14"] },
+      { "label": "outage inspection", "answers": ["gateway logs"] },
+      { "label": "outage isolation", "answers": ["failing switch"] },
+      { "label": "rollback threshold", "answers": ["200 milliseconds", "200"] }
+    ]
+  },
+  {
+    "key": "observatory-history-lt",
+    "title": "Šilo observatorija",
+    "language": "Lithuanian",
+    "sourceFile": "observatory-history-lt.txt",
+    "expectedTargets": [
+      { "label": "founding year", "answers": ["1922"] },
+      { "label": "founding purpose", "answers": ["universiteto studentams mokyti", "studentams mokyti"] },
+      { "label": "mirror diameter", "answers": ["28 centimetrų", "28"] },
+      { "label": "variable-star observations", "answers": ["1968"] },
+      { "label": "photometer installation", "answers": ["1997"] },
+      { "label": "accuracy improvement", "answers": ["15 procentų"] },
+      { "label": "public opening", "answers": ["2005"] },
+      { "label": "current tours", "answers": ["dvi naktines ekskursijas", "naktines ekskursijas"] },
+      { "label": "teaching topic", "answers": ["žvaigždžių šviesa", "jų temperatūrą"] }
+    ]
+  },
+  {
+    "key": "water-procedure-lt",
+    "title": "Vandens mėginio tyrimas",
+    "language": "Lithuanian",
+    "sourceFile": "water-procedure-lt.txt",
+    "expectedTargets": [
+      { "label": "sample container", "answers": ["steriliame inde"] },
+      { "label": "delivery limit", "answers": ["6 valandas"] },
+      { "label": "laboratory measurements", "answers": ["mėginio rūgštingumą", "vandens temperatūrą"] },
+      { "label": "repeat count", "answers": ["3 pakartotiniai matavimai", "3"] },
+      { "label": "filter threshold", "answers": ["20 procentų"] },
+      { "label": "report fields", "answers": ["mėginio vieta", "paėmimo data", "galutinis rezultatas"] }
+    ]
+  },
+  {
+    "key": "civic-leader-bio-lt",
+    "title": "Milda Vaitkutė",
+    "language": "Lithuanian",
+    "sourceFile": "civic-leader-bio-lt.txt",
+    "expectedTargets": [
+      { "label": "profession", "answers": ["ekonomistė", "bendruomenės organizatorė"] },
+      { "label": "birth year", "answers": ["1974"] },
+      { "label": "birthplace", "answers": ["Šilutėje"] },
+      { "label": "chair term start", "answers": ["2021"] },
+      { "label": "office", "answers": ["Baltijos tyrimų tarybos pirmininkės", "pirmininkės"] },
+      { "label": "candidacy year", "answers": ["2020"] }
+    ]
+  },
+  {
+    "key": "clipped-actions-en",
+    "title": "Clipped noun phrases",
+    "language": "English",
+    "sourceFile": "clipped-actions-en.txt",
+    "expectedTargets": [
+      { "label": "2016 opponent", "answers": ["Evelyn Hart"] },
+      { "label": "Costavia action", "answers": ["a rescue mission", "rescue mission"] },
+      { "label": "travel-rule countries", "answers": ["seven neighboring countries", "neighboring countries"] },
+      { "label": "court appointments", "answers": ["three constitutional court judges"] },
+      { "label": "republic withdrawal", "answers": ["agreements on climate and trade"] },
+      { "label": "finance-law conviction", "answers": ["the first former head of state", "first former head of state"] }
+    ]
+  },
+  {
+    "key": "wiki-bio-en",
+    "title": "Helen Park",
+    "language": "English",
+    "sourceFile": "wiki-bio-en.txt",
+    "expectedTargets": [
+      { "label": "birth year", "answers": ["1971"] },
+      { "label": "birthplace", "answers": ["Leeds"] },
+      { "label": "graduation year", "answers": ["1995"] },
+      { "label": "Nairobi move", "answers": ["2004"] },
+      { "label": "standards appointment year", "answers": ["2016"] },
+      { "label": "civic medal year", "answers": ["2021"] }
+    ]
+  }
+]

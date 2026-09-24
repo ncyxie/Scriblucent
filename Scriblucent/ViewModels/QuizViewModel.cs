@@ -1,5 +1,6 @@
 using Scriblucent.Localization;
 using Scriblucent.Models;
+using Scriblucent.Services;
 
 namespace Scriblucent.ViewModels;
 
@@ -49,8 +50,13 @@ public sealed class QuizViewModel : ViewModelBase
 
     public bool IsAiGenerated => !string.IsNullOrWhiteSpace(Document.AiModelDisplayName);
 
+    public bool ShowAiGeneratedChrome => IsAiGenerated && AiFeatureGate.IsEnabled;
+
     public string AiGeneratedTooltip => IsAiGenerated
-        ? string.Format(LocalizationService.GetString("QuizGeneratedWithModel"), Document.AiModelDisplayName.Trim())
+        ? LocalizationService.FormatAiGeneratedTooltip(
+            "QuizGeneratedWithModel",
+            Document.AiModelDisplayName,
+            includeReviewDisclaimer: !Document.AiReviewNoticeDismissed)
         : string.Empty;
 
     public void NotifyChanged()
@@ -66,6 +72,7 @@ public sealed class QuizViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasSchedule));
         OnPropertyChanged(nameof(NextScheduleDisplay));
         OnPropertyChanged(nameof(IsAiGenerated));
+        OnPropertyChanged(nameof(ShowAiGeneratedChrome));
         OnPropertyChanged(nameof(AiGeneratedTooltip));
     }
 }

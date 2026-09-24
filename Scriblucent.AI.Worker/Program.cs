@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using LLama.Native;
 using Scriblucent.AI.Protocol;
 
 namespace Scriblucent.AI.Worker;
@@ -8,15 +11,24 @@ internal static class Program
     static async Task<int> Main(string[] args)
     {
         var pipeName = GetPipeName(args);
+        var requestedBackend = GetArgument(args, "--backend") ?? "cpu";
         if (string.IsNullOrWhiteSpace(pipeName))
         {
             Console.Error.WriteLine("Usage: Scriblucent.AI.Worker.exe --pipe <pipeName>");
             return 1;
         }
 
+        var useVulkan = string.Equals(requestedBackend, "vulkan", StringComparison.OrdinalIgnoreCase)
+            && RuntimeInformation.ProcessArchitecture == Architecture.X64;
+
+        NativeLibraryConfig.All
+            .WithCuda(false)
+            .WithVulkan(useVulkan)
+            .WithAutoFallback(!useVulkan);
+
         try
         {
-            await RunPipeServerAsync(pipeName);
+            await RunPipeServerAsync(pipeName, useVulkan);
             return 0;
         }
         catch (Exception ex)
@@ -26,15 +38,17 @@ internal static class Program
         }
     }
 
-    private static string GetPipeName(string[] args)
+    private static string GetPipeName(string[] args) => GetArgument(args, "--pipe") ?? "";
+
+    private static string? GetArgument(string[] args, string name)
     {
         for (var i = 0; i < args.Length - 1; i++)
         {
-            if (string.Equals(args[i], "--pipe", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
                 return args[i + 1];
         }
 
-        return "";
+        return null;
     }
 
     private static bool IsValidPipeName(string pipeName)
@@ -59,8 +73,8 @@ internal static class Program
                 "Scriblucent", "AiCache", "models"));
             var assetsRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "Assets", "Models"));
 
-            return full.StartsWith(cacheRoot, StringComparison.OrdinalIgnoreCase)
-                || full.StartsWith(assetsRoot, StringComparison.OrdinalIgnoreCase);
+            return IsWithinRoot(full, cacheRoot)
+                || IsWithinRoot(full, assetsRoot);
         }
         catch
         {
@@ -68,12 +82,20 @@ internal static class Program
         }
     }
 
-    private static async Task RunPipeServerAsync(string pipeName)
+    private static bool IsWithinRoot(string path, string root)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        return !Path.IsPathRooted(relative)
+               && !string.Equals(relative, "..", StringComparison.Ordinal)
+               && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
+    }
+
+    private static async Task RunPipeServerAsync(string pipeName, bool useVulkan)
     {
         if (!IsValidPipeName(pipeName))
             throw new ArgumentException($"Invalid pipe name '{pipeName}'.", nameof(pipeName));
 
-        using var lifecycle = new ModelLifecycle();
+        using var lifecycle = new ModelLifecycle(useVulkan);
         using var tokenCounter = new TokenCounterEngine();
 
         while (true)
@@ -94,16 +116,20 @@ internal static class Program
                 break;
             }
 
-            var keepRunning = await HandleClientAsync(server, lifecycle, tokenCounter);
+            var keepRunning = await HandleClientAsync(
+                server,
+                lifecycle,
+                tokenCounter);
             if (!keepRunning)
                 break;
         }
     }
 
-    /// <returns>true to keep the process alive and wait for a new connection (idle-unload via
-    /// WorkerStopRequest, or the connection simply ended); false to let the process exit
-    /// (WorkerShutdownRequest).</returns>
-    private static async Task<bool> HandleClientAsync(System.IO.Pipes.NamedPipeServerStream pipe, ModelLifecycle lifecycle, TokenCounterEngine tokenCounter)
+    /// <returns>true to keep the process alive and wait for a new connection.</returns>
+    private static async Task<bool> HandleClientAsync(
+        System.IO.Pipes.NamedPipeServerStream pipe,
+        ModelLifecycle lifecycle,
+        TokenCounterEngine tokenCounter)
     {
         using var cts = new CancellationTokenSource();
         var reader = new WorkerLineReader(pipe);
@@ -119,7 +145,12 @@ internal static class Program
                 switch (request)
                 {
                     case WorkerStartRequest start:
-                        await HandleStartAsync(pipe, lifecycle, tokenCounter, start, cts.Token);
+                        await HandleStartAsync(
+                            pipe,
+                            lifecycle,
+                            tokenCounter,
+                            start,
+                            cts.Token);
                         break;
 
                     case WorkerGenerateRequest generate:
@@ -129,10 +160,6 @@ internal static class Program
                     case WorkerStopRequest:
                         lifecycle.UnloadModel();
                         return true;
-
-                    case WorkerShutdownRequest:
-                        lifecycle.UnloadModel();
-                        return false;
 
                     case WorkerTokenizeRequest tokenize:
                         await HandleTokenizeAsync(pipe, tokenCounter, tokenize, cts.Token);
@@ -158,9 +185,8 @@ internal static class Program
         finally
         {
             // A throwing cleanup here must never take the whole process down with it - this
-            // method's contract (see the doc comment above it) is that only an explicit
-            // WorkerShutdownRequest gets to end the process; every other exit path, including a
-            // broken connection or a cancelled-mid-generation model, keeps it alive for the next
+            // method's contract (see the doc comment above it) keeps the worker alive after a
+            // broken connection or a cancelled-mid-generation model so it can accept the next
             // reconnect. An unhandled exception from a `finally` block propagates straight out of
             // this method (bypassing the catch clauses above, which have already run) and up
             // through RunPipeServerAsync's uncaught `await HandleClientAsync(...)` into Main's
@@ -208,14 +234,27 @@ internal static class Program
             return;
         }
 
-        await lifecycle.LoadModelAsync(start.ModelPath, start.ContextSize, ct);
+        try
+        {
+            await lifecycle.LoadModelAsync(start.ModelPath, start.ContextSize, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            lifecycle.UnloadModel();
+            await WorkerWire.WriteResponseAsync(pipe, new WorkerErrorResponse
+            {
+                Message = $"Could not allocate a {start.ContextSize}-token model context: {ex.Message}"
+            }, ct);
+            return;
+        }
 
         if (lifecycle.Weights is not null)
             tokenCounter.SetWeights(lifecycle.Weights);
 
         await WorkerWire.WriteResponseAsync(pipe, new WorkerStartedResponse
         {
-            ModelKey = Path.GetFileNameWithoutExtension(start.ModelPath)
+            Backend = lifecycle.Backend,
+            ContextSize = lifecycle.CurrentContextSize
         }, ct);
     }
 
@@ -251,6 +290,26 @@ internal static class Program
         using var disconnectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var watcherCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var watcher = WatchForDisconnectAsync(pipe, watcherCts.Token, disconnectCts);
+        var pendingTokens = new StringBuilder();
+        var pendingTokenCount = 0;
+        var lastTokenFlush = Stopwatch.StartNew();
+
+        async Task FlushTokensAsync(int generatedChars)
+        {
+            if (pendingTokens.Length == 0)
+                return;
+
+            var text = pendingTokens.ToString();
+            pendingTokens.Clear();
+            pendingTokenCount = 0;
+            lastTokenFlush.Restart();
+            await WorkerWire.WriteResponseAsync(pipe, new WorkerTokenResponse
+            {
+                RequestId = generate.RequestId,
+                Text = text,
+                GeneratedChars = generatedChars
+            }, disconnectCts.Token);
+        }
 
         try
         {
@@ -266,15 +325,14 @@ internal static class Program
                 generate.GrammarRoot,
                 onToken: async (token, chars) =>
                 {
-                    await WorkerWire.WriteResponseAsync(pipe, new WorkerTokenResponse
-                    {
-                        RequestId = generate.RequestId,
-                        Text = token,
-                        GeneratedChars = chars
-                    }, ct);
+                    pendingTokens.Append(token);
+                    pendingTokenCount++;
+                    if (pendingTokenCount >= 8 || lastTokenFlush.Elapsed >= TimeSpan.FromMilliseconds(100))
+                        await FlushTokensAsync(chars);
                 },
                 disconnectCts.Token);
 
+            await FlushTokensAsync(generatedChars);
             await WorkerWire.WriteResponseAsync(pipe, new WorkerGenerateCompleteResponse
             {
                 RequestId = generate.RequestId,

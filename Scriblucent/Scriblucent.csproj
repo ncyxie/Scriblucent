@@ -9,16 +9,20 @@
     <ApplicationIcon>logo.ico</ApplicationIcon>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="logo.ico" />
     <Resource Include="Assets\brand-logo-light.svg" />
     <Resource Include="Assets\brand-logo-dark.svg" />
-    <Resource Include="Assets\Fonts\**\*.*" Exclude="Assets\Fonts\README.md" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Panels\VirtualizingWrapPanel\LICENSE" Link="LICENSE-VirtualizingWrapPanel" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Assets\Models\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -33,8 +37,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LLamaSharp" Version="0.27.0" />
-    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
     <PackageReference Include="MahApps.Metro.IconPacks.Lucide" Version="6.2.1" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="SharpVectors.Wpf" Version="1.8.5" />
@@ -60,27 +62,64 @@
     fails to launch at all. Copy its full output directory ourselves instead.
   -->
   <PropertyGroup>
-    <AiWorkerOutputPath>..\Scriblucent.AI.Worker\bin\$(Configuration)\$(TargetFramework)\</AiWorkerOutputPath>
+    <AiWorkerBaseOutputPath>..\Scriblucent.AI.Worker\bin\$(Configuration)\$(TargetFramework)\</AiWorkerBaseOutputPath>
+    <AiWorkerOutputPath Condition="'$(RuntimeIdentifier)' == ''">$(AiWorkerBaseOutputPath)</AiWorkerOutputPath>
+    <AiWorkerOutputPath Condition="'$(RuntimeIdentifier)' != ''">$(AiWorkerBaseOutputPath)$(RuntimeIdentifier)\</AiWorkerOutputPath>
+    <AiWorkerOutputExcludes>$(AiWorkerOutputPath)publish\**\*</AiWorkerOutputExcludes>
+    <AiWorkerOutputExcludes Condition="'$(RuntimeIdentifier)' == 'win-arm64'">$(AiWorkerOutputExcludes);$(AiWorkerOutputPath)runtimes\win-x64\**\*</AiWorkerOutputExcludes>
   </PropertyGroup>
 
   <Target Name="CopyAiWorkerBuildOutput" AfterTargets="Build" DependsOnTargets="ResolveProjectReferences">
     <ItemGroup>
       <!-- Use **\* not **\*.* to include extensionless native assets -->
-      <AiWorkerBuildOutputFiles Include="$(AiWorkerOutputPath)**\*" />
+      <AiWorkerBuildOutputFiles Include="$(AiWorkerOutputPath)**\*"
+                                Exclude="$(AiWorkerOutputExcludes)" />
     </ItemGroup>
     <Copy SourceFiles="@(AiWorkerBuildOutputFiles)"
-          DestinationFolder="$(OutDir)%(RecursiveDir)"
+          DestinationFolder="$(TargetDir)AIWorker\%(RecursiveDir)"
           SkipUnchangedFiles="true"
           UseHardlinksIfPossible="false" />
   </Target>
 
   <Target Name="CopyAiWorkerPublishOutput" AfterTargets="Publish" DependsOnTargets="CopyAiWorkerBuildOutput">
     <ItemGroup>
-      <AiWorkerPublishOutputFiles Include="$(AiWorkerOutputPath)**\*" />
+      <AiWorkerPublishOutputFiles Include="$(AiWorkerOutputPath)**\*"
+                                  Exclude="$(AiWorkerOutputExcludes)" />
     </ItemGroup>
     <Copy SourceFiles="@(AiWorkerPublishOutputFiles)"
-          DestinationFolder="$(PublishDir)%(RecursiveDir)"
+          DestinationFolder="$(PublishDir)AIWorker\%(RecursiveDir)"
           SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="ValidateAiWorkerPublish" AfterTargets="CopyAiWorkerPublishOutput">
+    <Error Condition="!Exists('$(PublishDir)AIWorker\Scriblucent.AI.Worker.exe')"
+           Text="Published AI worker executable is missing." />
+    <Error Condition="!Exists('$(PublishDir)AIWorker\Scriblucent.AI.Worker.dll')"
+           Text="Published AI worker managed assembly is missing." />
+    <Error Condition="!Exists('$(PublishDir)AIWorker\Scriblucent.AI.Worker.deps.json')"
+           Text="Published AI worker dependency manifest is missing." />
+    <Error Condition="!Exists('$(PublishDir)AIWorker\Scriblucent.AI.Worker.runtimeconfig.json')"
+           Text="Published AI worker runtime configuration is missing." />
+    <Error Condition="'$(RuntimeIdentifier)' == 'win-x64' and !Exists('$(PublishDir)AIWorker\runtimes\win-x64\native\vulkan\llama.dll')"
+           Text="Published x64 AI worker Vulkan backend is missing." />
+    <Error Condition="'$(RuntimeIdentifier)' == 'win-arm64' and !Exists('$(PublishDir)AIWorker\runtimes\win-arm64\native\llama.dll')"
+           Text="Published ARM64 AI worker CPU backend is missing." />
+    <Error Condition="'$(RuntimeIdentifier)' == 'win-arm64' and Exists('$(PublishDir)AIWorker\runtimes\win-x64')"
+           Text="Published ARM64 AI worker incorrectly contains x64 native files." />
+    <Error Condition="'$(RuntimeIdentifier)' == 'win-arm64' and Exists('$(PublishDir)AIWorker\runtimes\win-arm64\native\vulkan')"
+           Text="Published ARM64 AI worker incorrectly contains a Vulkan backend." />
+  </Target>
+
+  <Target Name="PruneReleasePublishAssets"
+          AfterTargets="CopyAiWorkerPublishOutput"
+          Condition="'$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <ReleaseSymbols Include="$(PublishDir)**\*.pdb" />
+      <RootWorkerDuplicates Include="$(PublishDir)Scriblucent.AI.Worker.*" />
+      <RootLlamaDuplicates Include="$(PublishDir)LLamaSharp*;$(PublishDir)runtimes\**\*" />
+    </ItemGroup>
+    <Delete Files="@(ReleaseSymbols);@(RootWorkerDuplicates);@(RootLlamaDuplicates)" />
+    <RemoveDir Directories="$(PublishDir)runtimes" Condition="Exists('$(PublishDir)runtimes')" />
   </Target>
 
   <!-- Clean stale worker files that were removed from worker output but remain in OutDir/PublishDir due to SkipUnchangedFiles -->
@@ -91,6 +130,8 @@
     </ItemGroup>
     <Delete Files="@(AiWorkerStaleFiles)" Condition="Exists('%(Identity)')" />
     <Delete Files="@(AiWorkerStalePublishFiles)" Condition="Exists('%(Identity)')" />
+    <RemoveDir Directories="$(OutDir)AIWorker" Condition="Exists('$(OutDir)AIWorker')" />
+    <RemoveDir Directories="$(PublishDir)AIWorker" Condition="Exists('$(PublishDir)AIWorker')" />
   </Target>
 
 </Project>

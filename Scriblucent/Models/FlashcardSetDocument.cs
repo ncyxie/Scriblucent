@@ -12,6 +12,8 @@ public sealed class FlashcardSetDocument
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastModified { get; set; } = DateTime.Now;
     public string AiModelDisplayName { get; set; } = string.Empty;
+    /// <summary>When true, this set's editor no longer shows the AI review warning.</summary>
+    public bool AiReviewNoticeDismissed { get; set; }
     public Guid? SourceNoteId { get; set; }
     public Guid? GroupId { get; set; }
     public List<NoteScheduleEntry> Schedules { get; set; } = new();

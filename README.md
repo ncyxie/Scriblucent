@@ -18,7 +18,7 @@
 
 ## Why Scriblucent?
 
-Most learning tools either require an internet connection or charge extra for AI features. Scriblucent runs **completely offline** after downloading the model once. All your data stays on your device. You get everything you need — from note-taking to AI-generated quizzes — in one clean, privacy-focused application.
+Most learning tools either require an internet connection or charge extra for AI features. Scriblucent runs offline after the model is downloaded. All your data stays on your device. You get everything you need — from note-taking to AI-generated quizzes — in one clean, privacy-focused application.
 
 ## Screenshots
 
@@ -36,12 +36,14 @@ Most learning tools either require an internet connection or charge extra for AI
 
 ## Supported AI Models
 
-Scriblucent supports three local models you can choose from in Settings:
-- **Qwen3.5-0.8B** — Fastest
-- **Qwen3.5-2B** — Balanced
-- **Qwen3.5-4B** — Most capable
+Choose a local model in Settings:
 
-The model is downloaded only the first time you use an AI feature — not on application launch.
+- **Qwen3.5-0.8B** — Basic
+- **Qwen3.5-2B** — Compact
+- **Qwen3.5-4B** — Recommended
+- **Qwen3.5-9B** — Advanced
+
+The selected model is downloaded the first time you use an AI feature, not on application launch.
 
 ## Architecture
 
@@ -92,7 +94,9 @@ For complete documentation, visit the **[Wiki](../../wiki)**.
 
 ## Testing
 
-The application was tested using manual functional testing. All major scenarios passed successfully. Detailed test cases and results are available in the [Wiki → Testing](../../wiki#4-testing-and-results).
+```bash
+dotnet test
+```
 
 ## Team
 

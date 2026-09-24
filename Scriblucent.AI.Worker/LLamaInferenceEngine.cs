@@ -7,10 +7,16 @@ namespace Scriblucent.AI.Worker;
 
 internal sealed class LLamaInferenceEngine : IDisposable
 {
+    private readonly bool _useGpu;
     private LLamaWeights? _model;
     private ModelParams? _parameters;
     private string _loadedModelPath = "";
     private bool _disposed;
+
+    public LLamaInferenceEngine(bool useGpu)
+    {
+        _useGpu = useGpu;
+    }
 
     public bool IsLoaded => _model is not null && !_disposed;
 
@@ -28,8 +34,9 @@ internal sealed class LLamaInferenceEngine : IDisposable
         _parameters = new ModelParams(modelPath)
         {
             ContextSize = (uint)contextSize,
-            GpuLayerCount = 0,
-            Threads = Math.Max(1, Environment.ProcessorCount - 1)
+            GpuLayerCount = _useGpu ? -1 : 0,
+            Threads = Math.Max(1, Environment.ProcessorCount / 2),
+            BatchThreads = Math.Max(1, Environment.ProcessorCount / 2)
         };
 
         _model = LLamaWeights.LoadFromFile(_parameters);
@@ -81,14 +88,18 @@ internal sealed class LLamaInferenceEngine : IDisposable
             SamplingPipeline = pipeline
         };
 
-        // Qwen is chat/instruct-tuned - StatelessExecutor sends the prompt as raw continuation
-        // text unless explicitly told to wrap it in the model's chat template.
+        // Qwen3.5's template is hybrid: an undefined/default template argument can open a
+        // reasoning block. llama.cpp does not apply the response grammar while that block is
+        // active, so structured calls can spend their budget on unconstrained reasoning and
+        // never produce a parseable final answer. LLamaSharp's StatelessExecutor does not expose
+        // chat-template kwargs; render Qwen's documented non-thinking branch explicitly instead.
+        var modelPrompt = ApplyQwenTemplate(prompt);
         var executor = new StatelessExecutor(_model, _parameters)
         {
-            ApplyTemplate = true
+            ApplyTemplate = false
         };
 
-        await foreach (var token in executor.InferAsync(prompt, inferenceParams, ct))
+        await foreach (var token in executor.InferAsync(modelPrompt, inferenceParams, ct))
         {
             output.Append(token);
             generatedChars += token.Length;
@@ -99,6 +110,11 @@ internal sealed class LLamaInferenceEngine : IDisposable
 
         sw.Stop();
         return (output.ToString(), generatedChars, sw.ElapsedMilliseconds);
+    }
+
+    internal static string ApplyQwenTemplate(string prompt)
+    {
+        return $"<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
     }
 
     public void Unload()

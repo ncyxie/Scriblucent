@@ -107,6 +107,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private AudioClipPlayer? _audioPlayer;
     private FlashcardPreviewItem? _activeAudioFlashcard;
     private bool _activeAudioIsQuestion;
+    private bool _aiReviewNoticeDismissed;
 
     public sealed class FlashcardNoteLinkOption
     {
@@ -132,7 +133,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         Action<Guid>? openNoteAction = null,
         int flipDelayMilliseconds = 0,
         bool studyDueCardsOnly = true,
-        bool? isTagsPanelOpen = null)
+        bool? isTagsPanelOpen = null,
+        bool aiReviewNoticeDismissed = false)
     {
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
@@ -186,7 +188,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             : string.Join(", ", tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
         SetTagsPanelOpen(isTagsPanelOpen ?? false, animate: false);
         _lastSavedTagsPanelOpen = _isTagsPanelOpen;
+        _aiReviewNoticeDismissed = aiReviewNoticeDismissed;
         ConfigureAiGeneratedIndicator(modelDisplayName);
+        AiFeatureGate.Changed += FlashcardsPreviewWindow_AiFeatureGateChanged;
+        Closed += (_, _) => AiFeatureGate.Changed -= FlashcardsPreviewWindow_AiFeatureGateChanged;
         OnPropertyChanged(nameof(NoteLinkOptions));
         OnPropertyChanged(nameof(LinkedNoteButtonText));
         OnPropertyChanged(nameof(LinkedNoteButtonToolTip));
@@ -268,7 +273,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             Schedules = existingDocument?.Schedules?.ToList() ?? new List<NoteScheduleEntry>(),
             IsPinned = existingDocument?.IsPinned ?? false,
             FlipDelayMilliseconds = GetFlipAnimationDurationMs(),
-            StudyDueCardsOnly = _dueOnly
+            StudyDueCardsOnly = _dueOnly,
+            AiReviewNoticeDismissed = _aiReviewNoticeDismissed || existingDocument?.AiReviewNoticeDismissed == true
         };
     }
 
@@ -520,30 +526,52 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         _modelDisplayName = modelDisplayName?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(modelDisplayName))
+        if (string.IsNullOrWhiteSpace(modelDisplayName) || !AiFeatureGate.IsEnabled)
         {
             AiGeneratedInfoBadge.ToolTip = null;
             if (_isInitializing)
             {
                 AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
+                AiReviewNotice.Visibility = Visibility.Collapsed;
                 return;
             }
 
             UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
+            UiMotion.AnimateInlineReveal(AiReviewNotice, false);
             return;
         }
 
-        AiGeneratedInfoBadge.ToolTip = string.Format(
-            LocalizationService.GetString("FlashcardsGeneratedWithModel"),
-            modelDisplayName.Trim());
+        AiGeneratedInfoBadge.ToolTip = LocalizationService.FormatAiGeneratedTooltip(
+            "FlashcardsGeneratedWithModel",
+            modelDisplayName.Trim(),
+            includeReviewDisclaimer: !_aiReviewNoticeDismissed);
 
         if (_isInitializing)
         {
             AiGeneratedInfoBadge.Visibility = Visibility.Visible;
+            AiReviewNotice.Visibility = _aiReviewNoticeDismissed ? Visibility.Collapsed : Visibility.Visible;
             return;
         }
 
         UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
+        UiMotion.AnimateInlineReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
+    }
+
+    public event EventHandler? AiReviewNoticeDismissedPersistRequested;
+
+    private void AiReviewNotice_Dismissed(object sender, RoutedEventArgs e)
+    {
+        if (_aiReviewNoticeDismissed)
+            return;
+
+        _aiReviewNoticeDismissed = true;
+        ConfigureAiGeneratedIndicator(_modelDisplayName);
+        AiReviewNoticeDismissedPersistRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void FlashcardsPreviewWindow_AiFeatureGateChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() => ConfigureAiGeneratedIndicator(_modelDisplayName));
     }
 
     private static IReadOnlyList<string> ParseTags(string? rawTags)

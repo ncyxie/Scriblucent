@@ -6,18 +6,23 @@ internal sealed class AiModelManifest
 {
     public static readonly AiModelManifest Instance = new();
 
-    private const string DefaultModelKey = "Qwen3.5-0.8B";
+    internal const string BasicModelKey = "Qwen3.5-0.8B";
+    internal const string CompactModelKey = "Qwen3.5-2B";
+    internal const string RecommendedModelKey = "Qwen3.5-4B";
+    internal const string AdvancedModelKey = "Qwen3.5-9B";
+    private const string DefaultModelKey = BasicModelKey;
 
     private readonly AiModelInfo[] _models =
     [
         new AiModelInfo(
-            Key: "Qwen3.5-0.8B",
+            Key: BasicModelKey,
             FileName: "Qwen3.5-0.8B-Q4_K_M.gguf",
-            DisplayName: "Qwen3.5-0.8B",
+            DisplayName: BasicModelKey,
             DescriptionResourceKey: "FlashcardModel08BDescription",
-            DefaultDescription: "faster, light",
+            DefaultDescription: "Basic",
             DownloadStatusKey: "ConvertToFlashcardsStatusDownloadingModel08B",
             MinimumBytes: 500L * 1024L * 1024L,
+            MinimumSupportedMemoryBytes: 0,
             MinimumRecommendedMemoryBytes: 0,
             ExpectedSha256: "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
             [
@@ -26,34 +31,55 @@ internal sealed class AiModelManifest
                 "https://hf-mirror.com/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf?download=true"
             ]),
         new AiModelInfo(
-            Key: "Qwen3.5-2B",
-            FileName: "Qwen3.5-2B-Q4_K_M.gguf",
-            DisplayName: "Qwen3.5-2B",
+            Key: CompactModelKey,
+            FileName: "Qwen3.5-2B-Q5_K_M.gguf",
+            DisplayName: CompactModelKey,
             DescriptionResourceKey: "FlashcardModel2BDescription",
-            DefaultDescription: "balanced, better quality",
+            DefaultDescription: "Compact",
             DownloadStatusKey: "ConvertToFlashcardsStatusDownloadingModel2B",
-            MinimumBytes: 1200L * 1024L * 1024L,
-            MinimumRecommendedMemoryBytes: 6L * 1024L * 1024L * 1024L,
-            ExpectedSha256: "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+            // Hugging Face LFS size for Qwen3.5-2B-Q5_K_M.gguf.
+            MinimumBytes: 1435238656,
+            MinimumSupportedMemoryBytes: 0,
+            MinimumRecommendedMemoryBytes: 4L * 1024L * 1024L * 1024L,
+            ExpectedSha256: "1885b3a9195f8cc09da9a7a7a75afdc1e8d5cbf9fc4a499c3961dddea37098ac",
             [
-                "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf",
-                "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf?download=true",
-                "https://hf-mirror.com/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf?download=true"
+                "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q5_K_M.gguf",
+                "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q5_K_M.gguf?download=true",
+                "https://hf-mirror.com/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q5_K_M.gguf?download=true"
             ]),
         new AiModelInfo(
-            Key: "Qwen3.5-4B",
+            Key: RecommendedModelKey,
             FileName: "Qwen3.5-4B-Q4_K_M.gguf",
-            DisplayName: "Qwen3.5-4B",
+            DisplayName: RecommendedModelKey,
             DescriptionResourceKey: "FlashcardModel4BDescription",
-            DefaultDescription: "more quality, slower",
+            DefaultDescription: "Recommended",
             DownloadStatusKey: "ConvertToFlashcardsStatusDownloadingModel4B",
-            MinimumBytes: 2600L * 1024L * 1024L,
-            MinimumRecommendedMemoryBytes: 12L * 1024L * 1024L * 1024L,
+            // Hugging Face LFS size for Qwen3.5-4B-Q4_K_M.gguf.
+            MinimumBytes: 2740937888,
+            MinimumSupportedMemoryBytes: 0,
+            MinimumRecommendedMemoryBytes: 8L * 1024L * 1024L * 1024L,
             ExpectedSha256: "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
             [
                 "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
                 "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true",
                 "https://hf-mirror.com/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true"
+            ]),
+        new AiModelInfo(
+            Key: AdvancedModelKey,
+            FileName: "Qwen3.5-9B-Q4_K_M.gguf",
+            DisplayName: AdvancedModelKey,
+            DescriptionResourceKey: "FlashcardModel9BDescription",
+            DefaultDescription: "Advanced",
+            DownloadStatusKey: "ConvertToFlashcardsStatusDownloadingModel9B",
+            // Hugging Face LFS size for Qwen3.5-9B-Q4_K_M.gguf.
+            MinimumBytes: 5680522464,
+            MinimumSupportedMemoryBytes: 8L * 1024L * 1024L * 1024L,
+            MinimumRecommendedMemoryBytes: 12L * 1024L * 1024L * 1024L,
+            ExpectedSha256: "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+            [
+                "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
+                "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf?download=true",
+                "https://hf-mirror.com/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf?download=true"
             ])
     ];
 
@@ -71,11 +97,16 @@ internal sealed class AiModelManifest
         var source = settings ?? AppSettingsService.Load();
         var enabledKeys = GetEnabledModelKeys(source);
         var selectedKey = source.FlashcardModelKey;
+        var memoryBytes = BundledModelHostService.GetTotalPhysicalMemoryBytesForCurrentMachine();
+        var selectedModel = string.IsNullOrWhiteSpace(selectedKey) ? null : FindByKey(selectedKey);
 
-        if (string.IsNullOrWhiteSpace(selectedKey)
-            || !enabledKeys.Any(key => string.Equals(key, selectedKey, StringComparison.OrdinalIgnoreCase)))
+        if (selectedModel is null
+            || !enabledKeys.Any(key => string.Equals(key, selectedKey, StringComparison.OrdinalIgnoreCase))
+            || !IsModelSupportedWithMemory(selectedModel.Key, memoryBytes))
         {
-            selectedKey = enabledKeys[0];
+            selectedKey = enabledKeys
+                .FirstOrDefault(key => IsModelSupportedWithMemory(key, memoryBytes))
+                ?? Default.Key;
         }
 
         return FindByKey(selectedKey) ?? Default;
@@ -99,9 +130,32 @@ internal sealed class AiModelManifest
             .ToList();
     }
 
+    public void MergeMissingCatalogTools(AppSettings settings)
+    {
+        settings.AiTools ??= new List<AiToolSettingsItem>();
+        var existing = new HashSet<string>(
+            settings.AiTools
+                .Where(item => !string.IsNullOrWhiteSpace(item.Key))
+                .Select(item => item.Key),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var model in _models)
+        {
+            if (existing.Contains(model.Key))
+                continue;
+
+            settings.AiTools.Add(new AiToolSettingsItem
+            {
+                Key = model.Key,
+                IsEnabled = true
+            });
+        }
+    }
+
     public IReadOnlyList<string> GetEnabledModelKeys(AppSettings? settings = null)
     {
         var source = settings ?? AppSettingsService.Load();
+        MergeMissingCatalogTools(source);
         var supportedByKey = _models
             .ToDictionary(model => model.Key, StringComparer.OrdinalIgnoreCase);
 
@@ -127,11 +181,11 @@ internal sealed class AiModelManifest
 
     public AiModelInfo GetMachineRecommendedModel(long totalPhysicalMemoryBytes)
     {
-        if (totalPhysicalMemoryBytes >= 12L * 1024L * 1024L * 1024L)
-            return FindByKey("Qwen3.5-4B") ?? Default;
+        if (totalPhysicalMemoryBytes >= 8L * 1024L * 1024L * 1024L)
+            return FindByKey(RecommendedModelKey) ?? Default;
 
-        if (totalPhysicalMemoryBytes >= 6L * 1024L * 1024L * 1024L)
-            return FindByKey("Qwen3.5-2B") ?? Default;
+        if (totalPhysicalMemoryBytes >= 4L * 1024L * 1024L * 1024L)
+            return FindByKey(CompactModelKey) ?? Default;
 
         return Default;
     }
@@ -164,5 +218,16 @@ internal sealed class AiModelManifest
     public long GetModelRequiredMemoryBytes(string key)
     {
         return FindByKey(key)?.MinimumRecommendedMemoryBytes ?? 0;
+    }
+
+    public long GetModelMinimumSupportedMemoryBytes(string key)
+    {
+        return FindByKey(key)?.MinimumSupportedMemoryBytes ?? 0;
+    }
+
+    public bool IsModelSupportedWithMemory(string key, long totalPhysicalMemoryBytes)
+    {
+        var minimumBytes = GetModelMinimumSupportedMemoryBytes(key);
+        return totalPhysicalMemoryBytes <= 0 || totalPhysicalMemoryBytes >= minimumBytes;
     }
 }

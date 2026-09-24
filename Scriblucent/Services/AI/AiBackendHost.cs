@@ -1,13 +1,8 @@
 namespace Scriblucent.Services.AI;
 
 /// <summary>
-/// App-scoped singleton for the AI worker. Previous per-tab <see cref="LLamaSharpWorkerAdapter"/>
-/// meant N tabs = N worker processes and N × model memory (each ~0.5–2.6GB). The global
-/// <c>IsAiGenerationInProgress</c> only gated the Convert button, not process count - two tabs
-/// could race to <c>StartWorkerAsync</c> before the flag propagated and each load the model.
-/// This host ensures one process, one model load, serialized via the adapter's own
-/// <c>SemaphoreSlim</c> (so concurrent tab requests queue rather than spawn).
-/// Disposal is app-lifetime only; per-tab <c>DisposeHostedEditor</c> no longer tears it down.
+/// App-scoped AI worker adapter. Requests from editor tabs are serialized by the adapter;
+/// the worker is disposed when the app exits.
 /// </summary>
 internal static class AiBackendHost
 {

@@ -10,7 +10,6 @@ namespace Scriblucent.AI.Protocol;
 [JsonDerivedType(typeof(WorkerStartRequest), "start")]
 [JsonDerivedType(typeof(WorkerGenerateRequest), "generate")]
 [JsonDerivedType(typeof(WorkerStopRequest), "stop")]
-[JsonDerivedType(typeof(WorkerShutdownRequest), "shutdown")]
 [JsonDerivedType(typeof(WorkerTokenizeRequest), "tokenize")]
 public abstract record WorkerRequest;
 
@@ -54,16 +53,12 @@ public sealed record WorkerGenerateRequest : WorkerRequest
 
     [JsonPropertyName("grammarRoot")]
     public string? GrammarRoot { get; init; }
+
 }
 
 /// Unloads the model but leaves the worker process running, waiting for a new connection on the
 /// same pipe name - used for idle-unload, where the whole point is to avoid a full process respawn.
 public sealed record WorkerStopRequest : WorkerRequest;
-
-/// Unloads the model and makes the worker process actually exit. Used for real teardown
-/// (LLamaSharpWorkerAdapter.Dispose()), where WorkerStopRequest would leave the process orphaned
-/// waiting for a connection that will never come.
-public sealed record WorkerShutdownRequest : WorkerRequest;
 
 public sealed record WorkerTokenizeRequest : WorkerRequest
 {
@@ -83,8 +78,11 @@ public abstract record WorkerResponse;
 
 public sealed record WorkerStartedResponse : WorkerResponse
 {
-    [JsonPropertyName("modelKey")]
-    public string ModelKey { get; init; } = "";
+    [JsonPropertyName("backend")]
+    public string Backend { get; init; } = "cpu";
+
+    [JsonPropertyName("contextSize")]
+    public int ContextSize { get; init; } = 4096;
 }
 
 public sealed record WorkerTokenResponse : WorkerResponse

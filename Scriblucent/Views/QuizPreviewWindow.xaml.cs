@@ -75,6 +75,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private bool _isTagsPanelOpen;
     private bool _lastSavedTagsPanelOpen;
     private int _tagsPanelAnimationVersion;
+    private bool _aiReviewNoticeDismissed;
 
     public QuizPreviewWindow(
         QuizDocument document,
@@ -136,8 +137,11 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             : string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
         SetTagsPanelOpen(document.IsEditorTagsPanelOpen ?? false, animate: false);
         _lastSavedTagsPanelOpen = _isTagsPanelOpen;
+        _aiReviewNoticeDismissed = document.AiReviewNoticeDismissed;
         QuestionsItemsControl.ItemsSource = _questions;
         ConfigureAiGeneratedIndicator(modelDisplayName ?? document.AiModelDisplayName);
+        AiFeatureGate.Changed += QuizPreviewWindow_AiFeatureGateChanged;
+        Closed += (_, _) => AiFeatureGate.Changed -= QuizPreviewWindow_AiFeatureGateChanged;
         UpdateModeChrome();
         UpdateSummary();
 
@@ -518,7 +522,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             PartialCreditMultipleChoice = _sourceDocument.PartialCreditMultipleChoice,
             ExamMode = _sourceDocument.ExamMode,
             Attempts = _sourceDocument.Attempts?.ToList() ?? existingDocument?.Attempts?.ToList() ?? new List<QuizAttempt>(),
-            ProgressSession = _sourceDocument.ProgressSession
+            ProgressSession = _sourceDocument.ProgressSession,
+            AiReviewNoticeDismissed = _aiReviewNoticeDismissed || existingDocument?.AiReviewNoticeDismissed == true || _sourceDocument.AiReviewNoticeDismissed
         };
     }
 
@@ -1712,30 +1717,53 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     {
         _modelDisplayName = modelDisplayName?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(_modelDisplayName))
+        if (string.IsNullOrWhiteSpace(_modelDisplayName) || !AiFeatureGate.IsEnabled)
         {
             AiGeneratedInfoBadge.ToolTip = null;
             if (_isInitializing)
             {
                 AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
+                AiReviewNotice.Visibility = Visibility.Collapsed;
                 return;
             }
 
             UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
+            UiMotion.AnimateInlineReveal(AiReviewNotice, false);
             return;
         }
 
-        AiGeneratedInfoBadge.ToolTip = string.Format(
-            LocalizationService.GetString("QuizGeneratedWithModel"),
-            _modelDisplayName);
+        AiGeneratedInfoBadge.ToolTip = LocalizationService.FormatAiGeneratedTooltip(
+            "QuizGeneratedWithModel",
+            _modelDisplayName,
+            includeReviewDisclaimer: !_aiReviewNoticeDismissed);
 
         if (_isInitializing)
         {
             AiGeneratedInfoBadge.Visibility = Visibility.Visible;
+            AiReviewNotice.Visibility = _aiReviewNoticeDismissed ? Visibility.Collapsed : Visibility.Visible;
             return;
         }
 
         UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
+        UiMotion.AnimateInlineReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
+    }
+
+    public event EventHandler? AiReviewNoticeDismissedPersistRequested;
+
+    private void AiReviewNotice_Dismissed(object sender, RoutedEventArgs e)
+    {
+        if (_aiReviewNoticeDismissed)
+            return;
+
+        _aiReviewNoticeDismissed = true;
+        _sourceDocument.AiReviewNoticeDismissed = true;
+        ConfigureAiGeneratedIndicator(_modelDisplayName);
+        AiReviewNoticeDismissedPersistRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void QuizPreviewWindow_AiFeatureGateChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() => ConfigureAiGeneratedIndicator(_modelDisplayName));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

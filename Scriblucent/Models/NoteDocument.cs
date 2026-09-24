@@ -13,6 +13,8 @@ public class NoteDocument
     public bool? IsEditorFontPanelOpen { get; set; }
     public bool? IsEditorTagsPanelOpen { get; set; }
     public bool? IsWordWrapEnabled { get; set; }
+    /// <summary>When true, this note's convert menu no longer shows the AI review warning.</summary>
+    public bool AiReviewNoticeDismissed { get; set; }
     public DateTime LastModified { get; set; } = DateTime.Now;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ScheduledAt { get; set; }

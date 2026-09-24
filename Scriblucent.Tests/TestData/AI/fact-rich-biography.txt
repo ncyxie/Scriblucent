@@ -1,0 +1,11 @@
+Elena Maris was born in 1978 in the coastal city of Bellhaven. Her mother taught mathematics, while her father repaired navigation instruments for fishing vessels. At age twelve, Elena built a simple tide gauge from a glass tube and salvaged clock parts. The device recorded water levels every fifteen minutes and won a regional science prize in 1991.
+
+Maris entered Northbridge University in 1996 and studied environmental engineering. She completed her undergraduate degree in 2000. Her final project compared three methods for removing salt from groundwater. After graduation, she joined the Harbor Research Institute as a laboratory assistant. In 2003, she published her first paper about low-cost ceramic filters.
+
+A severe drought affected Bellhaven between 2004 and 2006. During that period, Maris led a team that installed forty solar-powered purification units in nearby villages. Each unit could process approximately 800 liters of water per day. The project reduced the villages' dependence on trucked water and received the National Engineering Medal in 2007.
+
+In 2009, Maris founded Clear Current, a nonprofit organization focused on community water systems. The organization trained local technicians instead of relying permanently on visiting engineers. By 2015, Clear Current had completed projects in eleven regions and trained more than 300 technicians. Maris stepped down as executive director in 2018 but remained chair of its technical advisory board.
+
+Maris also returned to Northbridge University as a professor in 2012. Her research group developed sensors that detect contamination by measuring changes in electrical conductivity. In 2016, the group released the sensor design under an open hardware license. Schools and small laboratories could assemble one sensor for less than fifty dollars.
+
+The International Water Council appointed Maris to its standards committee in 2019. She helped draft guidelines for maintaining small solar purification systems. The guidelines require monthly filter inspections and annual water-quality testing. In 2022, she received the Bellhaven Civic Award for combining scientific research with local training. Maris continues to teach, advise Clear Current, and study affordable monitoring equipment.

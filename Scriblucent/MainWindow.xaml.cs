@@ -2440,6 +2440,8 @@ namespace Scriblucent
                 Owner = this
             };
 
+            editor.AiReviewNoticeDismissedPersistRequested += (_, _) => PersistAiReviewNoticeDismissal(savedDocument, vm.SaveMindMaps);
+
             saveNow = () =>
             {
                 var updatedDocument = editor.ToDocument(savedDocument);
@@ -2482,9 +2484,16 @@ namespace Scriblucent
                 noteId => OpenNoteById(vm, noteId),
                 document?.FlipDelayMilliseconds ?? 0,
                 document?.StudyDueCardsOnly ?? true,
-                isTagsPanelOpen: document?.IsEditorTagsPanelOpen)
+                isTagsPanelOpen: document?.IsEditorTagsPanelOpen,
+                aiReviewNoticeDismissed: document?.AiReviewNoticeDismissed ?? false)
             {
                 Owner = this
+            };
+
+            editor.AiReviewNoticeDismissedPersistRequested += (_, _) =>
+            {
+                PersistAiReviewNoticeDismissal(savedDocument, vm.SaveFlashcardSets);
+                set?.NotifyChanged();
             };
 
             saveNow = () =>
@@ -2546,6 +2555,12 @@ namespace Scriblucent
                 requestImmediateSave: () => saveNow())
             {
                 Owner = this
+            };
+
+            editor.AiReviewNoticeDismissedPersistRequested += (_, _) =>
+            {
+                PersistAiReviewNoticeDismissal(savedDocument, vm.SaveQuizzes);
+                quiz?.NotifyChanged();
             };
 
             // Finishing (or abandoning mid-way) a quiz attempt calls this directly instead of
@@ -2830,9 +2845,16 @@ namespace Scriblucent
                 mindMapVm.Document.UseManualPositions,
                 mindMapVm.Document.SourceNoteId,
                 noteId => OpenNoteById(vm, noteId),
-                isTagsPanelOpen: mindMapVm.Document.IsEditorTagsPanelOpen)
+                isTagsPanelOpen: mindMapVm.Document.IsEditorTagsPanelOpen,
+                aiReviewNoticeDismissed: mindMapVm.Document.AiReviewNoticeDismissed)
             {
                 Owner = this
+            };
+
+            editor.AiReviewNoticeDismissedPersistRequested += (_, _) =>
+            {
+                PersistAiReviewNoticeDismissal(savedDocument, vm.SaveMindMaps);
+                mindMapVm.NotifyChanged();
             };
 
             saveNow = () =>
@@ -2853,6 +2875,33 @@ namespace Scriblucent
             {
                 StopEditorAutoSave(autoSaveTimer);
             }
+        }
+
+        private static void PersistAiReviewNoticeDismissal(FlashcardSetDocument? document, Action save)
+        {
+            if (document is null)
+                return;
+
+            document.AiReviewNoticeDismissed = true;
+            save();
+        }
+
+        private static void PersistAiReviewNoticeDismissal(MindMapDocument? document, Action save)
+        {
+            if (document is null)
+                return;
+
+            document.AiReviewNoticeDismissed = true;
+            save();
+        }
+
+        private static void PersistAiReviewNoticeDismissal(QuizDocument? document, Action save)
+        {
+            if (document is null)
+                return;
+
+            document.AiReviewNoticeDismissed = true;
+            save();
         }
 
         private DispatcherTimer? StartEditorAutoSave(Func<bool> hasChanges, Action saveAction)
@@ -3093,9 +3142,9 @@ namespace Scriblucent
                 (InfoText("InfoLabelUnknownCards"), cards.Count(card => card.IsUnknown).ToString(CultureInfo.CurrentCulture)),
                 (InfoText("InfoLabelCategories"), cards.Select(card => card.Category?.Trim()).Where(category => !string.IsNullOrWhiteSpace(category)).Distinct(StringComparer.CurrentCultureIgnoreCase).Count().ToString(CultureInfo.CurrentCulture)),
                 (InfoText("InfoLabelSourceNote"), GetSourceNoteInfoTitle(set.Document.SourceNoteId)),
-                (InfoText("InfoLabelGeneratedWith"), FormatOptional(set.Document.AiModelDisplayName)),
                 (InfoText("InfoLabelId"), set.Document.Id.ToString())
             };
+            MaybeAddGeneratedWithInfo(rows, set.Document.AiModelDisplayName);
 
             ShowItemInfoDialog(set.Title, rows.Take(8), rows.Skip(8));
         }
@@ -3117,9 +3166,9 @@ namespace Scriblucent
                 (InfoText("InfoLabelLayout"), FormatMindMapLayout(mindMap.Document.LayoutMode)),
                 (InfoText("InfoLabelManualPositioning"), FormatInfoBool(mindMap.Document.UseManualPositions)),
                 (InfoText("InfoLabelSourceNote"), GetSourceNoteInfoTitle(mindMap.Document.SourceNoteId)),
-                (InfoText("InfoLabelGeneratedWith"), FormatOptional(mindMap.Document.AiModelDisplayName)),
                 (InfoText("InfoLabelId"), mindMap.Document.Id.ToString())
             };
+            MaybeAddGeneratedWithInfo(rows, mindMap.Document.AiModelDisplayName);
 
             ShowItemInfoDialog(mindMap.Title, rows.Take(8), rows.Skip(8));
         }
@@ -3143,9 +3192,9 @@ namespace Scriblucent
                 (InfoText("InfoLabelAttempts"), attempts.Count.ToString(CultureInfo.CurrentCulture)),
                 (InfoText("InfoLabelBestScore"), FormatBestQuizScore(attempts)),
                 (InfoText("InfoLabelSourceNote"), GetSourceNoteInfoTitle(quiz.Document.SourceNoteId)),
-                (InfoText("InfoLabelGeneratedWith"), FormatOptional(quiz.Document.AiModelDisplayName)),
                 (InfoText("InfoLabelId"), quiz.Document.Id.ToString())
             };
+            MaybeAddGeneratedWithInfo(rows, quiz.Document.AiModelDisplayName);
 
             ShowItemInfoDialog(quiz.Title, rows.Take(8), rows.Skip(8));
         }
@@ -3180,6 +3229,16 @@ namespace Scriblucent
         private static string FormatOptional(string? value)
         {
             return string.IsNullOrWhiteSpace(value) ? InfoText("InfoNone") : value.Trim();
+        }
+
+        private static void MaybeAddGeneratedWithInfo(List<(string Label, string Value)> rows, string? modelDisplayName)
+        {
+            if (!AiFeatureGate.IsEnabled)
+                return;
+
+            rows.Insert(
+                Math.Max(0, rows.Count - 1),
+                (InfoText("InfoLabelGeneratedWith"), FormatOptional(modelDisplayName)));
         }
 
         private static string FormatInfoTags(IEnumerable<string>? tags)

@@ -3,6 +3,7 @@ using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
+using Scriblucent.Services.AI;
 using Scriblucent.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -25,6 +26,7 @@ namespace Scriblucent.Views
             public string Name { get; init; } = string.Empty;
             public bool IsEnabled { get; set; }
             public bool IsDownloaded { get; set; }
+            public bool IsSupported { get; init; } = true;
         }
 
         private sealed class ManagedSpellCheckLanguageItem
@@ -33,6 +35,16 @@ namespace Scriblucent.Views
             public string DisplayName { get; init; } = string.Empty;
             public bool IsEnabled { get; set; }
             public bool IsDownloaded { get; set; }
+        }
+
+        private sealed class FlashcardModelOption
+        {
+            public string Key { get; init; } = string.Empty;
+            public string Label { get; init; } = string.Empty;
+            public bool ShowBetaBadge { get; init; }
+            public bool ShowClozeOnlyBadge { get; init; }
+
+            public override string ToString() => Label;
         }
 
         private const int MinAutoSaveIntervalSeconds = 5;
@@ -129,6 +141,10 @@ namespace Scriblucent.Views
                 SelectComboBoxItemByTag(flashcardModelBox, settings.FlashcardModelKey, recommendedModelKey);
             _lastSelectedFlashcardModelKey = GetSelectedFlashcardModelKey() ?? recommendedModelKey;
             UpdateFlashcardModelWarning(_lastSelectedFlashcardModelKey, machineMemoryBytes);
+            SelectComboBoxItemByTag(
+                StudyCoverageBox,
+                settings.StudyCoverage.ToString(),
+                StudyCoverageMode.Auto.ToString());
 
             SelectComboBoxItemByTag(
                 MeasurementUnitSystemBox,
@@ -148,14 +164,22 @@ namespace Scriblucent.Views
                 ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
             if (EnableSpellCheckCheckBox is not null)
                 EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
+            if (UseGpuAccelerationCheckBox is not null)
+                UseGpuAccelerationCheckBox.IsChecked = settings.UseGpuAcceleration;
+            if (EnableAiFeaturesCheckBox is not null)
+                EnableAiFeaturesCheckBox.IsChecked = settings.EnableAiFeatures;
             if (EnableDiagnosticLoggingCheckBox is not null)
                 EnableDiagnosticLoggingCheckBox.IsChecked = settings.EnableDiagnosticLogging;
+            if (EnableAiContentDiagnosticsCheckBox is not null)
+                EnableAiContentDiagnosticsCheckBox.IsChecked = settings.EnableAiContentDiagnostics;
             LoadManagedSpellCheckLanguages(settings);
+            ApplyAiFeaturesVisibility(animate: false);
             _isApplyingSettings = false;
         }
 
         private void LoadManagedAiTools(AppSettings settings)
         {
+            var machineMemoryBytes = BundledModelHostService.GetTotalPhysicalMemoryBytesForCurrentMachine();
             var supportedTools = BundledModelHostService.GetSupportedFlashcardTools()
                 .ToDictionary(tool => tool.Key, StringComparer.OrdinalIgnoreCase);
 
@@ -169,7 +193,9 @@ namespace Scriblucent.Views
                 {
                     Key = supported.Key,
                     Name = supported.DisplayName,
-                    IsEnabled = item.IsEnabled,
+                    IsEnabled = item.IsEnabled
+                                && BundledModelHostService.IsFlashcardModelSupportedWithMemory(supported.Key, machineMemoryBytes),
+                    IsSupported = BundledModelHostService.IsFlashcardModelSupportedWithMemory(supported.Key, machineMemoryBytes),
                     IsDownloaded = BundledModelHostService.IsModelDownloaded(supported.Key)
                 });
             }
@@ -183,7 +209,8 @@ namespace Scriblucent.Views
                 {
                     Key = supported.Key,
                     Name = supported.DisplayName,
-                    IsEnabled = true,
+                    IsEnabled = BundledModelHostService.IsFlashcardModelSupportedWithMemory(supported.Key, machineMemoryBytes),
+                    IsSupported = BundledModelHostService.IsFlashcardModelSupportedWithMemory(supported.Key, machineMemoryBytes),
                     IsDownloaded = BundledModelHostService.IsModelDownloaded(supported.Key)
                 });
             }
@@ -409,9 +436,21 @@ namespace Scriblucent.Views
 
             selected.IsDownloaded = BundledModelHostService.IsModelDownloaded(selected.Key);
 
-            AiToolsStatusText.Text = selected.IsDownloaded
-                ? string.Format(LocalizationService.GetString("AiToolsModelReadyFormat"), selected.Name)
-                : string.Format(LocalizationService.GetString("AiToolsModelNotDownloadedFormat"), selected.Name);
+            if (!selected.IsSupported)
+            {
+                var requiredGb = BundledModelHostService.GetFlashcardModelMinimumSupportedMemoryBytes(selected.Key)
+                                 / (1024L * 1024L * 1024L);
+                AiToolsStatusText.Text = string.Format(
+                    LocalizationService.GetString("AiToolsModelUnsupportedMemoryFormat"),
+                    selected.Name,
+                    requiredGb);
+            }
+            else
+            {
+                AiToolsStatusText.Text = selected.IsDownloaded
+                    ? string.Format(LocalizationService.GetString("AiToolsModelReadyFormat"), selected.Name)
+                    : string.Format(LocalizationService.GetString("AiToolsModelNotDownloadedFormat"), selected.Name);
+            }
 
             AiToolsListBox.Items.Refresh();
             UpdateAiActionButtons();
@@ -430,7 +469,10 @@ namespace Scriblucent.Views
             }
 
             if (FindName("DownloadSelectedAiToolButton") is Button downloadModelButton)
-                downloadModelButton.IsEnabled = hasSelection && !_isDownloadingAiModel && !isSelectedModelDownloaded;
+                downloadModelButton.IsEnabled = hasSelection
+                                                && selected!.IsSupported
+                                                && !_isDownloadingAiModel
+                                                && !isSelectedModelDownloaded;
 
             if (FindName("DeleteSelectedAiToolButton") is Button deleteModelButton)
                 deleteModelButton.IsEnabled = hasSelection && !_isDownloadingAiModel && isSelectedModelDownloaded;
@@ -443,6 +485,7 @@ namespace Scriblucent.Views
 
             AiToolsListBox.Items.Refresh();
             UpdateAiToolsStatusText();
+            UpdateRemoveDownloadedModelsButton();
         }
 
         private void RefreshFlashcardModelOptions(long machineMemoryBytes, AppSettings settings)
@@ -457,12 +500,11 @@ namespace Scriblucent.Views
             var enabledKeys = BundledModelHostService.GetEnabledFlashcardModelKeys(settings);
             foreach (var key in enabledKeys)
             {
+                if (!BundledModelHostService.IsFlashcardModelSupportedWithMemory(key, machineMemoryBytes))
+                    continue;
+
                 var isCompatible = BundledModelHostService.IsFlashcardModelCompatibleWithMemory(key, machineMemoryBytes);
-                flashcardModelBox.Items.Add(new ComboBoxItem
-                {
-                    Tag = key,
-                    Content = BundledModelHostService.GetFlashcardModelDisplayLabel(key, includeWarningPrefix: true, isCompatible: isCompatible)
-                });
+                flashcardModelBox.Items.Add(CreateFlashcardModelOption(key, isCompatible));
             }
 
             if (FindName("FlashcardModelContextMenu") is ContextMenu flashcardModelContextMenu)
@@ -470,11 +512,14 @@ namespace Scriblucent.Views
                 flashcardModelContextMenu.Items.Clear();
                 foreach (var key in enabledKeys)
                 {
+                    if (!BundledModelHostService.IsFlashcardModelSupportedWithMemory(key, machineMemoryBytes))
+                        continue;
+
                     var isCompatible = BundledModelHostService.IsFlashcardModelCompatibleWithMemory(key, machineMemoryBytes);
                     var menuItem = new MenuItem
                     {
                         Tag = key,
-                        Header = BundledModelHostService.GetFlashcardModelDisplayLabel(key, includeWarningPrefix: true, isCompatible: isCompatible)
+                        Header = CreateFlashcardModelOptionVisual(key, isCompatible)
                     };
                     menuItem.Click += FlashcardModelMenuItem_Click;
                     flashcardModelContextMenu.Items.Add(menuItem);
@@ -487,10 +532,68 @@ namespace Scriblucent.Views
             return;
         }
 
+        private static FlashcardModelOption CreateFlashcardModelOption(string key, bool isCompatible)
+        {
+            return new FlashcardModelOption
+            {
+                Key = key,
+                Label = BundledModelHostService.GetFlashcardModelDisplayLabel(key, includeWarningPrefix: true, isCompatible: isCompatible),
+                ShowBetaBadge = IsCompactBetaModel(key),
+                ShowClozeOnlyBadge = IsBasicModel(key)
+            };
+        }
+
+        private static FrameworkElement CreateFlashcardModelOptionVisual(string key, bool isCompatible)
+        {
+            var option = CreateFlashcardModelOption(key, isCompatible);
+            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            panel.Children.Add(new TextBlock
+            {
+                Text = option.Label,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            if (option.ShowBetaBadge)
+                panel.Children.Add(CreateModelBadge(LocalizationService.GetString("AiModelBetaBadge")));
+            if (option.ShowClozeOnlyBadge)
+                panel.Children.Add(CreateModelBadge(LocalizationService.GetString("AiModelClozeOnlyBadge")));
+
+            return panel;
+        }
+
+        private static Border CreateModelBadge(string text)
+        {
+            var badgeText = new TextBlock
+            {
+                Text = text,
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            badgeText.SetResourceReference(TextBlock.ForegroundProperty, "AccentPrimaryForeground");
+
+            var badge = new Border
+            {
+                Margin = new Thickness(8, 0, 0, 0),
+                Padding = new Thickness(6, 1, 6, 1),
+                CornerRadius = new CornerRadius(8),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = badgeText
+            };
+            badge.SetResourceReference(Border.BackgroundProperty, "AccentPrimary");
+            return badge;
+        }
+
+        private static bool IsCompactBetaModel(string key)
+            => string.Equals(key, AiModelManifest.CompactModelKey, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsBasicModel(string key)
+            => string.Equals(key, AiModelManifest.BasicModelKey, StringComparison.OrdinalIgnoreCase);
+
         private string? GetSelectedFlashcardModelKey()
         {
-            return FindName("FlashcardModelBox") is ComboBox flashcardModelBox && flashcardModelBox.SelectedItem is ComboBoxItem item
-                ? item.Tag?.ToString()
+            return FindName("FlashcardModelBox") is ComboBox flashcardModelBox
+                ? GetComboItemTag(flashcardModelBox.SelectedItem)
                 : null;
         }
 
@@ -516,27 +619,37 @@ namespace Scriblucent.Views
             UiMotion.AnimateInlineReveal(warningTextBlock, true);
         }
 
+        private static string? GetComboItemTag(object? item)
+        {
+            return item switch
+            {
+                ComboBoxItem comboBoxItem => comboBoxItem.Tag?.ToString(),
+                FlashcardModelOption option => option.Key,
+                _ => null
+            };
+        }
+
         private static void SelectComboBoxItemByTag(ComboBox comboBox, string? tag, string fallbackTag)
         {
             var selectedTag = string.IsNullOrWhiteSpace(tag) ? fallbackTag : tag;
+            if (TrySelectComboItem(comboBox, selectedTag))
+                return;
 
-            foreach (var comboBoxItem in comboBox.Items.OfType<ComboBoxItem>())
+            TrySelectComboItem(comboBox, fallbackTag);
+        }
+
+        private static bool TrySelectComboItem(ComboBox comboBox, string tag)
+        {
+            foreach (var item in comboBox.Items)
             {
-                if (string.Equals(comboBoxItem.Tag?.ToString(), selectedTag, StringComparison.OrdinalIgnoreCase))
-                {
-                    comboBox.SelectedItem = comboBoxItem;
-                    return;
-                }
+                if (!string.Equals(GetComboItemTag(item), tag, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                comboBox.SelectedItem = item;
+                return true;
             }
 
-            foreach (var comboBoxItem in comboBox.Items.OfType<ComboBoxItem>())
-            {
-                if (string.Equals(comboBoxItem.Tag?.ToString(), fallbackTag, StringComparison.OrdinalIgnoreCase))
-                {
-                    comboBox.SelectedItem = comboBoxItem;
-                    return;
-                }
-            }
+            return false;
         }
 
         // auto-save checkbox handlers
@@ -734,7 +847,7 @@ namespace Scriblucent.Views
 
             var selected = sender switch
             {
-                ComboBox comboBox when comboBox.SelectedItem is ComboBoxItem comboItem => comboItem.Tag?.ToString(),
+                ComboBox comboBox => GetComboItemTag(comboBox.SelectedItem),
                 MenuItem menuItem => menuItem.Tag?.ToString(),
                 _ => null
             };
@@ -856,6 +969,9 @@ namespace Scriblucent.Views
             if (_isDownloadingAiModel)
                 return;
 
+            if (!AiFeatureGate.IsEnabled)
+                return;
+
             if (AiToolsListBox.SelectedItem is not ManagedAiToolItem selected)
                 return;
 
@@ -867,7 +983,9 @@ namespace Scriblucent.Views
             {
                 var progress = new Progress<BundledModelHostService.FlashcardProgress>(p =>
                 {
-                    if (p.Percent.HasValue)
+                    if (p.StatusKey == BundledModelHostService.ModelVerificationStatusKey)
+                        AiToolsStatusText.Text = LocalizationService.GetString(BundledModelHostService.ModelVerificationStatusKey);
+                    else if (p.Percent.HasValue)
                         AiToolsStatusText.Text = string.Format(LocalizationService.GetString("AiToolsDownloadingPercentFormat"), selected.Name, p.Percent.Value);
                     else
                         AiToolsStatusText.Text = string.Format(LocalizationService.GetString("AiToolsDownloadPreparingFormat"), selected.Name);
@@ -1255,6 +1373,111 @@ namespace Scriblucent.Views
             var settings = AppSettingsService.Load();
             settings.EnableDiagnosticLogging = EnableDiagnosticLoggingCheckBox.IsChecked == true;
             AppSettingsService.Save(settings);
+        }
+
+        private void StudyCoverageBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isApplyingSettings || StudyCoverageBox.SelectedItem is not ComboBoxItem item)
+                return;
+            if (!Enum.TryParse<StudyCoverageMode>(item.Tag?.ToString(), ignoreCase: true, out var coverage))
+                coverage = StudyCoverageMode.Auto;
+
+            var settings = AppSettingsService.Load();
+            settings.StudyCoverage = StudyPlanCoordinator.NormalizeCoverage(coverage);
+            AppSettingsService.Save(settings);
+        }
+
+        private void UseGpuAccelerationCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings || UseGpuAccelerationCheckBox is null)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.UseGpuAcceleration = UseGpuAccelerationCheckBox.IsChecked == true;
+            AppSettingsService.Save(settings);
+        }
+
+        private void EnableAiFeaturesCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings || EnableAiFeaturesCheckBox is null)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.EnableAiFeatures = EnableAiFeaturesCheckBox.IsChecked == true;
+            AppSettingsService.Save(settings);
+            AiFeatureGate.NotifyChanged();
+            ApplyAiFeaturesVisibility(animate: true);
+        }
+
+        private void ApplyAiFeaturesVisibility(bool animate)
+        {
+            var enabled = AiFeatureGate.IsEnabled;
+            if (AiToolsDetailPanel is not null)
+            {
+                if (animate)
+                    UiMotion.AnimateInlineReveal(AiToolsDetailPanel, enabled);
+                else
+                    AiToolsDetailPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (AiContentDiagnosticsPanel is not null)
+            {
+                if (animate)
+                    UiMotion.AnimateInlineReveal(AiContentDiagnosticsPanel, enabled);
+                else
+                    AiContentDiagnosticsPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            UpdateRemoveDownloadedModelsButton();
+        }
+
+        private void UpdateRemoveDownloadedModelsButton()
+        {
+            if (RemoveDownloadedAiModelsButton is null)
+                return;
+
+            var show = !AiFeatureGate.IsEnabled && HasDownloadedAiModel();
+            RemoveDownloadedAiModelsButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static bool HasDownloadedAiModel()
+        {
+            return BundledModelHostService.GetSupportedFlashcardTools()
+                .Any(tool => BundledModelHostService.IsModelDownloaded(tool.Key));
+        }
+
+        private void RemoveDownloadedAiModelsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var confirmed = ModernDialog.ConfirmDanger(
+                Window.GetWindow(this),
+                LocalizationService.GetString("AiToolsRemoveDownloadedModelsTitle"),
+                LocalizationService.GetString("AiToolsRemoveDownloadedModelsPrompt"),
+                LocalizationService.GetString("Confirm"));
+
+            if (!confirmed)
+                return;
+
+            foreach (var tool in BundledModelHostService.GetSupportedFlashcardTools())
+                BundledModelHostService.DeleteModelArtifacts(tool.Key);
+
+            RefreshManagedAiToolDownloadState();
+            UpdateRemoveDownloadedModelsButton();
+        }
+
+        private void EnableAiContentDiagnosticsCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings || EnableAiContentDiagnosticsCheckBox is null)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.EnableAiContentDiagnostics = EnableAiContentDiagnosticsCheckBox.IsChecked == true;
+            AppSettingsService.Save(settings);
+        }
+
+        private void ClearStudyPlanCache_Click(object sender, RoutedEventArgs e)
+        {
+            StudyPlanCache.Shared.Clear();
+            AiToolsStatusText.Text = LocalizationService.GetString("StudyCoveragePlansCleared");
         }
 
         private static void RefreshOpenEditorSpellCheck(bool enabled)

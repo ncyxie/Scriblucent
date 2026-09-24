@@ -12,7 +12,9 @@ internal static class CrashLog
         try
         {
             var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scriblucent-crash.log");
-            File.AppendAllText(path, $"[{DateTime.Now:O}] {context}: {ex}\n\n");
+            // Exception messages and stack traces can contain note text and machine paths.
+            File.AppendAllText(path,
+                $"[{DateTimeOffset.UtcNow:O}] META {context}: {ex.GetType().FullName} (0x{ex.HResult:X8}){Environment.NewLine}");
         }
         catch
         {

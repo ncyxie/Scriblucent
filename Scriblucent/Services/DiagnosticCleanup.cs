@@ -1,4 +1,6 @@
 using System.IO;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Scriblucent.Services;
 
@@ -6,6 +8,9 @@ internal static class DiagnosticCleanup
 {
     private static readonly TimeSpan DiagnosticLogRetention = TimeSpan.FromDays(7);
     private static readonly TimeSpan CrashLogRetention = TimeSpan.FromDays(30);
+    private static readonly Regex MetadataCrashEntry = new(
+        @"^ META [A-Za-z0-9.]+: [A-Za-z0-9.+`]+ \(0x[0-9A-F]{8}\)$",
+        RegexOptions.Compiled);
 
     public static void CleanupOldLogs()
     {
@@ -57,40 +62,34 @@ internal static class DiagnosticCleanup
 
         try
         {
-            var fileInfo = new FileInfo(crashLogPath);
-            if (fileInfo.LastWriteTimeUtc < DateTime.UtcNow - CrashLogRetention)
-            {
-                // Truncate old entries instead of deleting — keep the file for potential future crashes
-                var lines = File.ReadAllLines(crashLogPath);
-                var cutoff = DateTime.UtcNow - CrashLogRetention;
-                var keptLines = new List<string>();
-                var inRelevantBlock = false;
+            var lines = File.ReadAllLines(crashLogPath);
+            var keptLines = RetainCrashMetadataLines(lines, DateTimeOffset.UtcNow - CrashLogRetention);
 
-                foreach (var line in lines)
-                {
-                    // Keep lines that look like timestamps within retention period
-                    if (line.StartsWith("=== ", StringComparison.Ordinal))
-                    {
-                        inRelevantBlock = true;
-                        keptLines.Add(line);
-                    }
-                    else if (inRelevantBlock)
-                    {
-                        keptLines.Add(line);
-                    }
-                }
-
-                // If we can't parse timestamps, just keep the last 100 lines
-                if (keptLines.Count == 0 && lines.Length > 100)
-                    keptLines = lines.Skip(lines.Length - 100).ToList();
-
-                if (keptLines.Count < lines.Length)
-                    File.WriteAllLines(crashLogPath, keptLines);
-            }
+            if (keptLines.Length == lines.Length)
+                return;
+            if (keptLines.Length == 0)
+                File.Delete(crashLogPath);
+            else
+                File.WriteAllLines(crashLogPath, keptLines);
         }
         catch
         {
             // Best-effort
         }
     }
+
+    internal static string[] RetainCrashMetadataLines(IEnumerable<string> lines, DateTimeOffset cutoff)
+        => lines.Where(line =>
+        {
+            var closingBracket = line.IndexOf(']');
+            return line.StartsWith("[", StringComparison.Ordinal)
+                && closingBracket > 1
+                && MetadataCrashEntry.IsMatch(line[(closingBracket + 1)..])
+                && DateTimeOffset.TryParse(
+                    line.AsSpan(1, closingBracket - 1),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var timestamp)
+                && timestamp >= cutoff;
+        }).ToArray();
 }

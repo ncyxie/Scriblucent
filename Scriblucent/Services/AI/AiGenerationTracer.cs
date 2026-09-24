@@ -5,18 +5,16 @@ using Scriblucent.Services;
 
 namespace Scriblucent.Services.AI;
 
-// TEMPORARY diagnostics scaffolding for the generation-quality investigation: one log file per
-// generation job recording the full source note, chunk plan, every backend call (prompt, grammar,
-// sampling params), the live token stream as it arrives from the worker, raw outputs with char
-// counts and timing, per-chunk parse/refusal verdicts, and the job outcome. Writes are append-only
-// and best-effort - tracing must never break or slow down generation. Remove once the
-// "unbalanced chunks / spurious refusals" issue is diagnosed and fixed.
+// Opt-in diagnostics record the source note, grounded planner calls, token stream, raw output,
+// timing, and outcome. Logs contain note content, so all three gates are required and traces expire.
 
 internal sealed class AiGenerationTracer : IDisposable
 {
     private readonly object _gate = new();
     private readonly string _path;
+    private readonly StringBuilder _streamBuffer = new();
     private bool _streamOpen;
+    private const int MaximumStreamCharacters = 256 * 1024;
 
     private AiGenerationTracer(string path)
     {
@@ -27,20 +25,24 @@ internal sealed class AiGenerationTracer : IDisposable
         string tag,
         string purpose,
         string modelKey,
-        string noteText,
-        bool forceEnable = false)
+        string noteText)
     {
-        if (!forceEnable && !DiagnosticLogging.IsEnabled)
+        var settings = AppSettingsService.Load();
+        if (!DiagnosticLogging.IsEnabled
+            || !settings.EnableAiContentDiagnostics
+            || !string.Equals(
+                Environment.GetEnvironmentVariable("SCRIBLUCENT_AI_TRACE"),
+                "1",
+                StringComparison.Ordinal))
+        {
             return null;
+        }
 
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Scriblucent",
-                "AiCache",
-                "diagnostics");
+            var dir = DiagnosticLogging.GetAiDiagnosticsDirectory();
             Directory.CreateDirectory(dir);
+            DeleteExpiredTraces(dir);
             var path = Path.Combine(
                 dir,
                 $"gen-{tag}-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}-{Guid.NewGuid().ToString("N")[..6]}.log");
@@ -60,22 +62,6 @@ internal sealed class AiGenerationTracer : IDisposable
         {
             return null;
         }
-    }
-
-    public void LogChunkPlan(IReadOnlyList<TextChunk> chunks)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("=== CHUNK PLAN ===");
-        if (chunks.Count == 0)
-            sb.AppendLine("(no chunks produced)");
-        foreach (var chunk in chunks)
-        {
-            sb.AppendLine(
-                $"Chunk[{chunk.Index}] of {chunk.TotalCount}: chars={chunk.Text.Length} tokens={chunk.TokenCount} offsets=[{chunk.StartCharOffset}..{chunk.EndCharOffset}]");
-            sb.AppendLine(chunk.Text);
-            sb.AppendLine();
-        }
-        Append(sb.ToString());
     }
 
     public void LogCallStart(int callId, string kind, AiGenerationRequest request)
@@ -98,9 +84,9 @@ internal sealed class AiGenerationTracer : IDisposable
         lock (_gate)
         {
             _streamOpen = true;
-            try { File.AppendAllText(_path, "--- STREAM ---" + Environment.NewLine, Encoding.UTF8); }
-            catch { }
+            _streamBuffer.Clear();
         }
+        Append("--- STREAM ---" + Environment.NewLine);
     }
 
     public void AppendStream(string delta)
@@ -114,7 +100,9 @@ internal sealed class AiGenerationTracer : IDisposable
             {
                 if (!_streamOpen)
                     return;
-                File.AppendAllText(_path, delta, Encoding.UTF8);
+                var remaining = MaximumStreamCharacters - _streamBuffer.Length;
+                if (remaining > 0)
+                    _streamBuffer.Append(delta.AsSpan(0, Math.Min(delta.Length, remaining)));
             }
         }
         catch
@@ -143,12 +131,6 @@ internal sealed class AiGenerationTracer : IDisposable
         Append(sb.ToString());
     }
 
-    public void LogVerdict(int chunkNumber, int addedItems, bool refusal, string refusalReason)
-    {
-        Append(
-            $"=== VERDICT chunk {chunkNumber} === AddedItems={addedItems} Refusal={refusal} Reason={refusalReason}{Environment.NewLine}");
-    }
-
     public void LogOutcome(string text)
     {
         Append($"=== JOB OUTCOME === {text}{Environment.NewLine}");
@@ -161,6 +143,10 @@ internal sealed class AiGenerationTracer : IDisposable
             if (_streamOpen)
             {
                 _streamOpen = false;
+                sb.Append(_streamBuffer);
+                if (_streamBuffer.Length >= MaximumStreamCharacters)
+                    sb.AppendLine("\n<<STREAM TRUNCATED>>");
+                _streamBuffer.Clear();
                 sb.AppendLine();
                 sb.AppendLine("<<STREAM END>>");
             }
@@ -181,5 +167,22 @@ internal sealed class AiGenerationTracer : IDisposable
 
     public void Dispose()
     {
+    }
+
+    private static void DeleteExpiredTraces(string directory)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-7);
+            foreach (var path in Directory.EnumerateFiles(directory, "gen-*.log"))
+            {
+                if (File.GetLastWriteTimeUtc(path) < cutoff)
+                    File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Diagnostics retention is best effort.
+        }
     }
 }

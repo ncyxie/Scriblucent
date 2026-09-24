@@ -822,8 +822,13 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
                 <Border Grid.Column="0"
+                        Grid.Row="0"
                         Margin="0,0,14,0"
                         VerticalAlignment="Center"
                         Style="{StaticResource ChromeTitleFieldBorderStyle}">
@@ -853,6 +858,7 @@
                 </Border>
 
                 <Border Grid.Column="1"
+                        Grid.Row="0"
                         Background="{DynamicResource InputSurface}"
                         CornerRadius="{StaticResource Radius.Control}"
                         VerticalAlignment="Center"
@@ -1028,6 +1034,13 @@
                                 Click="SaveButton_Click"/>
                     </StackPanel>
                 </Border>
+                <controls:AiReviewNotice x:Name="AiReviewNotice"
+                                         Grid.Row="1"
+                                         Grid.ColumnSpan="2"
+                                         Margin="0,10,0,0"
+                                         AllowDismiss="True"
+                                         Dismissed="AiReviewNotice_Dismissed"
+                                         Visibility="Collapsed"/>
             </Grid>
         </Border>
 

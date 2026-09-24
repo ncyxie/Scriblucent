@@ -594,7 +594,7 @@
                                                                                                 CornerRadius="{StaticResource Radius.Card}"
                                                                                                 Background="{DynamicResource IconButtonBackground}" BorderBrush="Transparent" BorderThickness="0"
                                                                                                 ToolTip="{Binding AiGeneratedTooltip}"
-                                                                                                Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
+                                                                                                Visibility="{Binding ShowAiGeneratedChrome, Converter={StaticResource BoolToVis}}">
                                                                                             <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
                                                                                         </Border>
                                                                                         <StackPanel Grid.Column="1"
@@ -874,7 +874,7 @@
                                                                             CornerRadius="{StaticResource Radius.Card}"
                                                                             Background="{DynamicResource IconButtonBackground}" BorderBrush="Transparent" BorderThickness="0"
                                                                             ToolTip="{Binding AiGeneratedTooltip}"
-                                                                            Visibility="{Binding IsAiGenerated, Converter={StaticResource BoolToVis}}">
+                                                                            Visibility="{Binding ShowAiGeneratedChrome, Converter={StaticResource BoolToVis}}">
                                                                        <icons:AppIcon Kind="AiGenerated" Width="14" Height="14" Foreground="{DynamicResource TextColorSecondary}"/>
                                                                     </Border>
                                                                     <StackPanel Grid.Column="1"
@@ -980,7 +980,7 @@
                                 <dashboard:EmptyDashboardPanel x:Name="MindMapsEmptyDashboardPanel"
                                             Grid.Row="2"
                                             Visibility="{Binding ShowMindMapsEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            Prompt="{Binding [MindMapsEmptyDashboardPrompt], Source={StaticResource Loc}}"
+                                            Prompt="{Binding MindMapsEmptyDashboardPrompt}"
                                             ButtonContent="{Binding [CreateMindMap], Source={StaticResource Loc}}"
                                             Click="CreateMindMapButton_Click"/>
                             </Grid>

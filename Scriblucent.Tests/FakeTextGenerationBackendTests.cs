@@ -40,17 +40,6 @@ public sealed class FakeTextGenerationBackendTests
     }
 
     [Fact]
-    public async Task OpenAsync_IncrementsCallCount()
-    {
-        using var backend = new FakeTextGenerationBackend();
-
-        await backend.OpenAsync();
-        await backend.OpenAsync();
-
-        Assert.Equal(2, backend.OpenCallCount);
-    }
-
-    [Fact]
     public async Task GenerateAsync_RecordsRequests()
     {
         using var backend = new FakeTextGenerationBackend();

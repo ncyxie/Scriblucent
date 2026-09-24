@@ -3,9 +3,15 @@ namespace Scriblucent.Services.AI;
 public enum AiGenerationStatus
 {
     PreparingAssets,
+    VerifyingModel,
     DownloadingModel,
     AssetsReady,
     Processing,
-    Repairing,
-    Finalizing
+    Finalizing,
+    AnalyzingSource,
+    ValidatingQuestionAnswer,
+    SelectingStudyPoints,
+    WritingQuestions,
+    GroundingAnswers,
+    FallingBackToCpu
 }

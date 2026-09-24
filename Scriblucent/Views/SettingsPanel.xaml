@@ -518,6 +518,24 @@
                         CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
+                        <CheckBox x:Name="EnableAiFeaturesCheckBox"
+                                  Content="{Binding [EnableAiFeatures], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  Checked="EnableAiFeaturesCheckBox_Changed"
+                                  Unchecked="EnableAiFeaturesCheckBox_Changed"/>
+                        <TextBlock Text="{Binding [EnableAiFeaturesDescription], Source={StaticResource Loc}}"
+                                   Margin="0,5,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+                        <Button x:Name="RemoveDownloadedAiModelsButton"
+                                Content="{Binding [AiToolsRemoveDownloadedModels], Source={StaticResource Loc}}"
+                                HorizontalAlignment="Left"
+                                Margin="0,10,0,0"
+                                Padding="10,5"
+                                Style="{StaticResource DialogDangerButtonStyle}"
+                                Visibility="Collapsed"
+                                Click="RemoveDownloadedAiModelsButton_Click"/>
+                        <StackPanel x:Name="AiToolsDetailPanel">
+                        <controls:AiReviewNotice Margin="0,12,0,12"/>
                         <TextBlock Text="{Binding [AiToolsDefaultModel], Source={StaticResource Loc}}"
                                    Style="{StaticResource FormOptionLabelStyle}">
                             <TextBlock.ContextMenu>
@@ -525,14 +543,47 @@
                                     <MenuItem Tag="Qwen3.5-0.8B" Click="FlashcardModelMenuItem_Click"/>
                                     <MenuItem Tag="Qwen3.5-2B" Click="FlashcardModelMenuItem_Click"/>
                                     <MenuItem Tag="Qwen3.5-4B" Click="FlashcardModelMenuItem_Click"/>
+                                    <MenuItem Tag="Qwen3.5-9B" Click="FlashcardModelMenuItem_Click"/>
                                 </ContextMenu>
                             </TextBlock.ContextMenu>
                         </TextBlock>
 
                         <ComboBox x:Name="FlashcardModelBox"
                                   Margin="0,6,8,8"
-                                  SelectedValuePath="Tag"
+                                  SelectedValuePath="Key"
                                   SelectionChanged="FlashcardModelBox_SelectionChanged">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Label}"
+                                                   VerticalAlignment="Center"/>
+                                        <Border Margin="8,0,0,0"
+                                                Padding="6,1,6,1"
+                                                CornerRadius="8"
+                                                Background="{DynamicResource AccentPrimary}"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding ShowBetaBadge, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding [AiModelBetaBadge], Source={StaticResource Loc}}"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource AccentPrimaryForeground}"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
+                                        <Border Margin="8,0,0,0"
+                                                Padding="6,1,6,1"
+                                                CornerRadius="8"
+                                                Background="{DynamicResource AccentPrimary}"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding ShowClozeOnlyBadge, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding [AiModelClozeOnlyBadge], Source={StaticResource Loc}}"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource AccentPrimaryForeground}"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
                         </ComboBox>
 
                         <TextBlock x:Name="FlashcardModelWarningText"
@@ -540,6 +591,34 @@
                                    Foreground="{DynamicResource AccentWarningHover}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"/>
+
+                        <CheckBox x:Name="UseGpuAccelerationCheckBox"
+                                  Content="{Binding [UseGpuAcceleration], Source={StaticResource Loc}}"
+                                  Margin="0,10,0,0"
+                                  HorizontalAlignment="Left"
+                                  Checked="UseGpuAccelerationCheckBox_Changed"
+                                  Unchecked="UseGpuAccelerationCheckBox_Changed"/>
+                        <TextBlock Text="{Binding [UseGpuAccelerationDescription], Source={StaticResource Loc}}"
+                                   Margin="0,5,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+
+                        <TextBlock Text="{Binding [StudyCoverage], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FormOptionLabelStyle}"/>
+                        <ComboBox x:Name="StudyCoverageBox"
+                                  Margin="0,6,8,0"
+                                  SelectedValuePath="Tag"
+                                  SelectionChanged="StudyCoverageBox_SelectionChanged">
+                            <ComboBoxItem Content="{Binding [StudyCoverageAuto], Source={StaticResource Loc}}" Tag="Auto"/>
+                            <ComboBoxItem Content="{Binding [StudyCoverageBalanced], Source={StaticResource Loc}}" Tag="Balanced"/>
+                            <ComboBoxItem Content="{Binding [StudyCoverageThorough], Source={StaticResource Loc}}" Tag="Thorough"/>
+                        </ComboBox>
+                        <Button Content="{Binding [StudyCoverageClearPlans], Source={StaticResource Loc}}"
+                                HorizontalAlignment="Left"
+                                Margin="0,8,0,0"
+                                Padding="10,5"
+                                Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
+                                Click="ClearStudyPlanCache_Click"/>
 
                         <Border Height="1"
                                 Background="{DynamicResource BorderColor}"
@@ -590,6 +669,7 @@
                                                     <CheckBox Grid.Column="2"
                                                               Content="{Binding [AiToolsEnabled], Source={StaticResource Loc}}"
                                                               IsChecked="{Binding IsEnabled}"
+                                                              IsEnabled="{Binding IsSupported}"
                                                               Tag="{Binding Key}"
                                                               Checked="AiToolEnabledCheckBox_Changed"
                                                               Unchecked="AiToolEnabledCheckBox_Changed"
@@ -642,6 +722,7 @@
                         <TextBlock x:Name="AiToolsStatusText"
                                    Margin="0,8,0,0"
                                    Style="{StaticResource FormHelperTextStyle}"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -789,6 +870,17 @@
                         <TextBlock Text="{Binding [EnableDiagnosticLoggingDescription], Source={StaticResource Loc}}"
                                    Margin="0,8,0,0"
                                    Style="{StaticResource FormHelperTextStyle}"/>
+                        <StackPanel x:Name="AiContentDiagnosticsPanel">
+                        <CheckBox x:Name="EnableAiContentDiagnosticsCheckBox"
+                                  Content="{Binding [EnableAiContentDiagnostics], Source={StaticResource Loc}}"
+                                  Margin="0,10,0,0"
+                                  HorizontalAlignment="Left"
+                                  Checked="EnableAiContentDiagnosticsCheckBox_Changed"
+                                  Unchecked="EnableAiContentDiagnosticsCheckBox_Changed"/>
+                        <TextBlock Text="{Binding [EnableAiContentDiagnosticsDescription], Source={StaticResource Loc}}"
+                                   Margin="0,5,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

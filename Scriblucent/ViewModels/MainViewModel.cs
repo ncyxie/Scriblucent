@@ -119,6 +119,14 @@ public class MainViewModel : ViewModelBase
     public bool ShowQuizzesEmptyDashboard => _isQuizzesDashboardReady && Quizzes.Count == 0;
     public bool ShouldShowQuizzesDashboardContent => Quizzes.Count > 0 || IsQuizzesDashboardLoading;
 
+    public string QuizzesEmptyDashboardPrompt => AiFeatureGate.IsEnabled
+        ? LocalizationService.GetString("QuizzesEmptyDashboardPrompt")
+        : LocalizationService.GetString("QuizzesEmptyDashboardPromptNoAi");
+
+    public string MindMapsEmptyDashboardPrompt => AiFeatureGate.IsEnabled
+        ? LocalizationService.GetString("MindMapsEmptyDashboardPrompt")
+        : LocalizationService.GetString("MindMapsEmptyDashboardPromptNoAi");
+
     public bool IsDashboardRevealMotionEnabled { get; private set; }
     private NoteCardViewModel? _notesMutationLightweightAddedNote;
     private DispatcherTimer? _autoSaveTimer;
@@ -463,6 +471,8 @@ public class MainViewModel : ViewModelBase
                 OnPropertyChanged(nameof(ActiveSortButtonText));
                 OnPropertyChanged(nameof(UserActivitySummaryTitle));
                 OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
+                OnPropertyChanged(nameof(QuizzesEmptyDashboardPrompt));
+                OnPropertyChanged(nameof(MindMapsEmptyDashboardPrompt));
                 RefreshActivityStats();
                 SaveAppSettings();
             }
@@ -557,6 +567,7 @@ public class MainViewModel : ViewModelBase
         Quizzes.CollectionChanged += OnQuizzesCollectionChanged;
         
         Scriblucent.Services.ActivityTracker.ActivityUpdated += RefreshActivityStats;
+        AiFeatureGate.Changed += OnAiFeatureGateChanged;
 
         AddNoteCommand = new RelayCommand(AddNote, () => !IsMassSelectMode);
         ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
@@ -1066,6 +1077,7 @@ public class MainViewModel : ViewModelBase
         setVm.Document.IsPinned = document.IsPinned;
         setVm.Document.FlipDelayMilliseconds = document.FlipDelayMilliseconds;
         setVm.Document.StudyDueCardsOnly = document.StudyDueCardsOnly;
+        setVm.Document.AiReviewNoticeDismissed = document.AiReviewNoticeDismissed || setVm.Document.AiReviewNoticeDismissed;
         setVm.NotifyChanged();
 
         ReorderFlashcardSets();
@@ -1855,6 +1867,7 @@ public class MainViewModel : ViewModelBase
         mapVm.Document.GroupId = document.GroupId;
         mapVm.Document.Schedules = document.Schedules;
         mapVm.Document.IsPinned = document.IsPinned;
+        mapVm.Document.AiReviewNoticeDismissed = document.AiReviewNoticeDismissed || mapVm.Document.AiReviewNoticeDismissed;
         mapVm.NotifyChanged();
 
         ReorderMindMaps();
@@ -2568,6 +2581,7 @@ public class MainViewModel : ViewModelBase
         quizVm.Document.ExamMode = document.ExamMode;
         quizVm.Document.Attempts = document.Attempts;
         quizVm.Document.ProgressSession = document.ProgressSession;
+        quizVm.Document.AiReviewNoticeDismissed = document.AiReviewNoticeDismissed || quizVm.Document.AiReviewNoticeDismissed;
         quizVm.NotifyChanged();
 
         ReorderQuizzes();
@@ -9614,6 +9628,25 @@ public class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsQuizzesDashboardLoading));
         OnPropertyChanged(nameof(ShowQuizzesEmptyDashboard));
         OnPropertyChanged(nameof(ShouldShowQuizzesDashboardContent));
+    }
+
+    private void OnAiFeatureGateChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(QuizzesEmptyDashboardPrompt));
+        OnPropertyChanged(nameof(MindMapsEmptyDashboardPrompt));
+
+        foreach (var set in FlashcardSets)
+            set.NotifyChanged();
+        foreach (var map in MindMaps)
+            map.NotifyChanged();
+        foreach (var quiz in Quizzes)
+            quiz.NotifyChanged();
+        foreach (var set in RecentFlashcardSets)
+            set.NotifyChanged();
+        foreach (var map in RecentMindMaps)
+            map.NotifyChanged();
+        foreach (var quiz in RecentQuizzes)
+            quiz.NotifyChanged();
     }
 
     /// <summary>Every NoteCardViewModel construction funnels through here so ScheduledAt stays in

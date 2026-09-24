@@ -58,8 +58,13 @@ public sealed class FlashcardSetViewModel : ViewModelBase
 
     public bool IsAiGenerated => !string.IsNullOrWhiteSpace(Document.AiModelDisplayName);
 
+    public bool ShowAiGeneratedChrome => IsAiGenerated && AiFeatureGate.IsEnabled;
+
     public string AiGeneratedTooltip => IsAiGenerated
-        ? string.Format(LocalizationService.GetString("FlashcardsGeneratedWithModel"), Document.AiModelDisplayName.Trim())
+        ? LocalizationService.FormatAiGeneratedTooltip(
+            "FlashcardsGeneratedWithModel",
+            Document.AiModelDisplayName,
+            includeReviewDisclaimer: !Document.AiReviewNoticeDismissed)
         : string.Empty;
 
     /// <summary>How many cards are due right now - algorithm-agnostic, since IsDue only reads
@@ -113,6 +118,7 @@ public sealed class FlashcardSetViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasSchedule));
         OnPropertyChanged(nameof(NextScheduleDisplay));
         OnPropertyChanged(nameof(IsAiGenerated));
+        OnPropertyChanged(nameof(ShowAiGeneratedChrome));
         OnPropertyChanged(nameof(AiGeneratedTooltip));
         OnPropertyChanged(nameof(DueCount));
         OnPropertyChanged(nameof(HasDueCards));

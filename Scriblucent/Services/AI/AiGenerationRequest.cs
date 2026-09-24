@@ -12,11 +12,11 @@ internal sealed record AiGenerationRequest(
     string? GrammarRoot = null,
     IProgress<AiGenerationProgress>? Progress = null,
     CancellationToken CancellationToken = default,
-    // Resolved once per generation job (see AiGenerationPipeline.RunAsync) so every chunk of the
-    // same job targets the same model even if the user changes the selection mid-job. Empty means
+    // Resolved once per generation job so every planning call targets the same model even if the
+    // user changes the selection mid-job. Empty means
     // "not job-scoped" - the backend falls back to resolving the currently-selected model itself.
     string ModelKey = "",
-    // TEMPORARY trace hook: invoked with each streamed token as it arrives from the worker, so
+    // Trace hook invoked with each streamed token as it arrives from the worker, so
     // AiGenerationTracer can capture the live output (including partial text on stall/cancel).
     Action<string>? TokenObserver = null
 );

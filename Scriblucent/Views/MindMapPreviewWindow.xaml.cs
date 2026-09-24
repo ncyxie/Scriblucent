@@ -163,6 +163,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     // in every other app instead of resetting on close.
     private static MindMapNode? _clipboardNode;
     private static CopiedNodeStyle? _copiedStyle;
+    private bool _aiReviewNoticeDismissed;
 
     private sealed record CopiedNodeStyle(
         string? BackgroundColor,
@@ -206,7 +207,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         bool useManualPositions = false,
         Guid? sourceNoteId = null,
         Action<Guid>? openNoteAction = null,
-        bool? isTagsPanelOpen = null)
+        bool? isTagsPanelOpen = null,
+        bool aiReviewNoticeDismissed = false)
     {
         _root = root;
         MindMapNodeIconCatalog.NormalizeTreeIcons(_root);
@@ -233,7 +235,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             : string.Join(", ", tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
         SetTagsPanelOpen(isTagsPanelOpen ?? false, animate: false);
         _lastSavedTagsPanelOpen = _isTagsPanelOpen;
+        _aiReviewNoticeDismissed = aiReviewNoticeDismissed;
         ConfigureAiGeneratedIndicator(modelDisplayName);
+        AiFeatureGate.Changed += MindMapPreviewWindow_AiFeatureGateChanged;
+        Closed += (_, _) => AiFeatureGate.Changed -= MindMapPreviewWindow_AiFeatureGateChanged;
         UpdateSearchResultsText();
 
         _suppressLayoutModeSelectionChanged = true;
@@ -519,7 +524,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             SourceNoteId = _selectedLinkedNote?.Id ?? existingDocument?.SourceNoteId,
             GroupId = existingDocument?.GroupId,
             Schedules = existingDocument?.Schedules?.ToList() ?? new List<NoteScheduleEntry>(),
-            IsPinned = existingDocument?.IsPinned ?? false
+            IsPinned = existingDocument?.IsPinned ?? false,
+            AiReviewNoticeDismissed = _aiReviewNoticeDismissed || existingDocument?.AiReviewNoticeDismissed == true
         };
     }
 
@@ -602,30 +608,52 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     {
         _modelDisplayName = modelDisplayName?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(_modelDisplayName))
+        if (string.IsNullOrWhiteSpace(_modelDisplayName) || !AiFeatureGate.IsEnabled)
         {
             AiGeneratedInfoBadge.ToolTip = null;
             if (_isInitializing)
             {
                 AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
+                AiReviewNotice.Visibility = Visibility.Collapsed;
                 return;
             }
 
             UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
+            UiMotion.AnimateInlineReveal(AiReviewNotice, false);
             return;
         }
 
-        AiGeneratedInfoBadge.ToolTip = string.Format(
-            LocalizationService.GetString("MindMapGeneratedWithModel"),
-            _modelDisplayName);
+        AiGeneratedInfoBadge.ToolTip = LocalizationService.FormatAiGeneratedTooltip(
+            "MindMapGeneratedWithModel",
+            _modelDisplayName,
+            includeReviewDisclaimer: !_aiReviewNoticeDismissed);
 
         if (_isInitializing)
         {
             AiGeneratedInfoBadge.Visibility = Visibility.Visible;
+            AiReviewNotice.Visibility = _aiReviewNoticeDismissed ? Visibility.Collapsed : Visibility.Visible;
             return;
         }
 
         UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
+        UiMotion.AnimateInlineReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
+    }
+
+    public event EventHandler? AiReviewNoticeDismissedPersistRequested;
+
+    private void AiReviewNotice_Dismissed(object sender, RoutedEventArgs e)
+    {
+        if (_aiReviewNoticeDismissed)
+            return;
+
+        _aiReviewNoticeDismissed = true;
+        ConfigureAiGeneratedIndicator(_modelDisplayName);
+        AiReviewNoticeDismissedPersistRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void MindMapPreviewWindow_AiFeatureGateChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() => ConfigureAiGeneratedIndicator(_modelDisplayName));
     }
 
     private void RebuildMap(bool animate = true)

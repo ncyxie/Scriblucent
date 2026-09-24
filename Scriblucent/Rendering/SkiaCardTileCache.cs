@@ -3,6 +3,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using SkiaSharp;
+using Scriblucent.Services;
 
 namespace Scriblucent.Rendering;
 
@@ -43,6 +44,7 @@ internal static class SkiaCardTileCache
     static SkiaCardTileCache()
     {
         ThemeManager.ThemeChanged += (_, _) => Clear();
+        AiFeatureGate.Changed += (_, _) => Clear();
     }
 
     public static void Clear()
