@@ -14,13 +14,18 @@ namespace Scriblucent.Behaviors;
 /// </summary>
 public static class SmoothScrollBehavior
 {
-    private const double WheelViewportRatio = 0.20;
+    private const double WheelViewportRatio = 0.23;
 
     // Exponential "approach the target" smoothing instead of a fixed-duration eased tween: a
     // fixed tween restarts its ease curve on every wheel tick, causing a visible velocity
     // discontinuity with real (uneven) wheel input. Exponential smoothing has no "restart" -
     // current velocity carries over continuously and composes across variable frame deltas.
     private const double SmoothingRatePerMs = 0.014979; // ln(20)/200: ~95% settled after 200ms
+    // Opening speed of one notch. The uncapped curve is fastest on frame one (the shove).
+    // A longer gesture queues more distance and this ceiling rises with it, so a flick
+    // speeds up without the flat cap that felt like lag.
+    private const double WheelCoastViewportsPerSecond = 1.7;
+    private const double WheelAccelViewportsPerSecond = 5.4;
     private const double DoneEpsilonPixels = 0.3;
     private const double MinFrameSeconds = 1.0 / 240.0;
     // A maximized window composites more cards per frame, so a late render tick (>22ms) is
@@ -36,10 +41,10 @@ public static class SmoothScrollBehavior
     // absorb via recycling so each post-stall snap stays cheap. Wide layouts (many ~244px
     // Notes columns) scale the lead down so the visual target cannot run as far ahead of
     // realizes when each viewport of content is denser.
-    private const double MaxImpulseLeadViewports = 0.4;
-    private const double MinImpulseLeadPixels = 220;
+    private const double MaxImpulseLeadViewports = 0.6;
+    private const double MinImpulseLeadPixels = 240;
     private const double DenseViewportWidthThreshold = 1200;
-    private const double DenseImpulseLeadFactor = 0.7;
+    private const double DenseImpulseLeadFactor = 0.8;
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
         "State",
@@ -666,10 +671,24 @@ public static class SmoothScrollBehavior
         var previousY = state.CurrentY;
 
         if (state.ImpulseActiveY)
-            state.CurrentY = ApproachTarget(state.CurrentY, state.ImpulseTargetY, smoothing, out state.ImpulseActiveY);
+        {
+            state.CurrentY = ApproachTarget(
+                state.CurrentY,
+                state.ImpulseTargetY,
+                smoothing,
+                MaxWheelStep(state.ScrollViewer.ViewportHeight, state.ImpulseTargetY - state.CurrentY, deltaSeconds),
+                out state.ImpulseActiveY);
+        }
 
         if (state.ImpulseActiveX)
-            state.CurrentX = ApproachTarget(state.CurrentX, state.ImpulseTargetX, smoothing, out state.ImpulseActiveX);
+        {
+            state.CurrentX = ApproachTarget(
+                state.CurrentX,
+                state.ImpulseTargetX,
+                smoothing,
+                MaxWheelStep(state.ScrollViewer.ViewportWidth, state.ImpulseTargetX - state.CurrentX, deltaSeconds),
+                out state.ImpulseActiveX);
+        }
 
         ApplyOffset(state, state.CurrentX, state.CurrentY, forceCommit: false);
 
@@ -705,7 +724,17 @@ public static class SmoothScrollBehavior
         // offset into EndAnimatedScroll and scroll content back by leftover drift.
     }
 
-    private static double ApproachTarget(double current, double target, double smoothing, out bool stillActive)
+    private static double MaxWheelStep(double viewport, double remaining, double deltaSeconds)
+    {
+        if (viewport <= 1)
+            return double.PositiveInfinity;
+
+        var fraction = Math.Min(Math.Abs(remaining) / viewport, 1);
+        var viewportsPerSecond = WheelCoastViewportsPerSecond + fraction * WheelAccelViewportsPerSecond;
+        return Math.Max(1, viewport * viewportsPerSecond * deltaSeconds);
+    }
+
+    private static double ApproachTarget(double current, double target, double smoothing, double maxStep, out bool stillActive)
     {
         var remaining = target - current;
         if (Math.Abs(remaining) <= DoneEpsilonPixels)
@@ -715,7 +744,11 @@ public static class SmoothScrollBehavior
         }
 
         stillActive = true;
-        return current + remaining * smoothing;
+        var step = remaining * smoothing;
+        if (Math.Abs(step) > maxStep)
+            step = Math.CopySign(maxStep, remaining);
+
+        return current + step;
     }
 
     private static void ApplyOffset(State state, double x, double y, bool forceCommit = true)

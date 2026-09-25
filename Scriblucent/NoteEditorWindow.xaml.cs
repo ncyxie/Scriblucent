@@ -1199,10 +1199,10 @@ namespace Scriblucent
             if (_isSpellCheckEnabled && !_isApplyingSpellCheckDecorations)
                 ScheduleSpellCheck();
 
-            // Text edits shift paragraph extents, so wrap lanes need a pass. The engine debounces
-            // and re-entrancy is harmless (paragraph margin changes reflow but the engine's own
-            // _isApplying guard plus this debounce keeps it stable).
-            _wrapLayout?.ScheduleApply();
+            // Squiggle edits are not text-flow changes. Spell-check already restores the caret;
+            // scheduling wrap from those events forces a second layout.
+            if (!_isApplyingSpellCheckDecorations)
+                _wrapLayout?.ScheduleApply();
 
             // Text edits also shift in-line image anchors - keep the caption sequence order fresh.
             _floatingImages.RenumberCaptions();
@@ -1304,10 +1304,11 @@ namespace Scriblucent
             {
                 ClearSpellCheckDecorations();
 
+                var runs = BuildTextRunIndex();
                 foreach (var span in spans)
                 {
-                    var start = GetTextPointerAtTextOffset(span.Start);
-                    var end = GetTextPointerAtTextOffset(span.Start + span.Length);
+                    var start = PointerAtTextOffset(runs, span.Start);
+                    var end = PointerAtTextOffset(runs, span.Start + span.Length);
                     if (start is null || end is null)
                         continue;
 
@@ -2792,6 +2793,73 @@ namespace Scriblucent
             return sb.ToString();
         }
 
+        private readonly struct TextRunSpan
+        {
+            public TextRunSpan(int start, int length, TextPointer pointer)
+            {
+                Start = start;
+                Length = length;
+                Pointer = pointer;
+            }
+
+            public int Start { get; }
+            public int Length { get; }
+            public TextPointer Pointer { get; }
+        }
+
+        /// <summary>One forward walk of the document. Spell-check and find resolve every hit
+        /// from this list instead of restarting at <see cref="TextElement.ContentStart"/>.</summary>
+        private List<TextRunSpan> BuildTextRunIndex()
+        {
+            var runs = new List<TextRunSpan>();
+            var traversed = 0;
+            var navigator = ContentTextBox.Document.ContentStart;
+            var end = ContentTextBox.Document.ContentEnd;
+
+            while (navigator is not null && navigator.CompareTo(end) < 0)
+            {
+                if (navigator.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                {
+                    var text = navigator.GetTextInRun(LogicalDirection.Forward);
+                    if (text.Length > 0)
+                        runs.Add(new TextRunSpan(traversed, text.Length, navigator));
+
+                    traversed += text.Length;
+                }
+
+                navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
+            }
+
+            return runs;
+        }
+
+        private TextPointer? PointerAtTextOffset(IReadOnlyList<TextRunSpan> runs, int targetOffset)
+        {
+            targetOffset = Math.Max(0, targetOffset);
+            var lo = 0;
+            var hi = runs.Count - 1;
+            while (lo <= hi)
+            {
+                var mid = (lo + hi) >>> 1;
+                var run = runs[mid];
+                if (targetOffset < run.Start)
+                {
+                    hi = mid - 1;
+                    continue;
+                }
+
+                if (targetOffset > run.Start + run.Length)
+                {
+                    lo = mid + 1;
+                    continue;
+                }
+
+                return run.Pointer.GetPositionAtOffset(targetOffset - run.Start, LogicalDirection.Forward);
+            }
+
+            return ContentTextBox.Document.ContentEnd;
+        }
+
         private TextPointer? GetTextPointerAtTextOffset(int targetOffset)
         {
             targetOffset = Math.Max(0, targetOffset);
@@ -2850,11 +2918,12 @@ namespace Scriblucent
             var activeBrush = TryFindResource("EditorFindActiveMatchBackground") as Brush
                 ?? new SolidColorBrush(Color.FromRgb(251, 191, 36));
 
+            var runs = BuildTextRunIndex();
             for (var i = 0; i < matches.Count; i++)
             {
                 var match = matches[i];
-                var start = GetTextPointerAtTextOffset(match.Start);
-                var end = GetTextPointerAtTextOffset(match.End);
+                var start = PointerAtTextOffset(runs, match.Start);
+                var end = PointerAtTextOffset(runs, match.End);
                 if (start is null || end is null)
                     continue;
 

@@ -6,6 +6,9 @@ public class NoteDocument
     public Guid? GroupId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    /// <summary>Plain-text card preview produced by <c>NoteCardViewModel</c>. Null until the
+    /// first decode or save; readers adopt it instead of parsing <see cref="Content"/> again.</summary>
+    public string? SearchablePreview { get; set; }
     public List<NoteImageAttachment> Images { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     public string FontFamily { get; set; } = "Calibri";

@@ -76,7 +76,9 @@ internal static class SkiaCardRenderer
         var fontManager = SKFontManager.Default;
 
         var title = vm.Title ?? string.Empty;
-        var preview = vm.Content ?? string.Empty;
+        // The caller only enqueues a render after the preview is cached. Reading Content here
+        // would build a FlowDocument on this background thread.
+        var preview = vm.TryGetCachedContentPreview(out var cachedPreview) ? cachedPreview : string.Empty;
         var tags = vm.TagsDisplay;
 
         Func<SKTypeface, SKShaper> shaperFactory = GetShaper;

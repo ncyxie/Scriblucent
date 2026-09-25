@@ -102,8 +102,10 @@ public partial class NoteCardControl : UserControl
                 if (!IsBitmapMode || !ReferenceEquals(DataContext, requestedVm))
                     return;
 
+                var previousHeight = (BitmapLayer.Source as System.Windows.Media.Imaging.BitmapSource)?.PixelHeight;
                 BitmapLayer.Source = source;
-                InvalidateMeasure();
+                if (previousHeight != source.PixelHeight)
+                    InvalidateMeasure();
             });
         }
         else if (!bitmapMode)

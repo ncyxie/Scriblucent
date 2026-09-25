@@ -57,6 +57,10 @@ internal static class SmoothScrollCompositor
         public bool OriginalContentHitTestVisible = true;
         public double DpiScale = 1.0;
         public IReadOnlyList<DashboardVirtualizationHost>? Hosts;
+        /// <summary>Short scrollers (recent strip, calendar rails, dialogs) share the dashboard
+        /// glide without the listing's shadow strip, tile swap, or surface hold. Those would
+        /// hide shadows and resize cards, and a nested scroller must not cancel the dashboard hold.</summary>
+        public bool Lightweight;
         /// <summary>Static section shells whose content was baked to a BitmapCache for the
         /// session (restored at the surface-hold release).</summary>
         public List<FrameworkElement>? CachedShells;
@@ -88,6 +92,8 @@ internal static class SmoothScrollCompositor
         if (session.Active)
             return;
 
+        DashboardScrollRenderGate.CancelStaggeredLiveRestore();
+
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
             Scriblucent.Services.ScrollPerfDiag.Log("sessionBegin");
 
@@ -101,6 +107,8 @@ internal static class SmoothScrollCompositor
         session.Translate = null;
         session.DpiScale = System.Windows.Media.VisualTreeHelper.GetDpi(scrollViewer).PixelsPerDip;
         session.Hosts = hosts;
+        session.Lightweight = hosts.Count == 0
+            && scrollViewer.ViewportHeight < MinViewportForCompositor;
 
         if (session.ContentElement is { } content)
         {
@@ -116,6 +124,12 @@ internal static class SmoothScrollCompositor
             session.HitTestSuppressed = true;
             content.IsHitTestVisible = false;
             DashboardScrollRenderGate.ResetHoveredCards(content);
+        }
+
+        if (session.Lightweight)
+        {
+            AddViewerThumbCompensations(session, scrollViewer);
+            return;
         }
 
         var reclaimedHold = TryReclaimSurfaceHold(scrollViewer);
@@ -194,11 +208,16 @@ internal static class SmoothScrollCompositor
             var endShells = teardown.CachedShells;
             teardown.CachedShells = null;
 
-            // Cards STAY in tile mode after the session ends: flipping back to the live template
-            // per burst re-flowed the grid (live card heights vary; tiles are fixed-cell) - the
-            // visible readjusting during scroll. The flip happens once, at the true settle (the
-            // surface hold release).
-            BeginSurfaceHold(scrollViewer, endHosts, endShells);
+            // Short scrollers only borrowed the translate. They must not start the listing
+            // surface hold, which would hide shadows and cancel an in-progress dashboard hold.
+            if (!teardown.Lightweight)
+            {
+                // Cards STAY in tile mode after the session ends: flipping back to the live template
+                // per burst re-flowed the grid (live card heights vary; tiles are fixed-cell) - the
+                // visible readjusting during scroll. The flip happens once, at the true settle (the
+                // surface hold release).
+                BeginSurfaceHold(scrollViewer, endHosts, endShells);
+            }
 
             RestoreThumbCompensations(teardown);
         }, DispatcherPriority.Loaded);
@@ -261,9 +280,8 @@ internal static class SmoothScrollCompositor
         if (_surfaceHoldHosts is { } holdHosts)
         {
             // The true settle: cards flip back to the live template (hover/menu/drag/mass-select)
-            // and the shadows return - once, not per scroll burst.
-            DashboardScrollRenderGate.SetRealizedCardBitmapMode(holdHosts, bitmapMode: false);
-            DashboardScrollRenderGate.SetRealizedCardShadowVisibility(holdHosts, visible: true);
+            // and the shadows return. A few cards per frame, so the handoff is not one hitch.
+            DashboardScrollRenderGate.RestoreRealizedCardsStaggered(holdHosts);
             _surfaceHoldHosts = null;
         }
 
@@ -331,7 +349,12 @@ internal static class SmoothScrollCompositor
         if (scrollViewer.ViewportHeight >= MinViewportForCompositor)
             return true;
 
-        return hosts.Count > 0;
+        if (hosts.Count > 0)
+            return true;
+
+        // Every other scroller that can move uses the same glide. A short list used to
+        // commit ScrollToOffset on every animation frame.
+        return scrollViewer.ScrollableHeight > 1 || scrollViewer.ScrollableWidth > 1;
     }
 
     private static bool ShouldCommit(Session session, ScrollViewer scrollViewer)

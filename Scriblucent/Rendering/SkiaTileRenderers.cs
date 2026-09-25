@@ -563,9 +563,10 @@ internal sealed class NotesTileRenderer : SkiaTileRenderer
     public override string BuildSignature(object viewModel)
     {
         var vm = (NoteCardViewModel)viewModel;
-        return vm.Document is { } doc
-            ? $"{ThemeManager.CurrentTheme}|{doc.Title}|{vm.Content}|{vm.TagsDisplay}|{doc.IsPinned}|{vm.HasSchedule}"
-            : $"{ThemeManager.CurrentTheme}|{vm.Title}|{vm.Content}|{vm.TagsDisplay}";
+        var doc = vm.Document;
+        // Document fields and the generation counter only. Content parses a FlowDocument and
+        // must not run on the scroll path that asks for this signature.
+        return $"{ThemeManager.CurrentTheme}|{doc.Title}|{doc.LastModified.Ticks}|{vm.ContentGeneration}|{vm.TagsDisplay}|{doc.IsPinned}|{vm.HasSchedule}";
     }
 
     private CardRenderColors ResolveColors()

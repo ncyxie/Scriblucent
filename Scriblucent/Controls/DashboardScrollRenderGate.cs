@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Threading;
 using Scriblucent.Animations;
 using Scriblucent.Behaviors;
 
@@ -98,6 +99,80 @@ internal static class DashboardScrollRenderGate
     /// BitmapCache) is not a DropShadowEffect, so StripRealizedCardShadows never touched it -
     /// yet it is a significant part of each card's scroll-time draw cost.
     /// </summary>
+    private const int LiveRestorePerFrame = 8;
+    private static readonly Queue<Action> LiveRestore = new();
+    private static bool _liveRestoreScheduled;
+
+    /// <summary>Drops a pending post-scroll return to live cards. A new scroll session must
+    /// not have a leftover callback flip cards back to the live template mid-glide.</summary>
+    public static void CancelStaggeredLiveRestore()
+    {
+        LiveRestore.Clear();
+        _liveRestoreScheduled = false;
+    }
+
+    /// <summary>Returns realized cards to the live template a few per frame, the same way
+    /// scroll surface caches are released, so settle does not rebuild every preview at once.</summary>
+    public static void RestoreRealizedCardsStaggered(IReadOnlyList<DashboardVirtualizationHost> hosts)
+    {
+        CancelStaggeredLiveRestore();
+        foreach (var host in hosts)
+        {
+            if (host.Child is not DashboardVirtualizedCardGrid grid)
+                continue;
+
+            if (grid.ResolveItemsPanel() is not Panel panel)
+                continue;
+
+            foreach (var child in panel.Children)
+            {
+                if (child is ContentPresenter { Content: NoteCardControl card })
+                {
+                    var captured = card;
+                    LiveRestore.Enqueue(() =>
+                    {
+                        captured.IsBitmapMode = false;
+                        captured.SetScrollShadowVisible(true);
+                    });
+                }
+                else if (child is ContentPresenter { Content: DashboardTileHost tileHost })
+                {
+                    var captured = tileHost;
+                    LiveRestore.Enqueue(() => captured.IsBitmapMode = false);
+                }
+            }
+        }
+
+        ScheduleLiveRestore();
+    }
+
+    private static void ScheduleLiveRestore()
+    {
+        if (_liveRestoreScheduled || LiveRestore.Count == 0)
+            return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+            return;
+
+        _liveRestoreScheduled = true;
+        dispatcher.BeginInvoke(RestoreLiveBatch, DispatcherPriority.Background);
+    }
+
+    private static void RestoreLiveBatch()
+    {
+        _liveRestoreScheduled = false;
+        var restored = 0;
+        while (restored < LiveRestorePerFrame && LiveRestore.Count > 0)
+        {
+            LiveRestore.Dequeue().Invoke();
+            restored++;
+        }
+
+        if (LiveRestore.Count > 0)
+            ScheduleLiveRestore();
+    }
+
     public static void SetRealizedCardShadowVisibility(IReadOnlyList<DashboardVirtualizationHost> hosts, bool visible)
     {
         foreach (var host in hosts)

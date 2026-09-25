@@ -973,6 +973,7 @@ public class MainViewModel : ViewModelBase
             RefreshAvailableFlashcardTags();
             NotifyFlashcardSetsChanged();
             _flashcardsLoadCompleted = true;
+            SeedFlashcardSetsSaveSignature();
             SweepOrphanedFlashcardMedia();
             return;
         }
@@ -997,6 +998,7 @@ public class MainViewModel : ViewModelBase
         RefreshAvailableFlashcardTags();
         NotifyFlashcardSetsChanged();
         _flashcardsLoadCompleted = true;
+        SeedFlashcardSetsSaveSignature();
         SweepOrphanedFlashcardMedia();
     }
 
@@ -1741,6 +1743,7 @@ public class MainViewModel : ViewModelBase
             RefreshAvailableMindMapTags();
             NotifyMindMapsChanged();
             _mindMapsLoadCompleted = true;
+            SeedMindMapsSaveSignature();
             return;
         }
 
@@ -1786,6 +1789,7 @@ public class MainViewModel : ViewModelBase
         NotifyMindMapsChanged();
         WarmMindMapPreviewsAtIdle();
         _mindMapsLoadCompleted = true;
+        SeedMindMapsSaveSignature();
     }
 
     /// <summary>
@@ -2476,6 +2480,7 @@ public class MainViewModel : ViewModelBase
             RefreshAvailableQuizTags();
             NotifyQuizzesChanged();
             _quizzesLoadCompleted = true;
+            SeedQuizzesSaveSignature();
             return;
         }
 
@@ -2520,6 +2525,7 @@ public class MainViewModel : ViewModelBase
         RefreshAvailableQuizTags();
         NotifyQuizzesChanged();
         _quizzesLoadCompleted = true;
+        SeedQuizzesSaveSignature();
     }
 
     public QuizViewModel AddOrUpdateQuiz(QuizDocument document)
@@ -3607,6 +3613,7 @@ public class MainViewModel : ViewModelBase
     private string _quizSearchQuery = string.Empty;
     private DispatcherTimer? _searchFilterDebounceTimer;
     private Action? _pendingSearchFilterApply;
+    private int _noteFilterWarmEpoch;
 
     public string SearchQuery
     {
@@ -5837,20 +5844,31 @@ public class MainViewModel : ViewModelBase
 
     private string BuildSearchText(NoteCardViewModel note)
     {
-        var groupName = GetNoteGroupName(note);
-        var lastModified = note.Document.LastModified.ToString("yyyy-MM-dd HH:mm dd MMM yyyy", CultureInfo.CurrentCulture);
-        var createdAt = note.Document.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm dd MMM yyyy", CultureInfo.CurrentCulture);
-        var scheduleSearchText = BuildScheduleSearchText(note.Document);
+        var includeBody = note.IsContentPreviewCached;
+        if (!note.TryGetSearchHaystack(includeBody, out var haystack))
+        {
+            haystack = BuildSearchHaystack(note, includeBody);
+            note.SetSearchHaystack(haystack, includeBody);
+        }
+
         var groupState = note.Document.GroupId.HasValue
             ? LocalizationService.GetString("Groups")
             : LocalizationService.GetString("UngroupedNotes");
 
+        return string.Join(' ', haystack, GetNoteGroupName(note), groupState);
+    }
+
+    private string BuildSearchHaystack(NoteCardViewModel note, bool includeBody)
+    {
+        var lastModified = note.Document.LastModified.ToString("yyyy-MM-dd HH:mm dd MMM yyyy", CultureInfo.CurrentCulture);
+        var createdAt = note.Document.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm dd MMM yyyy", CultureInfo.CurrentCulture);
+        var scheduleSearchText = BuildScheduleSearchText(note.Document);
+        var body = includeBody ? note.Content : string.Empty;
+
         return string.Join(' ',
             note.Title,
-            note.Content,
+            body,
             note.TagsSearchText,
-            groupName,
-            groupState,
             note.Document.FontFamily,
             note.Document.FontSize.ToString(CultureInfo.InvariantCulture),
             lastModified,
@@ -6089,12 +6107,61 @@ public class MainViewModel : ViewModelBase
 
     private void ApplyFilters(bool rebuildGroups = true)
     {
+        _noteFilterWarmEpoch++;
+        var generation = NotePreviewWarmQueue.BumpGeneration();
         InvalidateUngroupedVisibleCount();
         _notesView.Refresh();
         if (rebuildGroups)
             RebuildGroups();
         RefreshRecentNotes();
         RefreshCalendarScheduledNotes();
+        WarmColdNotesForSearch(_noteFilterWarmEpoch, generation);
+    }
+
+    /// <summary>Body search uses <see cref="NoteCardViewModel.Content"/> only after it is cached.
+    /// The filter runs immediately on title, tags, and metadata; cold bodies decode in idle
+    /// slices and the view refreshes once. Clearing or replacing the query bumps the warm
+    /// generation so those decodes stop.</summary>
+    private void WarmColdNotesForSearch(int epoch, int generation)
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery))
+            return;
+
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (epoch != _noteFilterWarmEpoch || string.IsNullOrWhiteSpace(SearchQuery))
+                return;
+
+            var cold = new List<NoteCardViewModel>();
+            foreach (var note in Notes)
+            {
+                if (!note.IsContentPreviewCached)
+                    cold.Add(note);
+            }
+
+            if (cold.Count == 0)
+                return;
+
+            var remaining = cold.Count;
+            foreach (var note in cold)
+            {
+                NotePreviewWarmQueue.Enqueue(note, () =>
+                {
+                    remaining--;
+                    if (remaining != 0 || epoch != _noteFilterWarmEpoch)
+                        return;
+
+                    if (string.IsNullOrWhiteSpace(SearchQuery))
+                        return;
+
+                    InvalidateUngroupedVisibleCount();
+                    _notesView.Refresh();
+                    RebuildGroups();
+                    RefreshRecentNotes();
+                    RefreshCalendarScheduledNotes();
+                }, generation);
+            }
+        }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     private void RefreshAvailableFlashcardTags()
@@ -6660,6 +6727,7 @@ public class MainViewModel : ViewModelBase
             {
                 Title = $"{note.Document.Title} (Copy)",
                 Content = note.Document.Content,
+                SearchablePreview = note.Document.SearchablePreview,
                 Images = CloneImageAttachments(note.Document.Images),
                 Tags = note.Document.Tags?.ToList() ?? new List<string>(),
                 FontFamily = note.Document.FontFamily,
@@ -8873,39 +8941,40 @@ public class MainViewModel : ViewModelBase
     private bool _dashboardRefreshInFlight;
     private bool _dashboardRefreshPending;
     private string? _lastSavedNotesSignature;
-    /// <summary>Managed heap size right after the last forced post-save collect (see
-    /// <see cref="SaveNotes"/>). Growth since this baseline decides whether the next save's
-    /// collect actually needs to run.</summary>
-    private long _heapBytesAfterLastForcedCollect = GC.GetTotalMemory(false);
     private string? _lastSavedFlashcardSetsSignature;
     private string? _lastSavedMindMapsSignature;
     private string? _lastSavedQuizzesSignature;
+
+    /// <summary>Load never assigned these, so the first autosave treated every store as dirty
+    /// and rewrote it. The signature is a field fingerprint, computed after the in-memory
+    /// library matches what was just read.</summary>
+    private void SeedNotesSaveSignature()
+    {
+        try { _lastSavedNotesSignature = BuildNotesStoreSignature(); }
+        catch { _lastSavedNotesSignature = null; }
+    }
+
+    private void SeedFlashcardSetsSaveSignature()
+    {
+        try { _lastSavedFlashcardSetsSignature = BuildFlashcardSetsSignature(); }
+        catch { _lastSavedFlashcardSetsSignature = null; }
+    }
+
+    private void SeedMindMapsSaveSignature()
+    {
+        try { _lastSavedMindMapsSignature = BuildMindMapsSignature(); }
+        catch { _lastSavedMindMapsSignature = null; }
+    }
+
+    private void SeedQuizzesSaveSignature()
+    {
+        try { _lastSavedQuizzesSignature = BuildQuizzesSignature(); }
+        catch { _lastSavedQuizzesSignature = null; }
+    }
+
     /// <summary>Shared serializer options - the metadata cache is per-instance, so reusing one
     /// instance avoids re-discovering the whole store object graph on every save.</summary>
     private static readonly JsonSerializerOptions StoreJsonOptions = new() { WriteIndented = false };
-
-    /// <summary>
-    /// Returns recently-freed pages to the OS so Task Manager reflects the app's real footprint
-    /// instead of the OS's page-retention history. Call off-thread after a collection: the pages
-    /// move to the standby list (fast to re-fault) and the committed memory becomes available to
-    /// the system. No-op on failure.
-    /// </summary>
-    public static void TrimWorkingSet()
-    {
-        try
-        {
-            SetProcessWorkingSetSize((IntPtr)(-1), (IntPtr)(-1), (IntPtr)(-1));
-        }
-        catch
-        {
-        }
-    }
-
-    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetProcessWorkingSetSize(
-        IntPtr process,
-        IntPtr minimumWorkingSetSize,
-        IntPtr maximumWorkingSetSize);
 
     /// <summary>
     /// Persists the notes store. The JSON payload carries every photo's Base64 data (a photo
@@ -8964,32 +9033,6 @@ public class MainViewModel : ViewModelBase
                 // Only a completed write may be remembered as "saved" - otherwise a failed
                 // write would make the next save skip and the changes would never persist.
                 _lastSavedNotesSignature = signature;
-
-                // Serializing a photo-heavy store allocates ~2-3x its payload as short-lived
-                // garbage that otherwise sits uncollected until the next incidental gen2 pass
-                // (the heap visibly climbed ~150MB per auto-save, then collapsed at the next
-                // window open). Collect deterministically right here, off the UI thread - the
-                // Optimized/non-blocking variant proved unreliable (skipped passes let the
-                // post-collection baseline climb ~150MB per save).
-                //
-                // But this is a blocking Gen2 collect - a stop-the-world pause that suspends every
-                // managed thread, including the UI thread, regardless of which thread requested it.
-                // Running it unconditionally on every save (even a one-line text edit that allocates
-                // almost nothing) was stalling whatever the UI was mid-animation for, e.g. the note
-                // editor's close animation. Only pay for it once actual garbage has accumulated.
-                const long ForcedCollectThresholdBytes = 50 * 1024 * 1024;
-                if (GC.GetTotalMemory(false) - _heapBytesAfterLastForcedCollect > ForcedCollectThresholdBytes)
-                {
-                    // Gives the note editor's close animation (WindowCloseMs=340 / NavFadeOutMs=120,
-                    // see UiMotion) time to finish before this fires - this collect is a blocking
-                    // Gen2 pause that freezes every thread, including whatever's mid-render,
-                    // regardless of which thread asked for it. We're already off the UI thread
-                    // here, so sleeping this background thread briefly is free.
-                    System.Threading.Thread.Sleep(450);
-                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-                    GC.WaitForPendingFinalizers();
-                    _heapBytesAfterLastForcedCollect = GC.GetTotalMemory(false);
-                }
             }
             catch
             {
@@ -9498,7 +9541,10 @@ public class MainViewModel : ViewModelBase
         RecalculateUngroupedVisibleCount();
         _notesBatchAddInProgress = false;
         if (markLoadComplete)
+        {
             _notesLoadComplete = true;
+            SeedNotesSaveSignature();
+        }
         NotifyNotesChanged();
         Scriblucent.Services.StartupProbe.Mark("completeGroups");
         RefreshRecentNotes();
@@ -9507,17 +9553,6 @@ public class MainViewModel : ViewModelBase
         MarkNotesDashboardReady();
         WarmNoteContentPreviewsAtIdle();
         SweepOrphanMediaFiles();
-
-        // The launch phase (store parse, card preview warming, dashboard realization) leaves
-        // hundreds of MB of short-lived garbage that would otherwise sit until the first
-        // incidental gen2 pass. Reclaim it off-thread right after the load and return the
-        // pages, so the app's footprint right after launch matches its real usage.
-        _ = Task.Run(() =>
-        {
-            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-            GC.WaitForPendingFinalizers();
-            TrimWorkingSet();
-        });
     }
 
     /// <summary>
@@ -9532,21 +9567,8 @@ public class MainViewModel : ViewModelBase
         // the user sees first. Only the initial viewport is warmed (the visible window + a
         // buffer); cards beyond it decode lazily on scroll - for large libraries warming every
         // card would decode the full content of the whole library at startup.
-        var pending = new Queue<NoteCardViewModel>(NotesView.Cast<NoteCardViewModel>().Take(PreviewWarmBudget));
-        if (pending.Count == 0)
-            return;
-
-        void Pump()
-        {
-            var budget = System.Diagnostics.Stopwatch.StartNew();
-            while (pending.Count > 0 && budget.ElapsedMilliseconds < 4)
-                pending.Dequeue().WarmContentPreview();
-
-            if (pending.Count > 0)
-                Application.Current?.Dispatcher.BeginInvoke(Pump, DispatcherPriority.ApplicationIdle);
-        }
-
-        Application.Current?.Dispatcher.BeginInvoke(Pump, DispatcherPriority.ApplicationIdle);
+        foreach (var note in NotesView.Cast<NoteCardViewModel>().Take(PreviewWarmBudget))
+            NotePreviewWarmQueue.Enqueue(note);
     }
 
     private void MarkNotesDashboardReady()

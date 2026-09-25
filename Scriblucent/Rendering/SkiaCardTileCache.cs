@@ -4,6 +4,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using SkiaSharp;
 using Scriblucent.Services;
+using Scriblucent.ViewModels;
 
 namespace Scriblucent.Rendering;
 
@@ -17,6 +18,8 @@ namespace Scriblucent.Rendering;
 internal static class SkiaCardTileCache
 {
     private const int MaxEntries = 320;
+
+    private readonly record struct CacheKey(object Vm, double Dpi, float WidthDip, SkiaTileRenderer Renderer);
 
     private sealed class Entry
     {
@@ -35,9 +38,10 @@ internal static class SkiaCardTileCache
         public required Action<BitmapSource>? Completed;
     }
 
-    private static readonly Dictionary<(object Vm, double Dpi, float WidthDip, SkiaTileRenderer Renderer), Entry> Cache = new();
-    private static readonly Queue<(object Vm, double Dpi, float WidthDip, SkiaTileRenderer Renderer)> Order = new();
-    private static readonly ConcurrentQueue<Request> Pending = new();
+    private static readonly Dictionary<CacheKey, Entry> Cache = new();
+    private static readonly LinkedList<CacheKey> Order = new();
+    private static readonly Dictionary<CacheKey, LinkedListNode<CacheKey>> Nodes = new();
+    private static readonly BlockingCollection<Request> Pending = new();
     private static readonly ConcurrentDictionary<(object Vm, SkiaTileRenderer Renderer), byte> InFlight = new();
     private static int _workersStarted;
 
@@ -54,17 +58,37 @@ internal static class SkiaCardTileCache
 
         Cache.Clear();
         Order.Clear();
+        Nodes.Clear();
     }
 
     /// <summary>
     /// Returns the cached tile for the card, or the themed placeholder and queues an off-thread
     /// render. When the render lands, <paramref name="completed"/> runs on the UI thread with
     /// the frozen BitmapSource (only if the caller is still relevant).
+    /// Note cards whose preview is not cached yet stay on the placeholder until an idle slice
+    /// decodes the preview; the worker never builds a FlowDocument.
     /// </summary>
     public static BitmapSource GetOrRequest(object vm, double dpi, SkiaTileRenderer renderer, Action<BitmapSource>? completed, float widthDip = 0)
     {
+        if (vm is NoteCardViewModel note
+            && ReferenceEquals(renderer, SkiaTileRenderers.Notes)
+            && !note.IsContentPreviewCached)
+        {
+            if (completed is not null)
+            {
+                NotePreviewWarmQueue.Enqueue(note, () =>
+                {
+                    var ready = GetOrRequest(note, dpi, renderer, completed, widthDip);
+                    if (Contains(note, dpi, widthDip, renderer))
+                        completed(ready);
+                });
+            }
+
+            return CreatePlaceholder(renderer, dpi);
+        }
+
         var signature = renderer.BuildSignature(vm);
-        var key = (vm, dpi, widthDip, renderer);
+        var key = new CacheKey(vm, dpi, widthDip, renderer);
 
         if (Cache.TryGetValue(key, out var entry) && entry.Signature == signature)
         {
@@ -77,21 +101,37 @@ internal static class SkiaCardTileCache
             // De-dupe in-flight renders per view model + renderer.
             if (InFlight.TryAdd((vm, renderer), 0))
             {
-                Pending.Enqueue(new Request { ViewModel = vm, Dpi = dpi, WidthDip = widthDip, Renderer = renderer, Completed = completed });
+                Pending.Add(new Request { ViewModel = vm, Dpi = dpi, WidthDip = widthDip, Renderer = renderer, Completed = completed });
                 EnsureWorkers();
             }
         }
 
-        return ToBitmapSource(renderer.RenderPlaceholder(dpi), dpi);
+        return CreatePlaceholder(renderer, dpi);
+    }
+
+    private static BitmapSource CreatePlaceholder(SkiaTileRenderer renderer, double dpi)
+    {
+        var bitmap = renderer.RenderPlaceholder(dpi);
+        try
+        {
+            return ToBitmapSource(bitmap, dpi);
+        }
+        finally
+        {
+            bitmap.Dispose();
+        }
     }
 
     public static double? GetHeightDip(object vm, double dpi, SkiaTileRenderer renderer)
     {
-        if (Cache.TryGetValue((vm, dpi, 0f, renderer), out var entry))
+        if (Cache.TryGetValue(new CacheKey(vm, dpi, 0f, renderer), out var entry))
             return entry.HeightDip;
 
         return null;
     }
+
+    private static bool Contains(object vm, double dpi, float widthDip, SkiaTileRenderer renderer)
+        => Cache.ContainsKey(new CacheKey(vm, dpi, widthDip, renderer));
 
     private static void EnsureWorkers()
     {
@@ -112,14 +152,8 @@ internal static class SkiaCardTileCache
 
     private static void RenderWorker()
     {
-        while (true)
+        foreach (var request in Pending.GetConsumingEnumerable())
         {
-            if (!Pending.TryDequeue(out var request))
-            {
-                Thread.Sleep(4);
-                continue;
-            }
-
             SKBitmap bitmap;
             double heightDip;
             try
@@ -143,31 +177,19 @@ internal static class SkiaCardTileCache
             var viewModel = request.ViewModel;
             var dpi = request.Dpi;
             var renderer = request.Renderer;
-            dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
                 try
                 {
                     var source = ToBitmapSource(bitmap, dpi);
-                    var key = (viewModel, dpi, request.WidthDip, renderer);
-                    if (Cache.TryGetValue(key, out var existing))
-                        existing.Bitmap.Dispose();
-                    else
-                        Order.Enqueue(key);
-
-                    Cache[key] = new Entry
+                    var key = new CacheKey(viewModel, dpi, request.WidthDip, renderer);
+                    Remember(key, new Entry
                     {
                         Signature = renderer.BuildSignature(viewModel),
                         Bitmap = bitmap,
                         Source = source,
                         HeightDip = heightDip
-                    };
-
-                    while (Order.Count > MaxEntries)
-                    {
-                        var oldest = Order.Dequeue();
-                        if (Cache.Remove(oldest, out var evicted))
-                            evicted.Bitmap.Dispose();
-                    }
+                    });
                 }
                 catch
                 {
@@ -186,7 +208,7 @@ internal static class SkiaCardTileCache
 
     private static BitmapSource? GetCached(object vm, double dpi, SkiaTileRenderer renderer, float widthDip)
     {
-        return Cache.TryGetValue((vm, dpi, widthDip, renderer), out var entry) ? entry.Source : null;
+        return Cache.TryGetValue(new CacheKey(vm, dpi, widthDip, renderer), out var entry) ? entry.Source : null;
     }
 
     /// <summary>
@@ -209,28 +231,34 @@ internal static class SkiaCardTileCache
         return source;
     }
 
-    private static void Touch((object Vm, double Dpi, float WidthDip, SkiaTileRenderer Renderer) key)
+    private static void Remember(CacheKey key, Entry entry)
     {
-        // Re-arm the LRU order by moving the key to the tail (bounded, cheap).
-        if (Order.Count <= 1)
-            return;
+        if (Cache.TryGetValue(key, out var existing))
+            existing.Bitmap.Dispose();
 
-        // Only re-queue if not already at the tail.
-        var last = Order.ToArray();
-        if (last.Length > 0 && last[^1].Vm == key.Vm && last[^1].Dpi == key.Dpi)
-            return;
-
-        var list = new List<(object, double, float, SkiaTileRenderer)>(Order.Count);
-        while (Order.Count > 0)
+        Cache[key] = entry;
+        Touch(key);
+        while (Order.Count > MaxEntries && Order.First is { } oldest)
         {
-            var item = Order.Dequeue();
-            if (item.Vm != key.Vm || item.Dpi != key.Dpi)
-                list.Add(item);
+            Order.RemoveFirst();
+            Nodes.Remove(oldest.Value);
+            if (Cache.Remove(oldest.Value, out var evicted))
+                evicted.Bitmap.Dispose();
+        }
+    }
+
+    private static void Touch(CacheKey key)
+    {
+        if (Nodes.TryGetValue(key, out var node))
+        {
+            if (node == Order.Last)
+                return;
+
+            Order.Remove(node);
+            Order.AddLast(node);
+            return;
         }
 
-        list.Add(key);
-        foreach (var item in list)
-            Order.Enqueue(item);
+        Nodes[key] = Order.AddLast(key);
     }
 }
-

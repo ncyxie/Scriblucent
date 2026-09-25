@@ -95,8 +95,10 @@ public class DashboardTileHost : ContentControl
                 if (!IsBitmapMode || !ReferenceEquals(DataContext, requestedVm))
                     return;
 
+                var previousHeight = (layer.Source as BitmapSource)?.PixelHeight;
                 layer.Source = source;
-                InvalidateMeasure();
+                if (previousHeight != source.PixelHeight)
+                    InvalidateMeasure();
             }, widthDip);
         }
         else

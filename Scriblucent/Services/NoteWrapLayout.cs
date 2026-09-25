@@ -451,47 +451,61 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         if (_disposed || _isApplying || _editor.Document is null || _editor.Document.Blocks.Count == 0)
             return;
 
+        // Notes with no wrap images and nothing already applied used to capture and restore
+        // the caret anyway, and restore always forces UpdateLayout. Skip that hitch.
+        if (_images.GetWrapSessions().Count == 0 && !HasAppliedWrap())
+            return;
+
         // The wrap pass removes and re-inserts transient spacer blocks: the extent temporarily
         // shrinks (clamping a deep scroll) and the flow mutations can trigger the caret-following,
         // yanking the view away from a photo that is far from the caret's text. Preserve the view
-        // across the pass (this also covers the debounced re-apply that follows an auto-save).
+        // across a pass that actually mutates the flow.
         var viewState = _images.CaptureViewState();
+        var mutated = false;
         try
         {
-            ApplyCore(live);
+            mutated = ApplyCore(live);
         }
         finally
         {
-            _images.RestoreViewState(viewState);
+            if (mutated)
+                _images.RestoreViewState(viewState);
         }
     }
 
-    private void ApplyCore(bool live)
+    private bool HasAppliedWrap()
+        => _originalMargins.Count > 0
+            || _inlineSpacers.Count > 0
+            || _squareLineSpacers.Count > 0
+            || _pushSpacer is not null
+            || _laneSides.Count > 0;
+
+    private bool ApplyCore(bool live)
     {
         var sessions = _images.GetWrapSessions();
         if (sessions.Count == 0)
         {
             Clear();
-            return;
+            return true;
         }
 
         var contentWidth = ResolveContentWidth();
         if (contentWidth <= NoteWrapMath.MinimumLaneWidth)
         {
             ScheduleLayoutRetry();
-            return;
+            return false;
         }
 
         var paragraphs = EnumerateParagraphs(_editor.Document.Blocks).ToList();
         if (paragraphs.Count == 0)
-            return;
+            return false;
 
         // Apply can be scheduled before the editor's first layout pass (view size 0, character
         // rects empty) - in that case retry once the layout is ready instead of silently no-oping.
         if (!paragraphs.Any(HasMeasurableExtent))
         {
             ScheduleLayoutRetry();
-            return;
+            return false;
         }
 
         if (!live && _originalMargins.Count > 0
@@ -502,7 +516,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             // spacer (block mutations firing TextChanged per event), which re-schedules this
             // pass forever: the perpetual re-apply loop that kept notes marked "edited" and
             // churned CPU at rest. The settled state is a true no-op.
-            return;
+            return false;
         }
 
         if (!live && IsWrapSettled(sessions))
@@ -512,15 +526,14 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             // remove/re-insert the push spacer (block mutations firing TextChanged per event),
             // which re-schedules this pass forever: the perpetual re-apply loop that kept
             // notes marked "edited" and churned CPU at rest. The settled state is a true no-op.
-            return;
+            return false;
         }
 
         _isApplying = true;
-        // The wrap's spacer mutations fire the editor's TextChanged per event, and the
-        // coordinator's marker sweep walks the whole document on every one of them - while the
-        // wrap never produces the marker char the sweep hunts (it comes from the save/load/undo
-        // paths). Suppress the sweep across the pass; the prior value is restored so a host-side
-        // suppression (document load) is never clobbered.
+        // The wrap's spacer mutations fire the editor's TextChanged per event, and each one
+        // sweeps the edited runs for the inline marker char (it comes from the save/load/undo
+        // paths, never from wrap). Suppress the sweep across the pass; the prior value is
+        // restored so a host-side suppression (document load) is never clobbered.
         var priorSweepSuppression = _images.SuppressMarkerSweep;
         _images.SuppressMarkerSweep = true;
         try
@@ -547,6 +560,8 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             _images.SuppressMarkerSweep = priorSweepSuppression;
             _isApplying = false;
         }
+
+        return true;
     }
 
     /// <summary>True when the wrap is fully applied and nothing (text or photo geometry) changed

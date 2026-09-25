@@ -2,6 +2,7 @@ using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
 using Scriblucent;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows.Controls;
@@ -15,9 +16,13 @@ public class NoteCardViewModel : ViewModelBase
 {
     private bool _isMenuVisible;
     private bool _isSelectedInMassSelect;
+    private int _contentGeneration;
     private string? _cachedContentPreview;
     private string? _cachedTagsDisplay;
     private string? _cachedTagsSearchText;
+    private string? _searchHaystack;
+    private bool _searchHaystackIncludesBody;
+    private CultureInfo? _searchHaystackCulture;
     private readonly Action<NoteCardViewModel> _deleteAction;
     private readonly Action<NoteCardViewModel>? _removeFromGroupAction;
     private readonly Action<NoteCardViewModel>? _duplicateAction;
@@ -39,6 +44,9 @@ public class NoteCardViewModel : ViewModelBase
         RemoveFromGroupCommand = new RelayCommand(RemoveFromGroup, () => IsGrouped);
         DuplicateCommand = new RelayCommand(DuplicateNote);
         TogglePinCommand = new RelayCommand(TogglePin);
+
+        if (document.SearchablePreview is not null)
+            _cachedContentPreview = document.SearchablePreview;
     }
 
     public bool HasTags => Document.Tags?.Count > 0;
@@ -84,6 +92,24 @@ public class NoteCardViewModel : ViewModelBase
     public NoteDocument Document { get; }
 
     public string Title => Document.Title;
+
+    /// <summary>Bumped when the note body changes so tile signatures invalidate without reading
+    /// <see cref="Content"/> (that getter parses a FlowDocument).</summary>
+    internal int ContentGeneration => _contentGeneration;
+
+    /// <summary>The cached preview, if one has already been decoded or loaded from
+    /// <see cref="NoteDocument.SearchablePreview"/>. Does not parse.</summary>
+    internal bool TryGetCachedContentPreview(out string preview)
+    {
+        if (_cachedContentPreview is null)
+        {
+            preview = string.Empty;
+            return false;
+        }
+
+        preview = _cachedContentPreview;
+        return true;
+    }
     // Return a plain-text preview for the card. The stored Document.Content
     // may be plain text or Base64-encoded RTF (saved by the editor). If it's
     // RTF we decode and extract the text so the card shows readable content
@@ -96,6 +122,7 @@ public class NoteCardViewModel : ViewModelBase
                 return _cachedContentPreview;
 
             _cachedContentPreview = BuildContentPreview();
+            Document.SearchablePreview = _cachedContentPreview;
             return _cachedContentPreview;
         }
     }
@@ -112,6 +139,29 @@ public class NoteCardViewModel : ViewModelBase
     /// had a chance to run.
     /// </summary>
     internal bool IsContentPreviewCached => _cachedContentPreview is not null;
+
+    internal bool TryGetSearchHaystack(bool includeBody, out string haystack)
+    {
+        if (_searchHaystack is not null
+            && _searchHaystackIncludesBody == includeBody
+            && ReferenceEquals(_searchHaystackCulture, CultureInfo.CurrentCulture))
+        {
+            haystack = _searchHaystack;
+            return true;
+        }
+
+        haystack = string.Empty;
+        return false;
+    }
+
+    internal void SetSearchHaystack(string haystack, bool includeBody)
+    {
+        _searchHaystack = haystack;
+        _searchHaystackIncludesBody = includeBody;
+        _searchHaystackCulture = CultureInfo.CurrentCulture;
+    }
+
+    internal void InvalidateSearchHaystack() => _searchHaystack = null;
 
     /// <summary>
     /// Builds and caches the preview eagerly so scrolling the dashboard never pays the
@@ -234,9 +284,12 @@ public class NoteCardViewModel : ViewModelBase
 
     public void NotifyContentChanged()
     {
+        _contentGeneration++;
         _cachedContentPreview = null;
+        Document.SearchablePreview = null;
         _cachedTagsDisplay = null;
         _cachedTagsSearchText = null;
+        InvalidateSearchHaystack();
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(Content));
         OnPropertyChanged(nameof(HasPictures));
@@ -246,6 +299,9 @@ public class NoteCardViewModel : ViewModelBase
         OnPropertyChanged(nameof(TagsSearchText));
         OnPropertyChanged(nameof(IsGrouped));
         CommandManager.InvalidateRequerySuggested();
+        // The editor saves immediately after this. Rebuild now so the snapshot keeps the
+        // same preview string the card shows, and the next launch does not parse again.
+        WarmContentPreview();
     }
 
     public void NotifyGroupChanged()

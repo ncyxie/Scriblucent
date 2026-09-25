@@ -62,16 +62,6 @@ public partial class NoteEditorTabsWindow : Window
             // beats a fire-and-forget task that may get cut off by process exit.
             foreach (var state in _tabsByDocumentId.Values)
                 state.Editor.DisposeHostedEditor(disposeAiBackendSynchronously: true);
-
-            // The editor teardown (document, coordinator, wrap engine) leaves sizeable transient
-            // garbage that otherwise waits for the next incidental gen2 pass; collect off-thread
-            // and return the freed pages (the app is idle at this moment).
-            _ = Task.Run(() =>
-            {
-                GC.Collect(2, GCCollectionMode.Forced, blocking: true);
-                GC.WaitForPendingFinalizers();
-                Scriblucent.ViewModels.MainViewModel.TrimWorkingSet();
-            });
         };
         Closing += Window_Closing;
         WindowContentEnterHelper.AnimateOnLoaded(this, "EditorTabs", FinalizeWindowClose);

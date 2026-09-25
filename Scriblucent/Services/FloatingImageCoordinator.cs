@@ -1329,6 +1329,9 @@ public sealed class FloatingImageCoordinator
     public void RenumberCaptions()
     {
         var captioned = _sessions.Values.Where(session => session.HasCaption).ToList();
+        if (captioned.Count == 0)
+            return;
+
         captioned.Sort(CompareCaptionOrder);
 
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -2284,6 +2287,61 @@ public sealed class FloatingImageCoordinator
         }
     }
 
+    /// <summary>Keystrokes only need the runs the edit touched. A full-document walk on every
+    /// character is what made long notes hitch; undo still reports the resurrected marker
+    /// inside <see cref="TextChangedEventArgs.Changes"/>.</summary>
+    private void SweepStrayInlineMarkers(TextChangedEventArgs e)
+    {
+        if (_editor?.Document is null || e.Changes.Count == 0)
+            return;
+
+        var runs = new HashSet<Run>();
+        foreach (var change in e.Changes)
+            CollectRunsOverlapping(change, runs);
+
+        foreach (var run in runs)
+        {
+            if (run.Text.IndexOf(InlineMarkerChar) >= 0)
+                RemoveMarkerChars(run);
+        }
+    }
+
+    private void CollectRunsOverlapping(TextChange change, HashSet<Run> runs)
+    {
+        var document = _editor!.Document;
+        var start = document.ContentStart.GetPositionAtOffset(change.Offset);
+        if (start is null)
+            return;
+
+        CollectRun(runs, start);
+        var end = change.AddedLength > 0
+            ? document.ContentStart.GetPositionAtOffset(change.Offset + change.AddedLength)
+            : start;
+        if (end is not null)
+            CollectRun(runs, end);
+
+        if (end is null || start.CompareTo(end) >= 0)
+            return;
+
+        var navigator = start;
+        var guard = 0;
+        while (navigator.CompareTo(end) < 0 && guard++ < 10000)
+        {
+            CollectRun(runs, navigator);
+            var next = navigator.GetNextContextPosition(LogicalDirection.Forward);
+            if (next is null || next.CompareTo(navigator) <= 0)
+                break;
+
+            navigator = next;
+        }
+    }
+
+    private static void CollectRun(HashSet<Run> runs, TextPointer pointer)
+    {
+        if (pointer.Parent is Run run)
+            runs.Add(run);
+    }
+
     /// <summary>Removes every marker char inside a run, keeping any real text it was coalesced
     /// with.</summary>
     private static void RemoveMarkerChars(Run run)
@@ -2364,7 +2422,7 @@ public sealed class FloatingImageCoordinator
         // being re-anchored (load), and while the host loads document content - all three
         // legitimately carry transient markers.
         if (_pendingInlineRestoreOrder is null && !_isRestoring && !SuppressMarkerSweep)
-            SweepStrayInlineMarkers();
+            SweepStrayInlineMarkers(e);
 
         SyncInlineParagraphLineStrategies();
         SyncInlineButtonPlacement();
