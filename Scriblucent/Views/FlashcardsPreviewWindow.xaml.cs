@@ -888,18 +888,26 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         if (_items.Count > 0)
         {
+            FlashcardsGridEmptyCreate.Visibility = Visibility.Collapsed;
             FlashcardsGridEmptyStateText.Visibility = Visibility.Collapsed;
             return;
         }
 
         var hasAnyCardsInSet = _allItems.Any(item => item.SetIndex == _currentSetIndex);
-        string message;
-
         if (!hasAnyCardsInSet)
         {
-            message = LocalizationService.GetString("FlashcardGridEmptyBeginCreating");
+            var wasHidden = FlashcardsGridEmptyCreate.Visibility != Visibility.Visible;
+            FlashcardsGridEmptyStateText.Visibility = Visibility.Collapsed;
+            FlashcardsGridEmptyCreate.Visibility = Visibility.Visible;
+            if (wasHidden)
+                UiMotion.AnimateEmptyDashboardEnter(FlashcardsGridEmptyCreate);
+            return;
         }
-        else if (_dueOnly && !_isCramMode)
+
+        FlashcardsGridEmptyCreate.Visibility = Visibility.Collapsed;
+        string message;
+
+        if (_dueOnly && !_isCramMode)
         {
             var upcomingDueDates = GetItemsMatchingNonDueFilters()
                 .Where(item => item.DueDate.HasValue)

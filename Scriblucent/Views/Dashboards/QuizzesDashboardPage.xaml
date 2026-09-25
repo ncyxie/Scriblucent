@@ -871,6 +871,7 @@
 
                                 <dashboard:EmptyDashboardPanel x:Name="QuizzesEmptyDashboardPanel"
                                             Grid.Row="2"
+                                            IconKind="Quizzes"
                                             Visibility="{Binding ShowQuizzesEmptyDashboard, Converter={StaticResource BoolToVis}}"
                                             Prompt="{Binding QuizzesEmptyDashboardPrompt}"
                                             ButtonContent="{Binding [CreateQuiz], Source={StaticResource Loc}}"

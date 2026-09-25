@@ -13,20 +13,6 @@ public partial class FlashcardsDashboardPage : UserControl
 
     private MainWindow? Host => Window.GetWindow(this) as MainWindow;
 
-    private void QuickCreateTitleTextBox_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter || sender is not TextBox textBox)
-            return;
-
-        var title = textBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(title))
-            return;
-
-        Host?.CreateFlashcardSetWithTitle(title);
-        textBox.Clear();
-        e.Handled = true;
-    }
-
     private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
         => Host?.CalendarScheduleGearButton_Click(sender, e);
     private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)

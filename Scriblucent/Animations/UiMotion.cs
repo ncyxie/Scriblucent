@@ -1035,9 +1035,10 @@ public static class UiMotion
 
     public const int StaggerEnterStepMs = 140;
     public const double StaggerEnterScale = 0.9;
-    public const int EmptyDashboardPanelMs = 360;
-    public const int EmptyDashboardStaggerStepMs = 220;
-    public const double EmptyDashboardEnterLiftY = 16;
+    public const int EmptyDashboardPanelMs = 280;
+    public const int EmptyDashboardStaggerStepMs = 70;
+    public const double EmptyDashboardEnterLiftY = 10;
+    public const double EmptyDashboardEnterScale = 0.96;
     public const int ContentHostEnterMs = 380;
     public const double ContentHostEnterLiftY = 12;
     public const int GroupEnterMs = 380;
@@ -1051,7 +1052,8 @@ public static class UiMotion
         int durationMs = SectionMs,
         double offsetY = PanelLiftY,
         int staggerMs = StaggerEnterStepMs,
-        Action? onComplete = null)
+        Action? onComplete = null,
+        double enterScale = StaggerEnterScale)
     {
         if (elements.Count == 0)
         {
@@ -1062,12 +1064,7 @@ public static class UiMotion
         if (PrefersReducedMotion)
         {
             foreach (var element in elements)
-            {
-                element.Opacity = 1;
-                ResetTranslate(element);
-                EnsureScale(element).ScaleX = 1;
-                EnsureScale(element).ScaleY = 1;
-            }
+                SnapStaggeredEnterRest(element);
 
             onComplete?.Invoke();
             return;
@@ -1088,15 +1085,14 @@ public static class UiMotion
             element.RenderTransformOrigin = new Point(0.5, 0.5);
             Stop(element);
             Clear(element, UIElement.OpacityProperty);
-            var translate = EnsureTranslate(element);
+            var (scale, translate) = EnsureScaleTranslateGroup(element);
             Clear(translate, TranslateTransform.YProperty);
-            var scale = EnsureScale(element, StaggerEnterScale);
             Clear(scale, ScaleTransform.ScaleXProperty);
             Clear(scale, ScaleTransform.ScaleYProperty);
             element.Opacity = 0;
             translate.Y = offsetY;
-            scale.ScaleX = StaggerEnterScale;
-            scale.ScaleY = StaggerEnterScale;
+            scale.ScaleX = enterScale;
+            scale.ScaleY = enterScale;
 
             Run(
                 element,
@@ -1107,7 +1103,7 @@ public static class UiMotion
                     Track(
                         durationMs,
                         OutBack,
-                        StaggerEnterScale,
+                        enterScale,
                         1,
                         value =>
                         {
@@ -1122,30 +1118,16 @@ public static class UiMotion
 
     public static void AnimateEmptyDashboardEnter(FrameworkElement panel, Action? onComplete = null)
     {
-        if (panel is not Panel container)
+        var container = ResolveEmptyDashboardMotionRoot(panel);
+        if (container is null)
         {
             AnimateContentEnter(panel, EmptyDashboardPanelMs, EmptyDashboardEnterLiftY, onComplete);
             return;
         }
 
-        var elements = container.Children.OfType<FrameworkElement>().ToList();
+        var elements = CollectEmptyDashboardMotionChildren(container);
         if (elements.Count == 0)
         {
-            onComplete?.Invoke();
-            return;
-        }
-
-        if (PrefersReducedMotion)
-        {
-            panel.Opacity = 1;
-            foreach (var element in elements)
-            {
-                element.Opacity = 1;
-                ResetTranslate(element);
-                EnsureScale(element).ScaleX = 1;
-                EnsureScale(element).ScaleY = 1;
-            }
-
             onComplete?.Invoke();
             return;
         }
@@ -1153,32 +1135,50 @@ public static class UiMotion
         Stop(panel);
         panel.Opacity = 1;
         ResetTranslate(panel);
-        var panelScale = EnsureScale(panel);
-        panelScale.ScaleX = 1;
-        panelScale.ScaleY = 1;
-
-        foreach (var element in elements)
-        {
-            element.RenderTransformOrigin = new Point(0.5, 0.5);
-            Stop(element);
-            Clear(element, UIElement.OpacityProperty);
-            var translate = EnsureTranslate(element);
-            Clear(translate, TranslateTransform.YProperty);
-            var scale = EnsureScale(element, StaggerEnterScale);
-            Clear(scale, ScaleTransform.ScaleXProperty);
-            Clear(scale, ScaleTransform.ScaleYProperty);
-            element.Opacity = 0;
-            translate.Y = EmptyDashboardEnterLiftY;
-            scale.ScaleX = StaggerEnterScale;
-            scale.ScaleY = StaggerEnterScale;
-        }
 
         AnimateStaggeredContentEnter(
             elements,
             durationMs: EmptyDashboardPanelMs,
             offsetY: EmptyDashboardEnterLiftY,
             staggerMs: EmptyDashboardStaggerStepMs,
-            onComplete);
+            onComplete: onComplete,
+            enterScale: EmptyDashboardEnterScale);
+    }
+
+    private static Panel? ResolveEmptyDashboardMotionRoot(FrameworkElement panel)
+    {
+        if (panel is Panel direct)
+            return direct;
+
+        return panel.FindName("MotionRoot") is Panel named ? named : null;
+    }
+
+    private static List<FrameworkElement> CollectEmptyDashboardMotionChildren(Panel container)
+        => container.Children
+            .OfType<FrameworkElement>()
+            .Where(child => child.Visibility == Visibility.Visible)
+            .ToList();
+
+    private static void SnapStaggeredEnterRest(FrameworkElement element)
+    {
+        element.Opacity = 1;
+        if (element.RenderTransform is TransformGroup group && !group.IsFrozen)
+        {
+            if (group.Children.OfType<TranslateTransform>().FirstOrDefault() is { IsFrozen: false } translate)
+                translate.X = translate.Y = 0;
+            if (group.Children.OfType<ScaleTransform>().FirstOrDefault() is { IsFrozen: false } scale)
+            {
+                scale.ScaleX = 1;
+                scale.ScaleY = 1;
+            }
+
+            return;
+        }
+
+        ResetTranslate(element);
+        var loneScale = EnsureScale(element);
+        loneScale.ScaleX = 1;
+        loneScale.ScaleY = 1;
     }
 
     public static void PrepDashboardContentRevealStart(FrameworkElement element)

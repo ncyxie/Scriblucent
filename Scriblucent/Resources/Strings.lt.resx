@@ -705,7 +705,6 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardsDashboard" xml:space="preserve"><value>Kortelės</value></data>
   <data name="FlashcardGroupsDashboardTitle" xml:space="preserve"><value>Mokymosi kortelės</value></data>
   <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Pradėkite sukurdami mokymosi korteles</value></data>
-  <data name="FlashcardsQuickCreateHint" xml:space="preserve"><value>Arba įveskite pavadinimą ir paspauskite Enter</value></data>
   <data name="CreateFlashcards" xml:space="preserve"><value>Sukurti flashcards</value></data>
   <data name="FlashcardSetCountFormat" xml:space="preserve"><value>{0} rinkiniai(-ių)</value></data>
   <data name="FlashcardCardsCountFormat" xml:space="preserve"><value>{0} kortelės(-ių)</value></data>
@@ -854,7 +853,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardStatusLearning" xml:space="preserve"><value>Mokomasi</value></data>
   <data name="FlashcardStatusMature" xml:space="preserve"><value>Įsitvirtinusi</value></data>
   <data name="FlashcardStatusAll" xml:space="preserve"><value>Visos</value></data>
-  <data name="FlashcardGridEmptyBeginCreating" xml:space="preserve"><value>Šiame rinkinyje dar nėra kortelių - spauskite +, kad pridėtumėte pirmą.</value></data>
+  <data name="FlashcardGridEmptyBeginCreating" xml:space="preserve"><value>Pradėkite sukurdami kortelę</value></data>
   <data name="FlashcardGridEmptyNoMatches" xml:space="preserve"><value>Pagal jūsų filtrus kortelių nerasta.</value></data>
   <data name="FlashcardGridEmptyNextReviewTomorrow" xml:space="preserve"><value>Viskas peržiūrėta! Kita peržiūra: rytoj.</value></data>
   <data name="FlashcardGridEmptyNextReviewInDaysFormat" xml:space="preserve"><value>Viskas peržiūrėta! Kita peržiūra: po {0} d.</value></data>

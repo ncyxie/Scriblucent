@@ -1217,6 +1217,39 @@
                             </DataTemplate>
                         </controls:FlashcardGridItemsControl.ItemTemplate>
                     </controls:FlashcardGridItemsControl>
+                    <StackPanel x:Name="FlashcardsGridEmptyCreate"
+                                Visibility="Collapsed"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <Border Width="64"
+                                Height="64"
+                                CornerRadius="{StaticResource Radius.Card}"
+                                Background="{DynamicResource AccentPrimarySubtle}"
+                                HorizontalAlignment="Center"
+                                IsHitTestVisible="False"
+                                Margin="0,0,0,16">
+                            <icons:AppIcon Kind="Flashcards"
+                                           Width="28"
+                                           Height="28"
+                                           Foreground="{DynamicResource AccentPrimary}"
+                                           IsHitTestVisible="False"/>
+                        </Border>
+                        <TextBlock Text="{Binding [FlashcardGridEmptyBeginCreating], Source={StaticResource Loc}}"
+                                   FontFamily="{StaticResource FontFamily.UI}"
+                                   FontSize="{StaticResource Type.EmptyState}"
+                                   Foreground="{DynamicResource TextColor}"
+                                   HorizontalAlignment="Center"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="520"
+                                   Margin="0,0,0,16"/>
+                        <Button Style="{StaticResource DialogPrimaryButtonStyle}"
+                                MinWidth="180"
+                                Padding="18,10"
+                                HorizontalAlignment="Center"
+                                Content="{Binding [AddFlashcard], Source={StaticResource Loc}}"
+                                Click="AddFlashcardButton_Click"/>
+                    </StackPanel>
                     <TextBlock x:Name="FlashcardsGridEmptyStateText"
                                Visibility="Collapsed"
                                FontSize="{StaticResource Type.EmptyState}"

@@ -914,33 +914,13 @@
                                 </Border>
                                 </Grid>
 
-                                <StackPanel Grid.Row="2"
+                                <dashboard:EmptyDashboardPanel x:Name="FlashcardsEmptyDashboardPanel"
+                                            Grid.Row="2"
+                                            IconKind="Flashcards"
                                             Visibility="{Binding ShowFlashcardsEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            HorizontalAlignment="Center">
-                                    <dashboard:EmptyDashboardPanel x:Name="FlashcardsEmptyDashboardPanel"
-                                                Prompt="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
-                                                ButtonContent="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
-                                                Click="CreateFlashcardsButton_Click"/>
-                                    <TextBlock Text="{Binding [FlashcardsQuickCreateHint], Source={StaticResource Loc}}"
-                                               FontSize="{StaticResource Type.Caption}"
-                                               Foreground="{DynamicResource TextColorSecondary}"
-                                               HorizontalAlignment="Center"
-                                               Margin="0,16,0,8"/>
-                                    <Border Width="280"
-                                            Height="36"
-                                            CornerRadius="{StaticResource Radius.Control}"
-                                            Background="{DynamicResource InputSurface}"
-                                            BorderBrush="{DynamicResource InputRestBorder}"
-                                            BorderThickness="{DynamicResource Field.RestBorderThickness}"
-                                            behaviors:RoundedClipBehavior.IsEnabled="True"
-                                            behaviors:FieldFocusRingBehavior.IsEnabled="True"
-                                            Padding="12,0">
-                                        <TextBox x:Name="QuickCreateTitleTextBox"
-                                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                                 VerticalContentAlignment="Center"
-                                                 KeyDown="QuickCreateTitleTextBox_KeyDown"/>
-                                    </Border>
-                                </StackPanel>
+                                            Prompt="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
+                                            ButtonContent="{Binding [CreateFlashcards], Source={StaticResource Loc}}"
+                                            Click="CreateFlashcardsButton_Click"/>
                             </Grid>
                         </ScrollViewer>
 

@@ -979,6 +979,7 @@
 
                                 <dashboard:EmptyDashboardPanel x:Name="MindMapsEmptyDashboardPanel"
                                             Grid.Row="2"
+                                            IconKind="MindMaps"
                                             Visibility="{Binding ShowMindMapsEmptyDashboard, Converter={StaticResource BoolToVis}}"
                                             Prompt="{Binding MindMapsEmptyDashboardPrompt}"
                                             ButtonContent="{Binding [CreateMindMap], Source={StaticResource Loc}}"

@@ -731,11 +731,10 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardsPreviewTitle" xml:space="preserve"><value>Flashcard Editor</value></data>
   <data name="FlashcardsEditorTitle" xml:space="preserve"><value>Flashcard Editor</value></data>
   <data name="NotesDashboard" xml:space="preserve"><value>Notes</value></data>
-  <data name="NotesEmptyDashboardPrompt" xml:space="preserve"><value>Begin by creating a note</value></data>
+  <data name="NotesEmptyDashboardPrompt" xml:space="preserve"><value>Start by creating a note</value></data>
   <data name="FlashcardsDashboard" xml:space="preserve"><value>Flashcards</value></data>
   <data name="FlashcardGroupsDashboardTitle" xml:space="preserve"><value>Flashcards</value></data>
   <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Start by creating flashcards</value></data>
-  <data name="FlashcardsQuickCreateHint" xml:space="preserve"><value>Or type a title and press Enter</value></data>
   <data name="CreateFlashcards" xml:space="preserve"><value>Create flashcards</value></data>
   <data name="FlashcardSetCountFormat" xml:space="preserve"><value>{0} sets</value></data>
   <data name="FlashcardCardsCountFormat" xml:space="preserve"><value>{0} cards</value></data>
@@ -884,7 +883,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardStatusLearning" xml:space="preserve"><value>Learning</value></data>
   <data name="FlashcardStatusMature" xml:space="preserve"><value>Mature</value></data>
   <data name="FlashcardStatusAll" xml:space="preserve"><value>All</value></data>
-  <data name="FlashcardGridEmptyBeginCreating" xml:space="preserve"><value>No cards in this set yet - click + to add your first one.</value></data>
+  <data name="FlashcardGridEmptyBeginCreating" xml:space="preserve"><value>Start by creating a flashcard</value></data>
   <data name="FlashcardGridEmptyNoMatches" xml:space="preserve"><value>No cards match your filters right now.</value></data>
   <data name="FlashcardGridEmptyNextReviewTomorrow" xml:space="preserve"><value>You're all caught up! Next review: tomorrow.</value></data>
   <data name="FlashcardGridEmptyNextReviewInDaysFormat" xml:space="preserve"><value>You're all caught up! Next review: in {0} days.</value></data>

@@ -601,6 +601,7 @@
                                 </Grid>
                                 <dashboard:EmptyDashboardPanel x:Name="NotesEmptyDashboardPanel"
                                             Grid.Row="2"
+                                            IconKind="Notes"
                                             Visibility="{Binding ShowNotesEmptyDashboard, Converter={StaticResource BoolToVis}}"
                                             Prompt="{Binding [NotesEmptyDashboardPrompt], Source={StaticResource Loc}}"
                                             ButtonContent="{Binding [AddNote], Source={StaticResource Loc}}"

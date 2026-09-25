@@ -1,18 +1,33 @@
 <UserControl x:Class="Scriblucent.Controls.Dashboard.EmptyDashboardPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
              HorizontalAlignment="Center"
              Margin="0,32,0,0">
-    <StackPanel HorizontalAlignment="Center">
+    <StackPanel x:Name="MotionRoot" HorizontalAlignment="Center">
+        <Border x:Name="GlyphChip"
+                Width="64"
+                Height="64"
+                CornerRadius="{StaticResource Radius.Card}"
+                Background="{DynamicResource AccentPrimarySubtle}"
+                HorizontalAlignment="Center"
+                IsHitTestVisible="False"
+                Margin="0,0,0,16">
+            <icons:AppIcon x:Name="GlyphIcon"
+                           Width="28"
+                           Height="28"
+                           Foreground="{DynamicResource AccentPrimary}"
+                           IsHitTestVisible="False"/>
+        </Border>
         <TextBlock x:Name="PromptText"
+                   FontFamily="{StaticResource FontFamily.UI}"
                    FontSize="{StaticResource Type.EmptyState}"
-                   FontStyle="Italic"
-                   Foreground="{DynamicResource TextColorSecondary}"
+                   Foreground="{DynamicResource TextColor}"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
                    TextWrapping="Wrap"
                    MaxWidth="520"
-                   Margin="0,0,0,8"/>
+                   Margin="0,0,0,16"/>
         <Button x:Name="PrimaryButton"
                 Style="{StaticResource EmptyDashboardPrimaryButtonStyle}"
                 MinWidth="180"

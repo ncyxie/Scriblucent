@@ -2337,19 +2337,6 @@ namespace Scriblucent
                 OpenFlashcardSetEditor(vm, null);
         }
 
-        /// <summary>Quick-create entry point for the empty-dashboard inline title box - opens the
-        /// same full editor CreateFlashcardsButton_Click does, just pre-titled with what was
-        /// already typed instead of the usual blank/placeholder title, so the user isn't asked to
-        /// retype it.</summary>
-        internal void CreateFlashcardSetWithTitle(string title)
-        {
-            if (DataContext is MainViewModel { IsMassSelectMode: true })
-                return;
-
-            if (DataContext is MainViewModel vm)
-                OpenFlashcardSetEditor(vm, null, title);
-        }
-
         internal void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button { ContextMenu: { } menu } button)
@@ -2560,7 +2547,7 @@ namespace Scriblucent
             }
         }
 
-        private void OpenFlashcardSetEditor(MainViewModel vm, FlashcardSetViewModel? set, string? initialTitle = null)
+        private void OpenFlashcardSetEditor(MainViewModel vm, FlashcardSetViewModel? set)
         {
             var document = set?.Document;
             FlashcardSetDocument? savedDocument = document;
@@ -2570,7 +2557,7 @@ namespace Scriblucent
                 document?.Cards ?? Enumerable.Empty<FlashcardItem>(),
                 vm.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
                 document?.AiModelDisplayName,
-                document?.Title ?? initialTitle,
+                document?.Title,
                 document?.Tags,
                 document?.SetNames,
                 document?.StudySession,
