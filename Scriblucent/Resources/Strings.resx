@@ -484,6 +484,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ClearFilters" xml:space="preserve"><value>Clear</value></data>
   <data name="NoTagsFound" xml:space="preserve"><value>No tags found yet.</value></data>
   <data name="SearchNotesHint" xml:space="preserve"><value>Search instantly by title, text, tags, group, date, font...</value></data>
+  <data name="ClearSearch" xml:space="preserve"><value>Clear search</value></data>
   <data name="ResetFactorySettings" xml:space="preserve"><value>Reset Factory Settings</value></data>
   <data name="ResetFactorySettingsTitle" xml:space="preserve"><value>Reset Factory Settings</value></data>
   <data name="ResetFactorySettingsDescription" xml:space="preserve"><value>Reset all settings and data to default. This action cannot be undone.</value></data>

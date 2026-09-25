@@ -17,6 +17,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
@@ -35,6 +36,12 @@ namespace Scriblucent
         private const double DashboardDragScrollMinStep = 16;
         private const double DashboardDragScrollMaxStep = 46;
         private const double TopSearchExpandedWidth = 320;
+        private const double ClearSearchButtonWidth = 22;
+        private const double ClearSearchButtonMargin = 4;
+        private const double ClearSearchButtonHiddenScale = 0.84;
+        private static readonly CubicEase ClearSearchShowEase = FreezeEase(EasingMode.EaseOut);
+        private static readonly CubicEase ClearSearchHideEase = FreezeEase(EasingMode.EaseIn);
+        private bool _clearSearchButtonShown;
         private const string DashboardNotes = "Notes";
         private const string DashboardFlashcards = "Flashcards";
         private const string DashboardQuizzes = "Quizzes";
@@ -416,6 +423,7 @@ namespace Scriblucent
                 _flashcardsHadGroups = _observedViewModel.HasFlashcardSetGroups;
                 _quizzesHadGroups = _observedViewModel.HasQuizGroups;
                 _mindMapsHadGroups = _observedViewModel.HasMindMapGroups;
+                SyncClearSearchButton(animate: false);
                 Dispatcher.BeginInvoke(EnsureAllDashboardContentHostsRestState, DispatcherPriority.Loaded);
                 QueueNotesLayoutRefresh();
                 QueueDashboardLayoutRefresh();
@@ -777,6 +785,8 @@ namespace Scriblucent
                     AnimateSectionVisibility(MindMapDashboardGroupsSectionBodyElement, vm.IsMindMapDashboardGroupsSectionExpanded, ScheduleMindMapVirtualizationRefreshAfterSectionAnimation);
                 else if (e.PropertyName == nameof(MainViewModel.IsMindMapDashboardUngroupedSectionExpanded))
                     AnimateSectionVisibility(MindMapDashboardUngroupedSectionBodyElement, vm.IsMindMapDashboardUngroupedSectionExpanded, ScheduleMindMapVirtualizationRefreshAfterSectionAnimation);
+                else if (e.PropertyName == nameof(MainViewModel.ActiveSearchQuery))
+                    SyncClearSearchButton(animate: true);
                 else if (e.PropertyName == nameof(MainViewModel.HasGroups))
                 {
                     _notesHadGroups = vm.HasGroups;
@@ -2157,11 +2167,95 @@ namespace Scriblucent
         private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
         {
             if (this.DataContext is ViewModels.MainViewModel vm)
+                vm.ActiveSearchQuery = string.Empty;
+
+            e.Handled = true;
+            Dispatcher.BeginInvoke(() =>
             {
-                vm.SearchQuery = string.Empty;
+                TopSearchTextBox.Focus();
+                TopSearchTextBox.CaretIndex = TopSearchTextBox.Text.Length;
+            }, DispatcherPriority.Input);
+        }
+
+        private static CubicEase FreezeEase(EasingMode mode)
+        {
+            var ease = new CubicEase { EasingMode = mode };
+            ease.Freeze();
+            return ease;
+        }
+
+        private void SyncClearSearchButton(bool animate)
+        {
+            var show = !string.IsNullOrEmpty(_observedViewModel?.ActiveSearchQuery);
+            if (show == _clearSearchButtonShown)
+                return;
+
+            _clearSearchButtonShown = show;
+            var button = ClearSearchButton;
+            UiMotion.Stop(button);
+
+            if (!animate || UiMotion.PrefersReducedMotion)
+            {
+                ApplyClearSearchButtonRestState(button, show);
+                return;
             }
 
-            CollapseTopSearchPanel();
+            button.RenderTransformOrigin = new Point(0.5, 0.5);
+            var scale = UiMotion.EnsureScale(button, show ? ClearSearchButtonHiddenScale : 1);
+            if (show)
+            {
+                button.Visibility = Visibility.Visible;
+                button.IsHitTestVisible = true;
+                button.Width = 0;
+                button.Margin = new Thickness(0);
+                button.Opacity = 0;
+                scale.ScaleX = ClearSearchButtonHiddenScale;
+                scale.ScaleY = ClearSearchButtonHiddenScale;
+            }
+            else
+            {
+                button.IsHitTestVisible = false;
+            }
+
+            var opacityFrom = button.Opacity;
+            var widthFrom = double.IsNaN(button.Width) ? (show ? 0 : ClearSearchButtonWidth) : button.Width;
+            var marginFrom = button.Margin.Left;
+            var scaleFrom = scale.ScaleX;
+            var duration = show ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
+            var easing = show ? ClearSearchShowEase : ClearSearchHideEase;
+
+            UiMotion.Run(
+                button,
+                new[]
+                {
+                    UiMotion.Track(duration, easing, opacityFrom, show ? 1.0 : 0.0, value => button.Opacity = value),
+                    UiMotion.Track(duration, easing, widthFrom, show ? ClearSearchButtonWidth : 0, value => button.Width = value),
+                    UiMotion.Track(duration, easing, marginFrom, show ? ClearSearchButtonMargin : 0, value => button.Margin = new Thickness(value, 0, 0, 0)),
+                    UiMotion.Track(duration, easing, scaleFrom, show ? 1.0 : ClearSearchButtonHiddenScale, value =>
+                    {
+                        scale.ScaleX = value;
+                        scale.ScaleY = value;
+                    })
+                },
+                () =>
+                {
+                    if (show != _clearSearchButtonShown)
+                        return;
+
+                    ApplyClearSearchButtonRestState(button, show);
+                });
+        }
+
+        private static void ApplyClearSearchButtonRestState(Button button, bool show)
+        {
+            var scale = UiMotion.EnsureScale(button, 1);
+            button.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            button.IsHitTestVisible = show;
+            button.Opacity = show ? 1 : 0;
+            button.Width = show ? ClearSearchButtonWidth : 0;
+            button.Margin = show ? new Thickness(ClearSearchButtonMargin, 0, 0, 0) : new Thickness(0);
+            scale.ScaleX = show ? 1 : ClearSearchButtonHiddenScale;
+            scale.ScaleY = show ? 1 : ClearSearchButtonHiddenScale;
         }
 
         private void ExpandTopSearchPanel()

@@ -484,6 +484,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ClearFilters" xml:space="preserve"><value>Išvalyti</value></data>
   <data name="NoTagsFound" xml:space="preserve"><value>Žymių dar nėra.</value></data>
   <data name="SearchNotesHint" xml:space="preserve"><value>Momentinė paieška pagal pavadinimą, tekstą, žymes, grupę, datą, šriftą...</value></data>
+  <data name="ClearSearch" xml:space="preserve"><value>Išvalyti paiešką</value></data>
   <data name="SortByLastModifiedDesc" xml:space="preserve"><value>Naujausiai redaguoti</value></data>
   <data name="SortByLastModifiedAsc" xml:space="preserve"><value>Seniausiai redaguoti</value></data>
   <data name="SortByCreatedAtDesc" xml:space="preserve"><value>Naujausiai sukurti</value></data>

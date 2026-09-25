@@ -3622,10 +3622,12 @@ public class MainViewModel : ViewModelBase
         {
             if (_searchQuery != value)
             {
-                _searchQuery = value ?? string.Empty;
+                var next = value ?? string.Empty;
+                var deleting = next.Length < _searchQuery.Length;
+                _searchQuery = next;
                 OnPropertyChanged(nameof(SearchQuery));
                 OnPropertyChanged(nameof(ActiveSearchQuery));
-                QueueSearchFilterApply(() => ApplyFilters());
+                QueueSearchFilterApply(() => ApplyFilters(), deleting);
             }
         }
     }
@@ -3635,13 +3637,15 @@ public class MainViewModel : ViewModelBase
         get => _flashcardSearchQuery;
         set
         {
-            if (_flashcardSearchQuery == (value ?? string.Empty))
+            var next = value ?? string.Empty;
+            if (_flashcardSearchQuery == next)
                 return;
 
-            _flashcardSearchQuery = value ?? string.Empty;
+            var deleting = next.Length < _flashcardSearchQuery.Length;
+            _flashcardSearchQuery = next;
             OnPropertyChanged(nameof(FlashcardSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            QueueSearchFilterApply(() => ApplyFlashcardFilters());
+            QueueSearchFilterApply(() => ApplyFlashcardFilters(), deleting);
         }
     }
 
@@ -3650,13 +3654,15 @@ public class MainViewModel : ViewModelBase
         get => _mindMapSearchQuery;
         set
         {
-            if (_mindMapSearchQuery == (value ?? string.Empty))
+            var next = value ?? string.Empty;
+            if (_mindMapSearchQuery == next)
                 return;
 
-            _mindMapSearchQuery = value ?? string.Empty;
+            var deleting = next.Length < _mindMapSearchQuery.Length;
+            _mindMapSearchQuery = next;
             OnPropertyChanged(nameof(MindMapSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            QueueSearchFilterApply(() => ApplyMindMapFilters());
+            QueueSearchFilterApply(() => ApplyMindMapFilters(), deleting);
         }
     }
 
@@ -3665,24 +3671,49 @@ public class MainViewModel : ViewModelBase
         get => _quizSearchQuery;
         set
         {
-            if (_quizSearchQuery == (value ?? string.Empty))
+            var next = value ?? string.Empty;
+            if (_quizSearchQuery == next)
                 return;
 
-            _quizSearchQuery = value ?? string.Empty;
+            var deleting = next.Length < _quizSearchQuery.Length;
+            _quizSearchQuery = next;
             OnPropertyChanged(nameof(QuizSearchQuery));
             OnPropertyChanged(nameof(ActiveSearchQuery));
-            QueueSearchFilterApply(() => ApplyQuizFilters());
+            QueueSearchFilterApply(() => ApplyQuizFilters(), deleting);
         }
     }
+
+    private const int SearchTypeDebounceMs = 250;
+    private const int SearchDeleteDebounceMs = 600;
 
     // Search-as-you-type debounce: applying the filter re-evaluates the dashboard's
     // ICollectionView (a full Reset, dropping realized containers/scroll position) and
     // rebuilds the Recent/Calendar strips, so doing that on every keystroke is wasteful.
     // The bound TextBox still updates immediately; only the filter pass is delayed.
-    private void QueueSearchFilterApply(Action applyFilters)
+    // Deleting waits longer so a run of backspaces does not rebuild the dashboard
+    // between characters, and clearing waits out the dismiss button's ease-out.
+    private void QueueSearchFilterApply(Action applyFilters, bool deleting)
     {
+        var query = ActiveSearchQuery;
+        int delayMs;
+        if (string.IsNullOrEmpty(query))
+            delayMs = UiMotion.PrefersReducedMotion ? 0 : UiMotion.HoverOutMs + 80;
+        else if (deleting && !UiMotion.PrefersReducedMotion)
+            delayMs = SearchDeleteDebounceMs;
+        else
+            delayMs = SearchTypeDebounceMs;
+
+        if (delayMs <= 0)
+        {
+            _searchFilterDebounceTimer?.Stop();
+            _pendingSearchFilterApply = null;
+            applyFilters();
+            return;
+        }
+
         _pendingSearchFilterApply = applyFilters;
-        _searchFilterDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _searchFilterDebounceTimer ??= new DispatcherTimer();
+        _searchFilterDebounceTimer.Interval = TimeSpan.FromMilliseconds(delayMs);
         _searchFilterDebounceTimer.Stop();
         _searchFilterDebounceTimer.Tick -= SearchFilterDebounceTimer_Tick;
         _searchFilterDebounceTimer.Tick += SearchFilterDebounceTimer_Tick;
