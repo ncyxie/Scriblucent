@@ -41,11 +41,11 @@ public sealed class OverlayDialogAnimator
 
         _animator.Show(
             afterShown,
-            () => OverlayBackdropCapture.TryCaptureForDimAnimation(_window.Owner));
+            () => OverlayBackdropCapture.TryCaptureForDialog(_window.Owner));
     }
 
     public void RefreshBackdrop()
-        => _animator.RefreshBackdrop(() => OverlayBackdropCapture.TryCaptureBehindOverlays(_window.Owner));
+        => _animator.RefreshBackdrop(() => OverlayBackdropCapture.TryCaptureForDialog(_window.Owner));
 
     public bool BeginClose(Action onClosed)
     {

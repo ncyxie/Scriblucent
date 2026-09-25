@@ -70,6 +70,7 @@
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Stretch"
                               behaviors:RoundedClipBehavior.IsEnabled="True"
+                              behaviors:RoundedClipBehavior.TopInset="1"
                               behaviors:RoundedClipBehavior.CornerRadius="{x:Static services:OverlayScrimRounding.WindowMatchRadius}">
                             <Image x:Name="BackdropSnapshot"
                                    Stretch="Fill"

@@ -347,53 +347,6 @@ internal static class ShellWindowChrome
         caption.BorderBrush = brush;
     }
 
-    /// <summary>
-    /// Sharp 1px top line for full-bleed overlays so the frame edge stays synced while the
-    /// caption (and its hairline) are covered by the blurred scrim.
-    /// </summary>
-    /// <param name="frameActive">
-    /// Whether the window whose OS L/R/B are visible is active. Overlay dialogs cover an inactive
-    /// owner — pass the owner's IsActive so Win10 light matches InactiveBorderColor.
-    /// </param>
-    /// <param name="frameWindow">Window whose chrome the hairline should match (usually the owner).</param>
-    internal static void ApplyOverlayFrameHairline(
-        Border hairline,
-        bool isDarkMode,
-        bool frameActive = true,
-        Window? frameWindow = null)
-    {
-        hairline.Height = 1;
-        hairline.BorderThickness = new Thickness(0);
-        hairline.SnapsToDevicePixels = true;
-        hairline.IsHitTestVisible = false;
-        hairline.VerticalAlignment = VerticalAlignment.Top;
-        hairline.HorizontalAlignment = HorizontalAlignment.Stretch;
-
-        if (frameWindow?.WindowState == WindowState.Maximized)
-        {
-            hairline.SetResourceReference(
-                Border.BackgroundProperty,
-                GetShellFrameBackgroundKey(frameWindow));
-            return;
-        }
-
-        var useThemeBorder = isDarkMode || Environment.OSVersion.Version.Build >= 22000;
-        if (useThemeBorder)
-        {
-            hairline.SetResourceReference(Border.BackgroundProperty, "BorderColor");
-            return;
-        }
-
-        // Win10 light: match the live OS frame (active vs inactive).
-        var color = frameActive
-            ? SystemColors.WindowFrameColor
-            : SystemColors.InactiveBorderColor;
-        var brush = new SolidColorBrush(color);
-        if (brush.CanFreeze)
-            brush.Freeze();
-        hairline.Background = brush;
-    }
-
     private static void ApplyShellFrame(Window window)
     {
         if (IsFullscreenSuspended(window))

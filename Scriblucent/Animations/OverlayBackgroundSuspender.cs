@@ -35,6 +35,40 @@ internal static class OverlayBackgroundSuspender
         _depth++;
     }
 
+    /// <summary>
+    /// Shows the page and caption an open scrim has hidden, runs <paramref name="action"/>,
+    /// then hides them again. The open scrim itself stays up.
+    /// </summary>
+    internal static T WithPageVisible<T>(Func<T> action)
+    {
+        var savedDepth = _depth;
+        var saved = Suspended.ToList();
+        if (savedDepth > 0)
+        {
+            foreach (var (element, visibility) in saved)
+                element.Visibility = visibility;
+
+            _depth = 0;
+            Suspended.Clear();
+        }
+
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            if (savedDepth > 0)
+            {
+                Suspended.Clear();
+                Suspended.AddRange(saved);
+                foreach (var (element, _) in saved)
+                    element.Visibility = Visibility.Hidden;
+                _depth = savedDepth;
+            }
+        }
+    }
+
     public static void TryResume()
     {
         if (_depth == 0)

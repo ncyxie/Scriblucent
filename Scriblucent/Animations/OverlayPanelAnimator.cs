@@ -37,8 +37,6 @@ public sealed class OverlayPanelAnimator
     private bool _backdropRefreshScheduled;
     private Effect? _savedPanelEffect;
     private FrameworkElement? _panelCard;
-    private Border? _frameHairline;
-    private Window? _frameHairlineWindow;
 
     private OverlayPanelAnimator(
         FrameworkElement host,
@@ -86,7 +84,6 @@ public sealed class OverlayPanelAnimator
         if (snapshot != null)
             OverlayBackgroundSuspender.TrySuspend(_host);
 
-        EnsureOverlayFrameHairline();
         _host.Visibility = Visibility.Visible;
         _host.IsHitTestVisible = true;
 
@@ -193,7 +190,6 @@ public sealed class OverlayPanelAnimator
         }
 
         OverlayBackgroundSuspender.TrySuspend(_host);
-        EnsureOverlayFrameHairline();
     }
 
     private void ShowImmediately(Action? afterShown)
@@ -210,7 +206,6 @@ public sealed class OverlayPanelAnimator
         _host.Visibility = Visibility.Collapsed;
         PrepareClosedState();
         ClearBackdrop();
-        HideOverlayFrameHairline();
         OverlayBackgroundSuspender.TryResume();
         _isClosing = false;
         afterHidden?.Invoke();
@@ -268,112 +263,12 @@ public sealed class OverlayPanelAnimator
                 _host.Visibility = Visibility.Collapsed;
                 PrepareClosedState();
                 ClearBackdrop();
-                HideOverlayFrameHairline();
                 EndPanelMotionPrep();
                 OverlayBackgroundSuspender.TryResume();
                 _isClosing = false;
                 afterHidden?.Invoke();
             },
             instantOnlyForSystemReducedMotion: true);
-    }
-
-    private void EnsureOverlayFrameHairline()
-    {
-        var panel = ResolveHairlinePanel();
-        if (panel is null)
-            return;
-
-        if (_frameHairline is null)
-        {
-            _frameHairline = new Border();
-            Panel.SetZIndex(_frameHairline, 10_000);
-            panel.Children.Add(_frameHairline);
-        }
-        else if (!ReferenceEquals(_frameHairline.Parent, panel))
-        {
-            if (_frameHairline.Parent is Panel oldParent)
-                oldParent.Children.Remove(_frameHairline);
-            Panel.SetZIndex(_frameHairline, 10_000);
-            panel.Children.Add(_frameHairline);
-        }
-
-        AttachFrameHairlineWindow();
-        RefreshOverlayFrameHairline();
-        _frameHairline.Visibility = Visibility.Visible;
-    }
-
-    private void RefreshOverlayFrameHairline()
-    {
-        if (_frameHairline is null)
-            return;
-
-        var isDarkMode = string.Equals(ThemeManager.CurrentTheme, "Dark", StringComparison.OrdinalIgnoreCase);
-        // Overlay dialogs are separate HWNDs over an inactive owner — L/R/B are the owner's frame.
-        var frameWindow = _frameHairlineWindow?.Owner ?? _frameHairlineWindow;
-        var frameActive = frameWindow?.IsActive ?? true;
-        ShellWindowChrome.ApplyOverlayFrameHairline(_frameHairline, isDarkMode, frameActive, frameWindow);
-    }
-
-    private void AttachFrameHairlineWindow()
-    {
-        var window = Window.GetWindow(_host);
-        if (ReferenceEquals(_frameHairlineWindow, window))
-            return;
-
-        DetachFrameHairlineWindow();
-        _frameHairlineWindow = window;
-        if (window is null)
-            return;
-
-        window.Activated += OnFrameHairlineActivationChanged;
-        window.Deactivated += OnFrameHairlineActivationChanged;
-        window.StateChanged += OnFrameHairlineActivationChanged;
-        if (window.Owner is { } owner)
-        {
-            owner.Activated += OnFrameHairlineActivationChanged;
-            owner.Deactivated += OnFrameHairlineActivationChanged;
-            owner.StateChanged += OnFrameHairlineActivationChanged;
-        }
-    }
-
-    private void DetachFrameHairlineWindow()
-    {
-        if (_frameHairlineWindow is null)
-            return;
-
-        _frameHairlineWindow.Activated -= OnFrameHairlineActivationChanged;
-        _frameHairlineWindow.Deactivated -= OnFrameHairlineActivationChanged;
-        _frameHairlineWindow.StateChanged -= OnFrameHairlineActivationChanged;
-        if (_frameHairlineWindow.Owner is { } owner)
-        {
-            owner.Activated -= OnFrameHairlineActivationChanged;
-            owner.Deactivated -= OnFrameHairlineActivationChanged;
-            owner.StateChanged -= OnFrameHairlineActivationChanged;
-        }
-
-        _frameHairlineWindow = null;
-    }
-
-    private void OnFrameHairlineActivationChanged(object? sender, EventArgs e)
-        => RefreshOverlayFrameHairline();
-
-    private Panel? ResolveHairlinePanel()
-    {
-        if (_host is Panel hostPanel)
-            return hostPanel;
-
-        // Settings/About/Schedule bind the UserControl as host; the named OverlayRoot is Content.
-        if (_host is ContentControl { Content: Panel contentPanel })
-            return contentPanel;
-
-        return _scrimHost.Parent as Panel;
-    }
-
-    private void HideOverlayFrameHairline()
-    {
-        DetachFrameHairlineWindow();
-        if (_frameHairline is not null)
-            _frameHairline.Visibility = Visibility.Collapsed;
     }
 
     private void PrepareOpenState()

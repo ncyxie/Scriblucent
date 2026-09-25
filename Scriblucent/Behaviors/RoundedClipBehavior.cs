@@ -42,6 +42,16 @@ public static class RoundedClipBehavior
         typeof(RoundedClipBehavior),
         new PropertyMetadata(new CornerRadius(), OnCornerRadiusChanged));
 
+    /// <summary>
+    /// DIPs left unpainted at the top so a full-window dialog does not cover the caption stroke.
+    /// The element still lays out at full size, so a 1:1 backdrop does not shift.
+    /// </summary>
+    public static readonly DependencyProperty TopInsetProperty = DependencyProperty.RegisterAttached(
+        "TopInset",
+        typeof(double),
+        typeof(RoundedClipBehavior),
+        new PropertyMetadata(0d, OnCornerRadiusChanged));
+
     public static void SetIsEnabled(DependencyObject element, bool value)
         => element.SetValue(IsEnabledProperty, value);
 
@@ -53,6 +63,12 @@ public static class RoundedClipBehavior
 
     public static CornerRadius GetCornerRadius(DependencyObject element)
         => (CornerRadius)element.GetValue(CornerRadiusProperty);
+
+    public static void SetTopInset(DependencyObject element, double value)
+        => element.SetValue(TopInsetProperty, value);
+
+    public static double GetTopInset(DependencyObject element)
+        => (double)element.GetValue(TopInsetProperty);
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -140,19 +156,24 @@ public static class RoundedClipBehavior
             return;
         }
 
+        var topInset = Math.Max(0, GetTopInset(element));
+        if (topInset >= height)
+            topInset = 0;
+
         var radius = ResolveRadius(element);
         var rx = Math.Max(0, Math.Min(radius.TopLeft, width / 2));
-        var ry = Math.Max(0, Math.Min(radius.TopLeft, height / 2));
+        var ry = Math.Max(0, Math.Min(radius.TopLeft, (height - topInset) / 2));
 
+        var rect = new Rect(0, topInset, width, height - topInset);
         if (element.Clip is RectangleGeometry existing)
         {
-            existing.Rect = new Rect(0, 0, width, height);
+            existing.Rect = rect;
             existing.RadiusX = rx;
             existing.RadiusY = ry;
             return;
         }
 
-        element.Clip = new RectangleGeometry(new Rect(0, 0, width, height), rx, ry);
+        element.Clip = new RectangleGeometry(rect, rx, ry);
     }
 
     private static CornerRadius ResolveRadius(FrameworkElement element)

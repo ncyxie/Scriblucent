@@ -26,6 +26,13 @@ public static class OverlayBackdropCapture
     public static BitmapSource? TryCaptureBehindOverlays(Window? window)
         => TryCaptureBehindOverlays(window, GetBlurRadius(window));
 
+    /// <summary>
+    /// One blur of the owner with any open scrim (Trash, Settings, About) out of the shot,
+    /// so a dialog does not blur an already blurred title-bar edge.
+    /// </summary>
+    public static BitmapSource? TryCaptureForDialog(Window? owner)
+        => OverlayBackgroundSuspender.WithPageVisible(() => TryCaptureBehindOverlays(owner));
+
     public static BitmapSource? TryCaptureBehindOverlays(Window? window, double blurRadius)
     {
         if (window?.Content is not Panel rootPanel)
