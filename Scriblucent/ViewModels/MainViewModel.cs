@@ -103,6 +103,15 @@ public class MainViewModel : ViewModelBase
 
     public event EventHandler? NotesDashboardReady;
 
+    public bool IsActiveDashboardReady => _activeDashboard switch
+    {
+        DashboardNotes => _isNotesDashboardReady,
+        DashboardFlashcards => _isFlashcardsDashboardReady,
+        DashboardMindMaps => _isMindMapsDashboardReady,
+        DashboardQuizzes => _isQuizzesDashboardReady,
+        _ => true
+    };
+
     public bool IsNotesDashboardReady => _isNotesDashboardReady;
     public bool IsNotesDashboardLoading => IsNotesView && !_isNotesDashboardReady;
     public bool ShowNotesEmptyDashboard => _isNotesDashboardReady && Notes.Count == 0;
@@ -520,6 +529,7 @@ public class MainViewModel : ViewModelBase
         _activeDashboard = normalized;
         CurrentView = normalized;
         OnPropertyChanged(nameof(ActiveDashboard));
+        OnPropertyChanged(nameof(IsActiveDashboardReady));
         OnPropertyChanged(nameof(CurrentView));
         OnPropertyChanged(nameof(IsNotesView));
         OnPropertyChanged(nameof(IsFlashcardsView));
@@ -9816,6 +9826,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         _isNotesDashboardReady = true;
+        OnPropertyChanged(nameof(IsActiveDashboardReady));
         NotifyNotesDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardNotes);
         NotesDashboardReady?.Invoke(this, EventArgs.Empty);
@@ -9827,6 +9838,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         _isFlashcardsDashboardReady = true;
+        OnPropertyChanged(nameof(IsActiveDashboardReady));
         NotifyFlashcardsDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardFlashcards);
     }
@@ -9837,6 +9849,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         _isMindMapsDashboardReady = true;
+        OnPropertyChanged(nameof(IsActiveDashboardReady));
         NotifyMindMapsDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardMindMaps);
     }
@@ -9847,6 +9860,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         _isQuizzesDashboardReady = true;
+        OnPropertyChanged(nameof(IsActiveDashboardReady));
         NotifyQuizzesDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardQuizzes);
     }

@@ -254,7 +254,20 @@ namespace Scriblucent
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             if (msg == WmSettingChange)
+            {
                 ReducedMotionPreferences.Refresh();
+                if (IsLoadingDashboardActive)
+                {
+                    _dashboardLoadingClock.Restart();
+                    DashboardLoadingShell.StartWave(UiMotion.PrefersReducedMotion);
+                    if (UiMotion.PrefersReducedMotion)
+                    {
+                        _startupLoadingEntrancePending = false;
+                        DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
+                        DashboardLoadingShell.Opacity = 1;
+                    }
+                }
+            }
 
             return IntPtr.Zero;
         }
@@ -355,6 +368,7 @@ namespace Scriblucent
             ConfigurePopupAnimations();
             ApplySectionStateImmediately();
             EnsureAllDashboardContentHostsRestState();
+            StartStartupLoadingEntrance();
             if (DataContext is MainViewModel vm && vm.IsNotesDashboardReady)
                 OnNotesDashboardReady(vm, EventArgs.Empty);
             else
@@ -363,6 +377,7 @@ namespace Scriblucent
 
         private void MainWindow_Unloaded(object sender, RoutedEventArgs e)
         {
+            CancelDashboardLoading();
             LocalizationService.CultureChanged -= LocalizationService_CultureChanged;
             AttachViewModel(null);
         }
@@ -380,6 +395,7 @@ namespace Scriblucent
 
             ApplySectionStateImmediately();
             EnsureAllDashboardContentHostsRestState();
+            SyncDashboardLoadingState(e.NewValue as MainViewModel);
             Dispatcher.BeginInvoke(EnsureActiveListingDashboardInteractive, DispatcherPriority.Loaded);
         }
 
@@ -879,9 +895,19 @@ namespace Scriblucent
                 }
                 else if (e.PropertyName == nameof(MainViewModel.ActiveDashboard))
                 {
+                    SyncDashboardLoadingState(vm);
                     AnimateDashboardTransition(vm.ActiveDashboard);
                     CloseNotesDashboardChrome();
                 }
+                else if (e.PropertyName == nameof(MainViewModel.IsActiveDashboardReady))
+                {
+                    SyncDashboardLoadingState(vm);
+                }
+
+                if (IsLoadingDashboardActive
+                    && !vm.IsActiveDashboardReady
+                    && string.Equals(_loadingDashboard, vm.ActiveDashboard, StringComparison.Ordinal))
+                    DashboardLoadingShell.SetLayout(BuildDashboardSkeletonLayout(vm));
 
             });
         }
@@ -1761,6 +1787,12 @@ namespace Scriblucent
             if (!IsLoaded || string.IsNullOrWhiteSpace(newDashboard))
                 return;
 
+            if (IsLoadingDashboardActive)
+            {
+                EnterDashboardLoading(newDashboard);
+                return;
+            }
+
             if (string.IsNullOrEmpty(_lastActiveDashboard)
                 || string.Equals(_lastActiveDashboard, newDashboard, StringComparison.Ordinal))
             {
@@ -1811,6 +1843,16 @@ namespace Scriblucent
                     incoming,
                     () =>
                     {
+                        if (!string.Equals(_lastActiveDashboard, newDashboard, StringComparison.Ordinal)
+                            || !string.Equals(_observedViewModel?.ActiveDashboard, newDashboard, StringComparison.Ordinal))
+                        {
+                            SetDashboardViewImmediate(_lastActiveDashboard);
+                            outgoing.IsHitTestVisible = true;
+                            incoming.IsHitTestVisible = true;
+                            DashboardShadowSuspender.TryResume(DashboardTransitionShadowScope);
+                            return;
+                        }
+
                         incoming.IsHitTestVisible = true;
                         outgoing.IsHitTestVisible = true;
                         _dashboardTransitionActive = false;

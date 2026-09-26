@@ -1067,6 +1067,15 @@
                 <dashboards:FlashcardsDashboardPage x:Name="FlashcardsDashboardView" Visibility="Collapsed"/>
                 <dashboards:QuizzesDashboardPage x:Name="QuizzesDashboardView" Visibility="Collapsed"/>
                 <dashboards:MindMapsDashboardPage x:Name="MindMapsDashboardView" Visibility="Collapsed"/>
+                <Grid x:Name="DashboardLoadingLayer" Visibility="Visible" ClipToBounds="True">
+                    <Border Background="{DynamicResource WindowBackground}"/>
+                    <controls:DashboardLoadingOverlay x:Name="DashboardLoadingShell"
+                                                      Background="Transparent"
+                                                      SurfaceBrush="{DynamicResource CardBackground}"
+                                                      DetailBrush="{DynamicResource BorderColor}"
+                                                      ClipToBounds="True"
+                                                      Opacity="0"/>
+                </Grid>
             </Grid>
             <Grid x:Name="MassSelectOverlayToolbar"
                     Grid.Row="1"
