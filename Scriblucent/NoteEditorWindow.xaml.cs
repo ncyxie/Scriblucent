@@ -137,6 +137,9 @@ namespace Scriblucent
         private bool _isSpellCheckEnabled;
         private DispatcherTimer? _spellCheckDebounceTimer;
         private readonly List<TextRange> _spellCheckDecoratedRanges = new();
+        private IReadOnlyList<SpellCheckService.WordSpan>? _lastSpellCheckAppliedSpans;
+        private long _lastSpellCheckAppliedVersion = -1;
+        private long _spellCheckRequestVersion;
         private bool _isSpellCheckScanning;
         private bool _isApplyingSpellCheckDecorations;
         private ContextMenu? _defaultContentTextBoxContextMenu;
@@ -1933,6 +1936,7 @@ namespace Scriblucent
 
             if (_isSerializingEditorContent
                 || _isApplyingHyperlinkCtrlHints
+                || _isApplyingSpellCheckDecorations
                 || _floatingImages.IsAdjustingExtentPad)
                 return;
 
@@ -1995,6 +1999,7 @@ namespace Scriblucent
         // still not worth running synchronously on every keystroke.
         private void ScheduleSpellCheck()
         {
+            _spellCheckRequestVersion++;
             _spellCheckDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
             _spellCheckDebounceTimer.Stop();
             _spellCheckDebounceTimer.Tick -= SpellCheckDebounceTimer_Tick;
@@ -2016,6 +2021,7 @@ namespace Scriblucent
             _isSpellCheckScanning = true;
             try
             {
+                var requestVersion = _spellCheckRequestVersion;
                 var settings = AppSettingsService.Load();
                 var dictionary = string.IsNullOrEmpty(settings.SpellCheckLanguageKey)
                     ? null
@@ -2028,6 +2034,7 @@ namespace Scriblucent
                 }
 
                 var text = GetDocumentSearchText();
+                var textVersion = _editorChangeVersion;
                 var customWords = new HashSet<string>(settings.SpellCheckCustomWords, StringComparer.OrdinalIgnoreCase);
                 customWords.UnionWith(_sessionIgnoredWords);
 
@@ -2037,7 +2044,27 @@ namespace Scriblucent
                 // thread by the continuation.
                 var spans = await Task.Run(
                     () => SpellCheckService.FindMisspelledWordSpans(text, dictionary, customWords));
+
+                if (!_isSpellCheckEnabled)
+                    return;
+
+                // A later edit may have happened while Hunspell scanned the snapshot. Its
+                // offsets must never be applied to the newer FlowDocument.
+                if (textVersion != _editorChangeVersion
+                    || requestVersion != _spellCheckRequestVersion)
+                {
+                    ScheduleSpellCheck();
+                    return;
+                }
+
+                if (_lastSpellCheckAppliedVersion == textVersion
+                    && _lastSpellCheckAppliedSpans is not null
+                    && _lastSpellCheckAppliedSpans.SequenceEqual(spans))
+                    return;
+
                 ApplySpellCheckDecorations(spans);
+                _lastSpellCheckAppliedSpans = spans.ToArray();
+                _lastSpellCheckAppliedVersion = textVersion;
             }
             finally
             {
@@ -2094,6 +2121,8 @@ namespace Scriblucent
         /// assumes a uniform range, which a mixed clear-everything range is not.</summary>
         private void ClearSpellCheckDecorations()
         {
+            _lastSpellCheckAppliedSpans = null;
+            _lastSpellCheckAppliedVersion = -1;
             if (_spellCheckDecoratedRanges.Count == 0)
                 return;
 
@@ -4797,8 +4826,7 @@ namespace Scriblucent
                 StartAutoSaveTimer();
             }
 
-            // Hook into content changes to track modifications
-            ContentTextBox.TextChanged += ContentTextBox_TextChanged;
+            // TextChanged is already wired in XAML.
             ContentTextBox.PreviewTextInput += ContentTextBox_PreviewTextInput;
             ContentTextBox.AddHandler(
                 Keyboard.PreviewKeyDownEvent,

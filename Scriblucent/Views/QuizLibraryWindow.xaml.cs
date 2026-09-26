@@ -17,7 +17,9 @@ namespace Scriblucent.Views;
 public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 {
     private readonly MainViewModel _mainViewModel;
-    private readonly ObservableCollection<global::Scriblucent.Views.QuizLibraryItemViewModel> _quizzes = new();
+    private readonly BulkObservableCollection<QuizLibraryItemViewModel> _quizzes = new();
+    private readonly BulkObservableCollection<QuizLibraryItemViewModel> _visibleQuizzes = new();
+    private readonly BulkObservableCollection<QuizLibraryItemViewModel> _selectedQuizzes = new();
     private readonly ObservableCollection<TagFilterItemViewModel> _categoryFilters = new();
     private readonly HashSet<string> _selectedTags = new(StringComparer.OrdinalIgnoreCase);
     private string _statusText = string.Empty;
@@ -26,6 +28,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private bool _shuffleCombinedQuestions = true;
     private bool _skipDuplicateQuestions = true;
     private DispatcherTimer? _searchFilterDebounceTimer;
+    private bool _isClearingSelection;
 
     public string QuizSearchQuery
     {
@@ -50,7 +53,6 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     {
         _searchFilterDebounceTimer?.Stop();
         UpdateFilteredVisibility();
-        UpdateStatusText();
     }
 
     public QuizLibraryWindow(MainViewModel mainViewModel)
@@ -62,7 +64,6 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
         LoadQuizzes();
         LoadCategories();
-        UpdateStatusText();
         UpdateFilteredVisibility();
         _mainViewModel.PropertyChanged += MainViewModel_PropertyChanged;
         WindowContentEnterHelper.AnimateOnLoaded(this);
@@ -78,13 +79,15 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     }
 
     public ObservableCollection<global::Scriblucent.Views.QuizLibraryItemViewModel> Quizzes => _quizzes;
+    public ObservableCollection<QuizLibraryItemViewModel> VisibleQuizzes => _visibleQuizzes;
+    public ObservableCollection<QuizLibraryItemViewModel> SelectedQuizzes => _selectedQuizzes;
 
     public ObservableCollection<TagFilterItemViewModel> CategoryFilters => _categoryFilters;
 
-    public string FilteredCountText => string.Format(CultureInfo.CurrentCulture, "{0} quizzes", _quizzes.Count(q => q.IsVisible));
-    public string SelectedCountText => string.Format(CultureInfo.CurrentCulture, "{0} selected", _quizzes.Count(q => q.IsSelected));
+    public string FilteredCountText => string.Format(CultureInfo.CurrentCulture, "{0} quizzes", _visibleQuizzes.Count);
+    public string SelectedCountText => string.Format(CultureInfo.CurrentCulture, "{0} selected", _selectedQuizzes.Count);
     public string SelectedQuestionCountText => string.Format(CultureInfo.CurrentCulture, "{0} questions in combined quiz", GetCombinedQuestionCount());
-    public bool HasSelectedQuizzes => _quizzes.Any(q => q.IsSelected);
+    public bool HasSelectedQuizzes => _selectedQuizzes.Count > 0;
 
     public string CombinedQuizTitle
     {
@@ -134,32 +137,31 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         {
             LoadCategories();
             UpdateFilteredVisibility();
-            UpdateStatusText();
         }
     }
 
     private void LoadQuizzes()
     {
-        _quizzes.Clear();
+        foreach (var quiz in _quizzes)
+            quiz.PropertyChanged -= QuizWrapper_PropertyChanged;
+
+        var wrappers = new List<QuizLibraryItemViewModel>();
         foreach (var quiz in _mainViewModel.Quizzes)
         {
-            var wrapper = new global::Scriblucent.Views.QuizLibraryItemViewModel(quiz);
+            var wrapper = new QuizLibraryItemViewModel(quiz);
             wrapper.PropertyChanged += QuizWrapper_PropertyChanged;
-            _quizzes.Add(wrapper);
+            wrappers.Add(wrapper);
         }
+
+        _quizzes.ReplaceAll(wrappers);
+        _selectedQuizzes.ReplaceAll([]);
     }
 
     private void QuizWrapper_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(QuizLibraryItemViewModel.IsVisible)
-            or nameof(QuizLibraryItemViewModel.IsSelected))
-        {
-            OnPropertyChanged(nameof(FilteredCountText));
-            OnPropertyChanged(nameof(SelectedCountText));
-            OnPropertyChanged(nameof(SelectedQuestionCountText));
-            OnPropertyChanged(nameof(HasSelectedQuizzes));
-            UpdateStatusText();
-        }
+        if (e.PropertyName == nameof(QuizLibraryItemViewModel.IsSelected)
+            && !_isClearingSelection)
+            RefreshSelectedQuizzes();
     }
 
     private void LoadCategories()
@@ -181,15 +183,28 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
             _selectedTags.Remove(tag);
 
         UpdateFilteredVisibility();
-        UpdateStatusText();
     }
 
     private void UpdateFilteredVisibility()
     {
+        var visible = new List<QuizLibraryItemViewModel>();
         foreach (var quiz in _quizzes)
-            quiz.IsVisible = MatchesFilter(quiz);
+        {
+            if (MatchesFilter(quiz))
+                visible.Add(quiz);
+        }
 
+        _visibleQuizzes.ReplaceAll(visible);
         OnPropertyChanged(nameof(FilteredCountText));
+        UpdateStatusText();
+    }
+
+    private void RefreshSelectedQuizzes()
+    {
+        _selectedQuizzes.ReplaceAll(_quizzes.Where(quiz => quiz.IsSelected).ToList());
+        OnPropertyChanged(nameof(SelectedCountText));
+        OnPropertyChanged(nameof(SelectedQuestionCountText));
+        OnPropertyChanged(nameof(HasSelectedQuizzes));
     }
 
     private bool MatchesFilter(QuizLibraryItemViewModel quiz)
@@ -214,7 +229,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     private void UpdateStatusText()
     {
-        var visibleCount = _quizzes.Count(quiz => quiz.IsVisible);
+        var visibleCount = _visibleQuizzes.Count;
         StatusText = string.Format(CultureInfo.CurrentCulture, "{0} of {1} quizzes shown", visibleCount, _quizzes.Count);
     }
 
@@ -237,8 +252,18 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var quiz in _quizzes)
-            quiz.IsSelected = false;
+        _isClearingSelection = true;
+        try
+        {
+            foreach (var quiz in _quizzes)
+                quiz.IsSelected = false;
+        }
+        finally
+        {
+            _isClearingSelection = false;
+        }
+
+        RefreshSelectedQuizzes();
     }
 
     private void QuizItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -254,7 +279,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     private void CreateCombinedQuizButton_Click(object sender, RoutedEventArgs e)
     {
-        var selectedQuizzes = _quizzes.Where(quiz => quiz.IsSelected).Select(quiz => quiz.Model).ToList();
+        var selectedQuizzes = _selectedQuizzes.Select(quiz => quiz.Model).ToList();
         if (selectedQuizzes.Count == 0)
         {
             ModernMessageBox.Show("Select at least one quiz first.", "Combine quizzes", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -380,8 +405,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     private int GetCombinedQuestionCount()
     {
-        var questions = _quizzes
-            .Where(quiz => quiz.IsSelected)
+        var questions = _selectedQuizzes
             .SelectMany(quiz => quiz.Document.Questions ?? []);
 
         if (!SkipDuplicateQuestions)

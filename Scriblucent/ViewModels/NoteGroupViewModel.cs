@@ -16,7 +16,7 @@ public class NoteGroupViewModel : ViewModelBase
         BackgroundColor = backgroundColor;
         _backgroundBrush = GroupBrushFactory.Create(backgroundColor);
         _foregroundBrush = GroupBrushFactory.CreateForeground(backgroundColor);
-        Notes = new ObservableCollection<NoteCardViewModel>(notes);
+        Notes = new BulkObservableCollection<NoteCardViewModel>(notes);
     }
 
     public Guid GroupId { get; }

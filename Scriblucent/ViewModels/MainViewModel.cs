@@ -5,6 +5,7 @@ using Scriblucent.Icons;
 using Scriblucent.Models;
 using Scriblucent.Localization;
 using Scriblucent.Services;
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
@@ -3789,10 +3790,12 @@ public class MainViewModel : ViewModelBase
         ApplyFilters();
     }
 
-    public NoteCardViewModel AddNoteFromDocument(NoteDocument document)
+    public NoteCardViewModel AddNoteFromDocument(NoteDocument document, NoteCardViewModel? previewSource = null)
     {
         EnsureDocumentTypography(document);
         var note = CreateNoteCard(document);
+        if (previewSource is not null)
+            note.CopyCachedContentPreviewFrom(previewSource);
         var hadNotes = Notes.Count > 0;
         var previousUngroupedCount = UngroupedVisibleCount;
 
@@ -4256,6 +4259,7 @@ public class MainViewModel : ViewModelBase
         {
             Title = $"{noteCard.Document.Title} (Copy)",
             Content = noteCard.Document.Content,
+            SearchablePreview = noteCard.Document.SearchablePreview,
             Images = CloneImageAttachments(noteCard.Document.Images),
             Tags = noteCard.Document.Tags?.ToList() ?? new List<string>(), // Copy tags if they exist
             FontFamily = noteCard.Document.FontFamily,
@@ -4265,10 +4269,10 @@ public class MainViewModel : ViewModelBase
             GroupId = noteCard.Document.GroupId
         };
 
-        AddNoteFromDocument(duplicateDocument);
+        AddNoteFromDocument(duplicateDocument, noteCard);
     }
 
-    private static List<NoteImageAttachment> CloneImageAttachments(IEnumerable<NoteImageAttachment>? source)
+    internal static List<NoteImageAttachment> CloneImageAttachments(IEnumerable<NoteImageAttachment>? source)
     {
         if (source is null)
             return new List<NoteImageAttachment>();
@@ -4282,7 +4286,16 @@ public class MainViewModel : ViewModelBase
             Height = image.Height,
             Left = image.Left,
             Top = image.Top,
-            LockAspectRatio = image.LockAspectRatio
+            LockAspectRatio = image.LockAspectRatio,
+            WrapMode = image.WrapMode,
+            InlineAnchorOffset = image.InlineAnchorOffset,
+            ZIndex = image.ZIndex,
+            CaptionLabel = image.CaptionLabel,
+            CaptionText = image.CaptionText,
+            CaptionNumbering = image.CaptionNumbering,
+            CaptionSeparator = image.CaptionSeparator,
+            CaptionPosition = image.CaptionPosition,
+            CaptionExcludeLabel = image.CaptionExcludeLabel
         }).ToList();
     }
 
@@ -6753,7 +6766,22 @@ public class MainViewModel : ViewModelBase
 
     private void DuplicateSelectedScriblucent()
     {
-        var duplicates = GetMassSelectedNotes()
+        var duplicateTimer = _massSelectedNoteIds.Count >= 1000 && ScrollPerfDiag.Enabled
+            ? System.Diagnostics.Stopwatch.StartNew()
+            : null;
+        long previousStageMs = 0;
+        void TraceDuplicateStage(string stage)
+        {
+            if (duplicateTimer is null)
+                return;
+
+            var elapsedMs = duplicateTimer.ElapsedMilliseconds;
+            ScrollPerfDiag.Log($"duplicateStage\tstage={stage}\tselected={_massSelectedNoteIds.Count}\tnotes={Notes.Count}\tdeltaMs={elapsedMs - previousStageMs}\ttotalMs={elapsedMs}");
+            previousStageMs = elapsedMs;
+        }
+
+        var selectedNotes = GetMassSelectedNotes();
+        var duplicates = selectedNotes
             .Select(note => new NoteDocument
             {
                 Title = $"{note.Document.Title} (Copy)",
@@ -6769,25 +6797,54 @@ public class MainViewModel : ViewModelBase
                 IsPinned = note.Document.IsPinned
             })
             .ToList();
+        TraceDuplicateStage("cloneDocuments");
 
         if (duplicates.Count == 0)
             return;
 
-        var cards = duplicates.Select(CreateNoteCard).ToList();
+        var cards = new List<NoteCardViewModel>(duplicates.Count);
+        for (var i = 0; i < duplicates.Count; i++)
+        {
+            var card = CreateNoteCard(duplicates[i]);
+            card.CopyCachedContentPreviewFrom(selectedNotes[i]);
+            cards.Add(card);
+        }
         var addedIds = duplicates.Select(document => document.Id).ToList();
+        TraceDuplicateStage("createCards");
+        const int BulkDuplicateThreshold = 128;
+        var useBulkUpdate = cards.Count >= BulkDuplicateThreshold;
+        // The motion engine animates at most eight visible enters in a bulk add. Tracking all
+        // 10,000 IDs still makes it inspect every one during layout and reflow. Keep candidates
+        // from both ends: recent-first sorting puts the newest copies at the latter end, while
+        // other sorts may surface copies from the earlier end.
+        var motionIds = addedIds.Count > BulkDuplicateThreshold
+            ? addedIds.Take(64).Concat(addedIds.TakeLast(64)).ToList()
+            : addedIds;
 
         _notesBatchAddInProgress = true;
         try
         {
             MotionHost?.BeginBatchMutation(DashboardMotionScope.Notes);
-            foreach (var (document, card) in duplicates.Zip(cards))
+            foreach (var id in motionIds)
+                MotionHost?.RegisterBatchItemAdd(DashboardMotionScope.Notes, id);
+            TraceDuplicateStage("captureMotion");
+
+            if (useBulkUpdate)
             {
-                MotionHost?.RegisterBatchItemAdd(DashboardMotionScope.Notes, document.Id);
-                Notes.Add(card);
+                // One Reset lets the sorted WPF view rebuild once for a large batch.
+                ((BulkObservableCollection<NoteCardViewModel>)Notes).AddRange(cards);
             }
+            else
+            {
+                foreach (var card in cards)
+                    Notes.Add(card);
+            }
+            TraceDuplicateStage("addToWpfView");
 
             SaveNotes();
-            CompleteNotesBatchAdd(addedIds);
+            TraceDuplicateStage("queueSave");
+            CompleteNotesBatchAdd(motionIds, useBulkUpdate);
+            TraceDuplicateStage("rebuildGroupsAndScheduleMotion");
         }
         finally
         {
@@ -6795,9 +6852,9 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    private void CompleteNotesBatchAdd(IReadOnlyList<Guid> addedIds)
+    private void CompleteNotesBatchAdd(IReadOnlyList<Guid> addedIds, bool useBulkUpdate)
     {
-        RebuildGroups();
+        RebuildGroups(bulkNoteUpdate: useBulkUpdate);
 
         void AfterMotion()
         {
@@ -6806,11 +6863,16 @@ public class MainViewModel : ViewModelBase
             // again would just swap in fresh NoteGroupViewModel/host instances mid-flight, out from
             // under whatever DashboardVirtualizationHost state has already settled for the previous
             // instances - leaving stale cached extent/slice state and rendering as blank gaps.
-            ApplyFilters(rebuildGroups: false);
-            RecalculateUngroupedVisibleCount();
+            // Add/AddRange already updated the sorted and filtered WPF view. Refreshing it here
+            // would sort and filter the entire, now larger library a second time.
+            RefreshRecentNotes();
+            _ungroupedVisibleCount = _notesView is CollectionView view
+                ? view.Count
+                : _notesView.Cast<object>().Count();
             NotifyNotesChanged();
             RefreshActivityStats();
-            EnsureMassSelectionConsistency();
+            // Adding unselected copies cannot invalidate any selected IDs. Copies also do not
+            // inherit schedules, so the calendar data remains unchanged.
         }
 
         if (MotionHost is null)
@@ -7101,7 +7163,13 @@ public class MainViewModel : ViewModelBase
         if (!IsMassSelectMode || ActiveMassSelectedCount == 0)
             return false;
 
-        return GetSelectedGroupableDocuments().All(item => item.GroupId.HasValue);
+        foreach (var (groupId, _) in EnumerateSelectedGroupableStates())
+        {
+            if (!groupId.HasValue)
+                return false;
+        }
+
+        return true;
     }
 
     private bool CanGroupSelectedNotes()
@@ -7109,26 +7177,90 @@ public class MainViewModel : ViewModelBase
         if (!IsMassSelectMode || ActiveMassSelectedCount < 2)
             return false;
 
-        var selectedGroupIds = GetSelectedGroupableDocuments()
-            .Select(item => item.GroupId)
-            .Distinct()
-            .ToList();
+        Guid? firstGroupId = null;
+        var hasFirst = false;
+        foreach (var (groupId, _) in EnumerateSelectedGroupableStates())
+        {
+            if (!hasFirst)
+            {
+                firstGroupId = groupId;
+                hasFirst = true;
+                if (!groupId.HasValue)
+                    return true;
+            }
+            else if (groupId != firstGroupId)
+            {
+                return true;
+            }
+        }
 
-        return selectedGroupIds.Count > 1 || !selectedGroupIds[0].HasValue;
+        return false;
     }
 
     private bool CanPinSelectedNotes()
     {
-        return IsMassSelectMode
-               && ActiveMassSelectedCount > 0
-               && GetSelectedGroupableDocuments().Any(item => !item.IsPinned);
+        if (!IsMassSelectMode || ActiveMassSelectedCount == 0)
+            return false;
+
+        foreach (var (_, isPinned) in EnumerateSelectedGroupableStates())
+        {
+            if (!isPinned)
+                return true;
+        }
+
+        return false;
     }
 
     private bool CanUnpinSelectedNotes()
     {
-        return IsMassSelectMode
-               && ActiveMassSelectedCount > 0
-               && GetSelectedGroupableDocuments().Any(item => item.IsPinned);
+        if (!IsMassSelectMode || ActiveMassSelectedCount == 0)
+            return false;
+
+        foreach (var (_, isPinned) in EnumerateSelectedGroupableStates())
+        {
+            if (isPinned)
+                return true;
+        }
+
+        return false;
+    }
+
+    // CommandManager can reevaluate all mass-action buttons on every mouse or focus change.
+    // The editable adapter path allocates an adapter and several delegates per selected item;
+    // these read-only checks need only two value fields and can stop as soon as they know.
+    private IEnumerable<(Guid? GroupId, bool IsPinned)> EnumerateSelectedGroupableStates()
+    {
+        switch (_massSelectDashboard)
+        {
+            case DashboardFlashcards:
+                foreach (var set in FlashcardSets)
+                {
+                    if (_massSelectedFlashcardSetIds.Contains(set.Document.Id))
+                        yield return (set.Document.GroupId, set.Document.IsPinned);
+                }
+                yield break;
+            case DashboardMindMaps:
+                foreach (var map in MindMaps)
+                {
+                    if (_massSelectedMindMapIds.Contains(map.Document.Id))
+                        yield return (map.Document.GroupId, map.Document.IsPinned);
+                }
+                yield break;
+            case DashboardQuizzes:
+                foreach (var quiz in Quizzes)
+                {
+                    if (_massSelectedQuizIds.Contains(quiz.Document.Id))
+                        yield return (quiz.Document.GroupId, quiz.Document.IsPinned);
+                }
+                yield break;
+            default:
+                foreach (var note in Notes)
+                {
+                    if (_massSelectedNoteIds.Contains(note.Document.Id))
+                        yield return (note.Document.GroupId, note.Document.IsPinned);
+                }
+                yield break;
+        }
     }
 
     private bool CanDuplicateSelectedNotes()
@@ -7712,6 +7844,14 @@ public class MainViewModel : ViewModelBase
 
     private void ApplySortToUngroupedView()
     {
+        if (_notesView is ListCollectionView listView)
+        {
+            // Sorting through property paths reflects over every card on each comparison.
+            // A direct comparer keeps bulk Reset/duplicate costs manageable for large libraries.
+            listView.CustomSort = new NoteCardSortComparer(_selectedSortOptionKey);
+            return;
+        }
+
         _notesView.SortDescriptions.Clear();
 
         // Always sort pinned notes first
@@ -7743,6 +7883,50 @@ public class MainViewModel : ViewModelBase
                 _notesView.SortDescriptions.Add(new SortDescription("Document.LastModified", ListSortDirection.Descending));
                 _notesView.SortDescriptions.Add(new SortDescription("Document.CreatedAt", ListSortDirection.Descending));
                 break;
+        }
+    }
+
+    internal sealed class NoteCardSortComparer(string sortOptionKey) : IComparer
+    {
+        public int Compare(object? x, object? y)
+        {
+            var left = ((NoteCardViewModel)x!).Document;
+            var right = ((NoteCardViewModel)y!).Document;
+            var pinned = right.IsPinned.CompareTo(left.IsPinned);
+            if (pinned != 0)
+                return pinned;
+
+            int primary;
+            int secondary;
+            switch (sortOptionKey)
+            {
+                case SortLastModifiedAsc:
+                    primary = left.LastModified.CompareTo(right.LastModified);
+                    secondary = Comparer.Default.Compare(left.Title, right.Title);
+                    break;
+                case SortCreatedAtDesc:
+                    primary = right.CreatedAt.CompareTo(left.CreatedAt);
+                    secondary = right.LastModified.CompareTo(left.LastModified);
+                    break;
+                case SortCreatedAtAsc:
+                    primary = left.CreatedAt.CompareTo(right.CreatedAt);
+                    secondary = right.LastModified.CompareTo(left.LastModified);
+                    break;
+                case SortTitleAsc:
+                    primary = Comparer.Default.Compare(left.Title, right.Title);
+                    secondary = right.LastModified.CompareTo(left.LastModified);
+                    break;
+                case SortTitleDesc:
+                    primary = Comparer.Default.Compare(right.Title, left.Title);
+                    secondary = right.LastModified.CompareTo(left.LastModified);
+                    break;
+                default:
+                    primary = right.LastModified.CompareTo(left.LastModified);
+                    secondary = right.CreatedAt.CompareTo(left.CreatedAt);
+                    break;
+            }
+
+            return primary != 0 ? primary : secondary;
         }
     }
 
@@ -8674,8 +8858,11 @@ public class MainViewModel : ViewModelBase
         return plans;
     }
 
-    private void RebuildGroups()
+    private void RebuildGroups(bool bulkNoteUpdate = false)
     {
+        var groupTimer = bulkNoteUpdate && ScrollPerfDiag.Enabled
+            ? System.Diagnostics.Stopwatch.StartNew()
+            : null;
         Scriblucent.Services.ScrollPerfDiag.Log($"rebuildGroups\tnotesCount={Notes.Count}\tnoteGroupsCountBefore={NoteGroups.Count}");
         // The collection's bulk Reset refreshes the view. Avoid a second full-library sort.
 
@@ -8684,6 +8871,8 @@ public class MainViewModel : ViewModelBase
             .GroupBy(n => n.Document.GroupId!.Value)
             .OrderByDescending(g => g.Max(n => n.Document.LastModified))
             .ToList();
+        if (groupTimer is not null)
+            ScrollPerfDiag.Log($"duplicateGroupStage\tstage=scan\tgroups={groupedByRecent.Count}\ttotalMs={groupTimer.ElapsedMilliseconds}");
 
         var nextOrder = 0;
         foreach (var group in groupedByRecent)
@@ -8699,6 +8888,8 @@ public class MainViewModel : ViewModelBase
             .OrderBy(g => EnsureGroupMetadata(g.Key).SortOrder ?? int.MaxValue)
             .ThenByDescending(g => g.Max(n => n.Document.LastModified))
             .ToList();
+        if (groupTimer is not null)
+            ScrollPerfDiag.Log($"duplicateGroupStage\tstage=order\tgroups={grouped.Count}\ttotalMs={groupTimer.ElapsedMilliseconds}");
 
         var desiredGroups = new List<NoteGroupViewModel>();
         foreach (var group in grouped)
@@ -8710,6 +8901,8 @@ public class MainViewModel : ViewModelBase
             var metadata = EnsureGroupMetadata(group.Key);
             desiredGroups.Add(new NoteGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleNotes));
         }
+        if (groupTimer is not null)
+            ScrollPerfDiag.Log($"duplicateGroupStage\tstage=buildDesired\tgroups={desiredGroups.Count}\ttotalMs={groupTimer.ElapsedMilliseconds}");
 
         var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
         var removingIds = NoteGroups
@@ -8717,13 +8910,15 @@ public class MainViewModel : ViewModelBase
             .Select(group => group.GroupId)
             .ToList();
 
-        if (TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds, () => SyncNoteGroups(desiredGroups)))
+        if (TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds, () => SyncNoteGroups(desiredGroups, bulkNoteUpdate)))
             return;
 
-        SyncNoteGroups(desiredGroups);
+        SyncNoteGroups(desiredGroups, bulkNoteUpdate);
+        if (groupTimer is not null)
+            ScrollPerfDiag.Log($"duplicateGroupStage\tstage=sync\tgroups={desiredGroups.Count}\ttotalMs={groupTimer.ElapsedMilliseconds}");
     }
 
-    private void SyncNoteGroups(IReadOnlyList<NoteGroupViewModel> desiredGroups)
+    private void SyncNoteGroups(IReadOnlyList<NoteGroupViewModel> desiredGroups, bool bulkNoteUpdate = false)
     {
         var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
         for (var i = NoteGroups.Count - 1; i >= 0; i--)
@@ -8745,7 +8940,15 @@ public class MainViewModel : ViewModelBase
             if (NoteGroups.IndexOf(existing) != i)
                 NoteGroups.Move(NoteGroups.IndexOf(existing), i);
 
-            SyncObservableCollectionOrder(existing.Notes, desired.Notes.ToList());
+            if (bulkNoteUpdate && existing.Notes is BulkObservableCollection<NoteCardViewModel> bulk)
+            {
+                if (!existing.Notes.SequenceEqual(desired.Notes))
+                    bulk.ReplaceAll(desired.Notes);
+            }
+            else
+            {
+                SyncObservableCollectionOrder(existing.Notes, desired.Notes.ToList());
+            }
         }
 
         OnPropertyChanged(nameof(NoteGroups));
@@ -9059,8 +9262,13 @@ public class MainViewModel : ViewModelBase
         {
             try
             {
+                var writeTimer = ScrollPerfDiag.Enabled
+                    ? System.Diagnostics.Stopwatch.StartNew()
+                    : null;
                 AtomicFileWriter.Write(filePath, stream =>
                     JsonSerializer.Serialize(stream, snapshot, StoreJsonOptions));
+                if (writeTimer is not null)
+                    ScrollPerfDiag.Log($"notesWrite\tnotes={snapshot.Notes.Count}\tdurationMs={writeTimer.ElapsedMilliseconds}");
                 // Only a completed write may be remembered as "saved" - otherwise a failed
                 // write would make the next save skip and the changes would never persist.
                 _lastSavedNotesSignature = signature;

@@ -121,8 +121,17 @@ public class NoteCardViewModel : ViewModelBase
             if (_cachedContentPreview is not null)
                 return _cachedContentPreview;
 
+            var startedAt = Scriblucent.Services.ScrollPerfDiag.Enabled
+                ? System.Diagnostics.Stopwatch.GetTimestamp()
+                : 0;
             _cachedContentPreview = BuildContentPreview();
             Document.SearchablePreview = _cachedContentPreview;
+            if (startedAt != 0)
+            {
+                var elapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+                if (elapsedMs >= 20)
+                    Scriblucent.Services.ScrollPerfDiag.Log($"notePreviewDecode\tms={elapsedMs:F2}\tcontentLength={Document.Content?.Length ?? 0}\timages={Document.Images?.Count ?? 0}");
+            }
             return _cachedContentPreview;
         }
     }
@@ -139,6 +148,17 @@ public class NoteCardViewModel : ViewModelBase
     /// had a chance to run.
     /// </summary>
     internal bool IsContentPreviewCached => _cachedContentPreview is not null;
+
+    /// <summary>Duplicates share content text and equivalent image layout. Reuse a preview
+    /// already decoded by the source card when the duplicate is first realized.</summary>
+    internal void CopyCachedContentPreviewFrom(NoteCardViewModel source)
+    {
+        if (!ReferenceEquals(Document.Content, source.Document.Content))
+            return;
+
+        _cachedContentPreview = source._cachedContentPreview;
+        Document.SearchablePreview = source.Document.SearchablePreview;
+    }
 
     internal bool TryGetSearchHaystack(bool includeBody, out string haystack)
     {

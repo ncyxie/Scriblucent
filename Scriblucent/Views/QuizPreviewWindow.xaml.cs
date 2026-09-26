@@ -24,6 +24,19 @@ namespace Scriblucent.Views;
 
 public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 {
+    private ScrollViewer? QuestionsScrollViewer
+    {
+        get
+        {
+            if (QuestionsItemsControl is null)
+                return null;
+
+            QuestionsItemsControl.ApplyTemplate();
+            return QuestionsItemsControl.Template?.FindName("QuestionsScrollViewer", QuestionsItemsControl)
+                as ScrollViewer;
+        }
+    }
+
     private enum UnsavedCloseDecision
     {
         Cancel,
@@ -555,21 +568,22 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             UpdateSummary(animateScore: true);
         }
 
-        if (UiMotion.PrefersReducedMotion || QuestionsScrollViewer is null)
+        var questionsScrollViewer = QuestionsScrollViewer;
+        if (UiMotion.PrefersReducedMotion || questionsScrollViewer is null)
         {
             SubmitAnswers();
             return;
         }
 
         UiMotion.Fade(
-            QuestionsScrollViewer,
+            questionsScrollViewer,
             0.5,
             UiMotion.NavFadeOutMs,
             UiMotion.InCubic,
             () =>
             {
                 SubmitAnswers();
-                UiMotion.Fade(QuestionsScrollViewer, 1, UiMotion.QuickMs, UiMotion.OutCubic);
+                UiMotion.Fade(questionsScrollViewer, 1, UiMotion.QuickMs, UiMotion.OutCubic);
             });
     }
 
@@ -1492,7 +1506,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 question.Reset();
         }
 
-        if (_isInitializing || QuestionsScrollViewer is null || UiMotion.PrefersReducedMotion)
+        var questionsScrollViewer = QuestionsScrollViewer;
+        if (_isInitializing || questionsScrollViewer is null || UiMotion.PrefersReducedMotion)
         {
             UpdateModeChrome();
             UpdateSummary();
@@ -1500,7 +1515,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
 
         UiMotion.Fade(
-            QuestionsScrollViewer,
+            questionsScrollViewer,
             0,
             UiMotion.NavFadeOutMs,
             UiMotion.InCubic,
@@ -1508,8 +1523,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             {
                 UpdateModeChrome();
                 UpdateSummary();
-                QuestionsScrollViewer.Opacity = 0;
-                UiMotion.Fade(QuestionsScrollViewer, 1, UiMotion.QuickMs, UiMotion.OutCubic);
+                questionsScrollViewer.Opacity = 0;
+                UiMotion.Fade(questionsScrollViewer, 1, UiMotion.QuickMs, UiMotion.OutCubic);
             });
     }
 
@@ -1821,7 +1836,30 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
 
         var container = QuestionsItemsControl.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+        if (IsLoaded && container is null
+            && FindVisualChild<VirtualizingStackPanel>(QuestionsItemsControl) is { } panel)
+        {
+            panel.BringIndexIntoViewPublic(index);
+            QuestionsItemsControl.UpdateLayout();
+            container = QuestionsItemsControl.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+        }
+
         container?.BringIntoView();
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+                return match;
+
+            if (FindVisualChild<T>(child) is { } descendant)
+                return descendant;
+        }
+
+        return null;
     }
 
     private int GetFocusedQuestionIndex()

@@ -14,6 +14,21 @@
         TextOptions.TextRenderingMode="ClearType"
         Background="{DynamicResource FeatureFrameBackground}" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
     <Window.Resources>
+        <Style x:Key="QuizVirtualizedItemsControlStyle" TargetType="{x:Type ItemsControl}">
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ItemsControl}">
+                        <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      behaviors:ScrollTileBehavior.IsEnabled="True">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="LibraryCardStyle" TargetType="Border" BasedOn="{StaticResource FeatureCombinePanelStyle}"/>
         <Style x:Key="LibraryTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource FeatureCombineTextBoxStyle}"/>
         <Style x:Key="LibraryOptionCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource FeatureCombineOptionCheckBoxStyle}"/>
@@ -126,15 +141,12 @@
                             </TextBlock>
                         </Grid>
 
-                        <ScrollViewer Grid.Row="2"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      behaviors:ScrollTileBehavior.IsEnabled="True">
-                            <ItemsControl ItemsSource="{Binding Quizzes}"
+                        <ItemsControl Grid.Row="2"
+                                          ItemsSource="{Binding VisibleQuizzes}"
+                                          Style="{StaticResource QuizVirtualizedItemsControlStyle}"
                                           VirtualizingPanel.IsVirtualizing="True"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
-                                          VirtualizingPanel.ScrollUnit="Pixel"
-                                          ScrollViewer.CanContentScroll="True">
+                                          VirtualizingPanel.ScrollUnit="Pixel">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
                                         <VirtualizingStackPanel IsItemsHost="True"/>
@@ -146,8 +158,7 @@
                                         <Grid Margin="0,0,0,8"
                                               UseLayoutRounding="True"
                                               SnapsToDevicePixels="True"
-                                              ClipToBounds="False"
-                                              Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                                              ClipToBounds="False">
                                             <controls:CardShadowLayer/>
                                             <Border Style="{StaticResource LibraryQuizItemBorderStyle}"
                                                     MouseLeftButtonUp="QuizItem_MouseLeftButtonUp">
@@ -185,8 +196,7 @@
                                         </controls:DashboardTileHost>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
+                        </ItemsControl>
                     </Grid>
                 </Border>
 
@@ -205,13 +215,12 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"
                                        Margin="0,0,0,12"/>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          MaxHeight="180">
-                                <ItemsControl ItemsSource="{Binding CategoryFilters}"
+                            <ItemsControl ItemsSource="{Binding CategoryFilters}"
+                                              MaxHeight="180"
+                                              Style="{StaticResource QuizVirtualizedItemsControlStyle}"
                                               VirtualizingPanel.IsVirtualizing="True"
                                               VirtualizingPanel.VirtualizationMode="Recycling"
-                                              VirtualizingPanel.ScrollUnit="Pixel"
-                                              ScrollViewer.CanContentScroll="True">
+                                              VirtualizingPanel.ScrollUnit="Pixel">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel IsItemsHost="True"/>
@@ -225,8 +234,7 @@
                                                       Foreground="{DynamicResource TextColor}"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                            </ItemsControl>
 
                             <Separator Margin="0,16,0,14"/>
                         </StackPanel>
@@ -251,15 +259,12 @@
                                            Foreground="{DynamicResource TextColorSecondary}"/>
                             </Grid>
 
-                            <ScrollViewer Grid.Row="1"
-                                          VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          behaviors:ScrollTileBehavior.IsEnabled="True">
-                                <ItemsControl ItemsSource="{Binding Quizzes}"
+                            <ItemsControl Grid.Row="1"
+                                              ItemsSource="{Binding SelectedQuizzes}"
+                                              Style="{StaticResource QuizVirtualizedItemsControlStyle}"
                                               VirtualizingPanel.IsVirtualizing="True"
                                               VirtualizingPanel.VirtualizationMode="Recycling"
-                                              VirtualizingPanel.ScrollUnit="Pixel"
-                                              ScrollViewer.CanContentScroll="True">
+                                              VirtualizingPanel.ScrollUnit="Pixel">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel IsItemsHost="True"/>
@@ -272,8 +277,7 @@
                                                     BorderThickness="0"
                                                     CornerRadius="{StaticResource Radius.Control}"
                                                     Padding="10"
-                                                    Margin="0,0,0,8"
-                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
+                                                    Margin="0,0,0,8">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -300,8 +304,7 @@
                                             </controls:DashboardTileHost>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                            </ItemsControl>
                         </Grid>
 
                         <StackPanel Grid.Row="2">

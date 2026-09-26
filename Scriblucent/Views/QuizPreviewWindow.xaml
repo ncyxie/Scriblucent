@@ -18,6 +18,29 @@
         Background="{DynamicResource FeatureFrameBackground}"
         Closing="QuizPreviewWindow_Closing">
     <Window.Resources>
+        <!-- Keep the scroller in the ItemsControl template so its presenter exposes the
+             VirtualizingStackPanel as IScrollInfo to ScrollContentPresenter. -->
+        <Style x:Key="QuizQuestionsItemsControlStyle" TargetType="{x:Type ItemsControl}">
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ItemsControl}">
+                        <ScrollViewer x:Name="QuestionsScrollViewer"
+                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Background="Transparent"
+                                      ClipToBounds="True"
+                                      behaviors:RoundedClipBehavior.IsEnabled="True"
+                                      behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
+                                      behaviors:SmoothScrollBehavior.IsEnabled="True"
+                                      behaviors:ScrollTileBehavior.IsEnabled="True">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="QuizToolbarButtonStyle" TargetType="Button" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
             <Setter Property="MinWidth" Value="110"/>
         </Style>
@@ -342,19 +365,10 @@
             </Grid>
         </Border>
 
-        <ScrollViewer x:Name="QuestionsScrollViewer"
-                      Grid.Row="3"
-                      Margin="20,10,20,10"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      Background="Transparent"
-                      Padding="0"
-                      ClipToBounds="True"
-                      behaviors:RoundedClipBehavior.IsEnabled="True"
-                      behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
-                      behaviors:SmoothScrollBehavior.IsEnabled="True"
-                      behaviors:ScrollTileBehavior.IsEnabled="True">
-            <ItemsControl x:Name="QuestionsItemsControl"
+        <ItemsControl x:Name="QuestionsItemsControl"
+                          Grid.Row="3"
+                          Margin="20,10,20,10"
+                          Style="{StaticResource QuizQuestionsItemsControlStyle}"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           VirtualizingPanel.ScrollUnit="Pixel"
@@ -756,8 +770,7 @@
                         </controls:DashboardTileHost>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+        </ItemsControl>
 
         <Border Grid.Row="4"
                 Margin="20,0,20,12"

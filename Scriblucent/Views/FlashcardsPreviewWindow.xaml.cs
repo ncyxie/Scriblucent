@@ -15,6 +15,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Scriblucent.Animations;
 using Scriblucent.Controls;
+using Scriblucent.ViewModels;
 
 namespace Scriblucent.Views;
 
@@ -47,7 +48,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private const int DefaultSetIndex = 1;
     private readonly List<FlashcardPreviewItem> _allItems;
-    private readonly ObservableCollection<FlashcardPreviewItem> _items;
+    private readonly BulkObservableCollection<FlashcardPreviewItem> _items;
     private readonly ObservableCollection<FlashcardSetOption> _setOptions;
     private readonly ObservableCollection<FlashcardStatusFilterOption> _statusFilterOptions;
     private readonly ObservableCollection<FlashcardCategoryFilterOption> _categoryFilterOptions;
@@ -171,7 +172,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 i.AnswerAudioFileName,
                 i.IsStarred))
             .ToList();
-        _items = new ObservableCollection<FlashcardPreviewItem>();
+        _items = new BulkObservableCollection<FlashcardPreviewItem>();
         _setOptions = new ObservableCollection<FlashcardSetOption>();
         _statusFilterOptions = new ObservableCollection<FlashcardStatusFilterOption>();
         _categoryFilterOptions = new ObservableCollection<FlashcardCategoryFilterOption>();
@@ -856,9 +857,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             orderedItems = filteredItems.ToList();
         }
 
-        _items.Clear();
-        foreach (var item in orderedItems)
-            _items.Add(item);
+        _items.ReplaceAll(orderedItems);
 
         UpdateQuestionAnswerToggleButton();
         UpdateEmptyGridState();
@@ -1524,9 +1523,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             return;
 
         var shuffled = _items.OrderBy(_ => _random.Next()).ToList();
-        _items.Clear();
-        foreach (var item in shuffled)
-            _items.Add(item);
+        _items.ReplaceAll(shuffled);
 
         _studyModeIndex = 0;
         ResetStudyHistory();
