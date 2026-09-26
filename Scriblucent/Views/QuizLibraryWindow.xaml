@@ -22,7 +22,8 @@
                         <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
-                                      behaviors:ScrollTileBehavior.IsEnabled="True">
+                                      behaviors:ScrollTileBehavior.IsEnabled="True"
+                                      behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                             <ItemsPresenter/>
                         </ScrollViewer>
                     </ControlTemplate>

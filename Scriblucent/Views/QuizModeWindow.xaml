@@ -255,7 +255,8 @@
                                   Padding="20,0,20,20"
                                   CanContentScroll="True"
                                   behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                  behaviors:ScrollTileBehavior.IsEnabled="True">
+                                  behaviors:ScrollTileBehavior.IsEnabled="True"
+                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                         <ItemsControl x:Name="ResultsQuestionsList"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
@@ -389,7 +390,8 @@
                                   CanContentScroll="True"
                                   VerticalAlignment="Stretch"
                                   behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                  behaviors:ScrollBarAutoHideBehavior.Enable="True">
+                                  behaviors:ScrollBarAutoHideBehavior.Enable="True"
+                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                         <ItemsControl x:Name="QuestionNavItemsControl"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"

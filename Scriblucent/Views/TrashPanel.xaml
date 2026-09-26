@@ -60,7 +60,8 @@
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Disabled"
                                           Background="Transparent"
-                                          behaviors:ScrollTileBehavior.IsEnabled="True">
+                                          behaviors:ScrollTileBehavior.IsEnabled="True"
+                                          behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                                 <ItemsPresenter/>
                             </ScrollViewer>
                         </Border>

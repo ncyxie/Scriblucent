@@ -197,7 +197,7 @@
                                                                Foreground="{DynamicResource TextColor}"
                                                                Margin="2,2,2,8"/>
                                                     <Grid Grid.Row="1">
-                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178" behaviors:ScrollTileBehavior.IsEnabled="True">
+                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178" behaviors:ScrollTileBehavior.IsEnabled="True" behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                                                             <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type vm:CalendarScheduledItemViewModel}">

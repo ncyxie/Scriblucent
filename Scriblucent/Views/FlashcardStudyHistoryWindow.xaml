@@ -89,6 +89,7 @@
                               UseLayoutRounding="True"
                               SnapsToDevicePixels="True"
                               behaviors:ScrollTileBehavior.IsEnabled="True"
+                              behaviors:MiddleClickScrollBehavior.IsEnabled="True"
                               Visibility="{Binding HasItems, Converter={StaticResource BoolToVis}}">
                     <ItemsControl ItemsSource="{Binding Items}"
                                   UseLayoutRounding="True"

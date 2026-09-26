@@ -39,6 +39,7 @@
                                       Background="Transparent"
                                       ClipToBounds="True"
                                       behaviors:ScrollTileBehavior.IsEnabled="True"
+                                      behaviors:MiddleClickScrollBehavior.IsEnabled="True"
                                       behaviors:RoundedClipBehavior.IsEnabled="True"
                                       behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}">
                             <ItemsPresenter Margin="{TemplateBinding Padding}"/>
