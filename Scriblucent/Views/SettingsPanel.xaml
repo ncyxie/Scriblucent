@@ -25,6 +25,43 @@
             <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
         </Style>
 
+        <!-- Same slim chrome as the secondary settings buttons, in the accent color so it
+             stays visible on the white language list. -->
+        <Style x:Key="SettingsAccentInlineButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Background" Value="{DynamicResource AccentPrimary}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryForeground}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentPrimaryHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentPrimaryPressed}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="AiToolsListBoxItemStyle" TargetType="{x:Type ListBoxItem}">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -461,8 +498,7 @@
                                                     <Button Grid.Column="1"
                                                             Content="{Binding [SpellCheckLanguageDownload], Source={StaticResource Loc}}"
                                                             Tag="{Binding Key}"
-                                                            Style="{StaticResource SettingsChromeSecondaryButtonStyle}"
-                                                            Padding="10,4"
+                                                            Style="{StaticResource SettingsAccentInlineButtonStyle}"
                                                             Margin="10,0,0,0"
                                                             VerticalAlignment="Center"
                                                             Click="DownloadSpellCheckLanguage_Click"
