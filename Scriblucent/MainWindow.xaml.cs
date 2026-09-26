@@ -5124,6 +5124,7 @@ namespace Scriblucent
             try
             {
                 int importedCount = 0;
+                var imported = new List<NoteDocument>();
 
                 if (DataContext is MainViewModel vm)
                 {
@@ -5134,7 +5135,7 @@ namespace Scriblucent
                             NoteDocument newDocument;
                             if (NoteFileService.IsNotePackagePath(filePath))
                             {
-                                newDocument = NoteFileService.LoadNotePackage(filePath);
+                                newDocument = NoteFileService.ReadNotePackage(filePath);
                             }
                             else
                             {
@@ -5158,8 +5159,7 @@ namespace Scriblucent
                                 };
                             }
 
-                            // Add to view model
-                            vm.AddNoteFromDocument(newDocument);
+                            imported.Add(newDocument);
                             importedCount++;
                         }
                         catch (Exception ex)
@@ -5171,6 +5171,8 @@ namespace Scriblucent
                                 MessageBoxImage.Error);
                         }
                     }
+
+                    vm.AddImportedNotes(imported);
 
                     if (importedCount > 0)
                     {

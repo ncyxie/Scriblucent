@@ -206,6 +206,22 @@ public partial class NoteImageWidget : UserControl
             _aspectRatio = clamped.Width / clamped.Height;
     }
 
+    /// <summary>Applies a size that was already saved. Live resize still goes through
+    /// <see cref="SetDisplaySize"/>.</summary>
+    public void SetExactDisplaySize(double width, double height)
+    {
+        if (double.IsNaN(width) || double.IsInfinity(width) || width <= 0
+            || double.IsNaN(height) || double.IsInfinity(height) || height <= 0)
+        {
+            SetDisplaySize(width, height);
+            return;
+        }
+
+        Width = width;
+        Height = height;
+        _aspectRatio = width / height;
+    }
+
     public Rect GetDocumentRect() =>
         new(DocumentLeft, DocumentTop, Width, Height);
 

@@ -280,11 +280,9 @@
   <data name="Save" xml:space="preserve"><value>Išsaugoti</value></data>
   <data name="Print" xml:space="preserve"><value>Spausdinti</value></data>
   <data name="ExportPdf" xml:space="preserve"><value>PDF (*.pdf)</value></data>
-  <data name="ExportNotePackage" xml:space="preserve"><value>Scriblucent paketas (*.notecard)</value></data>
+  <data name="ExportNotePackage" xml:space="preserve"><value>Scriblucent paketas (*.scribnote)</value></data>
   <data name="ExportRtf" xml:space="preserve"><value>Raiškusis tekstas (*.rtf)</value></data>
   <data name="ExportText" xml:space="preserve"><value>Paprastasis tekstas (*.txt)</value></data>
-  <data name="ExportMarkdown" xml:space="preserve"><value>Markdown (*.md)</value></data>
-  <data name="ExportXamlPackage" xml:space="preserve"><value>Raiškusis užrašo turinys (*.xamlpackage)</value></data>
   <data name="ToggleWordWrap" xml:space="preserve"><value>Perjungti žodžių laužymą</value></data>
   <data name="Zoom" xml:space="preserve"><value>Mastelis</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Priartinti</value></data>
@@ -375,7 +373,7 @@
   <data name="Error" xml:space="preserve"><value>Klaida</value></data>
   <data name="FailedToPrintNote" xml:space="preserve"><value>Nepavyko atspausdinti užrašo:</value></data>
   <data name="PrintError" xml:space="preserve"><value>Spausdinimo klaida</value></data>
-  <data name="OpenFileDialogFilter" xml:space="preserve"><value>Palaikomi užrašų failai (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent paketas (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Tekstiniai failai (*.txt)|*.txt|Markdown failai (*.md)|*.md|Raiškusis užrašo turinys (*.xamlpackage)|*.xamlpackage|Visi failai (*.*)|*.*</value></data>
+  <data name="OpenFileDialogFilter" xml:space="preserve"><value>Palaikomi užrašų failai (*.scribnote;*.notecard;*.rtf;*.txt)|*.scribnote;*.notecard;*.rtf;*.txt|Scriblucent užrašas (*.scribnote)|*.scribnote|Senas užrašo paketas (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Tekstiniai failai (*.txt)|*.txt|Visi failai (*.*)|*.*</value></data>
   <data name="AboutTagline" xml:space="preserve"><value>Užrašai. Kortelės. Minčių žemėlapiai. Testai.</value></data>
   <data name="AboutDescription" xml:space="preserve"><value>Mokykitės offline su vietiniu AI — užrašai virsta kortelėmis, minčių žemėlapiais ir testais. Duomenys lieka jūsų įrenginyje.</value></data>
   <data name="AboutMaintainedBy" xml:space="preserve"><value>Prižiūri</value></data>
@@ -392,17 +390,16 @@
   <data name="FailedToExportPdf" xml:space="preserve"><value>Nepavyko eksportuoti į PDF:</value></data>
   <data name="ExportComplete" xml:space="preserve"><value>Eksportas baigtas.</value></data>
   <data name="FailedToExport" xml:space="preserve"><value>Nepavyko eksportuoti:</value></data>
-  <data name="ExportNotePackageDialogFilter" xml:space="preserve"><value>Scriblucent paketas (*.notecard)|*.notecard</value></data>
+  <data name="ExportNotePackageDialogFilter" xml:space="preserve"><value>Scriblucent užrašas (*.scribnote)|*.scribnote</value></data>
   <data name="ExportRtfDialogFilter" xml:space="preserve"><value>Rich Text Format (*.rtf)|*.rtf</value></data>
   <data name="ExportTextDialogFilter" xml:space="preserve"><value>Tekstiniai failai (*.txt)|*.txt</value></data>
-  <data name="ExportMarkdownDialogFilter" xml:space="preserve"><value>Markdown failai (*.md)|*.md</value></data>
-  <data name="ExportXamlPackageDialogFilter" xml:space="preserve"><value>Raiškusis užrašo turinys (*.xamlpackage)|*.xamlpackage</value></data>
   <data name="ExportError" xml:space="preserve"><value>Eksporto klaida</value></data>
   <data name="Success" xml:space="preserve"><value>Pavyko</value></data>
   <data name="NoContent" xml:space="preserve"><value>(Nėra turinio)</value></data>
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Paveikslėlių failai (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|Visi failai (*.*)|*.*</value></data>
   <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Garso failai (*.mp3;*.wav)|*.mp3;*.wav|Visi failai (*.*)|*.*</value></data>
   <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Nepavyko nuskaityti užrašų failo</value></data>
+  <data name="NoteImportUnsupportedVersion" xml:space="preserve"><value>Šis užrašo failas sukurtas naujesnės Scriblucent versijos ir čia negali būti atidarytas.</value></data>
   <data name="DashboardLoadFailedTitle" xml:space="preserve"><value>Nepavyko įkelti šio skydelio</value></data>
   <data name="DashboardLoadFailedMessage" xml:space="preserve"><value>Nepavyko baigti įkelti šio skydelio. Siekiant apsaugoti duomenis, įrašymas pristabdytas. Bandykite dar kartą; jei klaida kartojasi, susisiekite su palaikymo komanda.</value></data>
   <data name="DashboardLoadRetry" xml:space="preserve"><value>Bandyti dar kartą</value></data>
@@ -534,7 +531,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="SelectFilesToImport" xml:space="preserve"><value>Pasirinkite importuotinus failus</value></data>
   <data name="ImportSuccess" xml:space="preserve"><value>Sėkmingai importuota {0} užrašai(-ų)</value></data>
   <data name="ImportError" xml:space="preserve"><value>Klaida importuojant failą:</value></data>
-  <data name="SupportedFormats" xml:space="preserve"><value>Palaikomi užrašų failai (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent paketas (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Tekstiniai failai (*.txt)|*.txt|Markdown failai (*.md)|*.md|Raiškusis užrašo turinys (*.xamlpackage)|*.xamlpackage|Visi failai (*.*)|*.*</value></data>
+  <data name="SupportedFormats" xml:space="preserve"><value>Palaikomi užrašų failai (*.scribnote;*.notecard;*.rtf;*.txt)|*.scribnote;*.notecard;*.rtf;*.txt|Scriblucent užrašas (*.scribnote)|*.scribnote|Senas užrašo paketas (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Tekstiniai failai (*.txt)|*.txt|Visi failai (*.*)|*.*</value></data>
   <data name="InsertPicture" xml:space="preserve"><value>Įterpti paveikslėlį</value></data>
   <data name="FailedToInsertPicture" xml:space="preserve"><value>Nepavyko įterpti paveikslėlio:</value></data>
   <data name="DeleteImage" xml:space="preserve"><value>Ištrinti paveikslėlį</value></data>

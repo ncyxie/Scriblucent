@@ -280,11 +280,9 @@
   <data name="Save" xml:space="preserve"><value>Save</value></data>
   <data name="Print" xml:space="preserve"><value>Print</value></data>
   <data name="ExportPdf" xml:space="preserve"><value>PDF (*.pdf)</value></data>
-  <data name="ExportNotePackage" xml:space="preserve"><value>Scriblucent package (*.notecard)</value></data>
+  <data name="ExportNotePackage" xml:space="preserve"><value>Scriblucent package (*.scribnote)</value></data>
   <data name="ExportRtf" xml:space="preserve"><value>Rich text (*.rtf)</value></data>
   <data name="ExportText" xml:space="preserve"><value>Plain text (*.txt)</value></data>
-  <data name="ExportMarkdown" xml:space="preserve"><value>Markdown (*.md)</value></data>
-  <data name="ExportXamlPackage" xml:space="preserve"><value>Rich note body (*.xamlpackage)</value></data>
   <data name="ToggleWordWrap" xml:space="preserve"><value>Toggle word wrap</value></data>
   <data name="Zoom" xml:space="preserve"><value>Zoom</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
@@ -375,7 +373,7 @@
   <data name="Error" xml:space="preserve"><value>Error</value></data>
   <data name="FailedToPrintNote" xml:space="preserve"><value>Failed to print note:</value></data>
   <data name="PrintError" xml:space="preserve"><value>Print Error</value></data>
-  <data name="OpenFileDialogFilter" xml:space="preserve"><value>Supported note files (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent Package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|Markdown Files (*.md)|*.md|Rich Note Body (*.xamlpackage)|*.xamlpackage|All files (*.*)|*.*</value></data>
+  <data name="OpenFileDialogFilter" xml:space="preserve"><value>Supported note files (*.scribnote;*.notecard;*.rtf;*.txt)|*.scribnote;*.notecard;*.rtf;*.txt|Scriblucent note (*.scribnote)|*.scribnote|Legacy note package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|All files (*.*)|*.*</value></data>
   <data name="AboutTagline" xml:space="preserve"><value>Notes. Flashcards. Mind Maps. Quizzes.</value></data>
   <data name="AboutDescription" xml:space="preserve"><value>Study offline with local AI — notes become flashcards, mind maps, and quizzes. Your data stays on your device.</value></data>
   <data name="AboutMaintainedBy" xml:space="preserve"><value>Maintained by</value></data>
@@ -392,17 +390,16 @@
   <data name="FailedToExportPdf" xml:space="preserve"><value>Failed to export PDF:</value></data>
   <data name="ExportComplete" xml:space="preserve"><value>Export complete.</value></data>
   <data name="FailedToExport" xml:space="preserve"><value>Failed to export:</value></data>
-  <data name="ExportNotePackageDialogFilter" xml:space="preserve"><value>Scriblucent Package (*.notecard)|*.notecard</value></data>
+  <data name="ExportNotePackageDialogFilter" xml:space="preserve"><value>Scriblucent note (*.scribnote)|*.scribnote</value></data>
   <data name="ExportRtfDialogFilter" xml:space="preserve"><value>Rich Text Format (*.rtf)|*.rtf</value></data>
   <data name="ExportTextDialogFilter" xml:space="preserve"><value>Text Files (*.txt)|*.txt</value></data>
-  <data name="ExportMarkdownDialogFilter" xml:space="preserve"><value>Markdown Files (*.md)|*.md</value></data>
-  <data name="ExportXamlPackageDialogFilter" xml:space="preserve"><value>Rich Note Body (*.xamlpackage)|*.xamlpackage</value></data>
   <data name="ExportError" xml:space="preserve"><value>Export Error</value></data>
   <data name="Success" xml:space="preserve"><value>Success</value></data>
   <data name="NoContent" xml:space="preserve"><value>(No content)</value></data>
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Image files (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|All files (*.*)|*.*</value></data>
   <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Audio files (*.mp3;*.wav)|*.mp3;*.wav|All files (*.*)|*.*</value></data>
   <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Notes file couldn't be read</value></data>
+  <data name="NoteImportUnsupportedVersion" xml:space="preserve"><value>This note file was created by a newer version of Scriblucent and can't be opened here.</value></data>
   <data name="DashboardLoadFailedTitle" xml:space="preserve"><value>Couldn't load this dashboard</value></data>
   <data name="DashboardLoadFailedMessage" xml:space="preserve"><value>This dashboard couldn't finish loading. Saving is paused to protect its data. Try again; if it still fails, contact support.</value></data>
   <data name="DashboardLoadRetry" xml:space="preserve"><value>Try again</value></data>
@@ -564,7 +561,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="SelectFilesToImport" xml:space="preserve"><value>Select files to import</value></data>
   <data name="ImportSuccess" xml:space="preserve"><value>Successfully imported {0} note(s)</value></data>
   <data name="ImportError" xml:space="preserve"><value>Error importing file:</value></data>
-  <data name="SupportedFormats" xml:space="preserve"><value>Supported note files (*.notecard;*.rtf;*.txt;*.md;*.xamlpackage)|*.notecard;*.rtf;*.txt;*.md;*.xamlpackage|Scriblucent Package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|Markdown Files (*.md)|*.md|Rich Note Body (*.xamlpackage)|*.xamlpackage|All files (*.*)|*.*</value></data>
+  <data name="SupportedFormats" xml:space="preserve"><value>Supported note files (*.scribnote;*.notecard;*.rtf;*.txt)|*.scribnote;*.notecard;*.rtf;*.txt|Scriblucent note (*.scribnote)|*.scribnote|Legacy note package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|All files (*.*)|*.*</value></data>
   <data name="InsertPicture" xml:space="preserve"><value>Insert picture</value></data>
   <data name="FailedToInsertPicture" xml:space="preserve"><value>Failed to insert picture:</value></data>
   <data name="DeleteImage" xml:space="preserve"><value>Delete image</value></data>

@@ -240,10 +240,6 @@
                                                   Click="ExportRtfMenuItem_Click"/>
                                         <MenuItem Header="{Binding [ExportText], Source={StaticResource Loc}}"
                                                   Click="ExportTextMenuItem_Click"/>
-                                        <MenuItem Header="{Binding [ExportMarkdown], Source={StaticResource Loc}}"
-                                                  Click="ExportMarkdownMenuItem_Click"/>
-                                        <MenuItem Header="{Binding [ExportXamlPackage], Source={StaticResource Loc}}"
-                                                  Click="ExportXamlPackageMenuItem_Click"/>
                                     </MenuItem>
                                     <MenuItem Header="{Binding [InsertPicture], Source={StaticResource Loc}}"
                                               Click="InsertPictureButton_Click"/>

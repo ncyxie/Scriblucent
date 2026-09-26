@@ -1386,20 +1386,13 @@ namespace Scriblucent
         {
             try
             {
-                // Get the foreground color from the application theme resources
+                // Default text follows the theme. A color the user chose stays as saved.
                 if (TryGetRichTextBoxForeground(out var foregroundBrush))
                 {
                     var doc = ContentTextBox.Document;
-
-                    // Set default foreground for the entire document
                     doc.Foreground = foregroundBrush;
-
-                    // Apply foreground to entire document text range
-                    var textRange = new TextRange(doc.ContentStart, doc.ContentEnd);
-                    textRange.ApplyPropertyValue(TextElement.ForegroundProperty, foregroundBrush);
-
-                    // List markers use List/ListItem Foreground, not Run colors from the TextRange.
-                    SyncListMarkerAppearance(CollectAllDocumentLists(), foreground: foregroundBrush);
+                    foreach (Block block in doc.Blocks)
+                        RecolorThemeDefaultForeground(block, foregroundBrush);
                 }
             }
             catch (Exception)
@@ -1413,6 +1406,84 @@ namespace Scriblucent
             if (_findBarOpen && _hasFindHighlights)
                 QueueFindOverlay(DispatcherPriority.Render);
             QueueSelectionOverlay();
+        }
+
+        private static readonly Color LightThemeForeground = Color.FromRgb(0x1C, 0x1C, 0x1C);
+        private static readonly Color DarkThemeForeground = Color.FromRgb(0xFF, 0xFF, 0xFF);
+
+        private static bool IsThemeDefaultForeground(Color color)
+            => color.A == 0xFF
+                && (color == LightThemeForeground || color == DarkThemeForeground);
+
+        /// <summary>Recolors only text that is still using a theme default. Chosen colors,
+        /// highlights, and list marker offsets stay untouched.</summary>
+        private void RecolorThemeDefaultForeground(TextElement element, Brush themeBrush)
+        {
+            if (element.ReadLocalValue(TextElement.ForegroundProperty) is SolidColorBrush brush
+                && IsThemeDefaultForeground(brush.Color))
+            {
+                element.Foreground = themeBrush;
+            }
+
+            switch (element)
+            {
+                case Paragraph paragraph:
+                    foreach (Inline inline in paragraph.Inlines)
+                        RecolorThemeDefaultInline(inline, themeBrush);
+                    break;
+                case Section section:
+                    foreach (Block block in section.Blocks)
+                        RecolorThemeDefaultForeground(block, themeBrush);
+                    break;
+                case System.Windows.Documents.List list:
+                    foreach (ListItem item in list.ListItems)
+                    {
+                        RecolorThemeDefaultForeground(item, themeBrush);
+                        foreach (Block block in item.Blocks)
+                            RecolorThemeDefaultForeground(block, themeBrush);
+                    }
+                    break;
+                case Table table:
+                    foreach (TableRowGroup rowGroup in table.RowGroups)
+                    {
+                        RecolorThemeDefaultForeground(rowGroup, themeBrush);
+                        foreach (TableRow row in rowGroup.Rows)
+                        {
+                            RecolorThemeDefaultForeground(row, themeBrush);
+                            foreach (TableCell cell in row.Cells)
+                            {
+                                RecolorThemeDefaultForeground(cell, themeBrush);
+                                foreach (Block block in cell.Blocks)
+                                    RecolorThemeDefaultForeground(block, themeBrush);
+                            }
+                        }
+                    }
+                    break;
+            }
+        }
+
+        private void RecolorThemeDefaultInline(Inline inline, Brush themeBrush)
+        {
+            if (inline is not TextElement element)
+                return;
+
+            if (element.ReadLocalValue(TextElement.ForegroundProperty) is SolidColorBrush brush
+                && IsThemeDefaultForeground(brush.Color))
+            {
+                element.Foreground = themeBrush;
+            }
+
+            switch (inline)
+            {
+                case Span span:
+                    foreach (Inline child in span.Inlines)
+                        RecolorThemeDefaultInline(child, themeBrush);
+                    break;
+                case AnchoredBlock anchored:
+                    foreach (Block block in anchored.Blocks)
+                        RecolorThemeDefaultForeground(block, themeBrush);
+                    break;
+            }
         }
 
         private static bool TryGetRichTextBoxForeground(out Brush foregroundBrush)
@@ -4545,10 +4616,12 @@ namespace Scriblucent
                     // Initialize last saved content
                     MarkCurrentStateSaved();
 
-                    // Apply theme colors to the loaded content
+                    // Apply theme colors to the loaded content. Custom text colors and the
+                    // note's own paragraph line spacing stay as they were saved.
                     ApplyRichTextBoxTheme();
                     ApplyEditorTextLayout();
-                    ApplyCurrentLineSpacingToDocument();
+                    if (!TrySyncLineSpacingFromDocument())
+                        ApplyCurrentLineSpacingToDocument();
 
                     _floatingImages.MediaDirectory = MainViewModel.NotesMediaDirectory;
                     // Decode the photos off the UI thread (the STA decode thread) so the note's
@@ -6417,14 +6490,6 @@ namespace Scriblucent
                 path => NoteFileService.SavePlainText(path, GetContentTextForFileExport()));
         }
 
-        private void ExportMarkdownMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            ExportFile(
-                "ExportMarkdownDialogFilter",
-                ".md",
-                path => NoteFileService.SavePlainText(path, GetContentTextForFileExport()));
-        }
-
         private void ExportRtfMenuItem_Click(object sender, RoutedEventArgs e)
         {
             ExportFile(
@@ -6441,27 +6506,11 @@ namespace Scriblucent
                 });
         }
 
-        private void ExportXamlPackageMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            ExportFile(
-                "ExportXamlPackageDialogFilter",
-                ".xamlpackage",
-                path =>
-                {
-                    ClearSpellCheckDecorations();
-                    _wrapLayout?.Clear();
-                    SaveWithInlineMarkers(() =>
-                        NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.XamlPackage));
-                    _ = RunSpellCheckPassAsync();
-                    _wrapLayout?.Reapply();
-                });
-        }
-
         private void ExportNotePackageMenuItem_Click(object sender, RoutedEventArgs e)
         {
             ExportFile(
                 "ExportNotePackageDialogFilter",
-                ".notecard",
+                ".scribnote",
                 path =>
                 {
                     _wrapLayout?.Clear();
@@ -7665,6 +7714,39 @@ namespace Scriblucent
             {
                 _isSyncingLineSpacingSelector = false;
             }
+        }
+
+        /// <summary>Points the spacing control at the spacing already stored on the note.
+        /// Returns false when the note has no saved line height, so the caller can apply the
+        /// app preference to a note that never had one.</summary>
+        private bool TrySyncLineSpacingFromDocument()
+        {
+            var paragraphs = new List<Paragraph>();
+            var document = ContentTextBox.Document;
+            CollectParagraphs(document.Blocks, document.ContentStart, document.ContentEnd, paragraphs);
+
+            Paragraph? spaced = null;
+            foreach (var paragraph in paragraphs)
+            {
+                if (paragraph.LineStackingStrategy == LineStackingStrategy.BlockLineHeight
+                    && !double.IsNaN(paragraph.LineHeight)
+                    && paragraph.LineHeight > 0)
+                {
+                    spaced = paragraph;
+                    break;
+                }
+            }
+
+            if (spaced is null)
+                return false;
+
+            var fontSize = ResolveLargestParagraphFontSize(spaced);
+            if (double.IsNaN(fontSize) || fontSize <= 0)
+                fontSize = ContentTextBox.FontSize > 0 ? ContentTextBox.FontSize : 14;
+
+            _lineSpacingMultiplier = NormalizeLineSpacingMultiplier(spaced.LineHeight / fontSize);
+            SyncLineSpacingSelectorFromPreference();
+            return true;
         }
 
         private void SyncIndentSizeSelectorFromPreference()
@@ -9937,8 +10019,13 @@ namespace Scriblucent
             SetFontPanelOpen(document.IsEditorFontPanelOpen ?? _isFontPanelOpen, animate: false);
             SetTagsPanelOpen(document.IsEditorTagsPanelOpen ?? false, animate: false);
             ApplyContentToEditor(document.Content);
+            ApplyRichTextBoxTheme();
+            if (!TrySyncLineSpacingFromDocument())
+                ApplyCurrentLineSpacingToDocument();
             ApplyEditorTextLayout();
             SyncFontSelectorsFromSelection();
+            _floatingImages.MediaDirectory = MainViewModel.NotesMediaDirectory;
+            _ = RestorePhotosAsync(document.Images);
         }
 
         private void ClearContentButton_Click(object sender, RoutedEventArgs e)

@@ -706,7 +706,8 @@ public class MainViewModel : ViewModelBase
         Task.Run(() => ReadNotesFromDisk(path)).ContinueWith(task =>
         {
             Scriblucent.Services.StartupProbe.Mark("library");
-            Application.Current?.Dispatcher.BeginInvoke(() => ApplyLoadedNotes(task.Result), DispatcherPriority.Background);
+            CompleteDashboardLoad(task, DashboardNotes, ApplyLoadedNotes,
+                () => { }, () => { });
         }, TaskScheduler.Default);
     }
 
@@ -722,17 +723,11 @@ public class MainViewModel : ViewModelBase
 
         if (result.Status == NotesLoadStatus.ParseError)
         {
-            // The file exists but failed to parse - do NOT create a starter note and save over it,
-            // that would permanently discard whatever real notes were on disk. Leave Notes empty for
-            // this session and tell the user instead of silently destroying their library.
-            var message = result.BackupPath is { } backupPath
-                ? string.Format(LocalizationService.GetString("NotesLoadFailedWithBackupFormat"), backupPath)
-                : LocalizationService.GetString("NotesLoadFailedNoBackup");
-            ModernMessageBox.Show(message, LocalizationService.GetString("NotesLoadFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
-            // Don't mark the load complete - that would let the autosave timer see an empty
-            // Notes collection as "loaded" and silently overwrite notes.json with nothing a
-            // few seconds later, destroying the very data this warning is about.
-            FinishNotesLoadInitialization(markLoadComplete: false);
+            ReportDashboardLoadFailure(DashboardNotes, new InvalidDataException(
+                result.BackupPath is { } backupPath
+                    ? string.Format(LocalizationService.GetString("NotesLoadFailedWithBackupFormat"), backupPath)
+                    : LocalizationService.GetString("NotesLoadFailedNoBackup")));
+            _notesBatchAddInProgress = false;
             return;
         }
 
@@ -747,13 +742,27 @@ public class MainViewModel : ViewModelBase
 
         if (result.Docs.Count == 0)
         {
-            var starterDocument = new NoteDocument
+            if (result.Status == NotesLoadStatus.NotFound)
             {
-                Title = LocalizationService.GetString("FirstNoteTitle"),
-                Content = LocalizationService.GetString("FirstNoteContent")
-            };
-            Notes.Add(CreateNoteCard(starterDocument));
-            SaveNotes();
+                var starterDocument = new NoteDocument
+                {
+                    Title = LocalizationService.GetString("FirstNoteTitle"),
+                    Content = LocalizationService.GetString("FirstNoteContent")
+                };
+                Notes.Add(CreateNoteCard(starterDocument));
+                SaveNotes();
+                FinishNotesLoadInitialization();
+                return;
+            }
+
+            _groupMetadata.Clear();
+            foreach (var metadata in result.Groups)
+                _groupMetadata[metadata.GroupId] = metadata;
+            Notes.Clear();
+            // Persist a soft-delete migration (deleted rows left the active list) without
+            // inventing a starter note over a library the user already emptied.
+            if (result.MovedDeletedToTrash)
+                SaveNotes();
             FinishNotesLoadInitialization();
             return;
         }
@@ -877,6 +886,10 @@ public class MainViewModel : ViewModelBase
                 _quizzesLoadCompleted = false;
                 _isQuizzesDashboardReady = false;
                 break;
+            case DashboardNotes:
+                _notesLoadComplete = false;
+                _isNotesDashboardReady = false;
+                break;
         }
 
         _dashboardLoadRetriesInProgress.Remove(dashboard);
@@ -899,6 +912,7 @@ public class MainViewModel : ViewModelBase
             case DashboardFlashcards: _flashcardsPersistedContentLoaded = false; break;
             case DashboardMindMaps: _mindMapsPersistedContentLoaded = false; break;
             case DashboardQuizzes: _quizzesPersistedContentLoaded = false; break;
+            case DashboardNotes: _notesPersistedContentLoaded = false; break;
         }
 
         OnPropertyChanged(nameof(IsActiveDashboardLoadFailed));
@@ -946,12 +960,32 @@ public class MainViewModel : ViewModelBase
         catch (DirectoryNotFoundException) { return null; }
     }
 
+    /// <summary>A save, antivirus scan, or cloud sync can hold the library for a moment.
+    /// Wait that out, then surface a lock that is still there.</summary>
+    private static FileStream? OpenDashboardFileWithRetry(string path)
+    {
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                return OpenDashboardFileIfPresent(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < maxAttempts)
+            {
+                System.Threading.Thread.Sleep(150);
+            }
+        }
+
+        return OpenDashboardFileIfPresent(path);
+    }
+
     // Pure read - runs off the UI thread via Task.Run in LoadFlashcardsPersistedContent. Must not
     // touch any instance/UI-bound state; ApplyLoadedFlashcards below applies the result on the UI
     // thread. Mirrors ReadNotesFromDisk/ApplyLoadedNotes.
     private static FlashcardsLoadResult ReadFlashcardsFromDisk(string setsPath, string legacyPath)
     {
-        using var stream = OpenDashboardFileIfPresent(setsPath);
+        using var stream = OpenDashboardFileWithRetry(setsPath);
         if (stream is not null)
         {
             List<FlashcardSetDocument> sets;
@@ -979,23 +1013,39 @@ public class MainViewModel : ViewModelBase
                     metadataAction = GroupMetadataSyncAction.Leave;
                 }
             }
-            catch (JsonException)
+            catch (JsonException storeError)
             {
                 stream.Position = 0;
-                sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream)
-                    ?? throw new JsonException("Flashcard sets file contains null.");
-                metadataAction = GroupMetadataSyncAction.Leave;
+                try
+                {
+                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream)
+                        ?? throw new JsonException("Flashcard sets file contains null.");
+                    metadataAction = GroupMetadataSyncAction.Leave;
+                }
+                catch (JsonException)
+                {
+                    TryBackupCorruptFile(setsPath);
+                    throw storeError;
+                }
             }
 
             return new FlashcardsLoadResult(true, sets, trashedSets, groups, metadataAction, new List<FlashcardItem>());
         }
 
-        using var legacyStream = OpenDashboardFileIfPresent(legacyPath);
+        using var legacyStream = OpenDashboardFileWithRetry(legacyPath);
         if (legacyStream is not null)
         {
-            var data = JsonSerializer.Deserialize<List<FlashcardItem>>(legacyStream)
-                ?? throw new JsonException("Legacy flashcards file contains null.");
-            return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, data);
+            try
+            {
+                var data = JsonSerializer.Deserialize<List<FlashcardItem>>(legacyStream)
+                    ?? throw new JsonException("Legacy flashcards file contains null.");
+                return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, data);
+            }
+            catch (JsonException)
+            {
+                TryBackupCorruptFile(legacyPath);
+                throw;
+            }
         }
 
         return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, new List<FlashcardItem>());
@@ -1760,7 +1810,7 @@ public class MainViewModel : ViewModelBase
     // ReadNotesFromDisk/ReadFlashcardsFromDisk.
     private static MindMapsLoadResult ReadMindMapsFromDisk(string path)
     {
-        using var stream = OpenDashboardFileIfPresent(path);
+        using var stream = OpenDashboardFileWithRetry(path);
         if (stream is null)
             return new MindMapsLoadResult(false, new List<MindMapDocument>(), new List<MindMapDocument>(), new List<MindMapGroupData>(), GroupMetadataSyncAction.Leave);
 
@@ -1789,12 +1839,20 @@ public class MainViewModel : ViewModelBase
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
         }
-        catch (JsonException)
+        catch (JsonException storeError)
         {
             stream.Position = 0;
-            maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream)
-                ?? throw new JsonException("Mind maps file contains null.");
-            metadataAction = GroupMetadataSyncAction.Leave;
+            try
+            {
+                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream)
+                    ?? throw new JsonException("Mind maps file contains null.");
+                metadataAction = GroupMetadataSyncAction.Leave;
+            }
+            catch (JsonException)
+            {
+                TryBackupCorruptFile(path);
+                throw storeError;
+            }
         }
 
         foreach (var map in maps.Concat(trashedMaps))
@@ -2511,7 +2569,7 @@ public class MainViewModel : ViewModelBase
     // ReadNotesFromDisk/ReadFlashcardsFromDisk/ReadMindMapsFromDisk.
     private static QuizzesLoadResult ReadQuizzesFromDisk(string path)
     {
-        using var stream = OpenDashboardFileIfPresent(path);
+        using var stream = OpenDashboardFileWithRetry(path);
         if (stream is null)
             return new QuizzesLoadResult(false, new List<QuizDocument>(), new List<QuizDocument>(), new List<QuizGroupData>(), GroupMetadataSyncAction.Leave);
 
@@ -2540,12 +2598,20 @@ public class MainViewModel : ViewModelBase
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
         }
-        catch (JsonException)
+        catch (JsonException storeError)
         {
             stream.Position = 0;
-            documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream)
-                ?? throw new JsonException("Quizzes file contains null.");
-            metadataAction = GroupMetadataSyncAction.Leave;
+            try
+            {
+                documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream)
+                    ?? throw new JsonException("Quizzes file contains null.");
+                metadataAction = GroupMetadataSyncAction.Leave;
+            }
+            catch (JsonException)
+            {
+                TryBackupCorruptFile(path);
+                throw storeError;
+            }
         }
 
         return new QuizzesLoadResult(true, documents, trashedDocuments, groups, metadataAction);
@@ -3924,6 +3990,83 @@ public class MainViewModel : ViewModelBase
         QueueSaveNotes();
         QueueNotesMutationReaction();
         return note;
+    }
+
+    /// <summary>
+    /// Adds imported notes as new library entries in one pass. One SaveNotes for the batch,
+    /// matching AddImportedQuizzes. Group, pin, and schedule state is cleared first.
+    /// </summary>
+    public void AddImportedNotes(IReadOnlyList<NoteDocument> documents)
+    {
+        if (documents.Count == 0)
+            return;
+
+        foreach (var document in documents)
+        {
+            NoteFileService.NormalizeImportedDocument(
+                document,
+                string.IsNullOrWhiteSpace(document.Title) ? LocalizationService.GetString("NewNoteTitle") : document.Title);
+            EnsureDocumentTypography(document);
+        }
+
+        var cards = documents.Select(CreateNoteCard).ToList();
+        var addedIds = documents.Select(document => document.Id).ToList();
+
+        if (Notes.Count == 0)
+        {
+            _notesBatchAddInProgress = true;
+            try
+            {
+                foreach (var card in cards)
+                    Notes.Add(card);
+
+                OnPropertyChanged(nameof(HasNotes));
+                SaveNotes();
+                MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.Notes);
+                RebuildGroups();
+                RefreshRecentNotes();
+                _ungroupedVisibleCount = _notesView is CollectionView view
+                    ? view.Count
+                    : _notesView.Cast<object>().Count();
+                NotifyNotesChanged();
+                RefreshActivityStats();
+            }
+            finally
+            {
+                _notesBatchAddInProgress = false;
+            }
+
+            return;
+        }
+
+        const int bulkAddThreshold = 128;
+        var useBulkUpdate = cards.Count >= bulkAddThreshold;
+        var motionIds = addedIds.Count > bulkAddThreshold
+            ? addedIds.Take(64).Concat(addedIds.TakeLast(64)).ToList()
+            : addedIds;
+
+        _notesBatchAddInProgress = true;
+        try
+        {
+            MotionHost?.BeginBatchMutation(DashboardMotionScope.Notes);
+            foreach (var id in motionIds)
+                MotionHost?.RegisterBatchItemAdd(DashboardMotionScope.Notes, id);
+
+            if (useBulkUpdate)
+                ((BulkObservableCollection<NoteCardViewModel>)Notes).AddRange(cards);
+            else
+            {
+                foreach (var card in cards)
+                    Notes.Add(card);
+            }
+
+            SaveNotes();
+            CompleteNotesBatchAdd(motionIds, useBulkUpdate);
+        }
+        finally
+        {
+            _notesBatchAddInProgress = false;
+        }
     }
 
     private void OnNotesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -9302,6 +9445,8 @@ public class MainViewModel : ViewModelBase
     /// </summary>
     public void SaveNotes()
     {
+        if (_dashboardLoadFailures.Contains(DashboardNotes))
+            return;
         // Skip the write entirely when nothing changed since the last one - the auto-save tick
         // would otherwise rewrite the whole (tens of MB) store every interval even when the
         // library is untouched. The signature covers every persisted field (see
@@ -9667,77 +9812,72 @@ public class MainViewModel : ViewModelBase
         List<NoteDocument> Docs,
         List<NoteGroupData> Groups,
         string? BackupPath = null,
-        List<NoteDocument>? TrashedDocs = null);
+        List<NoteDocument>? TrashedDocs = null,
+        bool MovedDeletedToTrash = false);
 
     private static NotesLoadResult ReadNotesFromDisk(string path)
     {
-        if (!File.Exists(path))
+        using var stream = OpenDashboardFileWithRetry(path);
+        if (stream is null)
             return new NotesLoadResult(NotesLoadStatus.NotFound, new List<NoteDocument>(), new List<NoteGroupData>());
 
-        // A previous instance's SaveNotes background write (or an antivirus/backup tool) can hold
-        // a transient lock on this exact path for a moment - retrying a few times before giving up
-        // avoids misreporting that as "file is damaged" (the file itself is fine; only genuine
-        // parse/deserialize failures below should count as real corruption).
-        const int maxAttempts = 3;
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        return ReadNotesStore(stream, path);
+    }
+
+    private static NotesLoadResult ReadNotesStore(FileStream stream, string path)
+    {
+        NotesStoreData? store = null;
+        JsonException? storeError = null;
+        try
         {
-            try
-            {
-                // Stream the deserialize - the store can be tens of MB of photo Base64, and
-                // reading it into a string first doubles the launch allocation for nothing.
-                using var stream = File.OpenRead(path);
-                var docs = new List<NoteDocument>();
-                var groups = new List<NoteGroupData>();
-                var trashedDocs = new List<NoteDocument>();
-
-                NotesStoreData? store = null;
-                try
-                {
-                    store = JsonSerializer.Deserialize<NotesStoreData>(stream);
-                }
-                catch (JsonException)
-                {
-                    // Not the current object-rooted format - fall through to the legacy bare-array
-                    // format below instead of treating this as corrupt.
-                }
-
-                // A non-null Notes list (even an empty one - e.g. every note moved to trash) means
-                // this is the current format; only a genuinely missing/null Notes property (or a
-                // failed deserialize above) means this might be the old bare-array format. Checking
-                // Notes.Count > 0 here used to misdiagnose "current format, zero live notes right
-                // now" as legacy, which then failed to parse as a bare array and got reported as a
-                // damaged file even though nothing was wrong with it.
-                if (store?.Notes != null)
-                {
-                    docs = store.Notes;
-                    groups = store.Groups ?? new List<NoteGroupData>();
-                    trashedDocs = store.TrashedNotes ?? new List<NoteDocument>();
-                }
-                else
-                {
-                    stream.Position = 0;
-                    var legacyDocs = JsonSerializer.Deserialize<List<NoteDocument>>(stream);
-                    if (legacyDocs != null)
-                        docs = legacyDocs;
-                }
-
-                return new NotesLoadResult(NotesLoadStatus.Success, docs, groups, TrashedDocs: trashedDocs);
-            }
-            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < maxAttempts)
-            {
-                System.Threading.Thread.Sleep(150);
-            }
-            catch
-            {
-                // File exists but couldn't be parsed - likely truncated/corrupted by a crash mid-write,
-                // or a transient lock that outlasted the retries above. Back it up rather than
-                // letting the caller silently overwrite it with a starter note.
-                var backupPath = TryBackupCorruptFile(path);
-                return new NotesLoadResult(NotesLoadStatus.ParseError, new List<NoteDocument>(), new List<NoteGroupData>(), backupPath);
-            }
+            store = JsonSerializer.Deserialize<NotesStoreData>(stream);
+        }
+        catch (JsonException ex)
+        {
+            storeError = ex;
         }
 
-        return new NotesLoadResult(NotesLoadStatus.ParseError, new List<NoteDocument>(), new List<NoteGroupData>(), TryBackupCorruptFile(path));
+        if (store?.Notes != null)
+        {
+            var rawNotes = store.Notes;
+            var trashedDocs = store.TrashedNotes ?? new List<NoteDocument>();
+            var deletedInActiveList = rawNotes.Where(note => note.IsDeleted).ToList();
+            trashedDocs.AddRange(deletedInActiveList);
+            var docs = rawNotes.Where(note => !note.IsDeleted).ToList();
+            return new NotesLoadResult(
+                NotesLoadStatus.Success,
+                docs,
+                store.Groups ?? new List<NoteGroupData>(),
+                TrashedDocs: trashedDocs,
+                MovedDeletedToTrash: deletedInActiveList.Count > 0);
+        }
+
+        stream.Position = 0;
+        List<NoteDocument>? legacyDocs;
+        try
+        {
+            legacyDocs = JsonSerializer.Deserialize<List<NoteDocument>>(stream);
+        }
+        catch (JsonException ex)
+        {
+            TryBackupCorruptFile(path);
+            throw storeError ?? ex;
+        }
+
+        if (legacyDocs is null)
+        {
+            TryBackupCorruptFile(path);
+            throw new JsonException("Notes file contains null.");
+        }
+
+        var trashedLegacy = legacyDocs.Where(note => note.IsDeleted).ToList();
+        var liveLegacy = legacyDocs.Where(note => !note.IsDeleted).ToList();
+        return new NotesLoadResult(
+            NotesLoadStatus.Success,
+            liveLegacy,
+            new List<NoteGroupData>(),
+            TrashedDocs: trashedLegacy,
+            MovedDeletedToTrash: trashedLegacy.Count > 0);
     }
 
     private static string? TryBackupCorruptFile(string path)

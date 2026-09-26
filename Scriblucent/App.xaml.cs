@@ -172,63 +172,33 @@ public partial class App : Application
             try
             {
                 var path = dlg.FileName;
-                var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-
-                if (ext == ".rtf")
+                if (NoteFileService.IsNotePackagePath(path))
                 {
-                    // Read raw bytes from the RTF file and store as Base64 so we don't corrupt encoding
-                    var bytes = System.IO.File.ReadAllBytes(path);
-                    viewModel.Document.Content = Convert.ToBase64String(bytes);
+                    var package = NoteFileService.ReadNotePackage(path);
+                    viewModel.Document.Content = package.Content ?? string.Empty;
+                    viewModel.Document.Images = package.Images ?? new List<Models.NoteImageAttachment>();
+                    if (string.IsNullOrWhiteSpace(viewModel.Document.Title) && !string.IsNullOrWhiteSpace(package.Title))
+                        viewModel.Document.Title = package.Title;
+                }
+                else if (string.Equals(System.IO.Path.GetExtension(path), ".rtf", StringComparison.OrdinalIgnoreCase))
+                {
+                    viewModel.Document.Content = NoteFileService.LoadEditorContentFromFile(path);
                 }
                 else
                 {
-                    // Read raw bytes first
-                    var rawBytes = System.IO.File.ReadAllBytes(path);
-
-                    string? content = null;
-
-                    // 1) Try strict UTF-8 (throws on invalid sequences)
-                    try
-                    {
-                        content = new System.Text.UTF8Encoding(false, true).GetString(rawBytes);
-                    }
-                    catch
-                    {
-                        // 2) Try BOM detection / StreamReader fallback
-                        try
-                        {
-                            using var ms = new System.IO.MemoryStream(rawBytes);
-                            using var sr = new System.IO.StreamReader(ms, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-                            content = sr.ReadToEnd();
-                        }
-                        catch
-                        {
-                            // 3) Try system ANSI
-                            try { content = System.Text.Encoding.Default.GetString(rawBytes); }
-                            catch
-                            {
-                                // 4) Try Lithuanian code page
-                                try { content = System.Text.Encoding.GetEncoding(1257).GetString(rawBytes); }
-                                catch (Exception ex)
-                                {
-                                    content = string.Empty;
-                                    CrashLog.Append("NoteCardControl.ImportTextFile", ex);
-                                }
-                            }
-                        }
-                    }
-
-                    viewModel.Document.Content = content ?? string.Empty;
-                    // Set note title to file name (without extension) if empty
+                    viewModel.Document.Content = NoteFileService.LoadEditorContentFromFile(path);
                     if (string.IsNullOrWhiteSpace(viewModel.Document.Title))
                         viewModel.Document.Title = System.IO.Path.GetFileNameWithoutExtension(path);
                 }
 
                 CurrentMainWindow?.OpenNoteEditor(viewModel);
             }
-            catch
+            catch (Exception ex)
             {
-                ModernMessageBox.Show(LocalizationService.GetString("FailedToOpenFile"), LocalizationService.GetString("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
+                var message = ex is InvalidOperationException && !string.IsNullOrWhiteSpace(ex.Message)
+                    ? ex.Message
+                    : LocalizationService.GetString("FailedToOpenFile");
+                ModernMessageBox.Show(message, LocalizationService.GetString("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

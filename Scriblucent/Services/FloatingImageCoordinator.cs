@@ -57,6 +57,7 @@ public sealed class FloatingImageCoordinator
     private int _edgeScrollDirectionX;
     private bool _syncScheduled;
     private bool _isRestoring;
+    private readonly Dictionary<Guid, RestoredImagePlacement> _restoredPlacement = new();
     private bool _isAdjustingExtentPad;
     private double _extentPadHeight;
     private DateTime _lastFullLayoutAt = DateTime.MinValue;
@@ -323,6 +324,7 @@ public sealed class FloatingImageCoordinator
 
     public void Clear(bool raiseChanged = true)
     {
+        _restoredPlacement.Clear();
         if (_overlay is null)
         {
             _sessions.Clear();
@@ -637,11 +639,16 @@ public sealed class FloatingImageCoordinator
                 if (load is null)
                     continue;
 
-                var clamped = attachment.LockAspectRatio
-                    ? NoteImageResizeMath.ClampDisplaySize(attachment.Width, attachment.Height)
-                    : NoteImageResizeMath.ClampFreeformSize(attachment.Width, attachment.Height);
-                var width = clamped.Width;
-                var height = clamped.Height;
+                var width = attachment.Width;
+                var height = attachment.Height;
+                if (!IsPositiveFinite(width) || !IsPositiveFinite(height))
+                {
+                    var clamped = attachment.LockAspectRatio
+                        ? NoteImageResizeMath.ClampDisplaySize(attachment.Width, attachment.Height)
+                        : NoteImageResizeMath.ClampFreeformSize(attachment.Width, attachment.Height);
+                    width = clamped.Width;
+                    height = clamped.Height;
+                }
 
                 var id = attachment.Id == Guid.Empty ? Guid.NewGuid() : attachment.Id;
                 var session = new NoteImageSession
@@ -663,11 +670,12 @@ public sealed class FloatingImageCoordinator
                     CaptionLabel = attachment.CaptionLabel,
                     CaptionText = attachment.CaptionText,
                     CaptionNumbering = attachment.CaptionNumbering,
-                    CaptionSeparator = string.IsNullOrEmpty(attachment.CaptionSeparator) ? ": " : attachment.CaptionSeparator,
+                    CaptionSeparator = attachment.CaptionSeparator ?? ": ",
                     CaptionPosition = attachment.CaptionPosition,
                     CaptionExcludeLabel = attachment.CaptionExcludeLabel
                 };
                 _sessions[id] = session;
+                RememberRestoredPlacement(session);
 
                 if (session.WrapMode == NoteImageWrapMode.Inline)
                 {
@@ -676,7 +684,7 @@ public sealed class FloatingImageCoordinator
                     continue;
                 }
 
-                var widget = CreateWidget(session, load.DisplaySource);
+                var widget = CreateWidget(session, load.DisplaySource, exactSize: true);
                 _overlay.Children.Add(widget);
             }
 
@@ -698,9 +706,9 @@ public sealed class FloatingImageCoordinator
 
                 if (restoredSession is not null)
                 {
-                    // Same clamp as everywhere else - including the flush-on-pin guard against
-                    // the pad-lagging extent.
-                    ClampSessionAndProject(restoredSession, widget);
+                    // Keep the saved position and size. A later editor resize may clamp.
+                    if (!TryKeepRestoredPlacement(restoredSession, widget))
+                        ClampSessionAndProject(restoredSession, widget);
                 }
                 else
                 {
@@ -1715,7 +1723,7 @@ public sealed class FloatingImageCoordinator
         return rect.Bottom + offset.Y;
     }
 
-    private NoteImageWidget CreateWidget(NoteImageSession session, ImageSource source)
+    private NoteImageWidget CreateWidget(NoteImageSession session, ImageSource source, bool exactSize = false)
     {
         var widget = new NoteImageWidget
         {
@@ -1723,7 +1731,7 @@ public sealed class FloatingImageCoordinator
             Source = source,
             WrapMode = session.WrapMode
         };
-        ProjectSessionToWidget(session, widget);
+        ProjectSessionToWidget(session, widget, exactSize);
         HookWidget(widget);
         return widget;
     }
@@ -1973,7 +1981,7 @@ public sealed class FloatingImageCoordinator
         if (DecodeDisplaySource(session) is not { } source)
             return;
 
-        var widget = CreateWidget(session, source);
+        var widget = CreateWidget(session, source, exactSize: _isRestoring);
         _overlay.Children.Add(widget);
         ClampSessionAndProject(session, widget);
         SyncWidget(widget);
@@ -3042,13 +3050,18 @@ public sealed class FloatingImageCoordinator
     private static void SyncSessionFromWidget(NoteImageSession session, NoteImageWidget widget)
         => CommitWidgetGeometryToSession(session, widget);
 
-    private static void ProjectSessionToWidget(NoteImageSession session, NoteImageWidget widget)
+    private static void ProjectSessionToWidget(NoteImageSession session, NoteImageWidget widget, bool exactSize = false)
     {
         widget.LockAspectRatio = session.LockAspectRatio;
         widget.DocumentLeft = session.DocumentLeft;
         widget.DocumentTop = session.DocumentTop;
         if (!widget.Width.Equals(session.Width) || !widget.Height.Equals(session.Height))
-            widget.SetDisplaySize(session.Width, session.Height);
+        {
+            if (exactSize)
+                widget.SetExactDisplaySize(session.Width, session.Height);
+            else
+                widget.SetDisplaySize(session.Width, session.Height);
+        }
     }
 
     private void SyncWidget(NoteImageWidget widget)
@@ -3151,8 +3164,58 @@ public sealed class FloatingImageCoordinator
         return caption;
     }
 
+    private readonly record struct RestoredImagePlacement(
+        double Left, double Top, double Width, double Height, double BoundsWidth);
+
+    private static bool IsPositiveFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value) && value > 0;
+
+    private void RememberRestoredPlacement(NoteImageSession session)
+    {
+        TryGetMeasuredBounds(out var boundsWidth, out _);
+        _restoredPlacement[session.Id] = new RestoredImagePlacement(
+            session.DocumentLeft,
+            session.DocumentTop,
+            session.Width,
+            session.Height,
+            boundsWidth);
+    }
+
+    /// <summary>Keeps a just-loaded photo at its saved geometry. A narrower page (word wrap,
+    /// a smaller window) may still pull it back in; growing the page does not move it.</summary>
+    private bool TryKeepRestoredPlacement(NoteImageSession session, NoteImageWidget widget)
+    {
+        if (!_restoredPlacement.TryGetValue(session.Id, out var saved))
+            return false;
+
+        var measured = TryGetMeasuredBounds(out var boundsWidth, out _);
+        if (saved.BoundsWidth <= 1 && measured && boundsWidth > 1)
+        {
+            saved = saved with { BoundsWidth = boundsWidth };
+            _restoredPlacement[session.Id] = saved;
+        }
+
+        var pageShrunk = saved.BoundsWidth > 1 && measured && boundsWidth < saved.BoundsWidth - 1;
+        var sameGeometry = Math.Abs(session.DocumentLeft - saved.Left) < 0.01
+            && Math.Abs(session.DocumentTop - saved.Top) < 0.01
+            && Math.Abs(session.Width - saved.Width) < 0.01
+            && Math.Abs(session.Height - saved.Height) < 0.01;
+
+        if (!pageShrunk && sameGeometry)
+        {
+            ProjectSessionToWidget(session, widget, exactSize: true);
+            return true;
+        }
+
+        _restoredPlacement.Remove(session.Id);
+        return false;
+    }
+
     private void ClampSessionAndProject(NoteImageSession session, NoteImageWidget widget)
     {
+        if (TryKeepRestoredPlacement(session, widget))
+            return;
+
         var (boundsW, boundsH) = GetDocumentBounds();
         var clamped = NoteImageResizeMath.ClampRectToBounds(
             session.DocumentLeft,

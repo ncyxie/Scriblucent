@@ -1,3 +1,4 @@
+using Scriblucent.Localization;
 using Scriblucent.Models;
 using System.IO;
 using System.Text;
@@ -8,43 +9,94 @@ namespace Scriblucent.Services;
 
 internal static class NoteFileService
 {
+    private const int CurrentScribNoteFormatVersion = 1;
+
     private static readonly JsonSerializerOptions NotePackageJsonOptions = new()
     {
         WriteIndented = true
     };
 
-    public static bool IsNotePackagePath(string path)
+    public static bool IsScribNotePath(string path)
+        => string.Equals(Path.GetExtension(path), ".scribnote", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsLegacyNoteCardPath(string path)
         => string.Equals(Path.GetExtension(path), ".notecard", StringComparison.OrdinalIgnoreCase);
 
-    public static bool IsRichContentPackagePath(string path)
-    {
-        var extension = Path.GetExtension(path);
-        return string.Equals(extension, ".xamlpackage", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(extension, ".xamlpkg", StringComparison.OrdinalIgnoreCase);
-    }
+    public static bool IsNotePackagePath(string path)
+        => IsScribNotePath(path) || IsLegacyNoteCardPath(path);
 
     public static string LoadEditorContentFromFile(string path)
     {
-        var extension = Path.GetExtension(path).ToLowerInvariant();
-        if (extension == ".rtf" || IsRichContentPackagePath(path))
+        var extension = Path.GetExtension(path);
+        if (IsUnsupportedNoteFile(extension))
+            throw new InvalidOperationException(LocalizationService.GetString("FailedToOpenFile"));
+
+        if (string.Equals(extension, ".rtf", StringComparison.OrdinalIgnoreCase))
             return Convert.ToBase64String(File.ReadAllBytes(path));
 
         return ReadTextFileWithFallback(path);
     }
 
+    private static bool IsUnsupportedNoteFile(string extension)
+        => string.Equals(extension, ".md", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".xamlpackage", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".xamlpkg", StringComparison.OrdinalIgnoreCase);
+
     public static NoteDocument LoadNotePackage(string path)
     {
-        var json = File.ReadAllText(path, Encoding.UTF8);
-        var document = JsonSerializer.Deserialize<NoteDocument>(json, NotePackageJsonOptions)
-            ?? throw new InvalidDataException("The note package is empty or invalid.");
-
+        var document = ReadNotePackage(path);
         NormalizeImportedDocument(document, Path.GetFileNameWithoutExtension(path));
         return document;
     }
 
+    /// <summary>Package contents without import normalization, for replacing an existing note.</summary>
+    public static NoteDocument ReadNotePackage(string path)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException(LocalizationService.GetString("FailedToOpenFile"), path);
+
+        string json;
+        try
+        {
+            json = File.ReadAllText(path, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(LocalizationService.GetString("FailedToOpenFile"), ex);
+        }
+
+        bool hasEnvelope;
+        try
+        {
+            using var probe = JsonDocument.Parse(json);
+            hasEnvelope = probe.RootElement.ValueKind == JsonValueKind.Object
+                && probe.RootElement.TryGetProperty("FormatVersion", out _);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(LocalizationService.GetString("FailedToOpenFile"), ex);
+        }
+
+        if (!hasEnvelope)
+        {
+            return JsonSerializer.Deserialize<NoteDocument>(json, NotePackageJsonOptions)
+                ?? throw new InvalidDataException(LocalizationService.GetString("FailedToOpenFile"));
+        }
+
+        var file = JsonSerializer.Deserialize<ScribNoteFile>(json, NotePackageJsonOptions)
+            ?? throw new InvalidDataException(LocalizationService.GetString("FailedToOpenFile"));
+
+        if (file.FormatVersion > CurrentScribNoteFormatVersion)
+            throw new InvalidOperationException(LocalizationService.GetString("NoteImportUnsupportedVersion"));
+
+        return file.Document
+            ?? throw new InvalidDataException(LocalizationService.GetString("FailedToOpenFile"));
+    }
+
     public static void SaveNotePackage(string path, NoteDocument document)
     {
-        var json = JsonSerializer.Serialize(document, NotePackageJsonOptions);
+        var file = new ScribNoteFile { FormatVersion = CurrentScribNoteFormatVersion, Document = document };
+        var json = JsonSerializer.Serialize(file, NotePackageJsonOptions);
         File.WriteAllText(path, json, new UTF8Encoding(false));
     }
 
@@ -113,8 +165,13 @@ internal static class NoteFileService
         document.CreatedAt = DateTime.UtcNow;
         document.LastModified = DateTime.Now;
         document.EditHistory ??= new List<NoteEditHistoryEntry>();
-        document.Schedules ??= new List<NoteScheduleEntry>();
-        document.ScheduleNote ??= string.Empty;
+        document.GroupId = null;
+        document.IsPinned = false;
+        document.IsDeleted = false;
+        document.DeletedAt = null;
+        document.ScheduledAt = null;
+        document.ScheduleNote = string.Empty;
+        document.Schedules = new List<NoteScheduleEntry>();
     }
 
     public static string CreateSafeFileName(string title, string fallback)
