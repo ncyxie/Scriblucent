@@ -503,7 +503,6 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="Replace" xml:space="preserve"><value>Pakeisti</value></data>
   <data name="FindPrevious" xml:space="preserve"><value>Rasti ankstesnį</value></data>
   <data name="FindNext" xml:space="preserve"><value>Rasti kitą</value></data>
-  <data name="ReplaceNext" xml:space="preserve"><value>Pakeisti kitą</value></data>
   <data name="ReplaceAll" xml:space="preserve"><value>Pakeisti visus</value></data>
   <data name="FindReplaceMatchCase" xml:space="preserve"><value>Skirti raides</value></data>
   <data name="FindReplaceWholeWord" xml:space="preserve"><value>Visas žodis</value></data>

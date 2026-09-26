@@ -533,7 +533,6 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="Replace" xml:space="preserve"><value>Replace</value></data>
   <data name="FindPrevious" xml:space="preserve"><value>Find Previous</value></data>
   <data name="FindNext" xml:space="preserve"><value>Find Next</value></data>
-  <data name="ReplaceNext" xml:space="preserve"><value>Replace Next</value></data>
   <data name="ReplaceAll" xml:space="preserve"><value>Replace All</value></data>
   <data name="FindReplaceMatchCase" xml:space="preserve"><value>Match case</value></data>
   <data name="FindReplaceWholeWord" xml:space="preserve"><value>Whole word</value></data>

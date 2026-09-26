@@ -32,7 +32,7 @@ namespace Scriblucent
     public partial class NoteEditorWindow : Window
     {
         private bool _isHostedInTab;
-        // Last search/replace state for Find Next / Replace Next functionality
+        // Last search/replace state for Find Next / Replace functionality
         private string? _lastSearchQuery = null;
         private string? _lastReplacementText = null;
         private bool _lastFindMatchCase;
@@ -2444,7 +2444,7 @@ namespace Scriblucent
             var hasSearch = !string.IsNullOrEmpty(FindQueryBox.Text);
             FindPreviousButton.IsEnabled = hasSearch;
             FindNextButton.IsEnabled = hasSearch;
-            ReplaceNextButton.IsEnabled = hasSearch;
+            ReplaceButton.IsEnabled = hasSearch;
             ReplaceAllButton.IsEnabled = hasSearch;
         }
 
@@ -2604,7 +2604,7 @@ namespace Scriblucent
         {
             if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
             {
-                ReplaceNextButton_Click(sender, e);
+                ReplaceButton_Click(sender, e);
                 e.Handled = true;
             }
         }
@@ -2635,18 +2635,19 @@ namespace Scriblucent
                 FindWrapAroundToggle.IsChecked == true));
         }
 
-        private void ReplaceNextButton_Click(object sender, RoutedEventArgs e)
+        private void ReplaceButton_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(FindQueryBox.Text))
                 return;
 
             RememberFindState();
-            ApplyFindStatus(PerformReplaceNext(
+            var result = PerformReplace(
                 FindQueryBox.Text,
                 FindReplacementBox.Text,
                 FindMatchCaseToggle.IsChecked == true,
-                FindWholeWordToggle.IsChecked == true,
-                FindWrapAroundToggle.IsChecked == true));
+                FindWholeWordToggle.IsChecked == true);
+            if (result is not null)
+                ApplyFindStatus(result);
             UpdateFindBarButtons();
         }
 
@@ -3854,12 +3855,11 @@ namespace Scriblucent
             return PerformFind(query, FindDirection.Previous, matchCase, wholeWord, wrapAround);
         }
 
-        internal FindReplaceResult PerformReplaceNext(
+        internal FindReplaceResult? PerformReplace(
             string query,
             string replacement,
             bool matchCase = false,
-            bool wholeWord = false,
-            bool wrapAround = true)
+            bool wholeWord = false)
         {
             if (string.IsNullOrEmpty(query))
                 return FindReplaceResult.Empty;
@@ -3873,21 +3873,22 @@ namespace Scriblucent
 
             var currentMatch = GetCurrentSelectionMatch(index.Runs, matches);
             if (currentMatch is null)
-                return PerformFindNext(query, matchCase, wholeWord, wrapAround);
+                return null;
 
             var start = PointerAtTextOffset(index.Runs, currentMatch.Start);
             var end = PointerAtTextOffset(index.Runs, currentMatch.End);
             if (start is null || end is null)
-                return PerformFindNext(query, matchCase, wholeWord, wrapAround);
+                return null;
 
             DropParkedSelection();
             ReplaceEditorSelection(end, end);
             InvalidateSelectionTiles();
-            new TextRange(start, end).Text = replacement ?? string.Empty;
+            var range = new TextRange(start, end);
+            range.Text = replacement ?? string.Empty;
+            ReplaceEditorSelection(range.End, range.End);
             MarkEditorContentChanged();
 
-            var result = PerformFindNext(query, matchCase, wholeWord, wrapAround);
-            return result with { ReplacedCount = 1 };
+            return new FindReplaceResult(false, 0, -1, false, 1);
         }
 
         internal FindReplaceResult PerformReplaceAll(

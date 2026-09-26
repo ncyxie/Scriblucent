@@ -841,14 +841,14 @@
                             behaviors:RoundedClipBehavior.IsEnabled="True"
                             SnapsToDevicePixels="True">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="ReplaceNextButton"
+                            <Button x:Name="ReplaceButton"
                                     Style="{StaticResource EditorToolButtonBaseStyle}"
                                     Height="32"
                                     Padding="16,0"
                                     Margin="0,0,6,0"
                                     FontSize="{StaticResource Type.Caption}"
-                                    Content="{Binding [ReplaceNext], Source={StaticResource Loc}}"
-                                    Click="ReplaceNextButton_Click"/>
+                                    Content="{Binding [Replace], Source={StaticResource Loc}}"
+                                    Click="ReplaceButton_Click"/>
                             <Button x:Name="ReplaceAllButton"
                                     Style="{StaticResource EditorToolButtonBaseStyle}"
                                     Height="32"
