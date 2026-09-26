@@ -114,14 +114,28 @@ public partial class InsertCaptionDialog : Window
         if (PreviewTextBlock is null || LabelComboBox is null || _nextNumberForLabel is null)
             return;
 
-        // OnlyOffice rule: only labels the user created can be deleted.
-        DeleteLabelButton.IsEnabled = ResultLabel.Length > 0 && !_defaultLabels.Contains(ResultLabel);
+        // Editable ComboBox raises SelectionChanged before it copies the chosen item
+        // into Text, so a label pick must use the item that was just added.
+        var label = LabelForPreview(sender, e);
 
-        var label = ResultLabel;
+        // OnlyOffice rule: only labels the user created can be deleted.
+        DeleteLabelButton.IsEnabled = label.Length > 0 && !_defaultLabels.Contains(label);
+
         var number = FloatingImageCoordinator.FormatCaptionNumber(_nextNumberForLabel(label), ResultNumbering);
         var prefix = ResultExcludeLabel ? number : $"{label} {number}".Trim();
         var separator = ResultText.Length > 0 ? ResultSeparator : string.Empty;
         PreviewTextBlock.Text = $"{prefix}{separator}{ResultText}".Trim();
+    }
+
+    private string LabelForPreview(object? sender, EventArgs e)
+    {
+        if (ReferenceEquals(sender, LabelComboBox)
+            && e is SelectionChangedEventArgs selection
+            && selection.AddedItems.Count > 0
+            && selection.AddedItems[0] is string picked)
+            return picked.Trim();
+
+        return ResultLabel;
     }
 
     private void Preview_KeyUp(object sender, KeyEventArgs e) => Preview_Changed(sender, e);
