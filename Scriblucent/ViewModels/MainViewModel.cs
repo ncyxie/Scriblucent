@@ -88,6 +88,8 @@ public class MainViewModel : ViewModelBase
     private bool _flashcardsLoadCompleted;
     private bool _mindMapsLoadCompleted;
     private bool _quizzesLoadCompleted;
+    private readonly HashSet<string> _dashboardLoadFailures = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _dashboardLoadRetriesInProgress = new(StringComparer.Ordinal);
     private bool _deferredDashboardLoadsScheduled;
     private bool _isNotesDashboardReady;
     private bool _isFlashcardsDashboardReady;
@@ -111,6 +113,8 @@ public class MainViewModel : ViewModelBase
         DashboardQuizzes => _isQuizzesDashboardReady,
         _ => true
     };
+    public bool IsActiveDashboardLoadFailed => _dashboardLoadFailures.Contains(_activeDashboard)
+        && !_dashboardLoadRetriesInProgress.Contains(_activeDashboard);
 
     public bool IsNotesDashboardReady => _isNotesDashboardReady;
     public bool IsNotesDashboardLoading => IsNotesView && !_isNotesDashboardReady;
@@ -530,6 +534,7 @@ public class MainViewModel : ViewModelBase
         CurrentView = normalized;
         OnPropertyChanged(nameof(ActiveDashboard));
         OnPropertyChanged(nameof(IsActiveDashboardReady));
+        OnPropertyChanged(nameof(IsActiveDashboardLoadFailed));
         OnPropertyChanged(nameof(CurrentView));
         OnPropertyChanged(nameof(IsNotesView));
         OnPropertyChanged(nameof(IsFlashcardsView));
@@ -774,21 +779,9 @@ public class MainViewModel : ViewModelBase
         var setsPath = GetFlashcardSetsFilePath();
         var legacyPath = GetFlashcardsFilePath();
         Task.Run(() => ReadFlashcardsFromDisk(setsPath, legacyPath)).ContinueWith(task =>
-        {
-            Application.Current?.Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    ApplyLoadedFlashcards(task.Result);
-                }
-                finally
-                {
-                    _flashcardDataLoadInProgress = false;
-                }
-
-                MarkFlashcardsDashboardReady();
-            }, DispatcherPriority.Background);
-        }, TaskScheduler.Default);
+            CompleteDashboardLoad(task, DashboardFlashcards, ApplyLoadedFlashcards,
+                MarkFlashcardsDashboardReady, () => _flashcardDataLoadInProgress = false),
+            TaskScheduler.Default);
     }
 
     private void LoadMindMapsPersistedContent()
@@ -801,21 +794,9 @@ public class MainViewModel : ViewModelBase
 
         var path = GetMindMapsFilePath();
         Task.Run(() => ReadMindMapsFromDisk(path)).ContinueWith(task =>
-        {
-            Application.Current?.Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    ApplyLoadedMindMaps(task.Result);
-                }
-                finally
-                {
-                    _mindMapDataLoadInProgress = false;
-                }
-
-                MarkMindMapsDashboardReady();
-            }, DispatcherPriority.Background);
-        }, TaskScheduler.Default);
+            CompleteDashboardLoad(task, DashboardMindMaps, ApplyLoadedMindMaps,
+                MarkMindMapsDashboardReady, () => _mindMapDataLoadInProgress = false),
+            TaskScheduler.Default);
     }
 
     private void LoadQuizzesPersistedContent()
@@ -828,21 +809,100 @@ public class MainViewModel : ViewModelBase
 
         var path = GetQuizzesFilePath();
         Task.Run(() => ReadQuizzesFromDisk(path)).ContinueWith(task =>
-        {
-            Application.Current?.Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    ApplyLoadedQuizzes(task.Result);
-                }
-                finally
-                {
-                    _quizDataLoadInProgress = false;
-                }
+            CompleteDashboardLoad(task, DashboardQuizzes, ApplyLoadedQuizzes,
+                MarkQuizzesDashboardReady, () => _quizDataLoadInProgress = false),
+            TaskScheduler.Default);
+    }
 
-                MarkQuizzesDashboardReady();
-            }, DispatcherPriority.Background);
-        }, TaskScheduler.Default);
+    private void CompleteDashboardLoad<T>(Task<T> task, string dashboard,
+        Action<T> apply, Action markReady, Action clearInProgress)
+    {
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            T result;
+            try
+            {
+                result = task.GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                ReportDashboardLoadFailure(dashboard, ex);
+                clearInProgress();
+                return;
+            }
+
+            // A successful read can be applied normally, including the existing legacy
+            // migration save. Until this point a retry must not save the empty collection.
+            _dashboardLoadFailures.Remove(dashboard);
+            _dashboardLoadRetriesInProgress.Remove(dashboard);
+            var applied = false;
+            try
+            {
+                apply(result);
+                applied = true;
+            }
+            catch (Exception ex)
+            {
+                ReportDashboardLoadFailure(dashboard, ex);
+            }
+            finally
+            {
+                clearInProgress();
+            }
+
+            if (!applied)
+                return;
+
+            try { markReady(); }
+            catch (Exception ex) { ReportDashboardLoadFailure(dashboard, ex); }
+        }, DispatcherPriority.Background);
+    }
+
+    private void ReportDashboardLoadFailure(string dashboard, Exception exception)
+    {
+        try { CrashLog.Append($"Load {dashboard}", exception); }
+        catch { /* Keep the failure visible even if logging is unavailable. */ }
+
+        switch (dashboard)
+        {
+            case DashboardFlashcards:
+                _flashcardsLoadCompleted = false;
+                _isFlashcardsDashboardReady = false;
+                break;
+            case DashboardMindMaps:
+                _mindMapsLoadCompleted = false;
+                _isMindMapsDashboardReady = false;
+                break;
+            case DashboardQuizzes:
+                _quizzesLoadCompleted = false;
+                _isQuizzesDashboardReady = false;
+                break;
+        }
+
+        _dashboardLoadRetriesInProgress.Remove(dashboard);
+        _dashboardLoadFailures.Add(dashboard);
+        if (string.Equals(_activeDashboard, dashboard, StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(IsActiveDashboardReady));
+            OnPropertyChanged(nameof(IsActiveDashboardLoadFailed));
+        }
+    }
+
+    public void RetryActiveDashboardLoad()
+    {
+        if (!_dashboardLoadFailures.Contains(_activeDashboard)
+            || !_dashboardLoadRetriesInProgress.Add(_activeDashboard))
+            return;
+
+        switch (_activeDashboard)
+        {
+            case DashboardFlashcards: _flashcardsPersistedContentLoaded = false; break;
+            case DashboardMindMaps: _mindMapsPersistedContentLoaded = false; break;
+            case DashboardQuizzes: _quizzesPersistedContentLoaded = false; break;
+        }
+
+        OnPropertyChanged(nameof(IsActiveDashboardLoadFailed));
+        EnsureDashboardPersistedContentLoaded(_activeDashboard);
     }
     private void AddFlashcard()
     {
@@ -877,18 +937,27 @@ public class MainViewModel : ViewModelBase
         GroupMetadataSyncAction GroupMetadataAction,
         List<FlashcardItem> LegacyItems);
 
+    // File.Exists returns false for some access errors, which would make an unreadable library
+    // look like a new empty one. Only a genuinely missing file may start an empty dashboard.
+    private static FileStream? OpenDashboardFileIfPresent(string path)
+    {
+        try { return File.OpenRead(path); }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
+    }
+
     // Pure read - runs off the UI thread via Task.Run in LoadFlashcardsPersistedContent. Must not
     // touch any instance/UI-bound state; ApplyLoadedFlashcards below applies the result on the UI
     // thread. Mirrors ReadNotesFromDisk/ApplyLoadedNotes.
     private static FlashcardsLoadResult ReadFlashcardsFromDisk(string setsPath, string legacyPath)
     {
-        if (File.Exists(setsPath))
+        using var stream = OpenDashboardFileIfPresent(setsPath);
+        if (stream is not null)
         {
             List<FlashcardSetDocument> sets;
             List<FlashcardSetDocument> trashedSets = new();
             List<FlashcardSetGroupData> groups = new();
             GroupMetadataSyncAction metadataAction;
-            using var stream = File.OpenRead(setsPath);
             try
             {
                 var store = JsonSerializer.Deserialize<FlashcardSetStoreData>(stream);
@@ -905,32 +974,27 @@ public class MainViewModel : ViewModelBase
                 else
                 {
                     stream.Position = 0;
-                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream) ?? new();
+                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream)
+                        ?? throw new JsonException("Flashcard sets file contains null.");
                     metadataAction = GroupMetadataSyncAction.Leave;
                 }
             }
-            catch
+            catch (JsonException)
             {
-                try
-                {
-                    stream.Position = 0;
-                    sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream) ?? new();
-                    metadataAction = GroupMetadataSyncAction.Leave;
-                }
-                catch
-                {
-                    sets = new List<FlashcardSetDocument>();
-                    metadataAction = GroupMetadataSyncAction.Leave;
-                }
+                stream.Position = 0;
+                sets = JsonSerializer.Deserialize<List<FlashcardSetDocument>>(stream)
+                    ?? throw new JsonException("Flashcard sets file contains null.");
+                metadataAction = GroupMetadataSyncAction.Leave;
             }
 
             return new FlashcardsLoadResult(true, sets, trashedSets, groups, metadataAction, new List<FlashcardItem>());
         }
 
-        if (File.Exists(legacyPath))
+        using var legacyStream = OpenDashboardFileIfPresent(legacyPath);
+        if (legacyStream is not null)
         {
-            using var stream = File.OpenRead(legacyPath);
-            var data = JsonSerializer.Deserialize<List<FlashcardItem>>(stream) ?? new();
+            var data = JsonSerializer.Deserialize<List<FlashcardItem>>(legacyStream)
+                ?? throw new JsonException("Legacy flashcards file contains null.");
             return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, data);
         }
 
@@ -1030,6 +1094,9 @@ public class MainViewModel : ViewModelBase
 
     private void SaveFlashcards()
     {
+        if (_dashboardLoadFailures.Contains(DashboardFlashcards))
+            return;
+
         var path = GetFlashcardsFilePath();
         var json = JsonSerializer.Serialize(Flashcards);
         File.WriteAllText(path, json);
@@ -1129,6 +1196,9 @@ public class MainViewModel : ViewModelBase
 
     public void SaveFlashcardSets()
     {
+        if (_dashboardLoadFailures.Contains(DashboardFlashcards))
+            return;
+
         try
         {
             // Skip the whole write when nothing changed since the last one - the auto-save
@@ -1690,7 +1760,8 @@ public class MainViewModel : ViewModelBase
     // ReadNotesFromDisk/ReadFlashcardsFromDisk.
     private static MindMapsLoadResult ReadMindMapsFromDisk(string path)
     {
-        if (!File.Exists(path))
+        using var stream = OpenDashboardFileIfPresent(path);
+        if (stream is null)
             return new MindMapsLoadResult(false, new List<MindMapDocument>(), new List<MindMapDocument>(), new List<MindMapGroupData>(), GroupMetadataSyncAction.Leave);
 
         // Try new format first, fall back to legacy list format
@@ -1698,7 +1769,6 @@ public class MainViewModel : ViewModelBase
         List<MindMapDocument> trashedMaps = new();
         List<MindMapGroupData> groups = new();
         GroupMetadataSyncAction metadataAction;
-        using var stream = File.OpenRead(path);
         try
         {
             var store = JsonSerializer.Deserialize<MindMapStoreData>(stream);
@@ -1714,23 +1784,17 @@ public class MainViewModel : ViewModelBase
             else
             {
                 stream.Position = 0;
-                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream) ?? new();
+                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream)
+                    ?? throw new JsonException("Mind maps file contains null.");
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
         }
-        catch
+        catch (JsonException)
         {
-            try
-            {
-                stream.Position = 0;
-                maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream) ?? new();
-                metadataAction = GroupMetadataSyncAction.Leave;
-            }
-            catch
-            {
-                maps = new List<MindMapDocument>();
-                metadataAction = GroupMetadataSyncAction.ClearOnly;
-            }
+            stream.Position = 0;
+            maps = JsonSerializer.Deserialize<List<MindMapDocument>>(stream)
+                ?? throw new JsonException("Mind maps file contains null.");
+            metadataAction = GroupMetadataSyncAction.Leave;
         }
 
         foreach (var map in maps.Concat(trashedMaps))
@@ -2208,6 +2272,9 @@ public class MainViewModel : ViewModelBase
 
     public void SaveMindMaps()
     {
+        if (_dashboardLoadFailures.Contains(DashboardMindMaps))
+            return;
+
         try
         {
             // Skip the whole write when nothing changed since the last one (mirrors SaveNotes).
@@ -2444,7 +2511,8 @@ public class MainViewModel : ViewModelBase
     // ReadNotesFromDisk/ReadFlashcardsFromDisk/ReadMindMapsFromDisk.
     private static QuizzesLoadResult ReadQuizzesFromDisk(string path)
     {
-        if (!File.Exists(path))
+        using var stream = OpenDashboardFileIfPresent(path);
+        if (stream is null)
             return new QuizzesLoadResult(false, new List<QuizDocument>(), new List<QuizDocument>(), new List<QuizGroupData>(), GroupMetadataSyncAction.Leave);
 
         // Try new format first, fall back to legacy list format
@@ -2452,7 +2520,6 @@ public class MainViewModel : ViewModelBase
         List<QuizDocument> trashedDocuments = new();
         List<QuizGroupData> groups = new();
         GroupMetadataSyncAction metadataAction;
-        using var stream = File.OpenRead(path);
         try
         {
             var store = JsonSerializer.Deserialize<QuizStoreData>(stream);
@@ -2468,14 +2535,16 @@ public class MainViewModel : ViewModelBase
             else
             {
                 stream.Position = 0;
-                documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream) ?? new();
+                documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream)
+                    ?? throw new JsonException("Quizzes file contains null.");
                 metadataAction = GroupMetadataSyncAction.Leave;
             }
         }
-        catch
+        catch (JsonException)
         {
             stream.Position = 0;
-            documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream) ?? new();
+            documents = JsonSerializer.Deserialize<List<QuizDocument>>(stream)
+                ?? throw new JsonException("Quizzes file contains null.");
             metadataAction = GroupMetadataSyncAction.Leave;
         }
 
@@ -2637,6 +2706,9 @@ public class MainViewModel : ViewModelBase
 
     public void SaveQuizzes()
     {
+        if (_dashboardLoadFailures.Contains(DashboardQuizzes))
+            return;
+
         try
         {
             // Skip the whole write when nothing changed since the last one (mirrors SaveNotes).

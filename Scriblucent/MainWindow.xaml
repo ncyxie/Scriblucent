@@ -1075,6 +1075,35 @@
                                                       DetailBrush="{DynamicResource BorderColor}"
                                                       ClipToBounds="True"
                                                       Opacity="0"/>
+                    <Border x:Name="DashboardLoadFailurePanel"
+                            Visibility="Collapsed"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MaxWidth="440"
+                            Margin="24"
+                            Padding="24"
+                            CornerRadius="{StaticResource Radius.Card}"
+                            Background="{DynamicResource CardBackground}"
+                            BorderBrush="{DynamicResource BorderColor}"
+                            BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="{Binding [DashboardLoadFailedTitle], Source={StaticResource Loc}}"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextColor}"
+                                       TextAlignment="Center"/>
+                            <TextBlock Text="{Binding [DashboardLoadFailedMessage], Source={StaticResource Loc}}"
+                                       Margin="0,12,0,20"
+                                       Foreground="{DynamicResource TextColorSecondary}"
+                                       TextWrapping="Wrap"
+                                       TextAlignment="Center"/>
+                            <Button Content="{Binding [DashboardLoadRetry], Source={StaticResource Loc}}"
+                                    Style="{StaticResource DialogPrimaryButtonStyle}"
+                                    HorizontalAlignment="Center"
+                                    MinWidth="120"
+                                    Click="RetryDashboardLoad_Click"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Grid>
             <Grid x:Name="MassSelectOverlayToolbar"

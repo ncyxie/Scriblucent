@@ -403,6 +403,9 @@
   <data name="ImageOpenFileDialogFilter" xml:space="preserve"><value>Paveikslėlių failai (*.jpg;*.jpeg;*.png;*.bmp;*.gif)|*.jpg;*.jpeg;*.png;*.bmp;*.gif|Visi failai (*.*)|*.*</value></data>
   <data name="AudioOpenFileDialogFilter" xml:space="preserve"><value>Garso failai (*.mp3;*.wav)|*.mp3;*.wav|Visi failai (*.*)|*.*</value></data>
   <data name="NotesLoadFailedTitle" xml:space="preserve"><value>Nepavyko nuskaityti užrašų failo</value></data>
+  <data name="DashboardLoadFailedTitle" xml:space="preserve"><value>Nepavyko įkelti šio skydelio</value></data>
+  <data name="DashboardLoadFailedMessage" xml:space="preserve"><value>Nepavyko baigti įkelti šio skydelio. Siekiant apsaugoti duomenis, įrašymas pristabdytas. Bandykite dar kartą; jei klaida kartojasi, susisiekite su palaikymo komanda.</value></data>
+  <data name="DashboardLoadRetry" xml:space="preserve"><value>Bandyti dar kartą</value></data>
   <data name="NotesLoadFailedWithBackupFormat" xml:space="preserve"><value>Panašu, kad jūsų užrašų failas yra pažeistas ir jo nepavyko atverti. Niekas nebuvo ištrinta ar perrašyta - originalaus failo kopija išsaugota čia:
 
 {0}

@@ -31,6 +31,15 @@ public partial class MainWindow
             return;
         }
 
+        if (vm.IsActiveDashboardLoadFailed)
+        {
+            ShowDashboardLoadFailure();
+            return;
+        }
+
+        DashboardLoadFailurePanel.Visibility = Visibility.Collapsed;
+        DashboardLoadingShell.Visibility = Visibility.Visible;
+
         if (!vm.IsActiveDashboardReady)
         {
             if (!string.Equals(_loadingDashboard, vm.ActiveDashboard, StringComparison.Ordinal))
@@ -61,6 +70,8 @@ public partial class MainWindow
         _loadingDashboardViewActivated = !enterOverCurrentDashboard;
         _startupLoadingEntrancePending = !IsLoaded && !UiMotion.PrefersReducedMotion;
         _dashboardLoadingClock.Restart();
+        DashboardLoadFailurePanel.Visibility = Visibility.Collapsed;
+        DashboardLoadingShell.Visibility = Visibility.Visible;
         DashboardLoadingShell.SetLayout(BuildDashboardSkeletonLayout(vm));
         DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
         DashboardLoadingShell.Opacity = _startupLoadingEntrancePending ? 0 : 1;
@@ -338,9 +349,27 @@ public partial class MainWindow
         DashboardLoadingShell.StopWave();
         DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
         DashboardLoadingShell.Opacity = 1;
+        DashboardLoadingShell.Visibility = Visibility.Visible;
+        DashboardLoadFailurePanel.Visibility = Visibility.Collapsed;
         DashboardLoadingLayer.BeginAnimation(UIElement.OpacityProperty, null);
         DashboardLoadingLayer.Opacity = 1;
         DashboardLoadingLayer.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowDashboardLoadFailure()
+    {
+        if (_loadingDashboard is not null || DashboardLoadFailurePanel.Visibility != Visibility.Visible)
+            CancelDashboardLoading();
+
+        DashboardLoadingShell.Visibility = Visibility.Collapsed;
+        DashboardLoadFailurePanel.Visibility = Visibility.Visible;
+        DashboardLoadingLayer.Visibility = Visibility.Visible;
+    }
+
+    private void RetryDashboardLoad_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            vm.RetryActiveDashboardLoad();
     }
 
     private void CancelLoadingCallbacks()

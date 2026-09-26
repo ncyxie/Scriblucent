@@ -903,6 +903,10 @@ namespace Scriblucent
                 {
                     SyncDashboardLoadingState(vm);
                 }
+                else if (e.PropertyName == nameof(MainViewModel.IsActiveDashboardLoadFailed))
+                {
+                    SyncDashboardLoadingState(vm);
+                }
 
                 if (IsLoadingDashboardActive
                     && !vm.IsActiveDashboardReady
