@@ -345,6 +345,7 @@
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="Fab"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.MotionHostName" Value="FabBorder"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.ShadowElementName" Value="FabShadow"/>
 			<Setter Property="OverridesDefaultStyle" Value="True"/>
 			<Setter Property="SnapsToDevicePixels" Value="True"/>
 			<Setter Property="Cursor" Value="Hand"/>
@@ -362,26 +363,28 @@
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="{x:Type Button}">
-						<Border x:Name="FabBorder"
-								Background="{TemplateBinding Background}"
-								BorderBrush="Transparent"
-								BorderThickness="0"
-								CornerRadius="{StaticResource Radius.Card}"
-								Effect="{StaticResource Elevation.Button}">
-							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-											  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-											  RecognizesAccessKey="True"/>
-						</Border>
+						<Grid x:Name="FabBorder">
+							<controls:BakedElevationLayer x:Name="FabShadow" Kind="ButtonCard" Opacity="0.20"/>
+							<Border x:Name="FabFace"
+									Background="{TemplateBinding Background}"
+									BorderBrush="Transparent"
+									BorderThickness="0"
+									CornerRadius="{StaticResource Radius.Card}">
+								<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+												  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+												  RecognizesAccessKey="True"/>
+							</Border>
+						</Grid>
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
-								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+								<Setter TargetName="FabFace" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
 							</Trigger>
 							<Trigger Property="IsPressed" Value="True">
-								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+								<Setter TargetName="FabFace" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
 							</Trigger>
 						   <Trigger Property="IsEnabled" Value="False">
 								<Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
-								<Setter TargetName="FabBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+								<Setter TargetName="FabFace" Property="Background" Value="{DynamicResource SelectionBackground}"/>
 								<Setter TargetName="FabBorder" Property="Opacity" Value="0.62"/>
 							</Trigger>
 						</ControlTemplate.Triggers>

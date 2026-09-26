@@ -173,11 +173,6 @@ internal static class SmoothScrollCompositor
         if (!reclaimedHold && session.ContentElement is { } shadowRoot)
             DashboardShadowSuspender.TrySuspend(DashboardShadowSuspender.AnimatedScrollShadowScope, shadowRoot);
 
-        // The full-content-stage halo plate is a live blur behind every dashboard; strip it
-        // for the session too so it cannot re-blur on scroll repaints. Restored with the scope.
-        if (Window.GetWindow(scrollViewer)?.FindName("ContentStageHaloPlate") is FrameworkElement stagePlate)
-            DashboardShadowSuspender.TrySuspend(DashboardShadowSuspender.AnimatedScrollShadowScope, stagePlate);
-
         session.CachedShells = CacheScrollShells(session.ContentElement);
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
             Scriblucent.Services.ScrollPerfDiag.Log($"shellCache\t{session.CachedShells?.Count ?? 0}");

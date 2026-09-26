@@ -122,13 +122,11 @@
                 </Border>
 
                 <!-- White chrome strip matching title field (InputSurface + field elevation; no focus ring). -->
-                <Border Grid.Column="1"
-                        Grid.Row="1"
-                        Background="{DynamicResource InputSurface}"
+                <Grid Grid.Column="1" Grid.Row="1" VerticalAlignment="Stretch">
+                <controls:BakedElevationLayer Kind="Field"/>
+                <Border Background="{DynamicResource InputSurface}"
                         CornerRadius="{StaticResource Radius.Control}"
-                        VerticalAlignment="Stretch"
                         Padding="8,6"
-                        Effect="{StaticResource Elevation.Field}"
                         behaviors:RoundedClipBehavior.IsEnabled="True"
                         SnapsToDevicePixels="True">
                     <StackPanel Orientation="Horizontal"
@@ -312,6 +310,7 @@
                                 Click="SaveButton_Click"/>
                     </StackPanel>
                 </Border>
+                </Grid>
             </Grid>
         </Border>
 
@@ -653,13 +652,13 @@
                         <Popup x:Name="TableSizePickerPopup"
                                PlacementTarget="{Binding ElementName=InsertTableButton}"
                                Placement="Bottom"
-                               HorizontalOffset="-8"
-                               VerticalOffset="4"
+                               HorizontalOffset="-28"
+                               VerticalOffset="-24"
                                StaysOpen="False"
                                AllowsTransparency="True"
                                PopupAnimation="None">
                             <Border Background="Transparent"
-                                    Padding="12,4,12,14"
+                                    Padding="32"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
@@ -761,12 +760,11 @@
                                FontSize="{StaticResource Type.Caption}"
                                Foreground="{DynamicResource TextColorSecondary}"
                                Text="{Binding [FindReplaceEnterSearch], Source={StaticResource Loc}}"/>
-                    <Border Grid.Column="2"
-                            Background="{DynamicResource InputSurface}"
+                    <Grid Grid.Column="2" VerticalAlignment="Center">
+                    <controls:BakedElevationLayer Kind="Field"/>
+                    <Border Background="{DynamicResource InputSurface}"
                             CornerRadius="{StaticResource Radius.Control}"
-                            VerticalAlignment="Center"
                             Padding="8,6"
-                            Effect="{StaticResource Elevation.Field}"
                             behaviors:RoundedClipBehavior.IsEnabled="True"
                             SnapsToDevicePixels="True">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -814,6 +812,7 @@
                                     Click="CloseFindBarButton_Click"/>
                         </StackPanel>
                     </Border>
+                    </Grid>
                 </Grid>
                 <Grid x:Name="FindReplaceReplaceRow" Visibility="Collapsed" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
@@ -832,12 +831,11 @@
                                  TextChanged="FindReplacementBox_TextChanged"
                                  PreviewKeyDown="FindReplacementBox_PreviewKeyDown"/>
                     </Border>
-                    <Border Grid.Column="1"
-                            Background="{DynamicResource InputSurface}"
+                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                    <controls:BakedElevationLayer Kind="Field"/>
+                    <Border Background="{DynamicResource InputSurface}"
                             CornerRadius="{StaticResource Radius.Control}"
-                            VerticalAlignment="Center"
                             Padding="8,6"
-                            Effect="{StaticResource Elevation.Field}"
                             behaviors:RoundedClipBehavior.IsEnabled="True"
                             SnapsToDevicePixels="True">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -859,6 +857,7 @@
                                     Click="ReplaceAllButton_Click"/>
                         </StackPanel>
                     </Border>
+                    </Grid>
                 </Grid>
             </StackPanel>
         </Border>

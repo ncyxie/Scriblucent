@@ -30,10 +30,7 @@
                 <ControlTemplate TargetType="{x:Type controls:FeatureWindowShell}">
                     <Grid Background="{TemplateBinding Background}">
                         <Grid Margin="{StaticResource Shell.FeatureInset}">
-                            <Border CornerRadius="{StaticResource Radius.Overlay}"
-                                    Background="{DynamicResource FeatureStageBackground}"
-                                    IsHitTestVisible="False"
-                                    Effect="{StaticResource Elevation.Stage}"/>
+                            <controls:StageShadowLayer/>
                             <Border Background="{DynamicResource FeatureStageBackground}"
                                     BorderThickness="0"
                                     CornerRadius="{StaticResource Radius.Overlay}"

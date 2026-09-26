@@ -101,10 +101,7 @@
                   MaxWidth="560"
                   UseLayoutRounding="True"
                   SnapsToDevicePixels="True">
-                <Border Background="{DynamicResource CardBackground}"
-                        CornerRadius="{StaticResource Radius.Overlay}"
-                        IsHitTestVisible="False"
-                        Effect="{StaticResource Elevation.Dialog}"/>
+                <controls:BakedElevationLayer Kind="Dialog"/>
                 <Border x:Name="PanelCard"
                         Background="{DynamicResource CardBackground}"
                         BorderThickness="0"

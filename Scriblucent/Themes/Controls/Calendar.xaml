@@ -321,7 +321,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Calendar">
                     <Border Background="Transparent"
-                            Padding="18,12,18,20"
+                            Padding="32"
                             ClipToBounds="False">
                         <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
                             <Border Background="{TemplateBinding Background}"

@@ -10,8 +10,7 @@ public partial class App : Application
 {
     private static readonly string[] ElevationTokenKeys =
     {
-        "Elevation.Thumb", "Elevation.Field", "Elevation.Popup",
-        "Elevation.Dialog", "Elevation.Button", "Elevation.Stage"
+        "Elevation.Thumb", "Elevation.Popup"
     };
 
     protected override void OnStartup(StartupEventArgs e)

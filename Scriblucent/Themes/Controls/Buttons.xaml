@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
+                    xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+                    xmlns:controls="clr-namespace:Scriblucent.Controls">
 
     <!-- Implicit Button — theme-aware fallback -->
     <Style TargetType="{x:Type Button}">
@@ -160,10 +161,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                IsHitTestVisible="False"
-                                Effect="{StaticResource Elevation.Button}"/>
+                        <controls:BakedElevationLayer Kind="Button"/>
                         <Border x:Name="ButtonBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
@@ -200,10 +198,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                IsHitTestVisible="False"
-                                Effect="{StaticResource Elevation.Button}"/>
+                        <controls:BakedElevationLayer Kind="Button"/>
                         <Border x:Name="ButtonBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
@@ -240,10 +235,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                IsHitTestVisible="False"
-                                Effect="{StaticResource Elevation.Button}"/>
+                        <controls:BakedElevationLayer Kind="Button"/>
                         <Border x:Name="ButtonBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"

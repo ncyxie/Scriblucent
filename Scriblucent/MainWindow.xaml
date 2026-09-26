@@ -157,6 +157,7 @@
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="FloatingSecondary"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.MotionHostName" Value="FloatingSecondaryBorder"/>
+			<Setter Property="behaviors:ChromeHoverMotionBehavior.ShadowElementName" Value="FloatingSecondaryShadow"/>
 			<Setter Property="Width" Value="36"/>
 			<Setter Property="Height" Value="34"/>
 			<Setter Property="FontSize" Value="{StaticResource Type.SectionTitle}"/>
@@ -164,21 +165,23 @@
 			<Setter Property="Template">
 				<Setter.Value>
 					<ControlTemplate TargetType="Button">
-						<Border x:Name="FloatingSecondaryBorder"
-								Background="{TemplateBinding Background}"
-								BorderBrush="Transparent"
-								BorderThickness="0"
-								CornerRadius="{StaticResource Radius.Control}"
-								Effect="{StaticResource Elevation.Button}">
-							<ContentPresenter HorizontalAlignment="Center"
-											  VerticalAlignment="Center"/>
-						</Border>
+						<Grid x:Name="FloatingSecondaryBorder">
+							<controls:BakedElevationLayer x:Name="FloatingSecondaryShadow" Kind="Button" Opacity="0.20"/>
+							<Border x:Name="FloatingSecondaryFace"
+									Background="{TemplateBinding Background}"
+									BorderBrush="Transparent"
+									BorderThickness="0"
+									CornerRadius="{StaticResource Radius.Control}">
+								<ContentPresenter HorizontalAlignment="Center"
+												  VerticalAlignment="Center"/>
+							</Border>
+						</Grid>
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="FloatingSecondaryBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+                                <Setter TargetName="FloatingSecondaryFace" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
 							</Trigger>
 							<Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="FloatingSecondaryBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                                <Setter TargetName="FloatingSecondaryFace" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
 							</Trigger>
 						</ControlTemplate.Triggers>
 					</ControlTemplate>
@@ -643,13 +646,7 @@
 
 		<!-- Fluent-style inset content stage: rounded where it meets the sidebar -->
 		<Grid Grid.Column="1" Margin="0,10,10,10">
-			<Border x:Name="ContentStageHaloPlate"
-					CornerRadius="{StaticResource Radius.Overlay}"
-					Background="{DynamicResource WindowBackground}"
-					Margin="1"
-					IsHitTestVisible="False"
-					Effect="{StaticResource Elevation.Stage}">
-			</Border>
+			<controls:StageShadowLayer/>
 			<Border x:Name="ContentStage"
 					CornerRadius="{StaticResource Radius.Overlay}"
 					Background="{DynamicResource WindowBackground}"
@@ -707,12 +704,7 @@
 								SnapsToDevicePixels="True"
 								UseLayoutRounding="True"
 								RenderTransformOrigin="1,0.5">
-							<Border Background="{DynamicResource InputSurface}"
-									BorderBrush="{DynamicResource InputRestBorder}"
-									BorderThickness="{DynamicResource Field.RestBorderThickness}"
-									CornerRadius="{StaticResource Radius.Control}"
-									IsHitTestVisible="False"
-									Effect="{StaticResource Elevation.Field}"/>
+							<controls:BakedElevationLayer Kind="Field"/>
 							<Border Padding="6,0"
 									CornerRadius="{StaticResource Radius.Control}"
 									SnapsToDevicePixels="True"
@@ -783,13 +775,13 @@
 				   Grid.Row="0"
 				   PlacementTarget="{Binding ElementName=SortNotesButton}"
 				   Placement="Bottom"
-				   HorizontalOffset="-16"
-				   VerticalOffset="0"
+				   HorizontalOffset="-32"
+				   VerticalOffset="-28"
 				   StaysOpen="False"
 				   AllowsTransparency="True"
 				   PopupAnimation="None">
 				<Border Background="Transparent"
-						Padding="16,4,16,18"
+						Padding="32"
 						ClipToBounds="False">
 					<Grid MinWidth="260"
 						  MaxWidth="320"
@@ -840,13 +832,13 @@
 				   Grid.Row="0"
 				   PlacementTarget="{Binding ElementName=DashboardSectionsButton}"
 				   Placement="Bottom"
-				   HorizontalOffset="-16"
-				   VerticalOffset="0"
+				   HorizontalOffset="-32"
+				   VerticalOffset="-28"
 				   StaysOpen="False"
 				   AllowsTransparency="True"
 				   PopupAnimation="None">
 				<Border Background="Transparent"
-						Padding="16,4,16,18"
+						Padding="32"
 						ClipToBounds="False">
 					<Grid MinWidth="220"
 						  MaxWidth="300"
@@ -979,13 +971,13 @@
 				   Grid.Row="0"
 				   PlacementTarget="{Binding ElementName=TagsFilterButton}"
 				   Placement="Bottom"
-				   HorizontalOffset="-16"
-				   VerticalOffset="0"
+				   HorizontalOffset="-32"
+				   VerticalOffset="-28"
 				   StaysOpen="False"
 				   AllowsTransparency="True"
 				   PopupAnimation="None">
 				<Border Background="Transparent"
-						Padding="16,4,16,18"
+						Padding="32"
 						ClipToBounds="False">
 					<Grid MinWidth="260"
 						  MaxWidth="320"
@@ -1090,13 +1082,18 @@
                 <Grid.RenderTransform>
                     <TranslateTransform Y="-12"/>
                 </Grid.RenderTransform>
-                <!-- Shadow plate is a sibling so toolbar text is not rasterized by DropShadowEffect
-                     (same pattern as ComboBox/ContextMenu popups). -->
-                <Border Background="{DynamicResource CardBackground}"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource Radius.Card}"
+                <!-- Shadow plate is a sibling so toolbar text is not rasterized by DropShadowEffect.
+                     The outer margin is the blur's room; it does not change where the bar sits. -->
+                <Border Margin="-32"
+                        Padding="32"
+                        Background="Transparent"
                         IsHitTestVisible="False"
-                        Effect="{StaticResource Elevation.Popup}"/>
+                        ClipToBounds="False">
+                    <Border Background="{DynamicResource CardBackground}"
+                            BorderThickness="0"
+                            CornerRadius="{StaticResource Radius.Card}"
+                            Effect="{StaticResource Elevation.Popup}"/>
+                </Border>
                 <Border x:Name="MassSelectCard"
                         Background="{DynamicResource CardBackground}"
                         BorderThickness="0"

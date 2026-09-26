@@ -1,0 +1,34 @@
+<UserControl x:Class="Scriblucent.Controls.StageShadowLayer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:anim="clr-namespace:Scriblucent.Animations"
+             IsHitTestVisible="False"
+             Focusable="False"
+             Margin="-20">
+    <!--
+        Even halo around a stage that does not move. Opacity matches the old Elevation.Stage
+        (0.12). Negative margin is the blur bleed, so the baked shape edge lines up with the
+        stage corner and the fringe paints outside it. The center cell stays empty; the stage
+        fill covers the interior.
+    -->
+    <Grid Opacity="0.12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="40"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="40"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="40"/>
+        </Grid.RowDefinitions>
+        <Image Grid.Row="0" Grid.Column="0" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.TopLeft}"/>
+        <Image Grid.Row="0" Grid.Column="1" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.TopEdge}"/>
+        <Image Grid.Row="0" Grid.Column="2" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.TopRight}"/>
+        <Image Grid.Row="1" Grid.Column="0" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.LeftEdge}"/>
+        <Image Grid.Row="1" Grid.Column="2" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.RightEdge}"/>
+        <Image Grid.Row="2" Grid.Column="0" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.BottomLeft}"/>
+        <Image Grid.Row="2" Grid.Column="1" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.BottomEdge}"/>
+        <Image Grid.Row="2" Grid.Column="2" Stretch="Fill" RenderOptions.BitmapScalingMode="Fant" Source="{x:Static anim:StageShadowAsset.BottomRight}"/>
+    </Grid>
+</UserControl>

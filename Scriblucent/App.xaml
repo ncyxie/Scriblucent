@@ -298,6 +298,10 @@
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
                 <Setter Property="HasDropShadow" Value="False"/>
+                <!-- Padding grew to 32 so the blur can finish; pull the menu back by the
+                     extra inset so the card stays where it was relative to the pointer. -->
+                <Setter Property="HorizontalOffset" Value="-14"/>
+                <Setter Property="VerticalOffset" Value="-18"/>
                 <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="BorderBrush" Value="Transparent"/>
                 <!-- Seal weight so Bold/SemiBold on owner buttons (⋯, Layout) does not inherit into items. -->
@@ -306,7 +310,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type ContextMenu}">
                             <Border Background="Transparent"
-                                    Padding="18,14,18,20"
+                                    Padding="32"
                                     ClipToBounds="False">
                                 <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
                                     <Border Background="{DynamicResource CardBackground}"
@@ -456,13 +460,13 @@
                         <Popup x:Name="PART_Popup"
                                AllowsTransparency="True"
                                Focusable="False"
-                               HorizontalOffset="6"
+                               HorizontalOffset="-8"
                                IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                Placement="Right"
                                PopupAnimation="Fade"
-                               VerticalOffset="-6">
+                               VerticalOffset="-24">
                             <Border Background="Transparent"
-                                    Padding="18,14,18,20"
+                                    Padding="32"
                                     ClipToBounds="False">
                                 <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
                                     <Border Background="{DynamicResource CardBackground}"

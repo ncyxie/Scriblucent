@@ -80,11 +80,8 @@
     <!--
       Elevation contract (x:Shared=False so each consumer gets its own effect instance):
         Thumb  · small drag grabbers (slider thumb, resize handles)
-        Field  · inputs, and small clickable list rows/panels at rest
         Popup  · sort/filter menus, ComboBox lists, ContextMenu (must read on light chrome)
-        Button · primary/danger/warning CTAs, FAB - never default/secondary buttons (flat, no shadow)
-        Dialog · modal surfaces
-        Stage  · ambient halo behind inset feature/editor shells
+        Field, Button, and Dialog elevations are baked nine-slices (BakedElevationLayer), not live blurs.
       Pick the tier by role, not by eye - do not hand-roll a new DropShadowEffect inline.
       Never put RoundedClipBehavior on the same Border as Effect — clip eats the shadow.
     -->
@@ -94,16 +91,10 @@
                       BlurRadius="6"
                       ShadowDepth="1"
                       Direction="270"/>
-    <DropShadowEffect x:Key="Elevation.Field"
-                      Color="#000000"
-                      Opacity="0.18"
-                      BlurRadius="14"
-                      ShadowDepth="2"
-                      Direction="270"/>
     <!-- Floating menus/dropdowns: soft lift (Quality bias). Keep opacity moderate — too high
          reads as a gray plate; too low vanishes on light chrome.
-         Consumers: transparent padding ~16–20px around the shadow host + HorizontalOffset
-         so the panel stays aligned with its control while blur has room to fall off. -->
+         Consumers: transparent padding of 32px around the shadow host (blur is 26, plus
+         the 3px drop) and a matching negative offset so the panel stays aligned. -->
     <DropShadowEffect x:Key="Elevation.Popup"
                       Color="#000000"
                       Opacity="0.18"
@@ -111,24 +102,6 @@
                       ShadowDepth="3"
                       Direction="270"
                       RenderingBias="Quality"/>
-    <DropShadowEffect x:Key="Elevation.Dialog"
-                      Color="#000000"
-                      Opacity="0.30"
-                      BlurRadius="36"
-                      ShadowDepth="8"
-                      Direction="270"/>
-    <DropShadowEffect x:Key="Elevation.Button"
-                      Color="#000000"
-                      Opacity="0.18"
-                      BlurRadius="12"
-                      ShadowDepth="1"
-                      Direction="270"/>
-    <!-- Soft ambient halo behind inset feature / editor stage shells -->
-    <DropShadowEffect x:Key="Elevation.Stage"
-                      Color="#000000"
-                      Opacity="0.12"
-                      BlurRadius="20"
-                      ShadowDepth="0"/>
 
 
     <!-- Overlay scrim (fixed; works on both themes) -->

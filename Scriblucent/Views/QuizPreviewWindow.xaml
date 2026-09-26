@@ -186,13 +186,13 @@
                     </Grid>
                 </Border>
 
+                <controls:BakedElevationLayer Grid.Column="1" Grid.Row="0" Kind="Field" VerticalAlignment="Center"/>
                 <Border Grid.Column="1"
                         Grid.Row="0"
                         Background="{DynamicResource InputSurface}"
                         CornerRadius="{StaticResource Radius.Control}"
                         VerticalAlignment="Center"
                         Padding="8,6"
-                        Effect="{StaticResource Elevation.Field}"
                         behaviors:RoundedClipBehavior.IsEnabled="True"
                         SnapsToDevicePixels="True">
                     <StackPanel Orientation="Horizontal"

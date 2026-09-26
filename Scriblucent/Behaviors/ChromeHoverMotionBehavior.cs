@@ -194,7 +194,7 @@ public static class ChromeHoverMotionBehavior
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
         {
             UiMotion.Stop(bakedShadow);
-            bakedShadow.Opacity = BakedShadowOpacityRest;
+            bakedShadow.Opacity = RestBakedOpacity(profile);
             bakedShadow.RenderTransformOrigin = new Point(0.5, 0.5);
             var (shadowScale, shadowTranslate) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
             shadowScale.ScaleX = 1;
@@ -227,7 +227,7 @@ public static class ChromeHoverMotionBehavior
 
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
         {
-            bakedShadow.Opacity = BakedShadowOpacityRest;
+            bakedShadow.Opacity = RestBakedOpacity(profile);
             bakedShadow.RenderTransformOrigin = new Point(0.5, 0.5);
             var (shadowScale, shadowTranslate) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
             shadowScale.ScaleX = 1;
@@ -265,10 +265,19 @@ public static class ChromeHoverMotionBehavior
             var (shadowScale, _) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
             shadowScale.ScaleX = 1;
             shadowScale.ScaleY = 1;
-            var tracks = new[]
-            {
-                UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
-            };
+            var lift = UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value);
+            var tracks = profile is ChromeHoverMotionProfile.Fab or ChromeHoverMotionProfile.FloatingSecondary
+                ? new[]
+                {
+                    lift,
+                    UiMotion.Track(
+                        durationMs,
+                        UiMotion.OutCubic,
+                        bakedShadow.Opacity,
+                        isEnter ? GetHoverShadowOpacity(profile) : GetRestShadowOpacity(profile),
+                        value => bakedShadow.Opacity = value)
+                }
+                : new[] { lift };
 
             UiMotion.Stop(host);
             UiMotion.Run(host, tracks);
@@ -322,7 +331,10 @@ public static class ChromeHoverMotionBehavior
     {
         bakedShadow = null!;
 
-        if (GetProfile(element) != ChromeHoverMotionProfile.RecentCard
+        var profile = GetProfile(element);
+        if (profile is not (ChromeHoverMotionProfile.RecentCard
+                or ChromeHoverMotionProfile.Fab
+                or ChromeHoverMotionProfile.FloatingSecondary)
             || element is not Control control)
             return false;
 
@@ -358,8 +370,8 @@ public static class ChromeHoverMotionBehavior
         if (profile != ChromeHoverMotionProfile.RecentCard
             || element is not Control control)
         {
-            // Fab/FloatingSecondary animate a live DropShadowEffect.Opacity on hover; caching the
-            // host avoids re-rasterizing the blur every frame for what's otherwise a cheap opacity tween.
+            // Menus and other chrome that still use a live effect. Fab and the floating
+            // secondary button resolve a baked layer before this and never get here.
             host.CacheMode ??= new BitmapCache();
             return UiMotion.EnsureShadow(host);
         }
@@ -396,6 +408,11 @@ public static class ChromeHoverMotionBehavior
         element.RenderTransformOrigin = new Point(0.5, 0.5);
         return element;
     }
+
+    private static double RestBakedOpacity(ChromeHoverMotionProfile profile)
+        => profile is ChromeHoverMotionProfile.Fab or ChromeHoverMotionProfile.FloatingSecondary
+            ? GetRestShadowOpacity(profile)
+            : BakedShadowOpacityRest;
 
     private static double GetHoverLiftY(ChromeHoverMotionProfile profile)
         => profile switch
