@@ -3209,9 +3209,10 @@ namespace Scriblucent
 
             int? flashcardsSuccessfulPacketCount = null;
             int? flashcardsTotalPacketCount = null;
+            var acceptProgress = true;
             var progress = new Progress<AiGenerationProgress>(status =>
             {
-                if (_isDisposed) return;
+                if (_isDisposed || !acceptProgress) return;
                 if (status.SuccessfulPacketCount.HasValue)
                 {
                     flashcardsSuccessfulPacketCount = status.SuccessfulPacketCount;
@@ -3225,6 +3226,12 @@ namespace Scriblucent
                 else
                     ShowPersistentStatusIndicatorWithoutAnimation(text);
             });
+
+            void CloseAiStatus()
+            {
+                acceptProgress = false;
+                DismissStatusIndicator();
+            }
 
             var restoreAutoSave = false;
             try
@@ -3248,7 +3255,7 @@ namespace Scriblucent
 
                 if (flashcards.Count == 0)
                 {
-                    HideStatusIndicator();
+                    CloseAiStatus();
                     ModernMessageBox.Show(
                         LocalizationService.GetString("ConvertToFlashcardsParseFailed"),
                         LocalizationService.GetString("Error"),
@@ -3292,11 +3299,11 @@ namespace Scriblucent
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
-                HideStatusIndicator();
+                CloseAiStatus();
             }
             catch (OperationCanceledException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseAiStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3305,7 +3312,7 @@ namespace Scriblucent
             }
             catch (AiInputRejectedException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseAiStatus();
                 ModernMessageBox.Show(
                     ex.Message,
                     LocalizationService.GetString("AiInputRejectedTitle"),
@@ -3314,7 +3321,7 @@ namespace Scriblucent
             }
             catch (TimeoutException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseAiStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("AiGenerationTimedOut")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3323,12 +3330,12 @@ namespace Scriblucent
             }
             catch (AiModelDownloadException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseAiStatus();
                 ModernDialog.ShowError(GetDialogOwnerWindow(), LocalizationService.GetString("Error"), ex.Message);
             }
             catch (Exception ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseAiStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToFlashcardsFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3381,9 +3388,10 @@ namespace Scriblucent
 
             int? mindMapSuccessfulPacketCount = null;
             int? mindMapTotalPacketCount = null;
+            var acceptMindMapProgress = true;
             var progress = new Progress<AiGenerationProgress>(status =>
             {
-                if (_isDisposed) return;
+                if (_isDisposed || !acceptMindMapProgress) return;
                 if (status.SuccessfulPacketCount.HasValue)
                 {
                     mindMapSuccessfulPacketCount = status.SuccessfulPacketCount;
@@ -3401,6 +3409,12 @@ namespace Scriblucent
                 else
                     ShowPersistentStatusIndicatorWithoutAnimation(text);
             });
+
+            void CloseMindMapStatus()
+            {
+                acceptMindMapProgress = false;
+                DismissStatusIndicator();
+            }
 
             var restoreAutoSave = false;
             try
@@ -3425,7 +3439,7 @@ namespace Scriblucent
 
                 if (mindMap is null || mindMap.Children.Count == 0)
                 {
-                    HideStatusIndicator();
+                    CloseMindMapStatus();
                     ModernMessageBox.Show(
                         LocalizationService.GetString("ConvertToMindMapParseFailed"),
                         LocalizationService.GetString("Error"),
@@ -3474,11 +3488,11 @@ namespace Scriblucent
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
-                HideStatusIndicator();
+                CloseMindMapStatus();
             }
             catch (OperationCanceledException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseMindMapStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3487,7 +3501,7 @@ namespace Scriblucent
             }
             catch (AiInputRejectedException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseMindMapStatus();
                 ModernMessageBox.Show(
                     ex.Message,
                     LocalizationService.GetString("AiInputRejectedTitle"),
@@ -3496,7 +3510,7 @@ namespace Scriblucent
             }
             catch (TimeoutException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseMindMapStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("AiGenerationTimedOut")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3505,12 +3519,12 @@ namespace Scriblucent
             }
             catch (AiModelDownloadException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseMindMapStatus();
                 ModernDialog.ShowError(GetDialogOwnerWindow(), LocalizationService.GetString("Error"), ex.Message);
             }
             catch (Exception ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseMindMapStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToMindMapFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3563,9 +3577,10 @@ namespace Scriblucent
 
             int? quizSuccessfulPacketCount = null;
             int? quizTotalPacketCount = null;
+            var acceptQuizProgress = true;
             var progress = new Progress<AiGenerationProgress>(status =>
             {
-                if (_isDisposed) return;
+                if (_isDisposed || !acceptQuizProgress) return;
                 if (status.SuccessfulPacketCount.HasValue)
                 {
                     quizSuccessfulPacketCount = status.SuccessfulPacketCount;
@@ -3583,6 +3598,12 @@ namespace Scriblucent
                 else
                     ShowPersistentStatusIndicatorWithoutAnimation(text);
             });
+
+            void CloseQuizStatus()
+            {
+                acceptQuizProgress = false;
+                DismissStatusIndicator();
+            }
 
             var restoreAutoSave = false;
             try
@@ -3608,7 +3629,7 @@ namespace Scriblucent
 
                 if (quiz is null || quiz.Questions.Count == 0)
                 {
-                    HideStatusIndicator();
+                    CloseQuizStatus();
                     ModernMessageBox.Show(
                         LocalizationService.GetString("ConvertToTestParseFailed"),
                         LocalizationService.GetString("Error"),
@@ -3652,11 +3673,11 @@ namespace Scriblucent
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
-                HideStatusIndicator();
+                CloseQuizStatus();
             }
             catch (OperationCanceledException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseQuizStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3665,7 +3686,7 @@ namespace Scriblucent
             }
             catch (AiInputRejectedException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseQuizStatus();
                 ModernMessageBox.Show(
                     ex.Message,
                     LocalizationService.GetString("AiInputRejectedTitle"),
@@ -3674,7 +3695,7 @@ namespace Scriblucent
             }
             catch (TimeoutException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseQuizStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("AiGenerationTimedOut")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3683,12 +3704,12 @@ namespace Scriblucent
             }
             catch (AiModelDownloadException ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseQuizStatus();
                 ModernDialog.ShowError(GetDialogOwnerWindow(), LocalizationService.GetString("Error"), ex.Message);
             }
             catch (Exception ex) when (!_isDisposed)
             {
-                HideStatusIndicator();
+                CloseQuizStatus();
                 ModernMessageBox.Show(
                     $"{LocalizationService.GetString("ConvertToTestFailed")}\n\n{ex.Message}",
                     LocalizationService.GetString("Error"),
@@ -3886,6 +3907,19 @@ namespace Scriblucent
         StatusIndicatorText.Text = message;
         StatusIndicatorText.Visibility = Visibility.Visible;
     }
+
+        private void DismissStatusIndicator()
+        {
+            UiMotion.Stop(StatusIndicatorText);
+            if (StatusIndicatorRow != null)
+                UiMotion.Stop(StatusIndicatorRow);
+            UiMotion.Clear(StatusIndicatorText, UIElement.OpacityProperty);
+            StatusIndicatorText.Opacity = 1;
+            StatusIndicatorText.Text = string.Empty;
+            StatusIndicatorText.Visibility = Visibility.Collapsed;
+            if (StatusIndicatorRow != null)
+                StatusIndicatorRow.Height = new GridLength(0);
+        }
 
         private void HideStatusIndicator()
         {
