@@ -146,6 +146,12 @@ internal static class SmoothScrollCompositor
 
         if (session.Lightweight)
         {
+            // Same shell cache as a tall list, so a short form does not repaint live chrome
+            // on every glide frame. Cleared when the coast ends — these trees hold buttons
+            // and fields, so they must not stay bitmaps through the dashboard surface hold.
+            session.CachedShells = CacheScrollShells(session.ContentElement);
+            if (Scriblucent.Services.ScrollPerfDiag.Enabled)
+                Scriblucent.Services.ScrollPerfDiag.Log($"shellCache\tlight\t{session.CachedShells?.Count ?? 0}");
             AddViewerThumbCompensations(session, scrollViewer);
             return;
         }
@@ -217,6 +223,11 @@ internal static class SmoothScrollCompositor
         var contentRoot = session.ContentElement;
         var restoreHitTest = session.HitTestSuppressed;
         var hitTestVisible = session.OriginalContentHitTestVisible;
+        var endedLightweight = session.Lightweight;
+        var endedHosts = session.Hosts;
+        var endedShells = session.CachedShells;
+        session.Hosts = null;
+        session.CachedShells = null;
         var teardown = session;
 
         // Unwrap the translate wrapper only after layout applies the final commit so
@@ -225,27 +236,42 @@ internal static class SmoothScrollCompositor
         {
             scrollViewer.UpdateLayout();
 
-            if (restoreHitTest && contentRoot is { } content)
+            if (restoreHitTest && contentRoot is { } content && !teardown.Active)
                 content.IsHitTestVisible = hitTestVisible;
 
-            teardown.HitTestSuppressed = false;
-            RestoreContentTransform(teardown);
-            teardown.Translate = null;
-            teardown.ContentElement = null;
-            var endHosts = teardown.Hosts;
-            teardown.Hosts = null;
-            var endShells = teardown.CachedShells;
-            teardown.CachedShells = null;
+            if (!teardown.Active)
+            {
+                teardown.HitTestSuppressed = false;
+                RestoreContentTransform(teardown);
+                teardown.Translate = null;
+                teardown.ContentElement = null;
+            }
 
-            // Short scrollers only borrowed the translate. They must not start the listing
-            // surface hold, which would hide shadows and cancel an in-progress dashboard hold.
-            if (!teardown.Lightweight)
+            // Card grids keep their shells and tile mode until the scroll truly settles.
+            // Every other scroller drops the shell cache now, so fields and buttons are live
+            // again. A newer glide on this same viewer may already own those shells.
+            if (!endedLightweight)
             {
                 // Cards STAY in tile mode after the session ends: flipping back to the live template
                 // per burst re-flowed the grid (live card heights vary; tiles are fixed-cell) - the
                 // visible readjusting during scroll. The flip happens once, at the true settle (the
                 // surface hold release).
-                BeginSurfaceHold(scrollViewer, endHosts, endShells);
+                BeginSurfaceHold(scrollViewer, endedHosts, endedShells);
+            }
+            else if (teardown.Active && teardown.CachedShells is { } currentShells)
+            {
+                if (endedShells is not null)
+                {
+                    foreach (var shell in endedShells)
+                    {
+                        if (!currentShells.Contains(shell) && shell.CacheMode is not null)
+                            shell.CacheMode = null;
+                    }
+                }
+            }
+            else
+            {
+                RestoreCachedShells(endedShells);
             }
 
             RestoreThumbCompensations(teardown);
@@ -394,8 +420,8 @@ internal static class SmoothScrollCompositor
         if (hosts.Count > 0)
             return true;
 
-        // Every other scroller that can move uses the same glide. A short list used to
-        // commit ScrollToOffset on every animation frame.
+        // Every other scroller that can move uses the same glide, including the shell
+        // cache. A short list used to commit ScrollToOffset on every animation frame.
         return scrollViewer.ScrollableHeight > 1 || scrollViewer.ScrollableWidth > 1;
     }
 
