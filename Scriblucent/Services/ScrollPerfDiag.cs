@@ -38,11 +38,15 @@ internal static class ScrollPerfDiag
     public const int EvCacheRelease = 8;
     public const int EvContainerPrepare = 9;
     public const int EvCommit = 10;
+    public const int EvEditorSelectionPaint = 11;
+    public const int EvEditorFindPaint = 12;
+    public const int EvEditorSelectionClear = 13;
 
     private static readonly string[] Names =
     {
         "", "frame", "posY", "hostMeasureState", "hostMeasure", "measureSlice",
-        "measureSliceStatic", "cacheApply", "cacheRelease", "containerPrepare", "commit"
+        "measureSliceStatic", "cacheApply", "cacheRelease", "containerPrepare", "commit",
+        "editorSelectionPaint", "editorFindPaint", "editorSelectionClear"
     };
 
     static ScrollPerfDiag()
@@ -91,6 +95,15 @@ internal static class ScrollPerfDiag
 
     public static void LogCommit(double clampedY)
         => LogEvent(EvCommit, clampedY);
+
+    public static void LogEditorSelectionPaint(double elapsedMs, double lines, double tiles)
+        => LogEvent(EvEditorSelectionPaint, elapsedMs, lines, tiles);
+
+    public static void LogEditorFindPaint(double elapsedMs, double matches, double tiles)
+        => LogEvent(EvEditorFindPaint, elapsedMs, matches, tiles);
+
+    public static void LogEditorSelectionClear(double elapsedMs)
+        => LogEvent(EvEditorSelectionClear, elapsedMs);
 
     private static void LogEvent(
         int eventId,

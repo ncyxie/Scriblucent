@@ -38,7 +38,8 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition x:Name="FontPanelRow" Height="0"/>
+            <RowDefinition x:Name="FindReplaceRow" Height="0"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -349,11 +350,7 @@
                 Margin="20,8,20,0"
                 Style="{StaticResource ChromePanelBorderStyle}"
                 Padding="10,7"
-                Opacity="0"
                 Visibility="Collapsed">
-            <Border.RenderTransform>
-                <TranslateTransform Y="-6"/>
-            </Border.RenderTransform>
             <StackPanel>
             <WrapPanel VerticalAlignment="Center"
                        Margin="0,0,0,8">
@@ -732,7 +729,141 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="3"
+        <Border x:Name="FindReplaceBar"
+                Grid.Row="3"
+                Margin="20,8,20,0"
+                Background="Transparent"
+                Visibility="Collapsed">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="140"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0"
+                            Style="{StaticResource ChromeFieldBorderStyle}"
+                            MinHeight="32"
+                            Margin="0,0,8,0">
+                        <TextBox x:Name="FindQueryBox"
+                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                 FontSize="{StaticResource Type.Meta}"
+                                 VerticalContentAlignment="Center"
+                                 ToolTip="{Binding [FindLabel], Source={StaticResource Loc}}"
+                                 TextChanged="FindQueryBox_TextChanged"
+                                 PreviewKeyDown="FindQueryBox_PreviewKeyDown"/>
+                    </Border>
+                    <TextBlock x:Name="FindStatusText"
+                               Grid.Column="1"
+                               MinWidth="88"
+                               Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               FontSize="{StaticResource Type.Caption}"
+                               Foreground="{DynamicResource TextColorSecondary}"
+                               Text="{Binding [FindReplaceEnterSearch], Source={StaticResource Loc}}"/>
+                    <Border Grid.Column="2"
+                            Background="{DynamicResource InputSurface}"
+                            CornerRadius="{StaticResource Radius.Control}"
+                            VerticalAlignment="Center"
+                            Padding="8,6"
+                            Effect="{StaticResource Elevation.Field}"
+                            behaviors:RoundedClipBehavior.IsEnabled="True"
+                            SnapsToDevicePixels="True">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="FindPreviousButton"
+                                    Style="{StaticResource EditorToolIconButtonStyle}"
+                                    Content="{icons:Icon Kind=ArrowUp, Size=14}"
+                                    ToolTip="{Binding [FindPrevious], Source={StaticResource Loc}}"
+                                    Click="FindPreviousButton_Click"/>
+                            <Button x:Name="FindNextButton"
+                                    Style="{StaticResource EditorToolIconButtonStyle}"
+                                    Content="{icons:Icon Kind=ArrowDown, Size=14}"
+                                    ToolTip="{Binding [FindNext], Source={StaticResource Loc}}"
+                                    Click="FindNextButton_Click"/>
+                            <ToggleButton x:Name="FindMatchCaseToggle"
+                                          Style="{StaticResource EditorToolIconToggleButtonStyle}"
+                                          Content="Aa"
+                                          FontSize="{StaticResource Type.Caption}"
+                                          ToolTip="{Binding [FindReplaceMatchCase], Source={StaticResource Loc}}"
+                                          Checked="FindOptions_Changed"
+                                          Unchecked="FindOptions_Changed"/>
+                            <ToggleButton x:Name="FindWholeWordToggle"
+                                          Style="{StaticResource EditorToolIconToggleButtonStyle}"
+                                          Content="ab"
+                                          FontSize="{StaticResource Type.Caption}"
+                                          ToolTip="{Binding [FindReplaceWholeWord], Source={StaticResource Loc}}"
+                                          Checked="FindOptions_Changed"
+                                          Unchecked="FindOptions_Changed"/>
+                            <ToggleButton x:Name="FindWrapAroundToggle"
+                                          Style="{StaticResource EditorToolIconToggleButtonStyle}"
+                                          IsChecked="True"
+                                          Content="{icons:Icon Kind=Refresh, Size=14}"
+                                          ToolTip="{Binding [FindReplaceWrapAround], Source={StaticResource Loc}}"
+                                          Checked="FindOptions_Changed"
+                                          Unchecked="FindOptions_Changed"/>
+                            <ToggleButton x:Name="FindReplaceToggle"
+                                          Style="{StaticResource EditorToolIconToggleButtonStyle}"
+                                          Content="{icons:Icon Kind=Swap, Size=14}"
+                                          ToolTip="{Binding [ReplaceLabel], Source={StaticResource Loc}}"
+                                          Checked="FindReplaceToggle_Changed"
+                                          Unchecked="FindReplaceToggle_Changed"/>
+                            <Button Style="{StaticResource EditorToolIconButtonStyle}"
+                                    Margin="0"
+                                    Content="{icons:Icon Kind=Close, Size=14}"
+                                    ToolTip="{Binding [Close], Source={StaticResource Loc}}"
+                                    Click="CloseFindBarButton_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                <Grid x:Name="FindReplaceReplaceRow" Visibility="Collapsed" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="140"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0"
+                            Style="{StaticResource ChromeFieldBorderStyle}"
+                            MinHeight="32"
+                            Margin="0,0,8,0">
+                        <TextBox x:Name="FindReplacementBox"
+                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                 FontSize="{StaticResource Type.Meta}"
+                                 VerticalContentAlignment="Center"
+                                 ToolTip="{Binding [ReplaceLabel], Source={StaticResource Loc}}"
+                                 TextChanged="FindReplacementBox_TextChanged"
+                                 PreviewKeyDown="FindReplacementBox_PreviewKeyDown"/>
+                    </Border>
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource InputSurface}"
+                            CornerRadius="{StaticResource Radius.Control}"
+                            VerticalAlignment="Center"
+                            Padding="8,6"
+                            Effect="{StaticResource Elevation.Field}"
+                            behaviors:RoundedClipBehavior.IsEnabled="True"
+                            SnapsToDevicePixels="True">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="ReplaceNextButton"
+                                    Style="{StaticResource EditorToolButtonBaseStyle}"
+                                    Height="32"
+                                    Padding="16,0"
+                                    Margin="0,0,6,0"
+                                    FontSize="{StaticResource Type.Caption}"
+                                    Content="{Binding [ReplaceNext], Source={StaticResource Loc}}"
+                                    Click="ReplaceNextButton_Click"/>
+                            <Button x:Name="ReplaceAllButton"
+                                    Style="{StaticResource EditorToolButtonBaseStyle}"
+                                    Height="32"
+                                    Padding="16,0"
+                                    Margin="0"
+                                    FontSize="{StaticResource Type.Caption}"
+                                    Content="{Binding [ReplaceAll], Source={StaticResource Loc}}"
+                                    Click="ReplaceAllButton_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="4"
               Margin="20,10,20,8"
               CornerRadius="{StaticResource Radius.Card}"
               Background="{DynamicResource RichTextBoxBackground}"
@@ -759,6 +890,15 @@
                       Grid.Row="0"
                       Grid.Column="0"
                       ClipToBounds="True">
+                    <Border Background="{DynamicResource RichTextBoxBackground}"/>
+                    <!-- Between the page color and the text. The editor fill is transparent,
+                         so the marks read as highlight and do not cover the glyphs.
+                         The grid stays put and clips to the text inset; the canvas inside
+                         is what scrolls with the note. -->
+                    <Grid x:Name="FindHighlightClip">
+                          <Canvas x:Name="SelectionHighlightOverlay" IsHitTestVisible="False"/>
+                          <Canvas x:Name="FindHighlightOverlay" IsHitTestVisible="False"/>
+                    </Grid>
                     <RichTextBox x:Name="ContentTextBox"
                                  Style="{StaticResource EditorRichTextBoxStyle}"
                                  SelectionChanged="ContentTextBox_SelectionChanged"
@@ -769,15 +909,15 @@
                                  TextOptions.TextRenderingMode="ClearType"
                                  RenderOptions.ClearTypeHint="Enabled"
                                  Margin="0"
-                                 Padding="18,16"
+                                 Padding="18,0"
                                  FontSize="{StaticResource Type.Body}"
                                  FontFamily="{StaticResource FontFamily.Editor}"
                                  AcceptsReturn="True"
                                  AcceptsTab="True"
                                  KeyboardNavigation.TabNavigation="None"
                                  IsInactiveSelectionHighlightEnabled="True"
-                                 SelectionBrush="{DynamicResource EditorSelectionBrush}"
-                                 SelectionOpacity="0.4"
+                                 SelectionBrush="Transparent"
+                                 SelectionOpacity="0"
                                  Background="Transparent"
                                  BorderThickness="0"
                                  ScrollViewer.VerticalScrollBarVisibility="Hidden"
@@ -823,7 +963,7 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 Margin="20,0,20,12"
                 Style="{StaticResource ChromePanelBorderStyle}"
                 Padding="10,7"

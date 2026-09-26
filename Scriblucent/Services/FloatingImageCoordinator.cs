@@ -21,6 +21,7 @@ namespace Scriblucent.Services;
 public sealed class FloatingImageCoordinator
 {
     internal const string ExtentPadTag = "Scriblucent.FloatingImageExtentPad";
+    internal const string EditorEndPadTag = "Scriblucent.EditorEndPad";
     internal const char InlineMarkerChar = '\uFFFC';
 
     private const double DragScrollEdgeThresholdDip = 64;
@@ -116,6 +117,7 @@ public sealed class FloatingImageCoordinator
     public event EventHandler? SelectionChanged;
 
     public bool HasSelection => _selected is not null || _selectedInlineId is not null;
+    internal bool HasImages => _sessions.Count > 0;
     public Guid? SelectedImageId => _selected?.ImageId ?? _selectedInlineId;
     public bool IsAdjustingExtentPad => _isAdjustingExtentPad;
     public bool HasActiveGestures => _activeGestures > 0;
@@ -1696,7 +1698,7 @@ public sealed class FloatingImageCoordinator
         Block? last = null;
         foreach (var block in _editor.Document.Blocks)
         {
-            if (!Equals(block.Tag, ExtentPadTag))
+            if (!Equals(block.Tag, ExtentPadTag) && !Equals(block.Tag, EditorEndPadTag))
                 last = block;
         }
 

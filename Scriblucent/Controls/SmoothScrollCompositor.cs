@@ -8,8 +8,8 @@ using Scriblucent.Animations;
 namespace Scriblucent.Controls;
 
 /// <summary>
-/// Keeps scroll motion visually smooth via <see cref="TranslateTransform"/> while throttling
-/// <see cref="ScrollViewer.ScrollToVerticalOffset"/> so dashboard virtualization remeasures less often.
+/// Keeps dashboard motion smooth by translating its content between offset commits.
+/// Viewport-sized document views use real offsets each frame so newly visible text is rendered.
 /// </summary>
 internal static class SmoothScrollCompositor
 {
@@ -40,6 +40,10 @@ internal static class SmoothScrollCompositor
     private sealed class Session
     {
         public bool Active;
+        public bool DirectOffsetMode;
+        public bool DirectOffsetSession;
+        public Action? SessionBegan;
+        public Action? SessionEnded;
         public double CommittedX;
         public double CommittedY;
         public double VisualX;
@@ -68,6 +72,9 @@ internal static class SmoothScrollCompositor
         /// like the note editor's mirror) that are translated by the drift each frame so the
         /// thumb tracks the gliding content instead of lagging behind the throttled commits.</summary>
         public List<ThumbCompensation> ThumbCompensations { get; } = new();
+        /// <summary>Transforms kept equal to the content translate's drift so drawings that
+        /// are not children of the scrolled view stay on the glyphs.</summary>
+        public List<TranslateTransform> ContentDriftTargets { get; } = new();
     }
 
     private sealed class ThumbCompensation
@@ -92,10 +99,16 @@ internal static class SmoothScrollCompositor
         if (session.Active)
             return;
 
-        DashboardScrollRenderGate.CancelStaggeredLiveRestore();
+        session.DirectOffsetSession = session.DirectOffsetMode;
+        if (!session.DirectOffsetSession)
+            DashboardScrollRenderGate.CancelStaggeredLiveRestore();
 
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
             Scriblucent.Services.ScrollPerfDiag.Log("sessionBegin");
+
+        // Before the offset is captured, so the editor can park a large selection
+        // without that change becoming the glide's start position.
+        session.SessionBegan?.Invoke();
 
         session.Active = true;
         session.CommittedX = scrollViewer.HorizontalOffset;
@@ -103,12 +116,17 @@ internal static class SmoothScrollCompositor
         session.VisualX = session.CommittedX;
         session.VisualY = session.CommittedY;
         session.LastCommitUtc = DateTime.UtcNow;
-        session.ContentElement = ResolveContentElement(scrollViewer);
+        session.ContentElement = session.DirectOffsetSession ? null : ResolveContentElement(scrollViewer);
         session.Translate = null;
         session.DpiScale = System.Windows.Media.VisualTreeHelper.GetDpi(scrollViewer).PixelsPerDip;
-        session.Hosts = hosts;
+        session.Hosts = session.DirectOffsetSession ? null : hosts;
         session.Lightweight = hosts.Count == 0
             && scrollViewer.ViewportHeight < MinViewportForCompositor;
+
+        // RichTextBox's FlowDocumentView is only viewport-sized. Moving that view between
+        // offset commits exposes empty strips, so its eased position is committed each frame.
+        if (session.DirectOffsetSession)
+            return;
 
         if (session.ContentElement is { } content)
         {
@@ -175,6 +193,15 @@ internal static class SmoothScrollCompositor
 
         Commit(scrollViewer, session, finalX, finalY);
 
+        if (session.DirectOffsetSession)
+        {
+            session.Active = false;
+            session.DirectOffsetSession = false;
+            ApplyContentDrift(session);
+            session.SessionEnded?.Invoke();
+            return;
+        }
+
         // Trust Commit's clamped target — re-reading VerticalOffset here can still be
         // behind the visual position when commits were throttled during the glide.
         if (session.Translate is { } translate)
@@ -184,6 +211,8 @@ internal static class SmoothScrollCompositor
         }
 
         session.Active = false;
+        ApplyContentDrift(session);
+        session.SessionEnded?.Invoke();
 
         var contentRoot = session.ContentElement;
         var restoreHitTest = session.HitTestSuppressed;
@@ -306,6 +335,19 @@ internal static class SmoothScrollCompositor
         if (scrollViewer.GetValue(SessionProperty) is not Session session || !session.Active)
             return false;
 
+        if (session.DirectOffsetSession)
+        {
+            var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
+            var snappedX = SnapOffset(visualX, scrollViewer.ScrollableWidth, scale);
+            var snappedY = SnapOffset(visualY, scrollViewer.ScrollableHeight, scale);
+            if (forceCommit || snappedX != session.CommittedX || snappedY != session.CommittedY)
+                Commit(scrollViewer, session, visualX, visualY);
+
+            committedX = session.CommittedX;
+            committedY = session.CommittedY;
+            return true;
+        }
+
         session.VisualX = visualX;
         session.VisualY = visualY;
         UpdateTransform(session);
@@ -399,14 +441,10 @@ internal static class SmoothScrollCompositor
         // glyphs anchor to once the drift translate clears; committing to fractional offsets
         // re-rasterizes the glyph cache at each commit.
         var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
-        var clampedX = scrollViewer.ScrollableWidth > 0
-            ? Math.Clamp(visualX, 0, scrollViewer.ScrollableWidth)
-            : 0;
-        var clampedY = scrollViewer.ScrollableHeight > 0
-            ? Math.Clamp(visualY, 0, scrollViewer.ScrollableHeight)
-            : 0;
-        clampedX = Snap(clampedX, scale);
-        clampedY = Snap(clampedY, scale);
+        var clampedX = SnapOffset(visualX, scrollViewer.ScrollableWidth, scale);
+        var clampedY = SnapOffset(visualY, scrollViewer.ScrollableHeight, scale);
+        var xChanged = clampedX != session.CommittedX;
+        var yChanged = clampedY != session.CommittedY;
 
         session.CommittedX = clampedX;
         session.CommittedY = clampedY;
@@ -414,11 +452,18 @@ internal static class SmoothScrollCompositor
         session.VisualY = clampedY;
         session.LastCommitUtc = DateTime.UtcNow;
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
-            Scriblucent.Services.ScrollPerfDiag.Log($"commit\ty={clampedY:F0}");
+        {
+            if (session.DirectOffsetSession)
+                Scriblucent.Services.ScrollPerfDiag.LogCommit(clampedY);
+            else
+                Scriblucent.Services.ScrollPerfDiag.Log($"commit\ty={clampedY:F0}");
+        }
 
-        if (scrollViewer.ScrollableWidth > 0)
+        if (scrollViewer.ScrollableWidth > 0
+            && (!session.DirectOffsetSession || xChanged || Math.Abs(scrollViewer.HorizontalOffset - clampedX) > 0.5 / scale))
             scrollViewer.ScrollToHorizontalOffset(clampedX);
-        if (scrollViewer.ScrollableHeight > 0)
+        if (scrollViewer.ScrollableHeight > 0
+            && (!session.DirectOffsetSession || yChanged || Math.Abs(scrollViewer.VerticalOffset - clampedY) > 0.5 / scale))
             scrollViewer.ScrollToVerticalOffset(clampedY);
 
         UpdateTransform(session);
@@ -426,17 +471,82 @@ internal static class SmoothScrollCompositor
 
     private static void UpdateTransform(Session session)
     {
-        if (session.Translate is not { } translate)
-            return;
-
-        // Snap the translate to whole device pixels: under a fractional translate, Display-mode
-        // text whose glyph origins snap to whole pixels re-rasterizes every frame - a major
-        // scroll frame-spike source.
         var scale = session.DpiScale > 0 ? session.DpiScale : 1.0;
-        translate.X = Snap(session.BaselineTranslateX - (session.VisualX - session.CommittedX), scale);
-        translate.Y = Snap(session.BaselineTranslateY - (session.VisualY - session.CommittedY), scale);
+        if (session.Translate is { } translate)
+        {
+            // Snap the translate to whole device pixels: under a fractional translate, Display-mode
+            // text whose glyph origins snap to whole pixels re-rasterizes every frame - a major
+            // scroll frame-spike source.
+            translate.X = Snap(session.BaselineTranslateX - (session.VisualX - session.CommittedX), scale);
+            translate.Y = Snap(session.BaselineTranslateY - (session.VisualY - session.CommittedY), scale);
+        }
 
         UpdateThumbCompensations(session);
+        ApplyContentDrift(session);
+    }
+
+    /// <summary>
+    /// Copies the scrolled view's drift onto overlays that are not inside that view.
+    /// The value is the translate just applied to the glyphs, not a separate scroll position.
+    /// </summary>
+    internal static void RegisterContentDriftTarget(ScrollViewer scrollViewer, TranslateTransform target)
+    {
+        var session = GetOrCreateSession(scrollViewer);
+        if (session.ContentDriftTargets.Exists(existing => ReferenceEquals(existing, target)))
+            return;
+
+        session.ContentDriftTargets.Add(target);
+    }
+
+    internal static void SetDirectOffsetMode(ScrollViewer scrollViewer, bool enabled)
+        => GetOrCreateSession(scrollViewer).DirectOffsetMode = enabled;
+
+    internal static void UnregisterContentDriftTarget(ScrollViewer scrollViewer, TranslateTransform target)
+    {
+        if (scrollViewer.GetValue(SessionProperty) is not Session session)
+            return;
+
+        session.ContentDriftTargets.Remove(target);
+        target.X = 0;
+        target.Y = 0;
+    }
+
+    internal static void RegisterSessionLifecycle(ScrollViewer scrollViewer, Action began, Action ended)
+    {
+        var session = GetOrCreateSession(scrollViewer);
+        session.SessionBegan = began;
+        session.SessionEnded = ended;
+    }
+
+    internal static void UnregisterSessionLifecycle(ScrollViewer scrollViewer, Action began, Action ended)
+    {
+        if (scrollViewer.GetValue(SessionProperty) is not Session session)
+            return;
+
+        if (session.SessionBegan == began)
+            session.SessionBegan = null;
+        if (session.SessionEnded == ended)
+            session.SessionEnded = null;
+    }
+
+    private static void ApplyContentDrift(Session session)
+    {
+        if (session.ContentDriftTargets.Count == 0)
+            return;
+
+        var x = 0.0;
+        var y = 0.0;
+        if (session.Active && session.Translate is { } translate)
+        {
+            x = translate.X - session.BaselineTranslateX;
+            y = translate.Y - session.BaselineTranslateY;
+        }
+
+        foreach (var target in session.ContentDriftTargets)
+        {
+            target.X = x;
+            target.Y = y;
+        }
     }
 
     /// <summary>
@@ -564,6 +674,9 @@ internal static class SmoothScrollCompositor
 
     private static double Snap(double value, double scale)
         => Math.Round(value * scale) / scale;
+
+    private static double SnapOffset(double value, double scrollableExtent, double scale)
+        => scrollableExtent > 0 ? Snap(Math.Clamp(value, 0, scrollableExtent), scale) : 0;
 
     private static TranslateTransform AcquireSmoothTranslate(FrameworkElement content, Session session)
     {

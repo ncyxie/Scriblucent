@@ -39,13 +39,101 @@ namespace Scriblucent
         private bool _lastFindWholeWord;
         private bool _lastFindWrapAround = true;
         private bool _hasFindHighlights;
+        private bool _findBarOpen;
+        private DispatcherTimer? _findHighlightDebounceTimer;
+        private int _findDocumentVersion;
+        private int _findCachedVersion = -1;
+        private string? _findCachedQuery;
+        private bool _findCachedMatchCase;
+        private bool _findCachedWholeWord;
+        private DocumentTextIndex _findCachedIndex;
+        private List<FindMatch>? _findCachedMatches;
+        private MatchSpan[] _findCachedSpans = Array.Empty<MatchSpan>();
+        private int _findMutationDepth;
+        private bool _findRefreshPending;
+        private MatchSpan[] _findOverlaySpans = Array.Empty<MatchSpan>();
+        private int _findOverlayActiveIndex = -1;
+        private DocumentTextIndex _findOverlayIndex;
+        private bool _findOverlayIndexReady;
+        private readonly TranslateTransform _findOverlayCommit = new();
+        private readonly TransformGroup _findOverlayMotion = new();
+        private readonly TranslateTransform _selectionCommit = new();
+        private readonly TransformGroup _selectionMotion = new();
+        private bool _selectionOverlayQueued;
+        private DispatcherOperation? _selectionOverlayOperation;
+        private DispatcherTimer? _selectionUiTimer;
+        private bool _suppressSelectionChange;
+        private bool _freezeSelectionScroll;
+        private bool _selectionCollapsedForScroll;
+        private TextPointer? _heldSelectionStart;
+        private TextPointer? _heldSelectionEnd;
+        private bool _heldCaretAtStart;
+        private Brush? _cachedSelectionOverlayBrush;
+        private bool _findOverlayQueued;
+        private const double HighlightTileHeight = 256;
+        private const double HighlightBuildBudgetMs = 2;
+        private readonly Dictionary<int, HighlightTile> _selectionTiles = new();
+        private readonly Dictionary<int, HighlightTile> _findTiles = new();
+        private readonly Dictionary<int, HighlightTile> _findActiveTiles = new();
+        private int _findComposedFirstTile = -1;
+        private int _findComposedLastTile = -1;
+        private MatchSpan[] _findActiveSpan = Array.Empty<MatchSpan>();
+        private double _findActiveTop = double.NaN;
+        private double _findActiveBottom = double.NaN;
+        private DispatcherOperation? _findOverlayOperation;
+        private TextPointer? _selectionTileStart;
+        private TextPointer? _selectionTileEnd;
+        private readonly SortedDictionary<TextPointer, BlueLineMeasure> _selectionLineRects =
+            new(Comparer<TextPointer>.Create((left, right) => left.CompareTo(right)));
+        private System.Windows.Shapes.Path? _selectionHighlightPath;
+        private System.Windows.Shapes.Path? _findNormalHighlightPath;
+        private System.Windows.Shapes.Path? _findActiveHighlightPath;
+
+        private sealed class HighlightTile
+        {
+            public required int Index;
+            public required double Left;
+            public required double Width;
+            public required GeometryGroup NormalGeometry;
+            public readonly List<Rect> NormalRects = new();
+            public TextPointer? NextLine;
+            public Dictionary<Paragraph, LineBandOrigin>? LineOrigins;
+            public FindLineRange? CurrentFindRange;
+            public FindDrawCursor? PendingFindDraw;
+            public bool Initialized;
+            public bool Complete;
+            public bool ValidatedInViewport;
+            public HighlightTile? PendingReplacement;
+            public bool NeedsSelectionRebuild;
+            public TextPointer? CoveredStart;
+            public TextPointer? CoveredEnd;
+        }
+
+        private readonly record struct BlueLineMeasure(Rect DocumentRect, bool ValidatedInViewport);
+
+        private sealed class FindLineRange
+        {
+            public required int Start;
+            public required int End;
+            public required int NextMatch;
+            public required int EndMatch;
+        }
+
+        private sealed class FindDrawCursor
+        {
+            public required int StartOffset;
+            public required int EndOffset;
+            public required int RunIndex;
+            public TextPointer? Position;
+            public TextPointer? RunEnd;
+        }
 
         // Spell check - see SpellCheckDictionaryService/SpellCheckService for the Hunspell-backed
         // engine this drives. Squiggles are real in-document TextDecorations
         // (TextDecorationLocation.Baseline, unused by any other feature in this editor) applied
         // per misspelled-word TextRange and tracked here so they can be cleared precisely
-        // (including before every save/export) without disturbing Underline/Strikethrough or
-        // Find/Replace's own Background highlighting, which use different properties entirely.
+        // (including before every save/export) without disturbing Underline/Strikethrough.
+        // Find marks are drawn over the viewport and are not part of the document.
         private bool _isSpellCheckEnabled;
         private DispatcherTimer? _spellCheckDebounceTimer;
         private readonly List<TextRange> _spellCheckDecoratedRanges = new();
@@ -212,7 +300,6 @@ namespace Scriblucent
             var primary = fontFamilySource.Split(',')[0].Trim();
             return string.IsNullOrWhiteSpace(primary) ? DefaultEditorFontFamily : primary;
         }
-        private int _fontPanelAnimationVersion;
         private int _tagsPanelAnimationVersion;
         private long _editorChangeVersion;
         private long _lastSavedEditorChangeVersion;
@@ -234,6 +321,7 @@ namespace Scriblucent
         private ScrollViewer? _contentScrollViewer;
         private DispatcherTimer? _editorScrollbarHideTimer;
         private bool _syncingEditorScrollbarMirror;
+        private bool _editorScrollbarsShown;
         private const int EditorScrollbarHideDelayMs = 1200;
         private INotifyPropertyChanged? _editorSettingsSource;
         private static readonly double[] WordFontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
@@ -260,6 +348,7 @@ namespace Scriblucent
         public NoteEditorWindow()
         {
             InitializeComponent();
+            FontButton.ToolTipOpening += FontButton_ToolTipOpening;
             var groundedQuestionPlanner = new GroundedQuestionPlanner();
             _flashcardConversionService = new FlashcardConversionService(_aiBackend, groundedQuestionPlanner);
             _mindMapConversionService = new MindMapConversionService(_aiBackend);
@@ -291,10 +380,17 @@ namespace Scriblucent
                 new System.Windows.Navigation.RequestNavigateEventHandler(ContentTextBox_HyperlinkRequestNavigate),
                 handledEventsToo: true);
             ContentTextBox.CommandBindings.Add(new CommandBinding(ApplicationCommands.Copy, ContentTextBox_CopyExecuted, ContentTextBox_CopyCanExecute));
+            ContentTextBox.CommandBindings.Add(new CommandBinding(ApplicationCommands.Cut, ContentTextBox_CutExecuted, ContentTextBox_CutCanExecute));
+            ContentTextBox.AddHandler(
+                FrameworkElement.RequestBringIntoViewEvent,
+                new RequestBringIntoViewEventHandler(ContentTextBox_RequestBringIntoView),
+                handledEventsToo: true);
             DataObject.AddPastingHandler(ContentTextBox, ContentTextBox_Pasting);
             ContentTextBox.PreviewMouseDown += ContentTextBox_PreviewMouseDown;
             ContentTextBox.PreviewKeyDown += ContentTextBox_HyperlinkHintPreviewKeyDown;
             ContentTextBox.PreviewKeyUp += ContentTextBox_HyperlinkHintPreviewKeyUp;
+            ContentTextBox.AddHandler(CommandManager.PreviewExecutedEvent,
+                new ExecutedRoutedEventHandler(ContentTextBox_PreviewSelectionCommand), handledEventsToo: true);
             // The static Cut/Copy/Paste menu is set via XAML; captured here so
             // ContentTextBox_ContextMenuOpening can restore it after showing a dynamic
             // spell-check suggestions menu for a right-click that landed on a misspelled word.
@@ -305,6 +401,8 @@ namespace Scriblucent
             // RootGrid is reparented into NoteEditorTabsWindow; keep image shortcuts on the body
             // so Delete/Back/Escape still reach the coordinator when this Window is not in the route.
             RootGrid.PreviewKeyDown += RootGrid_PreviewKeyDown;
+            RootGrid.PreviewMouseDown += RootGrid_PreviewMouseDown;
+            RootGrid.PreviewMouseWheel += RootGrid_PreviewMouseWheel;
             Deactivated += (_, _) => SetHyperlinkCtrlHintsVisible(false);
             Loaded += NoteEditorWindow_Loaded;
             RootGrid.Loaded += NoteEditorWindow_Loaded;
@@ -314,6 +412,7 @@ namespace Scriblucent
             _floatingImages.Attach(FloatingImageOverlay, ContentTextBox, EditorSurface);
             _floatingImages.ImagesChanged += (_, _) =>
             {
+                ApplyEditorEdgeSpacing();
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
                 _wrapLayout?.ScheduleApply();
@@ -491,6 +590,79 @@ namespace Scriblucent
                 settings.EnableScrollbar && settings.EnableHorizontalScrollbar);
         }
 
+        private readonly EditorEdgeSpacing _editorEdgeSpacing = new();
+        private bool _isApplyingEditorEdgeSpacing;
+        private bool _suspendEditorEdgeSpacingForLoad;
+
+        private void ApplyEditorEdgeSpacing(bool forImageInsertion = false)
+        {
+            if (_isApplyingEditorEdgeSpacing || _suspendEditorEdgeSpacingForLoad
+                || ContentTextBox.Document is null)
+                return;
+
+            _isApplyingEditorEdgeSpacing = true;
+            try
+            {
+                var storedImagesPending = (_isLoadingDocument || _suppressEditedMarking)
+                    && _currentDocument?.Images is { Count: > 0 };
+                var useEmptyViewportPadding = !forImageInsertion
+                    && !_floatingImages.HasImages && !storedImagesPending;
+                if (_editorEdgeSpacing.UpdateEditor(ContentTextBox, useEmptyViewportPadding))
+                    UpdateFindHighlightClip();
+            }
+            finally
+            {
+                _isApplyingEditorEdgeSpacing = false;
+            }
+        }
+
+        private void InsertFloatingImage(NoteImageLoader.LoadResult load, double width, double height)
+        {
+            ApplyEditorEdgeSpacing(forImageInsertion: true);
+            try
+            {
+                _floatingImages.Insert(load, width, height);
+            }
+            finally
+            {
+                ApplyEditorEdgeSpacing();
+            }
+        }
+
+        private void SuspendEditorEdgeSpacing()
+        {
+            if (_isApplyingEditorEdgeSpacing)
+                return;
+
+            _isApplyingEditorEdgeSpacing = true;
+            try
+            {
+                _editorEdgeSpacing.Suspend();
+            }
+            finally
+            {
+                _isApplyingEditorEdgeSpacing = false;
+            }
+        }
+
+        private void RemoveLegacyEditorEndPads()
+        {
+            if (_isApplyingEditorEdgeSpacing)
+                return;
+
+            _isApplyingEditorEdgeSpacing = true;
+            try
+            {
+                EditorEdgeSpacing.RemoveLegacyPads(ContentTextBox.Document);
+            }
+            finally
+            {
+                _isApplyingEditorEdgeSpacing = false;
+            }
+
+            ApplyEditorEdgeSpacing();
+        }
+
         private void ApplyEditorTextLayout()
         {
             var scrollbars = ResolveEditorScrollbarSettings();
@@ -500,16 +672,31 @@ namespace Scriblucent
                 ? ScrollBarVisibility.Auto
                 : ScrollBarVisibility.Hidden;
 
-            ContentTextBox.HorizontalScrollBarVisibility = horizontalScrollEnabled
-                ? ScrollBarVisibility.Auto
+            // The unscaled mirror is the editor's only visible horizontal bar.
+            // Hidden still allows horizontal scrolling; Auto shows a second bar
+            // inside the RichTextBox when word wrap is off.
+            var internalHorizontalVisibility = horizontalScrollEnabled
+                ? ScrollBarVisibility.Hidden
                 : ScrollBarVisibility.Disabled;
+            ContentTextBox.HorizontalScrollBarVisibility = internalHorizontalVisibility;
+            if (_contentScrollViewer != null)
+                _contentScrollViewer.HorizontalScrollBarVisibility = internalHorizontalVisibility;
 
             ContentTextBox.Document.PageWidth = horizontalScrollEnabled
                 ? UnwrappedDocumentPageWidth
                 : double.NaN;
 
+            // RichTextBox ignores PagePadding and the first block's top margin. Edge
+            // block padding scrolls with the text without adding selectable blocks.
+            ApplyEditorEdgeSpacing();
+
             ContentTextBox.InvalidateMeasure();
             _contentScrollViewer?.InvalidateScrollInfo();
+            InvalidateSelectionTiles();
+            InvalidateFindTiles();
+            QueueSelectionOverlay();
+            if (_findBarOpen)
+                QueueFindOverlay(DispatcherPriority.Render);
             UpdateEditorToolButtonStates();
             UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
@@ -528,6 +715,7 @@ namespace Scriblucent
 
         private void ThemeManager_ThemeChanged(object? sender, EventArgs e)
         {
+            _cachedSelectionOverlayBrush = null;
             Scriblucent.Services.WindowThemeService.ApplyTheme(this, ThemeManager.CurrentTheme, rebuildFrame: true);
             ApplyRichTextBoxTheme();
             UpdateEditorToolButtonStates();
@@ -556,8 +744,12 @@ namespace Scriblucent
                 _contentScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
                 _contentScrollViewer.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
 
-                _contentScrollViewer.SetResourceReference(ScrollViewer.BackgroundProperty, "RichTextBoxBackground");
+                // The page color sits behind FindHighlightOverlay. An opaque viewer fill
+                // would hide those marks; the glyphs stay above them.
+                _contentScrollViewer.Background = Brushes.Transparent;
+                SmoothScrollCompositor.SetDirectOffsetMode(_contentScrollViewer, true);
                 _contentScrollViewer.ScrollChanged += ContentScrollViewer_ScrollChanged;
+                ContentTextBox.SizeChanged += ContentTextBox_SizeChanged;
 
                 // The internal RichTextBox scrollbar is hidden; the unscaled mirrors beside the
                 // editor surface (outside the zoom transform) show/hide with it and auto-hide
@@ -574,13 +766,22 @@ namespace Scriblucent
                 _contentScrollViewer.PreviewKeyDown += (_, _) => ShowEditorScrollbars();
                 _contentScrollViewer.MouseEnter += (_, _) => ShowEditorScrollbars();
 
-                // The mirror bars sit outside the zoom transform; register them with the
-                // compositor so their thumbs track the gliding content during smooth scroll
-                // sessions instead of lagging behind the throttled commits, and with the
-                // smooth-scroll behavior so hovering them and using the mouse wheel scrolls
-                // the editor (like the viewer's own scrollbars).
-                SmoothScrollCompositor.RegisterExternalBar(_contentScrollViewer, EditorMirrorVerticalScrollBar);
-                SmoothScrollCompositor.RegisterExternalBar(_contentScrollViewer, EditorMirrorHorizontalScrollBar);
+                // The mirror bars sit outside the zoom transform. Real offsets keep their
+                // thumbs in sync; this hook routes wheel input over them to the editor.
+                // Slack marks sit just outside the viewport and slide in. The editor surface
+                // clips the result; clipping the canvas first would throw that slack away.
+                FindHighlightOverlay.ClipToBounds = false;
+                if (_findOverlayMotion.Children.Count == 0)
+                    _findOverlayMotion.Children.Add(_findOverlayCommit);
+                FindHighlightOverlay.RenderTransform = _findOverlayMotion;
+                if (_selectionMotion.Children.Count == 0)
+                    _selectionMotion.Children.Add(_selectionCommit);
+                SelectionHighlightOverlay.ClipToBounds = false;
+                SelectionHighlightOverlay.RenderTransform = _selectionMotion;
+                SmoothScrollCompositor.RegisterSessionLifecycle(
+                    _contentScrollViewer,
+                    HoldSelectionForScroll,
+                    FinishSelectionScroll);
                 SmoothScrollBehavior.RegisterExternalBar(_contentScrollViewer, EditorMirrorVerticalScrollBar);
                 SmoothScrollBehavior.RegisterExternalBar(_contentScrollViewer, EditorMirrorHorizontalScrollBar);
 
@@ -593,10 +794,17 @@ namespace Scriblucent
         private void DetachContentScrollViewer()
         {
             if (_contentScrollViewer != null)
+            {
                 _contentScrollViewer.ScrollChanged -= ContentScrollViewer_ScrollChanged;
+                ContentTextBox.SizeChanged -= ContentTextBox_SizeChanged;
+                SmoothScrollCompositor.UnregisterSessionLifecycle(
+                    _contentScrollViewer, HoldSelectionForScroll, FinishSelectionScroll);
+                SmoothScrollCompositor.SetDirectOffsetMode(_contentScrollViewer, false);
+            }
 
             _editorScrollbarHideTimer?.Stop();
             _editorScrollbarHideTimer = null;
+            _editorScrollbarsShown = false;
             _contentScrollViewer = null;
         }
 
@@ -605,6 +813,60 @@ namespace Scriblucent
             UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
             ShowEditorScrollbars();
+            if (_selectionCollapsedForScroll || ContentTextBox.Selection is { IsEmpty: false })
+            {
+                ApplySelectionOverlayCommit();
+                if (HighlightTilesNeedUpdate(_selectionTiles)
+                    || SelectionTilesNeedVisibleValidation())
+                    QueueSelectionOverlay();
+            }
+            if (!_findBarOpen || !_hasFindHighlights)
+                return;
+
+            ApplyFindOverlayCommit();
+            if (FindCompositionNeedsUpdate()
+                || HighlightTilesNeedUpdate(_findTiles)
+                || (_findActiveSpan.Length > 0 && HighlightTilesNeedUpdate(_findActiveTiles)))
+                QueueFindOverlay(DispatcherPriority.Render);
+        }
+
+        private void ContentTextBox_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateFindHighlightClip();
+            InvalidateSelectionTiles();
+            InvalidateFindTiles();
+            QueueSelectionOverlay();
+            if (_findBarOpen && _hasFindHighlights)
+                QueueFindOverlay(DispatcherPriority.Render);
+        }
+
+        private void UpdateFindHighlightClip()
+        {
+            if (FindHighlightClip == null)
+                return;
+
+            var width = FindHighlightClip.ActualWidth;
+            var height = FindHighlightClip.ActualHeight;
+            if (width <= 0 || height <= 0)
+            {
+                FindHighlightClip.Clip = null;
+                return;
+            }
+
+            var pad = ContentTextBox.Padding;
+            var rect = new Rect(
+                pad.Left,
+                pad.Top,
+                Math.Max(0, width - pad.Left - pad.Right),
+                Math.Max(0, height - pad.Top - pad.Bottom));
+
+            if (FindHighlightClip.Clip is RectangleGeometry clip)
+            {
+                clip.Rect = rect;
+                return;
+            }
+
+            FindHighlightClip.Clip = new RectangleGeometry(rect);
         }
 
         /// <summary>
@@ -627,9 +889,12 @@ namespace Scriblucent
                 {
                     var scrollable = Math.Max(0, viewer.ExtentHeight - viewer.ViewportHeight);
                     var visible = scrollable > 0.5;
+                    var wasVisible = vertical.Visibility == Visibility.Visible;
                     vertical.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
                     if (visible)
                     {
+                        if (!wasVisible && _editorScrollbarsShown)
+                            vertical.Opacity = 1;
                         vertical.Maximum = scrollable;
                         vertical.ViewportSize = viewer.ViewportHeight;
                         vertical.SmallChange = Math.Max(16, viewer.ViewportHeight * 0.1);
@@ -643,9 +908,12 @@ namespace Scriblucent
                 {
                     var scrollable = Math.Max(0, viewer.ExtentWidth - viewer.ViewportWidth);
                     var visible = scrollable > 0.5;
+                    var wasVisible = horizontal.Visibility == Visibility.Visible;
                     horizontal.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
                     if (visible)
                     {
+                        if (!wasVisible && _editorScrollbarsShown)
+                            horizontal.Opacity = 1;
                         horizontal.Maximum = scrollable;
                         horizontal.ViewportSize = viewer.ViewportWidth;
                         horizontal.SmallChange = Math.Max(16, viewer.ViewportWidth * 0.1);
@@ -665,6 +933,7 @@ namespace Scriblucent
             if (_syncingEditorScrollbarMirror || _contentScrollViewer == null)
                 return;
 
+            HoldSelectionForScroll();
             _contentScrollViewer.ScrollToVerticalOffset(e.NewValue);
         }
 
@@ -673,12 +942,17 @@ namespace Scriblucent
             if (_syncingEditorScrollbarMirror || _contentScrollViewer == null)
                 return;
 
+            HoldSelectionForScroll();
             _contentScrollViewer.ScrollToHorizontalOffset(e.NewValue);
         }
 
         private void ShowEditorScrollbars()
         {
-            AnimateEditorScrollbars(1.0);
+            if (!_editorScrollbarsShown)
+            {
+                _editorScrollbarsShown = true;
+                AnimateEditorScrollbars(1.0);
+            }
             _editorScrollbarHideTimer?.Stop();
             _editorScrollbarHideTimer?.Start();
         }
@@ -700,7 +974,11 @@ namespace Scriblucent
                 return;
             }
 
-            AnimateEditorScrollbars(0);
+            if (_editorScrollbarsShown)
+            {
+                _editorScrollbarsShown = false;
+                AnimateEditorScrollbars(0);
+            }
         }
 
         private void AnimateEditorScrollbars(double targetOpacity)
@@ -730,6 +1008,7 @@ namespace Scriblucent
             var horizontalScrollbarAvailable = ResolveEditorScrollbarSettings().Horizontal;
             SetEditorToolButtonActive(WordWrapButton, _isWordWrapEnabled || !horizontalScrollbarAvailable);
             SetEditorToolButtonActive(FontButton, _isFontPanelOpen);
+            SetEditorToolButtonActive(SearchButton, _findBarOpen);
             SetEditorToolButtonActive(TagsPanelToggleButton, _isTagsPanelOpen);
             SetEditorToolButtonActive(ZoomMenuButton, Math.Abs(_zoomLevel - 1.0) > 0.0001);
         }
@@ -954,12 +1233,15 @@ namespace Scriblucent
         public void DisposeHostedEditor(bool disposeAiBackendSynchronously = false)
         {
             _isDisposed = true;
+            DropParkedSelection();
 
             // No per-tab backend teardown: AiBackendHost.Shared is singleton, disposed only on App.OnExit.
             _ = disposeAiBackendSynchronously;
 
             StopAutoSaveTimer();
             _counterUpdateDebounceTimer?.Stop();
+            _selectionUiTimer?.Stop();
+            _findHighlightDebounceTimer?.Stop();
             _postSaveSnapshotTimer?.Stop();
             DetachContentScrollViewer();
             _floatingImages.Detach();
@@ -968,6 +1250,9 @@ namespace Scriblucent
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
             RootGrid.PreviewKeyDown -= RootGrid_PreviewKeyDown;
+            RootGrid.PreviewMouseDown -= RootGrid_PreviewMouseDown;
+            RootGrid.PreviewMouseWheel -= RootGrid_PreviewMouseWheel;
+            FontButton.ToolTipOpening -= FontButton_ToolTipOpening;
             DataContextChanged -= NoteEditorWindow_DataContextChanged;
             AttachEditorSettingsSource(null);
             _flashcardConversionCancellationSource?.Cancel();
@@ -1007,8 +1292,11 @@ namespace Scriblucent
 
         private void PerformEditorCloseCleanup()
         {
+            DropParkedSelection();
             StopAutoSaveTimer();
             _counterUpdateDebounceTimer?.Stop();
+            _selectionUiTimer?.Stop();
+            _findHighlightDebounceTimer?.Stop();
             DetachContentScrollViewer();
             _floatingImages.Detach();
             _wrapLayout?.Dispose();
@@ -1016,6 +1304,9 @@ namespace Scriblucent
             Loaded -= NoteEditorWindow_Loaded;
             RootGrid.Loaded -= NoteEditorWindow_Loaded;
             RootGrid.PreviewKeyDown -= RootGrid_PreviewKeyDown;
+            RootGrid.PreviewMouseDown -= RootGrid_PreviewMouseDown;
+            RootGrid.PreviewMouseWheel -= RootGrid_PreviewMouseWheel;
+            FontButton.ToolTipOpening -= FontButton_ToolTipOpening;
             DataContextChanged -= NoteEditorWindow_DataContextChanged;
             AttachEditorSettingsSource(null);
             _flashcardConversionCancellationSource?.Cancel();
@@ -1073,13 +1364,19 @@ namespace Scriblucent
 
         private void ClearAllHighlights()
         {
-            if (!_hasFindHighlights)
+            if (!_hasFindHighlights && !_findOverlayIndexReady && _findOverlaySpans.Length == 0)
                 return;
 
-            var doc = ContentTextBox.Document;
-            var textRange = new TextRange(doc.ContentStart, doc.ContentEnd);
-            textRange.ApplyPropertyValue(TextElement.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+            // Find marks are viewport drawings, never document formatting. In particular,
+            // clearing a search must not overwrite user-applied text backgrounds.
             _hasFindHighlights = false;
+            _findOverlaySpans = Array.Empty<MatchSpan>();
+            _findActiveSpan = Array.Empty<MatchSpan>();
+            _findActiveTop = double.NaN;
+            _findActiveBottom = double.NaN;
+            _findOverlayIndex = default;
+            _findOverlayIndexReady = false;
+            InvalidateFindTiles();
         }
 
         private void ApplyRichTextBoxTheme()
@@ -1106,6 +1403,13 @@ namespace Scriblucent
             {
                 // Non-critical - theme application shouldn't crash the app.
             }
+
+            _cachedSelectionOverlayBrush = null;
+            InvalidateSelectionTiles();
+            InvalidateFindTiles();
+            if (_findBarOpen && _hasFindHighlights)
+                QueueFindOverlay(DispatcherPriority.Render);
+            QueueSelectionOverlay();
         }
 
         private static bool TryGetRichTextBoxForeground(out Brush foregroundBrush)
@@ -1155,31 +1459,491 @@ namespace Scriblucent
 
         private void ContentTextBox_SelectionChanged(object sender, RoutedEventArgs e)
         {
-            // If selection is empty (deselected), clear find highlights when present.
-            // Gated so toolbar ComboBox Focus() does not rewrite the whole document background.
-            var sel = ContentTextBox.Selection;
-            if (_hasFindHighlights && (sel == null || sel.IsEmpty))
+            if (_suppressSelectionChange)
+                return;
+
+            if (EditorEdgeSpacing.CollapseEmptySelection(ContentTextBox))
             {
-                ClearAllHighlights();
+                // WPF selects a synthetic paragraph break in an otherwise empty document.
+                DropParkedSelection();
+                InvalidateSelectionTiles();
+                return;
             }
-            else
+
+            // Internal layout/save helpers can move the caret while a selection is parked.
+            // Their collapsed caret does not replace the logical selection. A deliberate
+            // nonempty programmatic selection does.
+            if (_selectionCollapsedForScroll)
             {
-                // Selection is used directly for online search.
+                if (ContentTextBox.Selection.IsEmpty)
+                    return;
+                DropParkedSelection();
             }
 
             UpdateOnlineSearchAvailability();
-            // Tooltip only — do not sync ComboBox SelectedItem here; that invalidates FontPanel
-            // and the shared RootGrid, which visually refreshes the RichTextBox.
-            UpdateFontButtonText();
+            ScheduleSelectionChromeRefresh();
+            // Several SelectionChanged events can precede one render, including a transient
+            // collapsed range. Keep the last painted blue geometry until that final range is known.
+            QueueSelectionOverlay();
+        }
+
+        private void ScheduleSelectionChromeRefresh()
+        {
+            if (_selectionCollapsedForScroll)
+                return;
+
+            _selectionUiTimer ??= new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMilliseconds(180)
+            };
+            _selectionUiTimer.Stop();
+            _selectionUiTimer.Tick -= SelectionUiTimer_Tick;
+            _selectionUiTimer.Tick += SelectionUiTimer_Tick;
+            _selectionUiTimer.Start();
+        }
+
+        private void SelectionUiTimer_Tick(object? sender, EventArgs e)
+        {
+            _selectionUiTimer?.Stop();
+            if (_selectionCollapsedForScroll || _isDisposed)
+                return;
+
+            // Both operations can inspect a whole selection. They belong after a gesture,
+            // never in SelectionChanged or a scroll callback.
+            if (!SelectionExtendsOutsideViewport())
+                UpdateFontButtonText();
             UpdateListRemoveButtonState();
+        }
+
+        private void FontButton_ToolTipOpening(object sender, ToolTipEventArgs e)
+            => UpdateFontButtonText();
+
+        private void ContentTextBox_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+        {
+            if (_freezeSelectionScroll)
+                e.Handled = true;
+        }
+
+        private void HoldSelectionForScroll()
+        {
+            if (_selectionCollapsedForScroll)
+                return;
+
+            var selection = ContentTextBox.Selection;
+            if (selection == null || selection.IsEmpty || !SelectionExtendsOutsideViewport())
+                return;
+
+            _heldSelectionStart = selection.Start;
+            _heldSelectionEnd = selection.End;
+            _heldCaretAtStart = ContentTextBox.CaretPosition?.CompareTo(selection.Start) == 0;
+            _selectionCollapsedForScroll = true;
+            _selectionUiTimer?.Stop();
+            var visible = ContentTextBox.GetPositionFromPoint(new Point(8, 4), snapToText: true)
+                ?? selection.Start;
+            ContentTextBox.CaretBrush = Brushes.Transparent;
+            ReplaceEditorSelection(visible, visible);
+            QueueSelectionOverlay();
+        }
+
+        private void FinishSelectionScroll()
+        {
+            // Keep the large selection parked across consecutive wheel bursts. A non-scroll
+            // action restores it once, immediately before that action reaches RichTextBox.
+            QueueSelectionOverlay();
+        }
+
+        private void MaterializeSelectionForAction()
+        {
+            if (!_selectionCollapsedForScroll)
+                return;
+
+            var start = _heldSelectionStart;
+            var end = _heldSelectionEnd;
+            var caretAtStart = _heldCaretAtStart;
+            DropParkedSelection();
+            if (start is null || end is null)
+                return;
+
+            ReplaceEditorSelection(caretAtStart ? end : start, caretAtStart ? start : end);
+            ScheduleSelectionChromeRefresh();
+            QueueSelectionOverlay();
+        }
+
+        private void DropParkedSelection()
+        {
+            if (!_selectionCollapsedForScroll)
+                return;
+
+            _selectionCollapsedForScroll = false;
+            _heldSelectionStart = null;
+            _heldSelectionEnd = null;
+            ContentTextBox.ClearValue(TextBoxBase.CaretBrushProperty);
+        }
+
+        private void ReplaceEditorSelection(TextPointer start, TextPointer end)
+        {
+            var viewer = _contentScrollViewer;
+            var x = viewer?.HorizontalOffset ?? 0;
+            var y = viewer?.VerticalOffset ?? 0;
+            _freezeSelectionScroll = true;
+            _suppressSelectionChange = true;
+            try
+            {
+                ContentTextBox.Selection.Select(start, end);
+            }
+            finally
+            {
+                _suppressSelectionChange = false;
+                _freezeSelectionScroll = false;
+            }
+
+            if (viewer == null)
+                return;
+
+            viewer.ScrollToHorizontalOffset(x);
+            viewer.ScrollToVerticalOffset(y);
+        }
+
+        private void ApplySelectionOverlayCommit()
+        {
+            if (_contentScrollViewer == null)
+                return;
+
+            _selectionCommit.X = -_contentScrollViewer.HorizontalOffset;
+            _selectionCommit.Y = -_contentScrollViewer.VerticalOffset;
+        }
+
+        private void QueueSelectionOverlay(DispatcherPriority priority = DispatcherPriority.Render)
+        {
+            if (_selectionOverlayQueued)
+            {
+                if (_selectionOverlayOperation is { Status: DispatcherOperationStatus.Pending } queued
+                    && queued.Priority < priority)
+                    queued.Priority = priority;
+                return;
+            }
+
+            _selectionOverlayQueued = true;
+            _selectionOverlayOperation = Dispatcher.BeginInvoke(PaintSelectionOverlayQueued, priority);
+        }
+
+        private void PaintSelectionOverlayQueued()
+        {
+            _selectionOverlayOperation = null;
+            _selectionOverlayQueued = false;
+            PaintSelectionOverlay();
+        }
+
+        private void PaintSelectionOverlay()
+        {
+            PaintSelectionTiles();
+        }
+
+        /// <summary>
+        /// One visual line of the selection. The last selected glyph determines the right
+        /// edge even when the selection continues onto another line.
+        /// </summary>
+        internal static Rect SelectionLineRect(TextPointer start, TextPointer end)
+        {
+            var startRect = SafeCharacterRect(start, LogicalDirection.Forward);
+            if (startRect.IsEmpty)
+                startRect = SafeCharacterRect(start, LogicalDirection.Backward);
+
+            var endRect = EndRectOnLine(start, end, startRect);
+            var rect = UnionOnSameLine(startRect, endRect);
+            if (rect.IsEmpty || rect.Height <= 0)
+                return Rect.Empty;
+
+            // A selected paragraph break has no glyph width. Give it a caret-sized mark,
+            // not the remaining width of the editor column.
+            if (rect.Width <= 0)
+                rect.Width = 2;
+            return rect;
+        }
+
+        /// <summary>
+        /// The selection's horizontal edges follow its characters, but its vertical edges
+        /// belong to the visual line. A character rect can be much shorter or taller than
+        /// the line box when the selection starts or ends inside a differently sized run.
+        /// </summary>
+        internal static Rect BlueSelectionLineRect(
+            TextPointer lineStart,
+            TextPointer? nextLine,
+            TextPointer start,
+            TextPointer end)
+            => BlueSelectionLineRect(lineStart, nextLine, start, end, null, 0);
+
+        internal readonly record struct LineBandOrigin(double TextCenter, double BoxTop);
+
+        internal static Rect BlueSelectionLineRect(
+            TextPointer lineStart,
+            TextPointer? nextLine,
+            TextPointer start,
+            TextPointer end,
+            Dictionary<Paragraph, LineBandOrigin>? lineOrigins,
+            double verticalOffset)
+        {
+            var rect = SelectionLineRect(start, end);
+            if (rect.IsEmpty)
+                return rect;
+
+            var lineRect = SafeCharacterRect(lineStart, LogicalDirection.Forward);
+            if (lineRect.IsEmpty || lineRect.Height <= 0)
+                return rect;
+
+            var paragraph = lineStart.Paragraph;
+            var lineHeight = paragraph?.LineHeight ?? double.NaN;
+            if (double.IsNaN(lineHeight) || lineHeight <= 0)
+                lineHeight = lineRect.Height;
+
+            rect.Y = lineRect.Top;
+            rect.Height = lineHeight;
+
+            if (paragraph?.LineStackingStrategy == LineStackingStrategy.BlockLineHeight)
+            {
+                // A caret rect follows its run's font metrics, so its top can jump within
+                // a paragraph even though WPF stacks the line boxes at fixed intervals.
+                if (lineOrigins is null || !lineOrigins.TryGetValue(paragraph, out var origin))
+                {
+                    var firstText = SafeCharacterRect(paragraph.ContentStart, LogicalDirection.Forward);
+                    var firstBox = SafeCharacterRect(paragraph.ContentStart, LogicalDirection.Backward);
+                    origin = new LineBandOrigin(
+                        firstText.Top + firstText.Height * 0.5 + verticalOffset,
+                        firstBox.Top + verticalOffset);
+                    lineOrigins?.Add(paragraph, origin);
+                }
+
+                if (double.IsFinite(origin.TextCenter) && double.IsFinite(origin.BoxTop))
+                {
+                    // Centers are less sensitive than tops to changes in font size at
+                    // the beginning of a wrapped or explicitly broken line.
+                    var lineCenter = lineRect.Top + lineRect.Height * 0.5 + verticalOffset;
+                    var lineNumber = Math.Round((lineCenter - origin.TextCenter) / lineHeight);
+                    if (double.IsFinite(lineNumber) && lineNumber >= 0)
+                        rect.Y = origin.BoxTop + lineNumber * lineHeight - verticalOffset;
+                }
+            }
+            else if (paragraph?.LineStackingStrategy == LineStackingStrategy.MaxHeight)
+            {
+                var inlineRect = InlineContainerLineRect(lineStart, nextLine, paragraph.ContentEnd);
+                if (!inlineRect.IsEmpty && inlineRect.Height > rect.Height)
+                {
+                    rect.Y = inlineRect.Top;
+                    rect.Height = inlineRect.Height;
+                }
+            }
+
+            return rect;
+        }
+
+        private static Rect InlineContainerLineRect(TextPointer lineStart, TextPointer? nextLine, TextPointer paragraphEnd)
+        {
+            var end = nextLine is not null && nextLine.CompareTo(paragraphEnd) < 0 ? nextLine : paragraphEnd;
+            var position = lineStart;
+            var result = Rect.Empty;
+            while (position.CompareTo(end) < 0)
+            {
+                if (position.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.ElementStart
+                    && position.GetAdjacentElement(LogicalDirection.Forward) is InlineUIContainer container)
+                {
+                    var imageRect = SafeCharacterRect(container.ContentStart, LogicalDirection.Forward);
+                    if (!imageRect.IsEmpty && imageRect.Height > 0)
+                        result = result.IsEmpty ? imageRect : Rect.Union(result, imageRect);
+                }
+
+                var next = position.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text
+                    ? position.GetPositionAtOffset(position.GetTextRunLength(LogicalDirection.Forward), LogicalDirection.Forward)
+                    : position.GetNextContextPosition(LogicalDirection.Forward);
+                if (next is null || next.CompareTo(position) <= 0)
+                    break;
+                position = next;
+            }
+
+            return result;
+        }
+
+        private static Rect EndRectOnLine(TextPointer start, TextPointer end, Rect startRect)
+        {
+            var directed = end.GetPositionAtOffset(0, LogicalDirection.Backward);
+            if (directed is not null)
+            {
+                var directedRect = SafeCharacterRect(directed, LogicalDirection.Backward);
+                if (IsMeasuredEnd(start, end, startRect, directedRect))
+                    return directedRect;
+            }
+
+            var direct = SafeCharacterRect(end, LogicalDirection.Backward);
+            if (IsMeasuredEnd(start, end, startRect, direct))
+                return direct;
+
+            var probe = end;
+            for (var i = 0; i < 8 && probe.CompareTo(start) > 0; i++)
+            {
+                var previous = probe.GetNextInsertionPosition(LogicalDirection.Backward);
+                if (previous == null || previous.CompareTo(probe) >= 0)
+                    break;
+
+                probe = previous;
+                var forward = SafeCharacterRect(probe, LogicalDirection.Forward);
+                if (IsMeasuredEnd(start, end, startRect, forward))
+                    return forward;
+            }
+
+            return Rect.Empty;
+        }
+
+        private static bool IsMeasuredEnd(TextPointer rangeStart, TextPointer rangeEnd, Rect startRect, Rect endRect)
+        {
+            if (!IsGlyphOnLine(startRect, endRect))
+                return false;
+
+            if (startRect.IsEmpty || endRect.Right > startRect.Right + 0.5)
+                return true;
+
+            // A one-character run is the start rect itself. A longer run whose end sits
+            // on the left edge is the paragraph break, not the last glyph.
+            return !SpansMoreThanOneCharacter(rangeStart, rangeEnd);
+        }
+
+        private static bool IsGlyphOnLine(Rect line, Rect glyph)
+        {
+            // TextPointer.GetCharacterRect reports caret positions with zero width. Their
+            // X coordinates are exactly the edges needed for a selected-character span.
+            if (glyph.IsEmpty || glyph.Height <= 0)
+                return false;
+
+            if (line.IsEmpty)
+                return true;
+
+            var overlap = Math.Min(line.Bottom, glyph.Bottom) - Math.Max(line.Top, glyph.Top);
+            return overlap > Math.Min(line.Height, glyph.Height) * 0.5;
+        }
+
+        private static Rect UnionOnSameLine(Rect start, Rect end)
+        {
+            if (start.IsEmpty)
+                return end;
+
+            if (end.IsEmpty || !IsGlyphOnLine(start, end))
+                return start;
+
+            return Rect.Union(start, end);
+        }
+
+        private static bool SpansMoreThanOneCharacter(TextPointer start, TextPointer end)
+        {
+            try
+            {
+                return start.GetOffsetToPosition(end) > 1;
+            }
+            catch (Exception)
+            {
+                return true;
+            }
+        }
+
+        private static Rect SafeCharacterRect(TextPointer pointer, LogicalDirection direction)
+        {
+            try
+            {
+                return pointer.GetCharacterRect(direction);
+            }
+            catch (Exception)
+            {
+                return Rect.Empty;
+            }
+        }
+
+        private bool TryGetPaintedSelection(out TextPointer start, out TextPointer end)
+        {
+            if (EditorEdgeSpacing.IsEmpty(ContentTextBox.Document))
+            {
+                start = null!;
+                end = null!;
+                return false;
+            }
+
+            if (_selectionCollapsedForScroll && _heldSelectionStart is not null && _heldSelectionEnd is not null)
+            {
+                start = _heldSelectionStart;
+                end = _heldSelectionEnd;
+            }
+            else if (ContentTextBox.Selection is { IsEmpty: false } selection)
+            {
+                start = selection.Start;
+                end = selection.End;
+            }
+            else
+            {
+                start = null!;
+                end = null!;
+                return false;
+            }
+
+            if (start.CompareTo(end) > 0)
+                (start, end) = (end, start);
+
+            return start.CompareTo(end) != 0;
+        }
+
+        private Brush CreateSelectionOverlayBrush()
+        {
+            if (_cachedSelectionOverlayBrush is not null)
+                return _cachedSelectionOverlayBrush;
+
+            var source = TryFindResource("EditorSelectionBrush") as Brush
+                ?? new SolidColorBrush(Color.FromRgb(67, 92, 236));
+            if (source.IsFrozen)
+                source = source.Clone();
+
+            source.Opacity = 0.4;
+            if (source.CanFreeze)
+                source.Freeze();
+
+            return _cachedSelectionOverlayBrush = source;
         }
 
         private void ContentTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (_isApplyingEditorEdgeSpacing)
+            {
+                InvalidateSelectionTiles();
+                InvalidateFindTiles();
+                if (_selectionCollapsedForScroll || ContentTextBox.Selection is { IsEmpty: false })
+                    QueueSelectionOverlay();
+                if (_findBarOpen)
+                    QueueFindOverlay(DispatcherPriority.Render);
+                return;
+            }
+
+            InvalidateSelectionTiles();
+            if (_selectionCollapsedForScroll || ContentTextBox.Selection is { IsEmpty: false })
+                QueueSelectionOverlay();
+
+            _findDocumentVersion++;
+            ReleaseFindCache();
+            if (_findBarOpen)
+            {
+                ClearAllHighlights();
+                if (_findMutationDepth > 0 || _isApplyingSpellCheckDecorations || _isSerializingEditorContent)
+                    _findRefreshPending = true;
+                else
+                    ScheduleFindHighlights();
+            }
+
             if (_isSerializingEditorContent
                 || _isApplyingHyperlinkCtrlHints
                 || _floatingImages.IsAdjustingExtentPad)
                 return;
+
+            if (_findMutationDepth > 0)
+            {
+                MarkEditorContentChanged();
+                return;
+            }
+
+            if (!_isLoadingDocument)
+                ApplyEditorEdgeSpacing();
 
             MarkEditorContentChanged();
 
@@ -1191,7 +1955,7 @@ namespace Scriblucent
             // Only update counter, not theme (theme is applied during load and on theme change)
             ScheduleCounterUpdate();
             UpdateEditedIndicator();
-            UpdateListRemoveButtonState();
+            ScheduleSelectionChromeRefresh();
 
             // Applying/clearing spell-check squiggles is itself a document-content change (real
             // TextDecorations, not an overlay) - guarded by _isApplyingSpellCheckDecorations so
@@ -1320,6 +2084,7 @@ namespace Scriblucent
             finally
             {
                 _isApplyingSpellCheckDecorations = false;
+                SchedulePendingFindRefresh();
             }
         }
 
@@ -1332,6 +2097,7 @@ namespace Scriblucent
             if (_spellCheckDecoratedRanges.Count == 0)
                 return;
 
+            var wasApplying = _isApplyingSpellCheckDecorations;
             _isApplyingSpellCheckDecorations = true;
             try
             {
@@ -1342,7 +2108,8 @@ namespace Scriblucent
             }
             finally
             {
-                _isApplyingSpellCheckDecorations = false;
+                _isApplyingSpellCheckDecorations = wasApplying;
+                SchedulePendingFindRefresh();
             }
         }
 
@@ -1544,36 +2311,420 @@ namespace Scriblucent
 
         private void SearchButton_Click(object sender, RoutedEventArgs e)
         {
-            OpenFindReplaceDialog(focusReplace: false);
+            if (_findBarOpen)
+                CloseFindBar();
+            else
+                OpenFindBar(focusReplace: false);
         }
 
-        private void OpenFindReplaceDialog(bool focusReplace)
+        private void OpenFindBar(bool focusReplace)
         {
-            var initialSearch = ResolveInitialFindText();
-            var dlg = new Views.SearchReplaceDialogLocalized(
-                this,
-                initialSearch,
-                _lastReplacementText,
-                _lastFindMatchCase,
-                _lastFindWholeWord,
-                _lastFindWrapAround,
-                focusReplace)
+            var wasOpen = _findBarOpen;
+            if (!wasOpen)
             {
-                Owner = GetDialogOwnerWindow()
-            };
+                FindMatchCaseToggle.IsChecked = _lastFindMatchCase;
+                FindWholeWordToggle.IsChecked = _lastFindWholeWord;
+                FindWrapAroundToggle.IsChecked = _lastFindWrapAround;
+                FindReplacementBox.Text = _lastReplacementText ?? string.Empty;
+                FindQueryBox.Text = ResolveInitialFindText() ?? string.Empty;
+                SetFindReplaceRowVisible(focusReplace);
+            }
+            else if (focusReplace)
+            {
+                SetFindReplaceRowVisible(true);
+            }
 
-            dlg.ShowDialog();
+            _findBarOpen = true;
+            FindReplaceBar.Visibility = Visibility.Visible;
+            UpdateFindBarButtons();
+            UpdateEditorToolButtonStates();
+            RefreshFindHighlights();
+            AnimateCollapsingRow(FindReplaceRow, FindReplaceBar, expand: true);
 
-            _lastSearchQuery = dlg.SearchText;
-            _lastReplacementText = dlg.ReplacementText;
-            _lastFindMatchCase = dlg.MatchCase;
-            _lastFindWholeWord = dlg.WholeWord;
-            _lastFindWrapAround = dlg.WrapAround;
+            if (focusReplace)
+            {
+                FindReplacementBox.SelectAll();
+                FindReplacementBox.Focus();
+            }
+            else
+            {
+                FindQueryBox.SelectAll();
+                FindQueryBox.Focus();
+            }
+        }
+
+        private void CloseFindBar()
+        {
+            if (!_findBarOpen && FindReplaceBar.Visibility != Visibility.Visible)
+                return;
+
+            RememberFindState();
+            _findBarOpen = false;
+            _findHighlightDebounceTimer?.Stop();
+            UpdateEditorToolButtonStates();
+            ClearFindHighlights();
+            ReleaseFindCache();
+            FindStatusText.Text = LocalizationService.GetString("FindReplaceEnterSearch");
+            AnimateCollapsingRow(
+                FindReplaceRow,
+                FindReplaceBar,
+                expand: false,
+                onCollapsed: () =>
+                {
+                    if (!_findBarOpen)
+                        FindReplaceBar.Visibility = Visibility.Collapsed;
+                });
+            ContentTextBox.Focus();
+        }
+
+        private void SetFindReplaceRowVisible(bool visible)
+        {
+            FindReplaceToggle.IsChecked = visible;
+            FindReplaceReplaceRow.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void AnimateCollapsingRow(
+            RowDefinition row,
+            FrameworkElement content,
+            bool expand,
+            Action? onCollapsed = null)
+        {
+            if (row == null)
+                return;
+
+            var targetHeight = expand ? MeasureRowContent(content) : 0;
+            var currentHeight = row.ActualHeight;
+            if (currentHeight <= 0 && row.Height.IsAbsolute)
+                currentHeight = row.Height.Value;
+
+            if (UiMotion.PrefersReducedMotion || Math.Abs(currentHeight - targetHeight) < 0.5)
+            {
+                UiMotion.Clear(row, RowDefinition.HeightProperty);
+                row.Height = new GridLength(Math.Max(0, targetHeight), GridUnitType.Pixel);
+                if (!expand)
+                    onCollapsed?.Invoke();
+                return;
+            }
+
+            UiMotion.AnimateRowHeight(
+                row,
+                row,
+                currentHeight,
+                targetHeight,
+                UiMotion.OpenMs,
+                UiMotion.OutQuad,
+                () =>
+                {
+                    if (!expand)
+                        onCollapsed?.Invoke();
+                });
+        }
+
+        private double MeasureRowContent(FrameworkElement content)
+        {
+            var width = RootGrid.ActualWidth;
+            if (width <= 0)
+                width = ActualWidth > 0 ? ActualWidth : 860;
+
+            content.Measure(new Size(width, double.PositiveInfinity));
+            return content.DesiredSize.Height;
+        }
+
+        private void RememberFindState()
+        {
+            _lastSearchQuery = FindQueryBox.Text;
+            _lastReplacementText = FindReplacementBox.Text;
+            _lastFindMatchCase = FindMatchCaseToggle.IsChecked == true;
+            _lastFindWholeWord = FindWholeWordToggle.IsChecked == true;
+            _lastFindWrapAround = FindWrapAroundToggle.IsChecked == true;
+        }
+
+        private void UpdateFindBarButtons()
+        {
+            var hasSearch = !string.IsNullOrEmpty(FindQueryBox.Text);
+            FindPreviousButton.IsEnabled = hasSearch;
+            FindNextButton.IsEnabled = hasSearch;
+            ReplaceNextButton.IsEnabled = hasSearch;
+            ReplaceAllButton.IsEnabled = hasSearch;
+        }
+
+        private void ScheduleFindHighlights()
+        {
+            _findHighlightDebounceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _findHighlightDebounceTimer.Stop();
+            _findHighlightDebounceTimer.Tick -= FindHighlightDebounceTimer_Tick;
+            _findHighlightDebounceTimer.Tick += FindHighlightDebounceTimer_Tick;
+            _findHighlightDebounceTimer.Start();
+        }
+
+        private void SchedulePendingFindRefresh()
+        {
+            if (!_findRefreshPending || !_findBarOpen || _findMutationDepth > 0
+                || _isApplyingSpellCheckDecorations || _isSerializingEditorContent)
+                return;
+
+            _findRefreshPending = false;
+            ScheduleFindHighlights();
+        }
+
+        private void FindHighlightDebounceTimer_Tick(object? sender, EventArgs e)
+        {
+            _findHighlightDebounceTimer?.Stop();
+            if (_findBarOpen)
+                RefreshFindHighlights();
+        }
+
+        private void RefreshFindHighlights()
+        {
+            _findHighlightDebounceTimer?.Stop();
+            if (_findMutationDepth > 0 || _isSerializingEditorContent)
+            {
+                _findRefreshPending = true;
+                return;
+            }
+
+            var query = FindQueryBox.Text ?? string.Empty;
+            if (string.IsNullOrEmpty(query))
+            {
+                ClearFindHighlights();
+                FindStatusText.Text = LocalizationService.GetString("FindReplaceEnterSearch");
+                return;
+            }
+
+            var (index, matches) = GetOrBuildFindMatches(
+                query,
+                FindMatchCaseToggle.IsChecked == true,
+                FindWholeWordToggle.IsChecked == true);
+            HighlightMatches(index, matches, activeIndex: -1);
+            FindStatusText.Text = matches.Count == 0
+                ? LocalizationService.GetString("FindReplaceNoMatches")
+                : string.Format(LocalizationService.GetString("FindReplaceMatchesFormat"), matches.Count);
+        }
+
+        private void ApplyFindStatus(FindReplaceResult result)
+        {
+            if (result.ReplacedCount > 0 && result.MatchCount == 0)
+            {
+                FindStatusText.Text = string.Format(
+                    LocalizationService.GetString("FindReplaceReplacedCountFormat"),
+                    result.ReplacedCount);
+                return;
+            }
+
+            var prefix = result.ReplacedCount > 0
+                ? string.Format(LocalizationService.GetString("FindReplaceReplacedCountFormat"), result.ReplacedCount) + " - "
+                : string.Empty;
+
+            if (string.IsNullOrEmpty(FindQueryBox.Text))
+            {
+                FindStatusText.Text = LocalizationService.GetString("FindReplaceEnterSearch");
+                return;
+            }
+
+            if (result.MatchCount == 0)
+            {
+                FindStatusText.Text = prefix + LocalizationService.GetString("FindReplaceNoMatches");
+                return;
+            }
+
+            if (!result.Found)
+            {
+                FindStatusText.Text = prefix + string.Format(
+                    LocalizationService.GetString("FindReplaceMatchesFormat"),
+                    result.MatchCount);
+                return;
+            }
+
+            var key = result.Wrapped
+                ? "FindReplaceWrappedResultFormat"
+                : "FindReplaceResultFormat";
+            FindStatusText.Text = prefix + string.Format(
+                LocalizationService.GetString(key),
+                result.ActiveIndex + 1,
+                result.MatchCount);
+        }
+
+        private void FindQueryBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_findBarOpen)
+                return;
+
+            RememberFindState();
+            UpdateFindBarButtons();
+            ClearAllHighlights();
+            if (string.IsNullOrEmpty(FindQueryBox.Text))
+                RefreshFindHighlights();
+            else
+                ScheduleFindHighlights();
+        }
+
+        private void FindReplacementBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_findBarOpen)
+                RememberFindState();
+        }
+
+        private void FindOptions_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_findBarOpen || FindQueryBox == null)
+                return;
+
+            RememberFindState();
+            RefreshFindHighlights();
+        }
+
+        private void FindReplaceToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!_findBarOpen || FindReplaceReplaceRow == null)
+                return;
+
+            FindReplaceReplaceRow.Visibility = FindReplaceToggle.IsChecked == true
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            AnimateCollapsingRow(FindReplaceRow, FindReplaceBar, expand: true);
+        }
+
+        private void FindQueryBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Shift)
+            {
+                FindPreviousButton_Click(sender, e);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                FindNextButton_Click(sender, e);
+                e.Handled = true;
+            }
+        }
+
+        private void FindReplacementBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                ReplaceNextButton_Click(sender, e);
+                e.Handled = true;
+            }
+        }
+
+        private void FindPreviousButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(FindQueryBox.Text))
+                return;
+
+            RememberFindState();
+            ApplyFindStatus(PerformFindPrevious(
+                FindQueryBox.Text,
+                FindMatchCaseToggle.IsChecked == true,
+                FindWholeWordToggle.IsChecked == true,
+                FindWrapAroundToggle.IsChecked == true));
+        }
+
+        private void FindNextButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(FindQueryBox.Text))
+                return;
+
+            RememberFindState();
+            ApplyFindStatus(PerformFindNext(
+                FindQueryBox.Text,
+                FindMatchCaseToggle.IsChecked == true,
+                FindWholeWordToggle.IsChecked == true,
+                FindWrapAroundToggle.IsChecked == true));
+        }
+
+        private void ReplaceNextButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(FindQueryBox.Text))
+                return;
+
+            RememberFindState();
+            ApplyFindStatus(PerformReplaceNext(
+                FindQueryBox.Text,
+                FindReplacementBox.Text,
+                FindMatchCaseToggle.IsChecked == true,
+                FindWholeWordToggle.IsChecked == true,
+                FindWrapAroundToggle.IsChecked == true));
+            UpdateFindBarButtons();
+        }
+
+        private void ReplaceAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(FindQueryBox.Text))
+                return;
+
+            RememberFindState();
+            ApplyFindStatus(PerformReplaceAll(
+                FindQueryBox.Text,
+                FindReplacementBox.Text,
+                FindMatchCaseToggle.IsChecked == true,
+                FindWholeWordToggle.IsChecked == true));
+            UpdateFindBarButtons();
+        }
+
+        private void CloseFindBarButton_Click(object sender, RoutedEventArgs e)
+            => CloseFindBar();
+
+        private bool TryHandleFindReplaceKey(KeyEventArgs e)
+        {
+            if (e.Handled)
+                return false;
+
+            if (_findBarOpen && e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                CloseFindBar();
+                e.Handled = true;
+                return true;
+            }
+
+            var isCtrlOnly = IsCtrlHeldForHyperlinkHints();
+            if (isCtrlOnly && e.Key == Key.F)
+            {
+                OpenFindBar(focusReplace: false);
+                e.Handled = true;
+                return true;
+            }
+
+            if (isCtrlOnly && e.Key == Key.H)
+            {
+                OpenFindBar(focusReplace: true);
+                e.Handled = true;
+                return true;
+            }
+
+            if (e.Key == Key.F3 && !string.IsNullOrWhiteSpace(_lastSearchQuery))
+            {
+                var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+                var result = shift
+                    ? PerformFindPrevious(_lastSearchQuery, _lastFindMatchCase, _lastFindWholeWord, _lastFindWrapAround)
+                    : PerformFindNext(_lastSearchQuery, _lastFindMatchCase, _lastFindWholeWord, _lastFindWrapAround);
+                if (_findBarOpen)
+                    ApplyFindStatus(result);
+                e.Handled = true;
+                return true;
+            }
+
+            return false;
         }
 
         private string? ResolveInitialFindText()
         {
-            var selectedText = ContentTextBox.Selection?.Text?.Trim();
+            var start = _selectionCollapsedForScroll
+                ? _heldSelectionStart : ContentTextBox.Selection?.Start;
+            var end = _selectionCollapsedForScroll
+                ? _heldSelectionEnd : ContentTextBox.Selection?.End;
+            if (start is null || end is null || start.CompareTo(end) >= 0)
+                return _lastSearchQuery;
+
+            // WPF materializes Selection.Text before Length can be checked. Bound the
+            // TextRange itself so Ctrl+F on a page-spanning selection stays cheap.
+            var limit = start.GetPositionAtOffset(161, LogicalDirection.Forward);
+            if (limit is not null && limit.CompareTo(end) < 0)
+                return _lastSearchQuery;
+
+            var selectedText = new TextRange(start, end).Text.Trim();
             if (!string.IsNullOrWhiteSpace(selectedText)
                 && !selectedText.Contains('\r')
                 && !selectedText.Contains('\n')
@@ -1597,41 +2748,134 @@ namespace Scriblucent
 
             if (TryHandleChecklistEnterKey(e))
                 return;
-
-            var isCtrlOnly = IsCtrlHeldForHyperlinkHints();
-
-            if (isCtrlOnly && e.Key == Key.F)
-            {
-                OpenFindReplaceDialog(focusReplace: false);
-                e.Handled = true;
-                return;
-            }
-
-            if (isCtrlOnly && e.Key == Key.H)
-            {
-                OpenFindReplaceDialog(focusReplace: true);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.F3 && !string.IsNullOrWhiteSpace(_lastSearchQuery))
-            {
-                if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
-                    PerformFindPrevious(_lastSearchQuery, _lastFindMatchCase, _lastFindWholeWord, _lastFindWrapAround);
-                else
-                    PerformFindNext(_lastSearchQuery, _lastFindMatchCase, _lastFindWholeWord, _lastFindWrapAround);
-
-                e.Handled = true;
-                return;
-            }
-
         }
 
         private void NoteEditorWindow_PreviewKeyUp(object sender, KeyEventArgs e)
             => UpdateHyperlinkCtrlHintsFromKeyEvent(e, isDown: false);
 
         private void RootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
-            => TryHandleFloatingImageKey(e);
+        {
+            if (_selectionCollapsedForScroll
+                && Keyboard.FocusedElement is DependencyObject focused
+                && (ReferenceEquals(focused, ContentTextBox) || IsEditorDescendant(focused))
+                && Keyboard.Modifiers == ModifierKeys.None
+                && e.Key is Key.Left or Key.Right)
+            {
+                var endpoint = e.Key == Key.Left ? _heldSelectionStart : _heldSelectionEnd;
+                DropParkedSelection();
+                if (endpoint is not null)
+                    ReplaceEditorSelection(endpoint, endpoint);
+                InvalidateSelectionTiles();
+                QueueSelectionOverlay();
+                e.Handled = true;
+                return;
+            }
+
+            var handlesFind = (Keyboard.Modifiers == ModifierKeys.Control
+                && e.Key is Key.F or Key.H)
+                || (_findBarOpen && e.Key == Key.Escape)
+                || (e.Key == Key.F3 && !string.IsNullOrWhiteSpace(_lastSearchQuery));
+            var nonSelectionChrome = e.OriginalSource is DependencyObject keySource
+                && IsNonSelectionEditorChrome(keySource);
+            if (!handlesFind && !nonSelectionChrome
+                && e.Key is not (Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
+                or Key.LeftAlt or Key.RightAlt))
+                MaterializeSelectionForAction();
+
+            if (TryHandleFindReplaceKey(e))
+                return;
+
+            TryHandleFloatingImageKey(e);
+        }
+
+        private void RootGrid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Middle)
+                return;
+
+            if (e.OriginalSource is DependencyObject source && IsEditorScrollbarSource(source))
+                return;
+
+            if (e.ChangedButton == MouseButton.Left
+                && e.OriginalSource is DependencyObject editorSource
+                && IsEditorDescendant(editorSource))
+            {
+                ClearParkedSelection();
+                return;
+            }
+
+            if (e.ChangedButton == MouseButton.Left
+                && e.OriginalSource is DependencyObject textFieldSource
+                && (IsDescendantOf(textFieldSource, TitleTextBox)
+                    || IsDescendantOf(textFieldSource, TagsTextBox)))
+            {
+                ClearParkedSelection();
+                return;
+            }
+
+            if (e.OriginalSource is DependencyObject otherSource
+                && IsNonSelectionEditorChrome(otherSource))
+                return;
+
+            MaterializeSelectionForAction();
+        }
+
+        private void ClearParkedSelection()
+        {
+            if (!_selectionCollapsedForScroll)
+                return;
+
+            var clearStarted = ScrollPerfDiag.Enabled ? Stopwatch.GetTimestamp() : 0;
+            DropParkedSelection();
+            InvalidateSelectionTiles();
+            QueueSelectionOverlay();
+            if (ScrollPerfDiag.Enabled)
+                ScrollPerfDiag.LogEditorSelectionClear(Stopwatch.GetElapsedTime(clearStarted).TotalMilliseconds);
+        }
+
+        private bool IsEditorDescendant(DependencyObject source)
+            => IsDescendantOf(source, ContentTextBox);
+
+        private bool IsNonSelectionEditorChrome(DependencyObject source)
+            => IsDescendantOf(source, SearchButton)
+                || IsDescendantOf(source, FindReplaceBar)
+                || IsDescendantOf(source, TitleTextBox)
+                || IsDescendantOf(source, TagsTextBox);
+
+        private static bool IsDescendantOf(DependencyObject source, DependencyObject ancestor)
+        {
+            for (DependencyObject? current = source; current is not null;)
+            {
+                if (ReferenceEquals(current, ancestor))
+                    return true;
+
+                current = current is Visual
+                    ? VisualTreeHelper.GetParent(current)
+                    : LogicalTreeHelper.GetParent(current);
+            }
+
+            return false;
+        }
+
+        private void RootGrid_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                return;
+
+            if (EditorSurface.IsMouseOver || EditorMirrorVerticalScrollBar.IsMouseOver
+                || EditorMirrorHorizontalScrollBar.IsMouseOver)
+                HoldSelectionForScroll();
+        }
+
+        private bool IsEditorScrollbarSource(DependencyObject source)
+            => ReferenceEquals(source, EditorMirrorVerticalScrollBar)
+                || ReferenceEquals(source, EditorMirrorHorizontalScrollBar)
+                || (source is Visual visual
+                    && (EditorMirrorVerticalScrollBar.IsAncestorOf(visual)
+                        || EditorMirrorHorizontalScrollBar.IsAncestorOf(visual)));
+
+        private void ContentTextBox_PreviewSelectionCommand(object sender, ExecutedRoutedEventArgs e)
+            => MaterializeSelectionForAction();
 
         /// <summary>
         /// Handles Escape/Delete/Back for a selected floating image.
@@ -2620,22 +3864,25 @@ namespace Scriblucent
             if (string.IsNullOrEmpty(query))
                 return FindReplaceResult.Empty;
 
-            var matches = FindTextMatches(query, matchCase, wholeWord);
+            var (index, matches) = GetOrBuildFindMatches(query, matchCase, wholeWord);
             if (matches.Count == 0)
             {
                 ClearAllHighlights();
                 return new FindReplaceResult(false, 0, -1, false, 0);
             }
 
-            var currentMatch = GetCurrentSelectionMatch(matches);
+            var currentMatch = GetCurrentSelectionMatch(index.Runs, matches);
             if (currentMatch is null)
                 return PerformFindNext(query, matchCase, wholeWord, wrapAround);
 
-            var start = GetTextPointerAtTextOffset(currentMatch.Start);
-            var end = GetTextPointerAtTextOffset(currentMatch.End);
+            var start = PointerAtTextOffset(index.Runs, currentMatch.Start);
+            var end = PointerAtTextOffset(index.Runs, currentMatch.End);
             if (start is null || end is null)
                 return PerformFindNext(query, matchCase, wholeWord, wrapAround);
 
+            DropParkedSelection();
+            ReplaceEditorSelection(end, end);
+            InvalidateSelectionTiles();
             new TextRange(start, end).Text = replacement ?? string.Empty;
             MarkEditorContentChanged();
 
@@ -2652,28 +3899,50 @@ namespace Scriblucent
             if (string.IsNullOrEmpty(query))
                 return FindReplaceResult.Empty;
 
-            var matches = FindTextMatches(query, matchCase, wholeWord);
+            DropParkedSelection();
+            InvalidateSelectionTiles();
+
+            var (index, matches) = GetOrBuildFindMatches(query, matchCase, wholeWord);
             if (matches.Count == 0)
             {
                 ClearAllHighlights();
                 return new FindReplaceResult(false, 0, -1, false, 0);
             }
 
-            ClearAllHighlights();
-            for (var i = matches.Count - 1; i >= 0; i--)
+            var ranges = new List<(TextPointer Start, TextPointer End)>(matches.Count);
+            foreach (var match in matches)
             {
-                var match = matches[i];
-                var start = GetTextPointerAtTextOffset(match.Start);
-                var end = GetTextPointerAtTextOffset(match.End);
-                if (start is null || end is null)
-                    continue;
+                var start = PointerAtTextOffset(index.Runs, match.Start);
+                var end = PointerAtTextOffset(index.Runs, match.End);
+                if (start is not null && end is not null)
+                    ranges.Add((start, end));
+            }
 
-                new TextRange(start, end).Text = replacement ?? string.Empty;
+            ClearAllHighlights();
+            _findMutationDepth++;
+            try
+            {
+                for (var i = ranges.Count - 1; i >= 0; i--)
+                    new TextRange(ranges[i].Start, ranges[i].End).Text = replacement ?? string.Empty;
+            }
+            finally
+            {
+                _findMutationDepth--;
+                SchedulePendingFindRefresh();
             }
 
             MarkEditorContentChanged();
+            if (!_isLoadingDocument)
+                ApplyEditorEdgeSpacing();
+            ScheduleCounterUpdate();
+            UpdateEditedIndicator();
+            ScheduleSelectionChromeRefresh();
+            if (_isSpellCheckEnabled)
+                ScheduleSpellCheck();
+            _wrapLayout?.ScheduleApply();
+            _floatingImages.RenumberCaptions();
             ContentTextBox.Focus();
-            return new FindReplaceResult(false, 0, -1, false, matches.Count);
+            return new FindReplaceResult(false, 0, -1, false, ranges.Count);
         }
 
         internal int CountFindMatches(string query, bool matchCase = false, bool wholeWord = false)
@@ -2687,6 +3956,8 @@ namespace Scriblucent
         internal void ClearFindHighlights()
         {
             ClearAllHighlights();
+            _findOverlayActiveIndex = -1;
+            InvalidateFindTiles();
         }
 
         private FindReplaceResult PerformFind(
@@ -2699,7 +3970,7 @@ namespace Scriblucent
             if (string.IsNullOrEmpty(query))
                 return FindReplaceResult.Empty;
 
-            var matches = FindTextMatches(query, matchCase, wholeWord);
+            var (index, matches) = GetOrBuildFindMatches(query, matchCase, wholeWord);
             if (matches.Count == 0)
             {
                 ClearAllHighlights();
@@ -2707,12 +3978,18 @@ namespace Scriblucent
             }
 
             var selection = ContentTextBox.Selection;
-            var selectionStart = GetTextOffsetForPointer(selection?.Start ?? ContentTextBox.Document.ContentStart);
-            var selectionEnd = GetTextOffsetForPointer(selection?.End ?? ContentTextBox.Document.ContentStart);
+            var start = _selectionCollapsedForScroll
+                ? _heldSelectionStart : selection?.Start;
+            var end = _selectionCollapsedForScroll
+                ? _heldSelectionEnd : selection?.End;
+            var selectionStart = GetTextOffsetForPointer(index.Runs, start ?? ContentTextBox.Document.ContentStart);
+            var selectionEnd = GetTextOffsetForPointer(index.Runs, end ?? ContentTextBox.Document.ContentStart);
 
             var activeIndex = direction == FindDirection.Next
-                ? matches.FindIndex(match => match.Start >= selectionEnd)
-                : FindLastMatchIndexBefore(matches, selection?.IsEmpty == false ? selectionStart : selectionEnd);
+                ? FindFirstMatchIndexAtOrAfter(matches, selectionEnd)
+                : FindLastMatchIndexBefore(matches,
+                    _selectionCollapsedForScroll || selection?.IsEmpty == false
+                        ? selectionStart : selectionEnd);
 
             var wrapped = false;
             if (activeIndex < 0 && wrapAround)
@@ -2723,40 +4000,106 @@ namespace Scriblucent
 
             if (activeIndex < 0)
             {
-                HighlightMatches(matches, activeIndex: -1);
+                HighlightMatches(index, matches, activeIndex: -1);
                 return new FindReplaceResult(false, matches.Count, -1, false, 0);
             }
 
-            HighlightMatches(matches, activeIndex);
-            SelectMatch(matches[activeIndex]);
+            HighlightMatches(index, matches, activeIndex);
+            SelectMatch(index.Runs, matches[activeIndex]);
             return new FindReplaceResult(true, matches.Count, activeIndex, wrapped, 0);
         }
 
         private static int FindLastMatchIndexBefore(IReadOnlyList<FindMatch> matches, int offset)
         {
-            for (var i = matches.Count - 1; i >= 0; i--)
+            var lo = 0;
+            var hi = matches.Count;
+            while (lo < hi)
             {
-                if (matches[i].Start < offset)
-                    return i;
+                var mid = (lo + hi) >>> 1;
+                if (matches[mid].Start < offset)
+                    lo = mid + 1;
+                else
+                    hi = mid;
             }
 
-            return -1;
+            return lo - 1;
         }
 
-        private FindMatch? GetCurrentSelectionMatch(IReadOnlyList<FindMatch> matches)
+        private static int FindFirstMatchIndexAtOrAfter(IReadOnlyList<FindMatch> matches, int offset)
+        {
+            var lo = 0;
+            var hi = matches.Count;
+            while (lo < hi)
+            {
+                var mid = (lo + hi) >>> 1;
+                if (matches[mid].Start < offset)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+
+            return lo < matches.Count ? lo : -1;
+        }
+
+        private FindMatch? GetCurrentSelectionMatch(IReadOnlyList<TextRunSpan> runs, IReadOnlyList<FindMatch> matches)
         {
             var selection = ContentTextBox.Selection;
-            if (selection is null || selection.IsEmpty)
+            var start = _selectionCollapsedForScroll ? _heldSelectionStart : selection?.Start;
+            var end = _selectionCollapsedForScroll ? _heldSelectionEnd : selection?.End;
+            if (start is null || end is null || start.CompareTo(end) >= 0)
                 return null;
 
-            var startOffset = GetTextOffsetForPointer(selection.Start);
-            var endOffset = GetTextOffsetForPointer(selection.End);
-            return matches.FirstOrDefault(match => match.Start == startOffset && match.End == endOffset);
+            var startOffset = GetTextOffsetForPointer(runs, start);
+            var endOffset = GetTextOffsetForPointer(runs, end);
+            var index = FindFirstMatchIndexAtOrAfter(matches, startOffset);
+            return index >= 0 && matches[index].Start == startOffset && matches[index].End == endOffset
+                ? matches[index]
+                : null;
         }
 
         private List<FindMatch> FindTextMatches(string query, bool matchCase, bool wholeWord)
+            => GetOrBuildFindMatches(query, matchCase, wholeWord).Matches;
+
+        private (DocumentTextIndex Index, List<FindMatch> Matches) GetOrBuildFindMatches(
+            string query,
+            bool matchCase,
+            bool wholeWord)
         {
-            var documentText = GetDocumentSearchText();
+            if (_findCachedVersion == _findDocumentVersion
+                && _findCachedMatches is not null
+                && string.Equals(_findCachedQuery, query, StringComparison.Ordinal)
+                && _findCachedMatchCase == matchCase
+                && _findCachedWholeWord == wholeWord)
+                return (_findCachedIndex, _findCachedMatches);
+
+            var index = BuildDocumentTextIndex();
+            var matches = FindTextMatches(index, query, matchCase, wholeWord);
+            var spans = new MatchSpan[matches.Count];
+            for (var i = 0; i < matches.Count; i++)
+                spans[i] = new MatchSpan(matches[i].Start, matches[i].Length);
+
+            _findCachedVersion = _findDocumentVersion;
+            _findCachedQuery = query;
+            _findCachedMatchCase = matchCase;
+            _findCachedWholeWord = wholeWord;
+            _findCachedIndex = index;
+            _findCachedMatches = matches;
+            _findCachedSpans = spans;
+            return (index, matches);
+        }
+
+        private void ReleaseFindCache()
+        {
+            _findCachedVersion = -1;
+            _findCachedQuery = null;
+            _findCachedIndex = default;
+            _findCachedMatches = null;
+            _findCachedSpans = Array.Empty<MatchSpan>();
+        }
+
+        private List<FindMatch> FindTextMatches(DocumentTextIndex index, string query, bool matchCase, bool wholeWord)
+        {
+            var documentText = index.Text;
             var matches = new List<FindMatch>();
             if (string.IsNullOrEmpty(query) || string.IsNullOrEmpty(documentText))
                 return matches;
@@ -2765,32 +4108,32 @@ namespace Scriblucent
             var searchStart = 0;
             while (searchStart <= documentText.Length - query.Length)
             {
-                var index = documentText.IndexOf(query, searchStart, comparison);
-                if (index < 0)
+                var found = documentText.IndexOf(query, searchStart, comparison);
+                if (found < 0)
                     break;
 
-                if (!wholeWord || IsWholeWordMatch(documentText, index, query.Length))
-                    matches.Add(new FindMatch(index, query.Length));
+                if (!wholeWord || IsWholeWordMatch(documentText, found, query.Length))
+                    matches.Add(new FindMatch(found, query.Length));
 
-                searchStart = index + Math.Max(1, query.Length);
+                searchStart = found + Math.Max(1, query.Length);
             }
 
             return matches;
         }
 
         private string GetDocumentSearchText()
-        {
-            var sb = new StringBuilder();
-            var navigator = ContentTextBox.Document.ContentStart;
-            while (navigator is not null && navigator.CompareTo(ContentTextBox.Document.ContentEnd) < 0)
-            {
-                if (navigator.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-                    sb.Append(navigator.GetTextInRun(LogicalDirection.Forward));
+            => BuildDocumentTextIndex().Text;
 
-                navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
+        private readonly struct DocumentTextIndex
+        {
+            public DocumentTextIndex(string text, List<TextRunSpan> runs)
+            {
+                Text = text;
+                Runs = runs;
             }
 
-            return sb.ToString();
+            public string Text { get; }
+            public List<TextRunSpan> Runs { get; }
         }
 
         private readonly struct TextRunSpan
@@ -2807,31 +4150,67 @@ namespace Scriblucent
             public TextPointer Pointer { get; }
         }
 
-        /// <summary>One forward walk of the document. Spell-check and find resolve every hit
-        /// from this list instead of restarting at <see cref="TextElement.ContentStart"/>.</summary>
-        private List<TextRunSpan> BuildTextRunIndex()
+        /// <summary>
+        /// One forward walk. Paragraphs, line breaks, tables, and images insert a newline so a
+        /// match cannot form across unrelated words. Formatting inside a paragraph does not.
+        /// </summary>
+        private DocumentTextIndex BuildDocumentTextIndex()
         {
+            var text = new StringBuilder();
             var runs = new List<TextRunSpan>();
             var traversed = 0;
+            var seenText = false;
+            var pendingBreak = false;
             var navigator = ContentTextBox.Document.ContentStart;
             var end = ContentTextBox.Document.ContentEnd;
 
             while (navigator is not null && navigator.CompareTo(end) < 0)
             {
-                if (navigator.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                var context = navigator.GetPointerContext(LogicalDirection.Forward);
+                if (context == TextPointerContext.Text)
                 {
-                    var text = navigator.GetTextInRun(LogicalDirection.Forward);
-                    if (text.Length > 0)
-                        runs.Add(new TextRunSpan(traversed, text.Length, navigator));
+                    var runText = navigator.GetTextInRun(LogicalDirection.Forward);
+                    if (runText.Length > 0)
+                    {
+                        if (seenText && pendingBreak)
+                        {
+                            text.Append('\n');
+                            traversed++;
+                        }
 
-                    traversed += text.Length;
+                        pendingBreak = false;
+                        runs.Add(new TextRunSpan(traversed, runText.Length, navigator));
+                        text.Append(runText);
+                        traversed += runText.Length;
+                        seenText = true;
+                    }
+                }
+                else if (IsSearchBreak(navigator, context))
+                {
+                    pendingBreak = true;
                 }
 
                 navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
             }
 
-            return runs;
+            return new DocumentTextIndex(text.ToString(), runs);
         }
+
+        private static bool IsSearchBreak(TextPointer pointer, TextPointerContext context)
+        {
+            if (context == TextPointerContext.EmbeddedElement)
+                return true;
+
+            if (context == TextPointerContext.ElementStart || context == TextPointerContext.ElementEnd)
+                return pointer.GetAdjacentElement(LogicalDirection.Forward) is Block or LineBreak or InlineUIContainer;
+
+            return false;
+        }
+
+        /// <summary>One forward walk of the document. Spell-check and find resolve every hit
+        /// from this list instead of restarting at <see cref="TextElement.ContentStart"/>.</summary>
+        private List<TextRunSpan> BuildTextRunIndex()
+            => BuildDocumentTextIndex().Runs;
 
         private TextPointer? PointerAtTextOffset(IReadOnlyList<TextRunSpan> runs, int targetOffset)
         {
@@ -2854,96 +4233,174 @@ namespace Scriblucent
                     continue;
                 }
 
-                return run.Pointer.GetPositionAtOffset(targetOffset - run.Start, LogicalDirection.Forward);
+                return FindHighlightSlices.Advance(run.Pointer, targetOffset - run.Start);
             }
 
-            return ContentTextBox.Document.ContentEnd;
+            return null;
         }
 
         private TextPointer? GetTextPointerAtTextOffset(int targetOffset)
-        {
-            targetOffset = Math.Max(0, targetOffset);
-            var traversed = 0;
-            var navigator = ContentTextBox.Document.ContentStart;
-
-            while (navigator is not null && navigator.CompareTo(ContentTextBox.Document.ContentEnd) < 0)
-            {
-                if (navigator.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-                {
-                    var text = navigator.GetTextInRun(LogicalDirection.Forward);
-                    if (targetOffset <= traversed + text.Length)
-                        return navigator.GetPositionAtOffset(targetOffset - traversed, LogicalDirection.Forward);
-
-                    traversed += text.Length;
-                }
-
-                navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
-            }
-
-            return ContentTextBox.Document.ContentEnd;
-        }
+            => PointerAtTextOffset(BuildTextRunIndex(), targetOffset);
 
         private int GetTextOffsetForPointer(TextPointer pointer)
+            => GetTextOffsetForPointer(BuildTextRunIndex(), pointer);
+
+        private int GetTextOffsetForPointer(IReadOnlyList<TextRunSpan> runs, TextPointer pointer)
         {
-            var traversed = 0;
-            var navigator = ContentTextBox.Document.ContentStart;
+            if (runs.Count == 0)
+                return 0;
 
-            while (navigator is not null && navigator.CompareTo(ContentTextBox.Document.ContentEnd) < 0)
+            // TextPointers and run starts are in document order. Find the containing run
+            // without measuring from the document start on every viewport repaint.
+            var lo = 0;
+            var hi = runs.Count;
+            while (lo < hi)
             {
-                if (navigator.CompareTo(pointer) >= 0)
-                    return traversed;
-
-                if (navigator.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-                {
-                    var text = navigator.GetTextInRun(LogicalDirection.Forward);
-                    var runEnd = navigator.GetPositionAtOffset(text.Length, LogicalDirection.Forward);
-                    if (runEnd is not null && runEnd.CompareTo(pointer) >= 0)
-                        return traversed + Math.Max(0, navigator.GetOffsetToPosition(pointer));
-
-                    traversed += text.Length;
-                }
-
-                navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
+                var mid = (lo + hi) >>> 1;
+                if (runs[mid].Pointer.CompareTo(pointer) <= 0)
+                    lo = mid + 1;
+                else
+                    hi = mid;
             }
 
-            return traversed;
+            if (lo == 0)
+                return runs[0].Start;
+
+            var run = runs[lo - 1];
+            var runEnd = run.Pointer.GetPositionAtOffset(run.Length, LogicalDirection.Forward);
+            if (runEnd is not null && pointer.CompareTo(runEnd) <= 0)
+                return run.Start + Math.Clamp(run.Pointer.GetOffsetToPosition(pointer), 0, run.Length);
+
+            return lo < runs.Count ? runs[lo].Start : run.Start + run.Length;
         }
 
-        private void HighlightMatches(IReadOnlyList<FindMatch> matches, int activeIndex)
+        private void HighlightMatches(DocumentTextIndex index, IReadOnlyList<FindMatch> matches, int activeIndex)
         {
-            ClearAllHighlights();
-
-            var matchBrush = TryFindResource("EditorFindMatchBackground") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(254, 243, 199));
-            var activeBrush = TryFindResource("EditorFindActiveMatchBackground") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(251, 191, 36));
-
-            var runs = BuildTextRunIndex();
-            for (var i = 0; i < matches.Count; i++)
-            {
-                var match = matches[i];
-                var start = PointerAtTextOffset(runs, match.Start);
-                var end = PointerAtTextOffset(runs, match.End);
-                if (start is null || end is null)
-                    continue;
-
-                new TextRange(start, end).ApplyPropertyValue(
-                    TextElement.BackgroundProperty,
-                    i == activeIndex ? activeBrush : matchBrush);
-            }
+            var spans = ReferenceEquals(matches, _findCachedMatches)
+                ? _findCachedSpans
+                : matches.Select(match => new MatchSpan(match.Start, match.Length)).ToArray();
+            var sameResults = _findOverlayIndexReady
+                && ReferenceEquals(_findOverlaySpans, spans)
+                && ReferenceEquals(_findOverlayIndex.Runs, index.Runs);
+            var activeChanged = _findOverlayActiveIndex != activeIndex;
+            _findOverlayIndex = index;
+            _findOverlayIndexReady = true;
+            _findOverlayActiveIndex = activeIndex;
+            _findOverlaySpans = spans;
+            _findActiveSpan = activeIndex >= 0 && activeIndex < spans.Length
+                ? [spans[activeIndex]] : Array.Empty<MatchSpan>();
+            UpdateActiveFindBounds(index.Runs);
 
             _hasFindHighlights = matches.Count > 0;
+            if (!sameResults)
+                InvalidateFindTiles();
+            else if (activeChanged)
+                InvalidateFindActiveTiles();
+            QueueFindOverlay(DispatcherPriority.Render);
         }
 
-        private void SelectMatch(FindMatch match)
+        private void UpdateActiveFindBounds(IReadOnlyList<TextRunSpan> runs)
         {
-            var start = GetTextPointerAtTextOffset(match.Start);
-            var end = GetTextPointerAtTextOffset(match.End);
+            _findActiveTop = double.NaN;
+            _findActiveBottom = double.NaN;
+            if (_findActiveSpan.Length == 0)
+                return;
+
+            var match = _findActiveSpan[0];
+            var start = PointerAtTextOffset(runs, match.Start);
+            var end = PointerAtTextOffset(runs, match.End);
+            if (start is null || end is null)
+                return;
+
+            var first = SafeCharacterRect(start, LogicalDirection.Forward);
+            var last = SafeCharacterRect(end, LogicalDirection.Backward);
+            if (first.IsEmpty || last.IsEmpty)
+                return;
+
+            var reach = Math.Max(HighlightTileHeight, Math.Max(first.Height, last.Height));
+            var offset = _contentScrollViewer?.VerticalOffset ?? 0;
+            _findActiveTop = Math.Min(first.Top, last.Top) + offset - reach;
+            _findActiveBottom = Math.Max(first.Bottom, last.Bottom) + offset + reach;
+        }
+
+        private void ApplyFindOverlayCommit()
+        {
+            if (_contentScrollViewer == null)
+                return;
+
+            _findOverlayCommit.X = -_contentScrollViewer.HorizontalOffset;
+            _findOverlayCommit.Y = -_contentScrollViewer.VerticalOffset;
+        }
+
+        private void QueueFindOverlay(DispatcherPriority priority)
+        {
+            if (!_findBarOpen)
+                return;
+
+            if (_findOverlayQueued)
+            {
+                if (_findOverlayOperation is { Status: DispatcherOperationStatus.Pending } queued
+                    && queued.Priority < priority)
+                    queued.Priority = priority;
+                return;
+            }
+
+            _findOverlayQueued = true;
+            _findOverlayOperation = Dispatcher.BeginInvoke(new Action(PaintFindOverlayQueued), priority);
+        }
+
+        private void PaintFindOverlayQueued()
+        {
+            _findOverlayOperation = null;
+            _findOverlayQueued = false;
+            if (_findBarOpen)
+                PaintFindOverlay();
+        }
+
+        private bool PaintFindOverlay()
+        {
+            return PaintFindTiles();
+        }
+
+        private static int FirstRunEndingAfter(IReadOnlyList<TextRunSpan> runs, int offset)
+        {
+            var lo = 0;
+            var hi = runs.Count;
+            while (lo < hi)
+            {
+                var mid = (lo + hi) >>> 1;
+                if (runs[mid].Start + runs[mid].Length <= offset)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+
+            return lo;
+        }
+
+        private static void AddFindMarkRect(StreamGeometryContext geometry, Rect rect)
+        {
+            if (rect.IsEmpty || rect.Width <= 0 || rect.Height <= 0)
+                return;
+
+            var right = rect.X + Math.Max(1, rect.Width);
+            var bottom = rect.Y + Math.Max(1, rect.Height);
+            geometry.BeginFigure(rect.Location, isFilled: true, isClosed: true);
+            geometry.LineTo(new Point(right, rect.Y), isStroked: false, isSmoothJoin: false);
+            geometry.LineTo(new Point(right, bottom), isStroked: false, isSmoothJoin: false);
+            geometry.LineTo(new Point(rect.X, bottom), isStroked: false, isSmoothJoin: false);
+        }
+
+        private void SelectMatch(IReadOnlyList<TextRunSpan> runs, FindMatch match)
+        {
+            var start = PointerAtTextOffset(runs, match.Start);
+            var end = PointerAtTextOffset(runs, match.End);
             if (start is null || end is null)
                 return;
 
             ContentTextBox.Selection.Select(start, end);
-            ContentTextBox.Focus();
+            if (start.Paragraph is FrameworkContentElement paragraph)
+                paragraph.BringIntoView();
         }
 
         private static bool IsWholeWordMatch(string text, int index, int length)
@@ -2960,12 +4417,17 @@ namespace Scriblucent
         // Load data FROM a NoteDocument
         public void LoadFromDocument(NoteDocument document)
         {
+            DropParkedSelection();
+            _findDocumentVersion++;
+            ReleaseFindCache();
+            ClearFindHighlights();
             try
             {
                 if (document != null)
                 {
                     _isLoadingDocument = true;
                     _currentDocument = document; // Set current document
+                    SuspendEditorEdgeSpacing();
                     TitleTextBox.Text = document.Title;
                     TagsTextBox.Text = string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
 
@@ -3014,6 +4476,8 @@ namespace Scriblucent
                             tr.Text = document.Content;
                         }
                     }
+
+                    RemoveLegacyEditorEndPads();
 
                     var settings = AppSettingsService.Load();
                     _isWordWrapEnabled = document.IsWordWrapEnabled ?? settings.IsEditorWordWrapEnabled;
@@ -3080,6 +4544,7 @@ namespace Scriblucent
             }
             finally
             {
+                ApplyEditorEdgeSpacing();
                 _isLoadingDocument = false;
                 _floatingImages.SuppressMarkerSweep = false;
                 UpdateEditedIndicator();
@@ -3100,6 +4565,7 @@ namespace Scriblucent
             try
             {
                 await _floatingImages.RestoreAsync(attachments);
+                ApplyEditorEdgeSpacing();
 
                 // The wrap lanes depend on the photo geometry - apply them now, synchronously
                 // inside the suppression window, so the wrap is correct immediately and its
@@ -3126,6 +4592,7 @@ namespace Scriblucent
         {
             _restoreSettleTimer?.Stop();
             _suppressEditedMarking = false;
+            ApplyEditorEdgeSpacing();
             MarkCurrentStateSaved();
             UpdateEditedIndicator();
         }
@@ -3195,7 +4662,6 @@ namespace Scriblucent
             var newTags = ParseTags(TagsTextBox.Text);
             var newFontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source);
             var newFontSize = ContentTextBox.FontSize;
-            ClearAllHighlights();
             ClearSpellCheckDecorations();
             // Wrap insets are transient layout margins - never persist them into saved content.
             // When the editor is closing, capture the wrap first so it can be restored verbatim
@@ -3372,8 +4838,8 @@ namespace Scriblucent
                 {
                     e.CancelCommand();
                     e.Handled = true;
+                    return;
                 }
-                return;
             }
 
             // Text/RTF pastes can carry the in-line photo marker (\uFFFC) when the source was a
@@ -3381,6 +4847,41 @@ namespace Scriblucent
             // serialization stand-in. It renders as "obj", so strip it from the pasted data.
             if (ContainsInlineMarkers(data))
                 e.DataObject = SanitizePasteDataObject(data);
+
+            // Keep the source's inline formatting, but apply this editor's paragraph
+            // spacing after WPF has inserted the fragment.
+            QueuePastedTextSpacing(ContentTextBox,
+                (start, end) => ApplyLineSpacingToRange(start, end, _lineSpacingMultiplier));
+        }
+
+        internal static DispatcherOperation QueuePastedTextSpacing(
+            RichTextBox editor,
+            Action<TextPointer, TextPointer> applySpacing)
+        {
+            var document = editor.Document;
+            var startOffset = document.ContentStart.GetOffsetToPosition(editor.Selection.Start);
+            return editor.Dispatcher.InvokeAsync(() =>
+            {
+                if (!ReferenceEquals(editor.Document, document))
+                    return;
+
+                var start = document.ContentStart.GetPositionAtOffset(startOffset, LogicalDirection.Forward);
+                var end = editor.Selection.End;
+                if (start == null || start.CompareTo(end) >= 0)
+                    return;
+
+                // BeginChange suspends dispatcher processing, so it must start here,
+                // after the queued callback begins, rather than in the paste event.
+                editor.BeginChange();
+                try
+                {
+                    applySpacing(start, end);
+                }
+                finally
+                {
+                    editor.EndChange();
+                }
+            }, DispatcherPriority.Normal);
         }
 
         private static bool ContainsInlineMarkers(IDataObject data)
@@ -3448,7 +4949,7 @@ namespace Scriblucent
                     NoteImageLoader.DefaultInsertMaxWidthDip,
                     NoteImageLoader.DefaultInsertMaxHeightDip);
 
-                _floatingImages.Insert(load, width, height);
+                InsertFloatingImage(load, width, height);
                 ContentTextBox.Focus();
                 return true;
             }
@@ -3565,8 +5066,33 @@ namespace Scriblucent
 
         private void ContentTextBox_CopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = ContentTextBox.Selection is { IsEmpty: false } || _floatingImages.SelectedImageId is not null;
+            e.CanExecute = _selectionCollapsedForScroll
+                || ContentTextBox.Selection is { IsEmpty: false }
+                || _floatingImages.SelectedImageId is not null;
             e.Handled = true;
+        }
+
+        private void ContentTextBox_CutCanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            if (!_selectionCollapsedForScroll)
+                return;
+
+            e.CanExecute = _heldSelectionStart is not null && _heldSelectionEnd is not null;
+            e.Handled = true;
+        }
+
+        private void ContentTextBox_CutExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (!_selectionCollapsedForScroll)
+                return;
+
+            e.Handled = true;
+            MaterializeSelectionForAction();
+            if (!CopyEditorSelectionToClipboard())
+                return;
+
+            ContentTextBox.Selection.Text = string.Empty;
+            QueueSelectionOverlay();
         }
 
         private void ContentTextBox_CopyExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -3584,6 +5110,12 @@ namespace Scriblucent
         }
 
         private bool CopyEditorSelectionToClipboard()
+        {
+            MaterializeSelectionForAction();
+            return CopyCurrentEditorSelectionToClipboard();
+        }
+
+        private bool CopyCurrentEditorSelectionToClipboard()
         {
             var selection = ContentTextBox.Selection;
             if (selection == null || selection.IsEmpty)
@@ -3683,6 +5215,7 @@ namespace Scriblucent
             _isSerializingEditorContent = true;
             try
             {
+                SuspendEditorEdgeSpacing();
                 _floatingImages.PrepareInlineImagesForSerialization();
                 try
                 {
@@ -3695,8 +5228,15 @@ namespace Scriblucent
             }
             finally
             {
-                _isSerializingEditorContent = false;
-                _floatingImages.EnsureImageExtentPad();
+                try
+                {
+                    ApplyEditorEdgeSpacing();
+                    _floatingImages.EnsureImageExtentPad();
+                }
+                finally
+                {
+                    _isSerializingEditorContent = false;
+                }
             }
         }
 
@@ -4863,7 +6403,6 @@ namespace Scriblucent
                 ".rtf",
                 path =>
                 {
-                    ClearAllHighlights();
                     ClearSpellCheckDecorations();
                     _wrapLayout?.Clear();
                     SaveWithInlineMarkers(() =>
@@ -4880,7 +6419,6 @@ namespace Scriblucent
                 ".xamlpackage",
                 path =>
                 {
-                    ClearAllHighlights();
                     ClearSpellCheckDecorations();
                     _wrapLayout?.Clear();
                     SaveWithInlineMarkers(() =>
@@ -4897,7 +6435,6 @@ namespace Scriblucent
                 ".notecard",
                 path =>
                 {
-                    ClearAllHighlights();
                     _wrapLayout?.Clear();
                     NoteFileService.SaveNotePackage(path, CreateExportNoteDocument());
                     _wrapLayout?.Reapply();
@@ -5379,47 +6916,57 @@ namespace Scriblucent
 
         private void ApplyContentToEditor(string? content)
         {
-            TextRange tr = new TextRange(ContentTextBox.Document.ContentStart, ContentTextBox.Document.ContentEnd);
-
-            if (string.IsNullOrEmpty(content))
-            {
-                tr.Text = string.Empty;
-                SyncFontSelectorsFromSelection();
-                return;
-            }
-
+            _suspendEditorEdgeSpacingForLoad = true;
             try
             {
-                byte[] bytes = Convert.FromBase64String(content);
-                if (bytes.Length >= 5)
+                SuspendEditorEdgeSpacing();
+                TextRange tr = new TextRange(ContentTextBox.Document.ContentStart, ContentTextBox.Document.ContentEnd);
+
+                if (string.IsNullOrEmpty(content))
                 {
-                    var hdr = System.Text.Encoding.ASCII.GetString(bytes, 0, Math.Min(5, bytes.Length));
-                    if (hdr.StartsWith("{\\rtf"))
+                    tr.Text = string.Empty;
+                    SyncFontSelectorsFromSelection();
+                    return;
+                }
+
+                try
+                {
+                    byte[] bytes = Convert.FromBase64String(content);
+                    if (bytes.Length >= 5)
                     {
-                        using (MemoryStream ms = new MemoryStream(bytes))
+                        var hdr = System.Text.Encoding.ASCII.GetString(bytes, 0, Math.Min(5, bytes.Length));
+                        if (hdr.StartsWith("{\\rtf"))
                         {
-                            tr.Load(ms, DataFormats.Rtf);
+                            using (MemoryStream ms = new MemoryStream(bytes))
+                            {
+                                tr.Load(ms, DataFormats.Rtf);
+                            }
                         }
-                    }
-                    else if (bytes[0] == 0x50 && bytes[1] == 0x4B) // ZIP / XamlPackage
-                    {
-                        using (MemoryStream ms = new MemoryStream(bytes))
+                        else if (bytes[0] == 0x50 && bytes[1] == 0x4B) // ZIP / XamlPackage
                         {
-                            tr.Load(ms, DataFormats.XamlPackage);
+                            using (MemoryStream ms = new MemoryStream(bytes))
+                            {
+                                tr.Load(ms, DataFormats.XamlPackage);
+                            }
                         }
-                    }
-                    else
-                    {
-                        throw new FormatException();
+                        else
+                        {
+                            throw new FormatException();
+                        }
                     }
                 }
-            }
-            catch (FormatException)
-            {
-                tr.Text = content;
-            }
+                catch (FormatException)
+                {
+                    tr.Text = content;
+                }
 
-            SyncFontSelectorsFromSelection();
+                SyncFontSelectorsFromSelection();
+            }
+            finally
+            {
+                _suspendEditorEdgeSpacingForLoad = false;
+                RemoveLegacyEditorEndPads();
+            }
         }
 
         private void ShowStatusIndicator(string message)
@@ -5669,53 +7216,24 @@ namespace Scriblucent
 
             if (!animate)
             {
-                UiMotion.Stop(FontPanel);
-                UiMotion.Clear(FontPanel, UIElement.OpacityProperty);
-                UiMotion.Clear(EnsureFontPanelTransform(), TranslateTransform.YProperty);
+                UiMotion.Clear(FontPanelRow, RowDefinition.HeightProperty);
                 FontPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-                FontPanel.Opacity = isOpen ? 1 : 0;
-                EnsureFontPanelTransform().Y = isOpen ? 0 : -6;
+                FontPanelRow.Height = new GridLength(isOpen ? MeasureRowContent(FontPanel) : 0, GridUnitType.Pixel);
                 return;
             }
 
-            AnimateFontPanel(isOpen);
-        }
-
-        private void AnimateFontPanel(bool show)
-        {
-            var animationVersion = ++_fontPanelAnimationVersion;
-            var transform = EnsureFontPanelTransform();
-            var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
-            var opacityFrom = FontPanel.Opacity;
-            var yFrom = transform.Y;
-
-            if (show)
+            if (isOpen)
                 FontPanel.Visibility = Visibility.Visible;
 
-            UiMotion.Stop(FontPanel);
-            UiMotion.RunComposited(
+            AnimateCollapsingRow(
+                FontPanelRow,
                 FontPanel,
-                new[]
-                {
-                    UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => FontPanel.Opacity = value),
-                    UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
-                },
+                isOpen,
                 () =>
                 {
-                    if (!show && animationVersion == _fontPanelAnimationVersion && !_isFontPanelOpen)
+                    if (!_isFontPanelOpen)
                         FontPanel.Visibility = Visibility.Collapsed;
                 });
-        }
-
-        private TranslateTransform EnsureFontPanelTransform()
-        {
-            var translate = UiMotion.EnsureTranslate(FontPanel);
-            if (FontPanel.RenderTransform is TranslateTransform { IsFrozen: false }
-                && Math.Abs(translate.Y) < 0.001
-                && !_isFontPanelOpen)
-                translate.Y = -6;
-
-            return translate;
         }
 
         private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
@@ -5784,13 +7302,15 @@ namespace Scriblucent
 
         private void ApplyLineSpacingToTargetParagraphs(double spacingMultiplier)
         {
-            NormalizeVerticalMarginsForLineSpacingTarget();
+            var selection = ContentTextBox.Selection;
+            var start = selection == null || selection.IsEmpty
+                ? ContentTextBox.Document.ContentStart
+                : selection.Start;
+            var end = selection == null || selection.IsEmpty
+                ? ContentTextBox.Document.ContentEnd
+                : selection.End;
 
-            var paragraphs = GetTargetParagraphsForParagraphFormatting();
-            foreach (var paragraph in paragraphs)
-            {
-                ApplyLineSpacingToParagraph(paragraph, spacingMultiplier);
-            }
+            ApplyLineSpacingToRange(start, end, spacingMultiplier);
         }
 
         private void ApplyLineSpacingToInlineFormattingTarget(double? minimumFontSize = null)
@@ -5819,46 +7339,44 @@ namespace Scriblucent
             if (ContentTextBox.Document == null)
                 return;
 
-            NormalizeVerticalBlockMargins(
-                ContentTextBox.Document.Blocks,
-                ContentTextBox.Document.ContentStart,
-                ContentTextBox.Document.ContentEnd);
-
-            var paragraphs = new List<Paragraph>();
-            CollectParagraphs(
-                ContentTextBox.Document.Blocks,
+            ApplyLineSpacingToRange(
                 ContentTextBox.Document.ContentStart,
                 ContentTextBox.Document.ContentEnd,
-                paragraphs);
-
-            foreach (var paragraph in paragraphs)
-                ApplyLineSpacingToParagraph(paragraph, _lineSpacingMultiplier);
+                _lineSpacingMultiplier);
 
             // Paragraphs hosting in-line images need MaxHeight so the line grows to fit them.
             _floatingImages.SyncInlineParagraphLineStrategies();
         }
 
+        private void ApplyLineSpacingToRange(TextPointer start, TextPointer end, double spacingMultiplier)
+        {
+            NormalizeVerticalBlockMargins(ContentTextBox.Document.Blocks, start, end);
+
+            var paragraphs = new List<Paragraph>();
+            CollectParagraphs(ContentTextBox.Document.Blocks, start, end, paragraphs);
+            // A paste ending at an empty paragraph has no content span to intersect,
+            // but that paragraph still needs the preferred spacing for the next keystroke.
+            if (start.Paragraph is { } first && first.ContentStart.CompareTo(first.ContentEnd) == 0
+                && !paragraphs.Contains(first))
+                paragraphs.Add(first);
+            if (end.Paragraph is { } last && last.ContentStart.CompareTo(last.ContentEnd) == 0
+                && !paragraphs.Contains(last))
+                paragraphs.Add(last);
+            foreach (var paragraph in paragraphs)
+                ApplyLineSpacingToParagraph(paragraph, spacingMultiplier);
+        }
+
         private void ApplyLineSpacingToParagraph(Paragraph paragraph, double spacingMultiplier, double? minimumFontSize = null)
         {
-            paragraph.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
-            paragraph.LineHeight = ResolveParagraphLineHeight(paragraph, spacingMultiplier, minimumFontSize);
-            paragraph.Margin = NormalizeVerticalBlockMargin(paragraph.Margin);
+            if (paragraph.LineStackingStrategy != LineStackingStrategy.BlockLineHeight)
+                paragraph.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+            var lineHeight = ResolveParagraphLineHeight(paragraph, spacingMultiplier, minimumFontSize);
+            if (double.IsNaN(paragraph.LineHeight) || Math.Abs(paragraph.LineHeight - lineHeight) >= 0.01)
+                paragraph.LineHeight = lineHeight;
+            NormalizeVerticalBlockMarginIfNeeded(paragraph);
         }
 
-        private void NormalizeVerticalMarginsForLineSpacingTarget()
-        {
-            var selection = ContentTextBox.Selection;
-            var start = selection == null || selection.IsEmpty
-                ? ContentTextBox.Document.ContentStart
-                : selection.Start;
-            var end = selection == null || selection.IsEmpty
-                ? ContentTextBox.Document.ContentEnd
-                : selection.End;
-
-            NormalizeVerticalBlockMargins(ContentTextBox.Document.Blocks, start, end);
-        }
-
-        private static void NormalizeVerticalBlockMargins(
+        internal static void NormalizeVerticalBlockMargins(
             BlockCollection blocks,
             TextPointer start,
             TextPointer end)
@@ -5868,20 +7386,27 @@ namespace Scriblucent
                 switch (block)
                 {
                     case Paragraph paragraph when TextElementIntersectsRange(paragraph, start, end):
-                        paragraph.Margin = NormalizeVerticalBlockMargin(paragraph.Margin);
+                        NormalizeVerticalBlockMarginIfNeeded(paragraph);
                         break;
                     case BlockUIContainer blockContainer when TextElementIntersectsRange(blockContainer, start, end):
-                        blockContainer.Margin = NormalizeVerticalBlockMargin(blockContainer.Margin);
+                        NormalizeVerticalBlockMarginIfNeeded(blockContainer);
                         break;
                     case System.Windows.Documents.List list when TextElementIntersectsRange(list, start, end):
-                        list.Margin = NormalizeVerticalBlockMargin(list.Margin);
+                        NormalizeVerticalBlockMarginIfNeeded(list);
                         foreach (ListItem item in list.ListItems)
+                        {
+                            if (!TextElementIntersectsRange(item, start, end))
+                                continue;
+                            NormalizeVerticalListItemMarginIfNeeded(item);
                             NormalizeVerticalBlockMargins(item.Blocks, start, end);
+                        }
                         break;
-                    case Section section:
+                    case Section section when TextElementIntersectsRange(section, start, end):
+                        NormalizeVerticalBlockMarginIfNeeded(section);
                         NormalizeVerticalBlockMargins(section.Blocks, start, end);
                         break;
-                    case Table table:
+                    case Table table when TextElementIntersectsRange(table, start, end):
+                        NormalizeVerticalBlockMarginIfNeeded(table);
                         foreach (TableRowGroup rowGroup in table.RowGroups)
                         {
                             foreach (TableRow row in rowGroup.Rows)
@@ -5895,23 +7420,20 @@ namespace Scriblucent
             }
         }
 
+        private static void NormalizeVerticalBlockMarginIfNeeded(Block block)
+        {
+            if (block.Margin.Top != 0 || block.Margin.Bottom != 0)
+                block.Margin = NormalizeVerticalBlockMargin(block.Margin);
+        }
+
+        private static void NormalizeVerticalListItemMarginIfNeeded(ListItem item)
+        {
+            if (item.Margin.Top != 0 || item.Margin.Bottom != 0)
+                item.Margin = NormalizeVerticalBlockMargin(item.Margin);
+        }
+
         private static Thickness NormalizeVerticalBlockMargin(Thickness margin)
             => new(margin.Left, 0, margin.Right, 0);
-
-        private List<Paragraph> GetTargetParagraphsForParagraphFormatting()
-        {
-            var selection = ContentTextBox.Selection;
-            var start = selection == null || selection.IsEmpty
-                ? ContentTextBox.Document.ContentStart
-                : selection.Start;
-            var end = selection == null || selection.IsEmpty
-                ? ContentTextBox.Document.ContentEnd
-                : selection.End;
-
-            var paragraphs = new List<Paragraph>();
-            CollectParagraphs(ContentTextBox.Document.Blocks, start, end, paragraphs);
-            return paragraphs;
-        }
 
         private List<Paragraph> GetTargetParagraphsForInlineFormatting()
         {
@@ -7746,19 +9268,36 @@ namespace Scriblucent
             if (selection is null)
                 return lists;
 
-            if (selection.IsEmpty)
+            if (selection.IsEmpty || SelectionExtendsOutsideViewport())
             {
-                AddActiveDocumentList(selection.Start, lists);
-            }
-            else
-            {
-                CollectDocumentLists(ContentTextBox.Document.Blocks, selection.Start, selection.End, lists);
-                AddActiveDocumentList(selection.Start, lists);
-                AddActiveDocumentList(selection.End, lists);
+                AddActiveDocumentList(ContentTextBox.CaretPosition ?? selection.Start, lists);
+                return lists;
             }
 
+            CollectDocumentLists(ContentTextBox.Document.Blocks, selection.Start, selection.End, lists);
+            AddActiveDocumentList(selection.Start, lists);
+            AddActiveDocumentList(selection.End, lists);
             AddActiveDocumentList(ContentTextBox.CaretPosition, lists);
             return lists;
+        }
+
+        private bool SelectionExtendsOutsideViewport()
+        {
+            var selection = ContentTextBox.Selection;
+            if (selection == null || selection.IsEmpty || ContentTextBox.ActualHeight <= 1)
+                return false;
+
+            var top = ContentTextBox.GetPositionFromPoint(new Point(8, 4), snapToText: true);
+            var bottom = ContentTextBox.GetPositionFromPoint(
+                new Point(Math.Max(8, ContentTextBox.ActualWidth - 8), Math.Max(4, ContentTextBox.ActualHeight - 4)),
+                snapToText: true);
+            if (top is null || bottom is null)
+                return false;
+
+            if (top.CompareTo(bottom) > 0)
+                (top, bottom) = (bottom, top);
+
+            return selection.Start.CompareTo(top) < 0 || selection.End.CompareTo(bottom) > 0;
         }
 
         private HashSet<System.Windows.Documents.List> CollectAllDocumentLists()
@@ -8457,7 +9996,7 @@ namespace Scriblucent
                     NoteImageLoader.DefaultInsertMaxWidthDip,
                     NoteImageLoader.DefaultInsertMaxHeightDip);
 
-                _floatingImages.Insert(load, width, height);
+                InsertFloatingImage(load, width, height);
                 ContentTextBox.Focus();
             }
             catch (Exception ex)
@@ -8675,7 +10214,7 @@ namespace Scriblucent
                     NoteImageLoader.DefaultInsertMaxWidthDip,
                     NoteImageLoader.DefaultInsertMaxHeightDip);
 
-                _floatingImages.Insert(load, width, height);
+                InsertFloatingImage(load, width, height);
                 ContentTextBox.Focus();
             }
             catch (Exception ex)
@@ -8697,6 +10236,9 @@ namespace Scriblucent
 
         private string SerializeEditorContent()
         {
+            if (EditorEdgeSpacing.IsEmpty(ContentTextBox.Document))
+                return string.Empty;
+
             _isSerializingEditorContent = true;
             // The serialization strips the extent pad and the inline photo containers out of
             // the live flow; any layout pass in between clamps the scroll / snaps the caret,
@@ -8705,6 +10247,7 @@ namespace Scriblucent
             try
             {
                 _floatingImages.StripImageExtentPad();
+                SuspendEditorEdgeSpacing();
 
                 var textRange = new TextRange(
                     ContentTextBox.Document.ContentStart,
@@ -8727,9 +10270,17 @@ namespace Scriblucent
             }
             finally
             {
-                _isSerializingEditorContent = false;
-                _floatingImages.EnsureImageExtentPad();
-                _floatingImages.RestoreViewState(viewState);
+                try
+                {
+                    _floatingImages.EnsureImageExtentPad();
+                    ApplyEditorEdgeSpacing();
+                }
+                finally
+                {
+                    _isSerializingEditorContent = false;
+                    _floatingImages.RestoreViewState(viewState);
+                    SchedulePendingFindRefresh();
+                }
             }
         }
 
@@ -8813,6 +10364,11 @@ namespace Scriblucent
             EditorSurface.LayoutTransform = new ScaleTransform(_zoomLevel, _zoomLevel);
             UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
+            InvalidateSelectionTiles();
+            InvalidateFindTiles();
+            QueueSelectionOverlay();
+            if (_findBarOpen)
+                QueueFindOverlay(DispatcherPriority.Render);
         }
         private bool _isWordWrapEnabled = true;
 

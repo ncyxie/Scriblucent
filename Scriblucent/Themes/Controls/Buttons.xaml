@@ -391,7 +391,8 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource Radius.Control}">
+                            CornerRadius="{StaticResource Radius.Control}"
+                            Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           Margin="0"
@@ -509,8 +510,8 @@
         <Setter Property="FontWeight" Value="Normal"/>
     </Style>
 
-    <!-- ToggleButton counterpart to EditorToolIconButtonStyle - same chrome look, checked state
-         fills with the accent color instead of a Button's press-only feedback. -->
+    <!-- ToggleButton counterpart to EditorToolIconButtonStyle. Checked state matches
+         SetEditorToolButtonActive: pastel fill plus the accent edge, not a solid fill. -->
     <Style x:Key="EditorToolIconToggleButtonStyle" TargetType="ToggleButton">
         <Setter Property="Width" Value="32"/>
         <Setter Property="Height" Value="32"/>
@@ -544,8 +545,10 @@
                             <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentPrimary}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryForeground}"/>
+                            <Setter Property="Background" Value="{DynamicResource EditorToolActiveBackground}"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource EditorToolActiveBorder}"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Setter Property="Foreground" Value="{DynamicResource EditorToolActiveForeground}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
