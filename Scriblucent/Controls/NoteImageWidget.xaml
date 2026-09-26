@@ -15,9 +15,6 @@
     <UserControl.ContextMenu>
         <ContextMenu>
             <MenuItem Header="{Binding [TextWrap], Source={x:Static localization:LocalizationProvider.Instance}}">
-                <MenuItem.Icon>
-                    <icons:AppIcon Kind="WrapSquare" Width="14" Height="14"/>
-                </MenuItem.Icon>
                 <MenuItem x:Name="WrapInlineItem"
                           Header="{Binding [WrapInline], Source={x:Static localization:LocalizationProvider.Instance}}"
                           IsCheckable="True"
@@ -54,35 +51,15 @@
                       Click="ContextMenuLockAspect_Click"/>
             <Separator/>
             <MenuItem Header="{Binding [CopyImage], Source={x:Static localization:LocalizationProvider.Instance}}"
-                      Click="ContextMenuCopy_Click">
-                <MenuItem.Icon>
-                    <icons:AppIcon Kind="Duplicate" Width="14" Height="14"/>
-                </MenuItem.Icon>
-            </MenuItem>
+                      Click="ContextMenuCopy_Click"/>
             <MenuItem Header="{Binding [CutImage], Source={x:Static localization:LocalizationProvider.Instance}}"
-                      Click="ContextMenuCut_Click">
-                <MenuItem.Icon>
-                    <icons:AppIcon Kind="Cut" Width="14" Height="14"/>
-                </MenuItem.Icon>
-            </MenuItem>
+                      Click="ContextMenuCut_Click"/>
             <MenuItem Header="{Binding [ChangePicture], Source={x:Static localization:LocalizationProvider.Instance}}"
-                      Click="ContextMenuChangePicture_Click">
-                <MenuItem.Icon>
-                    <icons:AppIcon Kind="Swap" Width="14" Height="14"/>
-                </MenuItem.Icon>
-            </MenuItem>
+                      Click="ContextMenuChangePicture_Click"/>
             <MenuItem Header="{Binding [InsertCaption], Source={x:Static localization:LocalizationProvider.Instance}}"
-                      Click="ContextMenuCaption_Click">
-                <MenuItem.Icon>
-                    <icons:AppIcon Kind="Tag" Width="14" Height="14"/>
-                </MenuItem.Icon>
-            </MenuItem>
+                      Click="ContextMenuCaption_Click"/>
             <MenuItem Header="{Binding [DeleteImage], Source={x:Static localization:LocalizationProvider.Instance}}"
-                      Click="ContextMenuDelete_Click">
-                <MenuItem.Icon>
-                    <icons:AppIcon Kind="Delete" Width="14" Height="14"/>
-                </MenuItem.Icon>
-            </MenuItem>
+                      Click="ContextMenuDelete_Click"/>
         </ContextMenu>
     </UserControl.ContextMenu>
     <UserControl.Resources>
