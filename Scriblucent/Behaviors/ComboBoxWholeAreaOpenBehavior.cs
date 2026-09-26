@@ -79,7 +79,7 @@ public static class ComboBoxWholeAreaOpenBehavior
         var current = source;
         while (current is not null)
         {
-            if (current is ComboBoxItem)
+            if (current is ComboBoxItem or ScrollBar or Thumb or RepeatButton or Track)
                 return true;
 
             current = VisualTreeHelper.GetParent(current);

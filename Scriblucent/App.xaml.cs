@@ -1,4 +1,5 @@
 using Scriblucent.Animations;
+using Scriblucent.Behaviors;
 using Scriblucent.Localization;
 using Scriblucent.Services;
 using Scriblucent.ViewModels;
@@ -16,6 +17,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         Scriblucent.Services.StartupProbe.Mark("onStartup");
+        PopupScrollDragBehavior.Register();
 
         // Multi-Core JIT: records which methods get JIT'd this run, then on every later run
         // background-JITs those same methods on idle cores while startup proceeds — so by the
