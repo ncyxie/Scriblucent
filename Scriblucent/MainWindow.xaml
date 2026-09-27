@@ -1027,7 +1027,9 @@
 									<ControlTemplate TargetType="{x:Type ItemsControl}">
 										<ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
 													  VerticalScrollBarVisibility="Auto"
-													  HorizontalScrollBarVisibility="Disabled">
+													  HorizontalScrollBarVisibility="Disabled"
+													  behaviors:RoundedClipBehavior.IsEnabled="True"
+													  behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
 											<ItemsPresenter/>
 										</ScrollViewer>
 									</ControlTemplate>

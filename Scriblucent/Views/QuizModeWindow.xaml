@@ -261,7 +261,9 @@
                                                   HorizontalScrollBarVisibility="Disabled"
                                                   Background="Transparent"
                                                   behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True"
+                                                  behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                  behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
                                         <ItemsPresenter Margin="20,0,20,20"/>
                                     </ScrollViewer>
                                 </ControlTemplate>
@@ -401,7 +403,9 @@
                                                   Background="Transparent"
                                                   behaviors:SmoothScrollBehavior.IsEnabled="True"
                                                   behaviors:ScrollBarAutoHideBehavior.Enable="True"
-                                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True"
+                                                  behaviors:RoundedClipBehavior.IsEnabled="True"
+                                                  behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
                                         <ItemsPresenter/>
                                     </ScrollViewer>
                                 </ControlTemplate>

@@ -171,7 +171,9 @@
                               Margin="0,18,0,0"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
-                              CanContentScroll="True">
+                              CanContentScroll="True"
+                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
                 <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

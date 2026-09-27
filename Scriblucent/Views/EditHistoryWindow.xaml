@@ -69,7 +69,9 @@
                                               VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled"
                                               Background="Transparent"
-                                              behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                              behaviors:MiddleClickScrollBehavior.IsEnabled="True"
+                                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
                                     <ItemsPresenter/>
                                 </ScrollViewer>
                             </Border>

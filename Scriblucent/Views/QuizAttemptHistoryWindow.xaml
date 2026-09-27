@@ -100,7 +100,9 @@
                                               ClipToBounds="True"
                                               UseLayoutRounding="True"
                                               SnapsToDevicePixels="True"
-                                              behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                              behaviors:MiddleClickScrollBehavior.IsEnabled="True"
+                                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
                                     <ItemsPresenter/>
                                 </ScrollViewer>
                             </ControlTemplate>
