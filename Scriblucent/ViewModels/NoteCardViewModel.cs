@@ -27,6 +27,10 @@ public class NoteCardViewModel : ViewModelBase
     private readonly Action<NoteCardViewModel>? _removeFromGroupAction;
     private readonly Action<NoteCardViewModel>? _duplicateAction;
     private readonly Action<NoteCardViewModel>? _togglePinAction;
+    private RelayCommand? _deleteCommand;
+    private RelayCommand? _removeFromGroupCommand;
+    private RelayCommand? _duplicateCommand;
+    private RelayCommand? _togglePinCommand;
 
     public NoteCardViewModel(
         NoteDocument document,
@@ -40,11 +44,6 @@ public class NoteCardViewModel : ViewModelBase
         _removeFromGroupAction = removeFromGroupAction;
         _duplicateAction = duplicateAction;
         _togglePinAction = togglePinAction;
-        DeleteCommand = new RelayCommand(DeleteNote);
-        RemoveFromGroupCommand = new RelayCommand(RemoveFromGroup, () => IsGrouped);
-        DuplicateCommand = new RelayCommand(DuplicateNote);
-        TogglePinCommand = new RelayCommand(TogglePin);
-
         if (document.SearchablePreview is not null)
             _cachedContentPreview = document.SearchablePreview;
     }
@@ -292,13 +291,14 @@ public class NoteCardViewModel : ViewModelBase
 
     public bool IsGrouped => Document.GroupId.HasValue;
 
-    public ICommand DeleteCommand { get; }
+    public ICommand DeleteCommand => _deleteCommand ??= new RelayCommand(DeleteNote);
 
-    public ICommand RemoveFromGroupCommand { get; }
+    public ICommand RemoveFromGroupCommand => _removeFromGroupCommand ??=
+        new RelayCommand(RemoveFromGroup, () => IsGrouped);
 
-    public ICommand DuplicateCommand { get; }
+    public ICommand DuplicateCommand => _duplicateCommand ??= new RelayCommand(DuplicateNote);
 
-    public ICommand TogglePinCommand { get; }
+    public ICommand TogglePinCommand => _togglePinCommand ??= new RelayCommand(TogglePin);
 
     private void DuplicateNote() => _duplicateAction?.Invoke(this);
 

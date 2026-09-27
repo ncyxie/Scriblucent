@@ -784,6 +784,12 @@ internal static class SmoothScrollCompositor
 
     private static void CacheScrollShellsWalk(DependencyObject node, List<FrameworkElement> cached)
     {
+        // WPF's virtualizing item panels recycle their children while scrolling. Caching a
+        // realized row as a static shell makes WPF repaint that bitmap whenever the container
+        // takes the next item, which is especially costly in very large ListBoxes (Trash).
+        if (node is VirtualizingPanel)
+            return;
+
         if (node is Border { Background: System.Windows.Media.SolidColorBrush { Color.A: > 0 } } border
             && border.CornerRadius.TopLeft > 0
             && !HasVirtualizationHostDescendant(border))
@@ -814,7 +820,7 @@ internal static class SmoothScrollCompositor
         for (var i = 0; i < count; i++)
         {
             var child = VisualTreeHelper.GetChild(root, i);
-            if (child is DashboardVirtualizationHost)
+            if (child is DashboardVirtualizationHost or VirtualizingPanel)
                 return true;
 
             if (HasVirtualizationHostDescendant(child))

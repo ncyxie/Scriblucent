@@ -20,16 +20,39 @@ public partial class EditHistoryWindow : Window
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
 
-        var items = versions
-            .OrderByDescending(v => v.Timestamp)
+        var source = versions.ToArray();
+        if (source.Length < 10_000)
+        {
+            BindVersions(BuildItems(source));
+        }
+        else
+        {
+            var loadStarted = false;
+            Loaded += async (_, _) =>
+            {
+                if (loadStarted)
+                    return;
+
+                loadStarted = true;
+                var items = await Task.Run(() => BuildItems(source));
+                if (IsVisible)
+                    BindVersions(items);
+            };
+        }
+
+        WindowContentEnterHelper.AnimateOnLoaded(this);
+    }
+
+    private static List<EditHistoryListItem> BuildItems(NoteEditHistoryEntry[] versions)
+        => versions.OrderByDescending(v => v.Timestamp)
             .Select(v => new EditHistoryListItem(v))
             .ToList();
 
+    private void BindVersions(List<EditHistoryListItem> items)
+    {
         HistoryListBox.ItemsSource = items;
         if (items.Count > 0)
             HistoryListBox.SelectedIndex = 0;
-
-        WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
     private void RestoreButton_Click(object sender, RoutedEventArgs e)

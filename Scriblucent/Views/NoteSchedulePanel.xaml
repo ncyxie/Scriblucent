@@ -161,8 +161,11 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"
                                        Margin="0,0,0,8"/>
-                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="330">
-                                <ItemsControl x:Name="ScheduleItemsControl" ItemsSource="{Binding ScheduleItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <ItemsControl x:Name="ScheduleItemsControl"
+                                              Grid.Row="1"
+                                              MaxHeight="330"
+                                              Style="{StaticResource CalendarScheduledListStyle}"
+                                              ItemsSource="{Binding ScheduleItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type models:NoteScheduleEntry}">
                                             <!-- Match dashboard event cards: surface lift + calendar hover (no intermittent clipped shadow). -->
@@ -205,7 +208,10 @@
                                                         <TextBlock Text="{Binding Note}"
                                                                    Margin="0,4,8,8"
                                                                    Foreground="{DynamicResource TextColorSecondary}"
-                                                                   TextWrapping="Wrap"/>
+                                                                   TextWrapping="Wrap"
+                                                                   Height="34"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding Note}"/>
                                                     </StackPanel>
                                                     <Button Grid.Column="1"
                                                             Content="{icons:Icon Delete}"
@@ -220,7 +226,6 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
                             <TextBlock Grid.Row="1"
                                        Text="{Binding [CalendarNoSchedulesForDay], Source={StaticResource Loc}}"
                                        Foreground="{DynamicResource TextColorSecondary}"

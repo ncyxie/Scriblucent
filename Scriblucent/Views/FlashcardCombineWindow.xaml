@@ -12,6 +12,21 @@
         TextOptions.TextRenderingMode="ClearType"
         Background="{DynamicResource FeatureFrameBackground}" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
     <Window.Resources>
+        <Style x:Key="CombineVirtualizedItemsStyle" TargetType="{x:Type ItemsControl}">
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ItemsControl}">
+                        <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="CombinePanelStyle" TargetType="Border" BasedOn="{StaticResource FeatureCombinePanelStyle}"/>
         <Style x:Key="CombineTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource FeatureCombineTextBoxStyle}"/>
         <Style x:Key="CombineOptionCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource FeatureCombineOptionCheckBoxStyle}"/>
@@ -122,12 +137,9 @@
                             </TextBlock>
                         </Grid>
 
-                        <ScrollViewer Grid.Row="2"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      behaviors:ScrollTileBehavior.IsEnabled="True"
-                                      behaviors:MiddleClickScrollBehavior.IsEnabled="True">
-                            <ItemsControl ItemsSource="{Binding Sets}"
+                            <ItemsControl Grid.Row="2"
+                                          ItemsSource="{Binding VisibleSets}"
+                                          Style="{StaticResource CombineVirtualizedItemsStyle}"
                                           VirtualizingPanel.IsVirtualizing="True"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
                                           VirtualizingPanel.ScrollUnit="Pixel"
@@ -143,8 +155,7 @@
                                         <Grid Margin="0,0,0,8"
                                               UseLayoutRounding="True"
                                               SnapsToDevicePixels="True"
-                                              ClipToBounds="False"
-                                              Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
+                                              ClipToBounds="False">
                                             <controls:CardShadowLayer/>
                                             <Border Style="{StaticResource CombineItemBorderStyle}"
                                                     MouseLeftButtonUp="SetItem_MouseLeftButtonUp">
@@ -169,10 +180,23 @@
                                                                    Foreground="{DynamicResource TextColorSecondary}"/>
                                                         <TextBlock Text="{Binding TagsDisplay}"
                                                                    Margin="0,4,0,0"
+                                                                   Height="18"
                                                                    FontSize="{StaticResource Type.Caption}"
                                                                    Foreground="{DynamicResource TextColorSecondary}"
-                                                                   TextWrapping="Wrap"
-                                                                   Visibility="{Binding HasTags, Converter={StaticResource BoolToVis}}"/>
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding TagsDisplay}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding HasTags}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -181,7 +205,6 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </ScrollViewer>
                     </Grid>
                 </Border>
 
@@ -200,9 +223,9 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"
                                        Margin="0,0,0,12"/>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          MaxHeight="180">
                                 <ItemsControl ItemsSource="{Binding CategoryFilters}"
+                                              MaxHeight="180"
+                                              Style="{StaticResource CombineVirtualizedItemsStyle}"
                                               VirtualizingPanel.IsVirtualizing="True"
                                               VirtualizingPanel.VirtualizationMode="Recycling"
                                               VirtualizingPanel.ScrollUnit="Pixel"
@@ -221,7 +244,6 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
                             <Separator Margin="0,16,0,14"/>
                         </StackPanel>
 
@@ -245,12 +267,9 @@
                                            Foreground="{DynamicResource TextColorSecondary}"/>
                             </Grid>
 
-                            <ScrollViewer Grid.Row="1"
-                                          VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          behaviors:ScrollTileBehavior.IsEnabled="True"
-                                      behaviors:MiddleClickScrollBehavior.IsEnabled="True">
-                                <ItemsControl ItemsSource="{Binding Sets}"
+                                <ItemsControl Grid.Row="1"
+                                              ItemsSource="{Binding SelectedSets}"
+                                              Style="{StaticResource CombineVirtualizedItemsStyle}"
                                               VirtualizingPanel.IsVirtualizing="True"
                                               VirtualizingPanel.VirtualizationMode="Recycling"
                                               VirtualizingPanel.ScrollUnit="Pixel"
@@ -267,8 +286,7 @@
                                                     BorderThickness="0"
                                                     CornerRadius="{StaticResource Radius.Control}"
                                                     Padding="10"
-                                                    Margin="0,0,0,8"
-                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
+                                                    Margin="0,0,0,8">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -296,7 +314,6 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
                         </Grid>
 
                         <StackPanel Grid.Row="2">

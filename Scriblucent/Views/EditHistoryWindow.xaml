@@ -86,12 +86,11 @@
                                     <Style TargetType="Border">
                                         <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
                                         <Setter Property="BorderBrush" Value="Transparent"/>
-                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="BorderThickness" Value="2"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                                 <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
                                                 <Setter Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
-                                                <Setter Property="BorderThickness" Value="2"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                                 <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
@@ -112,7 +111,9 @@
                                                Text="{Binding PreviewText}"
                                                Foreground="{DynamicResource TextColorSecondary}"
                                                TextWrapping="Wrap"
-                                               MaxHeight="58"/>
+                                               Height="58"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding PreviewText}"/>
                                 </Grid>
                             </Border>
                         </DataTemplate>

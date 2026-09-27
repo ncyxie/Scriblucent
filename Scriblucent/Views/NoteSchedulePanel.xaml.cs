@@ -15,7 +15,8 @@ public partial class NoteSchedulePanel : UserControl
     private NoteCardViewModel? _selectedNote;
     private Action<IEnumerable<NoteScheduleEntry>>? _saveCallback;
 
-    public ObservableCollection<NoteScheduleEntry> ScheduleItems { get; } = new();
+    private readonly BulkObservableCollection<NoteScheduleEntry> _scheduleItems = new();
+    public ObservableCollection<NoteScheduleEntry> ScheduleItems => _scheduleItems;
 
     public NoteSchedulePanel()
     {
@@ -34,9 +35,7 @@ public partial class NoteSchedulePanel : UserControl
         ScheduleSubtitleText.Text = note.Document.Title ?? string.Empty;
         ScheduleSubtitleText.Visibility = string.IsNullOrEmpty(ScheduleSubtitleText.Text) ? Visibility.Collapsed : Visibility.Visible;
 
-        ScheduleItems.Clear();
-        foreach (var schedule in BuildWorkingSchedules(note))
-            ScheduleItems.Add(schedule);
+        _scheduleItems.ReplaceAll(BuildWorkingSchedules(note));
 
         PopulateTimeSelectors();
         SetEntryEditorsFromNow();
@@ -53,13 +52,12 @@ public partial class NoteSchedulePanel : UserControl
         ScheduleSubtitleText.Text = subtitle;
         ScheduleSubtitleText.Visibility = string.IsNullOrEmpty(subtitle) ? Visibility.Collapsed : Visibility.Visible;
 
-        ScheduleItems.Clear();
         var sorted = existingSchedules
             .Select(e => new NoteScheduleEntry { ScheduledAt = e.ScheduledAt, Note = e.Note ?? string.Empty })
             .OrderBy(e => e.ScheduledAt)
-            .ThenBy(e => e.Note, StringComparer.CurrentCultureIgnoreCase);
-        foreach (var schedule in sorted)
-            ScheduleItems.Add(schedule);
+            .ThenBy(e => e.Note, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        _scheduleItems.ReplaceAll(sorted);
 
         PopulateTimeSelectors();
         SetEntryEditorsFromNow();
@@ -157,9 +155,7 @@ public partial class NoteSchedulePanel : UserControl
             .ThenBy(item => item.Note, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
 
-        ScheduleItems.Clear();
-        foreach (var item in ordered)
-            ScheduleItems.Add(item);
+        _scheduleItems.ReplaceAll(ordered);
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)

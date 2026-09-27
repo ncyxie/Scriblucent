@@ -1016,14 +1016,22 @@
 										Content="{Binding [ClearFilters], Source={StaticResource Loc}}"
 										Command="{Binding ClearTagFiltersCommand}"/>
 							</Grid>
-							<ScrollViewer MaxHeight="230"
-										  VerticalScrollBarVisibility="Auto"
-										  Visibility="{Binding ActiveHasTagFilters, Converter={StaticResource BoolToVis}}">
-								<ItemsControl ItemsSource="{Binding ActiveTagFilters}"
+							<ItemsControl ItemsSource="{Binding ActiveTagFilters}"
+										  MaxHeight="230"
+										  Visibility="{Binding ActiveHasTagFilters, Converter={StaticResource BoolToVis}}"
 										  VirtualizingPanel.IsVirtualizing="True"
 										  VirtualizingPanel.VirtualizationMode="Recycling"
 										  VirtualizingPanel.ScrollUnit="Pixel"
 										  ScrollViewer.CanContentScroll="True">
+								<ItemsControl.Template>
+									<ControlTemplate TargetType="{x:Type ItemsControl}">
+										<ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+													  VerticalScrollBarVisibility="Auto"
+													  HorizontalScrollBarVisibility="Disabled">
+											<ItemsPresenter/>
+										</ScrollViewer>
+									</ControlTemplate>
+								</ItemsControl.Template>
 								<ItemsControl.ItemsPanel>
 									<ItemsPanelTemplate>
 										<VirtualizingStackPanel IsItemsHost="True"/>
@@ -1031,14 +1039,17 @@
 								</ItemsControl.ItemsPanel>
 									<ItemsControl.ItemTemplate>
 										<DataTemplate DataType="{x:Type vm:TagFilterItemViewModel}">
-											<CheckBox Content="{Binding Tag}"
-													  IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+											<CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
 													  Margin="0,2"
-													  Foreground="{DynamicResource TextColor}"/>
+													  Foreground="{DynamicResource TextColor}">
+												<TextBlock Text="{Binding Tag}"
+													   Height="20"
+													   TextTrimming="CharacterEllipsis"
+													   ToolTip="{Binding Tag}"/>
+											</CheckBox>
 										</DataTemplate>
 									</ItemsControl.ItemTemplate>
-								</ItemsControl>
-							</ScrollViewer>
+							</ItemsControl>
 							<TextBlock Text="{Binding [NoTagsFound], Source={StaticResource Loc}}"
 									   Margin="0,4,0,0"
 									   FontStyle="Italic"

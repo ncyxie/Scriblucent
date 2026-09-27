@@ -27,12 +27,19 @@
                                               VerticalAlignment="{TemplateBinding VerticalAlignment}"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentPrimarySubtle}"/>
-                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBackground}"/>
                             </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource NoteCardSelection}"/>
+                            </Trigger>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsLogicalAllSelected, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"/>
+                                    <Condition Binding="{Binding IsExcludedFromLogicalSelection}" Value="False"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource NoteCardSelection}"/>
+                            </MultiDataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -44,10 +51,8 @@
             <Setter Property="Padding" Value="2,0,0,0"/>
         </Style>
 
-        <!-- Custom template so the list's own ScrollViewer can carry the scroll-tile behavior
-             (the default ListBox template's inner ScrollViewer cannot take attached behaviors).
-             Virtualization engages because the ListBox now owns a bounded viewport; smooth
-             scrolling comes from the app-wide implicit ScrollViewer style. -->
+        <!-- The list owns a bounded viewport so its VirtualizingStackPanel can recycle rows.
+             Smooth scrolling comes from the app-wide ScrollViewer style. -->
         <Style x:Key="TrashListBoxStyle" TargetType="{x:Type ListBox}">
             <Setter Property="Template">
                 <Setter.Value>
@@ -60,7 +65,6 @@
                                           VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Disabled"
                                           Background="Transparent"
-                                          behaviors:ScrollTileBehavior.IsEnabled="True"
                                           behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                                 <ItemsPresenter/>
                             </ScrollViewer>
@@ -219,11 +223,38 @@
                                      Style="{StaticResource TrashListBoxStyle}"
                                      ItemContainerStyle="{StaticResource TrashListBoxItemStyle}"
                                      SelectionMode="Extended"
+                                     PreviewMouseLeftButtonDown="TrashedItemsListBox_PreviewMouseLeftButtonDown"
+                                     PreviewKeyDown="TrashedItemsListBox_PreviewKeyDown"
                                      SelectionChanged="TrashedItemsListBox_SelectionChanged">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <controls:DashboardTileHost RendererKey="TrashRow">
-                                            <Border Style="{StaticResource ChromePanelBorderStyle}" Padding="12,10">
+                                            <Border Padding="12,10"
+                                                    CornerRadius="{StaticResource Radius.Card}"
+                                                    SnapsToDevicePixels="True">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+                                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource FlashcardCardHoverBackground}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource FlashcardCardSelectedBackground}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource FlashcardCardSelectedBorder}"/>
+                                                            </DataTrigger>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsLogicalAllSelected, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"/>
+                                                                    <Condition Binding="{Binding IsExcludedFromLogicalSelection}" Value="False"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Background" Value="{DynamicResource FlashcardCardSelectedBackground}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource FlashcardCardSelectedBorder}"/>
+                                                            </MultiDataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto"/>
@@ -242,8 +273,12 @@
                                                         <TextBlock Text="{Binding Title}"
                                                                    Style="{StaticResource FormBodyTextStyle}"
                                                                    FontWeight="SemiBold"
-                                                                   TextTrimming="CharacterEllipsis"/>
-                                                        <TextBlock Style="{StaticResource FormHelperTextStyle}">
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding Title}"/>
+                                                        <TextBlock Style="{StaticResource FormHelperTextStyle}"
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis">
                                                             <Run Text="{Binding KindDisplayName, Mode=OneWay}"/>
                                                             <Run Text=" · "/>
                                                             <Run Text="{Binding DeletedAtDisplay, Mode=OneWay}"/>
@@ -269,7 +304,6 @@
                                                             Click="DeleteItemPermanentlyButton_Click"/>
                                                 </Grid>
                                             </Border>
-                                            </controls:DashboardTileHost>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
@@ -282,6 +316,13 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Orientation="Horizontal">
+                                <Button x:Name="SelectAllTrashButton"
+                                        Content="{Binding [SelectAll], Source={StaticResource Loc}}"
+                                        Style="{StaticResource DialogSecondaryButtonStyle}"
+                                        Padding="12,6"
+                                        Margin="0,0,8,0"
+                                        IsEnabled="False"
+                                        Click="SelectAllTrashButton_Click"/>
                                 <Button x:Name="RestoreSelectedButton"
                                         Content="{Binding [TrashRestoreSelected], Source={StaticResource Loc}}"
                                         Style="{StaticResource DialogSecondaryButtonStyle}"

@@ -10,6 +10,8 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -163,6 +165,10 @@ public class MainViewModel : ViewModelBase
     private readonly HashSet<Guid> _massSelectedFlashcardSetIds = new();
     private readonly HashSet<Guid> _massSelectedMindMapIds = new();
     private readonly HashSet<Guid> _massSelectedQuizIds = new();
+    private readonly Dictionary<Guid, NoteCardViewModel> _selectedNotes = new();
+    private readonly Dictionary<Guid, FlashcardSetViewModel> _selectedFlashcardSets = new();
+    private readonly Dictionary<Guid, MindMapViewModel> _selectedMindMaps = new();
+    private readonly Dictionary<Guid, QuizViewModel> _selectedQuizzes = new();
     private bool _isMassSelectMode;
     private string _massSelectDashboard = DashboardNotes;
     private DateTime _calendarSelectedDate = DateTime.Today;
@@ -563,7 +569,7 @@ public class MainViewModel : ViewModelBase
         FlashcardSortOptions = new ObservableCollection<NoteSortOptionItemViewModel>();
         MindMapSortOptions = new ObservableCollection<NoteSortOptionItemViewModel>();
         QuizSortOptions = new ObservableCollection<NoteSortOptionItemViewModel>();
-        CalendarScheduledNotes = new ObservableCollection<CalendarScheduledItemViewModel>();
+        CalendarScheduledNotes = new BulkObservableCollection<CalendarScheduledItemViewModel>();
         // Create a view for Notes so we can apply filtering for search
         _notesView = CollectionViewSource.GetDefaultView(Notes);
         _notesView.Filter = FilterUngroupedNotes;
@@ -734,11 +740,11 @@ public class MainViewModel : ViewModelBase
         TrashedNotes.Clear();
         if (result.TrashedDocs is { Count: > 0 } trashedDocs)
         {
-            foreach (var doc in trashedDocs)
-                TrashedNotes.Add(CreateNoteCard(doc));
+            ((BulkObservableCollection<NoteCardViewModel>)TrashedNotes)
+                .AddRange(trashedDocs.Select(CreateNoteCard));
         }
         PurgeExpiredTrashedNotes();
-        NotifyTrashChanged();
+        NotifyTrashChanged(refreshItems: TrashedNotes.Count < 10_000);
 
         if (result.Docs.Count == 0)
         {
@@ -3331,11 +3337,11 @@ public class MainViewModel : ViewModelBase
 
 
     public ObservableCollection<NoteCardViewModel> Notes { get; }
-    public ObservableCollection<NoteCardViewModel> TrashedNotes { get; } = new();
+    public ObservableCollection<NoteCardViewModel> TrashedNotes { get; } = new BulkObservableCollection<NoteCardViewModel>();
     public ObservableCollection<FlashcardSetViewModel> TrashedFlashcardSets { get; } = new();
     public ObservableCollection<MindMapViewModel> TrashedMindMaps { get; } = new();
     public ObservableCollection<QuizViewModel> TrashedQuizzes { get; } = new();
-    public ObservableCollection<TrashItemViewModel> TrashedItems { get; } = new BulkObservableCollection<TrashItemViewModel>();
+    public IReadOnlyList<TrashItemViewModel> TrashedItems { get; private set; } = new LazyTrashItemList([], TrashRetentionDays);
 
     public int TrashItemCount =>
         TrashedNotes.Count + TrashedFlashcardSets.Count + TrashedMindMaps.Count + TrashedQuizzes.Count;
@@ -4844,6 +4850,7 @@ public class MainViewModel : ViewModelBase
     private void CommitDeleteNote(NoteCardViewModel noteCard)
     {
         _massSelectedNoteIds.Remove(noteCard.Document.Id);
+        _selectedNotes.Remove(noteCard.Document.Id);
         noteCard.IsSelectedInMassSelect = false;
         Notes.Remove(noteCard);
         MoveNoteToTrash(noteCard);
@@ -4906,10 +4913,12 @@ public class MainViewModel : ViewModelBase
         TrashedQuizzes.Add(quiz);
     }
 
-    private void ApplyNotesDeleteReaction()
+    private void ApplyNotesDeleteReaction() => ApplyNotesDeleteReaction(bulkNoteUpdate: false);
+
+    private void ApplyNotesDeleteReaction(bool bulkNoteUpdate)
     {
         NormalizeGroups();
-        RebuildGroups();
+        RebuildGroups(bulkNoteUpdate);
         QueueSaveNotes();
         RecalculateUngroupedVisibleCount();
         NotifyNotesChanged();
@@ -5053,12 +5062,26 @@ public class MainViewModel : ViewModelBase
     /// once per type instead.</summary>
     public void RestoreTrashItems(IEnumerable<TrashItemViewModel> items)
     {
-        var list = items.ToList();
-        if (list.Count <= 1)
+        var lazyItems = items as LazyTrashItemList;
+        var list = lazyItems is null ? items.ToList() : null;
+        var selectedCount = lazyItems?.Count ?? list!.Count;
+        if (selectedCount <= 1)
         {
-            foreach (var item in list)
-                RestoreTrashItem(item);
+            if (selectedCount == 1)
+                RestoreTrashItem(lazyItems is null ? list![0] : lazyItems[0]);
             return;
+        }
+
+        var traceRestore = selectedCount >= 1_000 && ScrollPerfDiag.Enabled;
+        var stageStartedAt = traceRestore ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        void TraceRestoreStage(string stage)
+        {
+            if (!traceRestore)
+                return;
+
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            ScrollPerfDiag.Log($"massRestoreStage\tstage={stage}\tselected={selectedCount}\tnotes={Notes.Count}\ttrash={TrashedNotes.Count}\tdeltaMs={System.Diagnostics.Stopwatch.GetElapsedTime(stageStartedAt, now).TotalMilliseconds:F1}");
+            stageStartedAt = now;
         }
 
         var notes = new List<NoteCardViewModel>();
@@ -5066,9 +5089,10 @@ public class MainViewModel : ViewModelBase
         var maps = new List<MindMapViewModel>();
         var quizzes = new List<QuizViewModel>();
 
-        foreach (var item in list)
+        var sources = lazyItems is null ? list!.Select(item => item.Source) : lazyItems.EnumerateSources();
+        foreach (var source in sources)
         {
-            switch (item.Source)
+            switch (source)
             {
                 case NoteCardViewModel note:
                     notes.Add(note);
@@ -5084,26 +5108,25 @@ public class MainViewModel : ViewModelBase
                     break;
             }
         }
+        TraceRestoreStage("classify");
 
         if (notes.Count > 0)
         {
             RemoveManyFromObservableCollection(TrashedNotes, notes);
+            TraceRestoreStage("removeFromTrash");
             _notesBatchAddInProgress = true;
             try
             {
-                foreach (var note in notes)
-                {
-                    note.Document.IsDeleted = false;
-                    note.Document.DeletedAt = null;
-                    Notes.Add(note);
-                }
+                AddRestoredNotes(Notes, notes);
             }
             finally
             {
                 _notesBatchAddInProgress = false;
             }
+            TraceRestoreStage("addToNotes");
 
-            ApplyNotesDeleteReaction();
+            ApplyNotesDeleteReaction(bulkNoteUpdate: notes.Count >= 128);
+            TraceRestoreStage("rebuildNotes");
         }
 
         if (sets.Count > 0)
@@ -5170,6 +5193,26 @@ public class MainViewModel : ViewModelBase
         }
 
         NotifyTrashChanged();
+        TraceRestoreStage("refreshTrash");
+    }
+
+    internal static void AddRestoredNotes(
+        ObservableCollection<NoteCardViewModel> activeNotes,
+        IReadOnlyList<NoteCardViewModel> restoredNotes)
+    {
+        foreach (var note in restoredNotes)
+        {
+            note.Document.IsDeleted = false;
+            note.Document.DeletedAt = null;
+        }
+
+        if (restoredNotes.Count >= 128 && activeNotes is BulkObservableCollection<NoteCardViewModel> bulk)
+            bulk.AddRange(restoredNotes);
+        else
+        {
+            foreach (var note in restoredNotes)
+                activeNotes.Add(note);
+        }
     }
 
     /// <summary>Batched sibling of PurgeTrashItemPermanently - see RestoreTrashItems for why this
@@ -5178,11 +5221,13 @@ public class MainViewModel : ViewModelBase
     /// methods, once per item).</summary>
     public void PurgeTrashItemsPermanently(IEnumerable<TrashItemViewModel> items)
     {
-        var list = items.ToList();
-        if (list.Count <= 1)
+        var lazyItems = items as LazyTrashItemList;
+        var list = lazyItems is null ? items.ToList() : null;
+        var selectedCount = lazyItems?.Count ?? list!.Count;
+        if (selectedCount <= 1)
         {
-            foreach (var item in list)
-                PurgeTrashItemPermanently(item);
+            if (selectedCount == 1)
+                PurgeTrashItemPermanently(lazyItems is null ? list![0] : lazyItems[0]);
             return;
         }
 
@@ -5191,9 +5236,10 @@ public class MainViewModel : ViewModelBase
         var maps = new List<MindMapViewModel>();
         var quizzes = new List<QuizViewModel>();
 
-        foreach (var item in list)
+        var sources = lazyItems is null ? list!.Select(item => item.Source) : lazyItems.EnumerateSources();
+        foreach (var source in sources)
         {
-            switch (item.Source)
+            switch (source)
             {
                 case NoteCardViewModel note:
                     notes.Add(note);
@@ -5285,78 +5331,68 @@ public class MainViewModel : ViewModelBase
             NotifyTrashChanged();
     }
 
-    /// <summary>Builds the full list off to the side and swaps it in with at most two
-    /// CollectionChanged events (Clear + AddRange), instead of one event per item - mirrors
-    /// CommitBulkNotes's use of the same BulkObservableCollection idiom. Firing one event per item
-    /// here used to make every subscriber's per-event reaction (e.g. TrashPanel's ApplyFilters,
-    /// itself O(current count)) run once per item too, turning opening the Trash panel after a
-    /// large batch delete into an O(k^2) freeze.</summary>
+    /// <summary>Keep lightweight row descriptors in deletion order. The panel creates view models
+    /// only for rows WPF actually realizes while scrolling.</summary>
     public void RefreshTrashedItems()
     {
-        var items = new List<TrashItemViewModel>(
+        var items = new List<TrashItemEntry>(
             TrashedNotes.Count + TrashedFlashcardSets.Count + TrashedMindMaps.Count + TrashedQuizzes.Count);
 
         foreach (var note in TrashedNotes.OrderByDescending(n => n.Document.DeletedAt ?? DateTime.MinValue))
         {
-            items.Add(new TrashItemViewModel(
+            items.Add(new TrashItemEntry(
                 TrashItemKind.Note,
                 note.Document.Id,
                 note.Title,
                 note.Document.DeletedAt,
-                note,
-                TrashRetentionDays));
+                note));
         }
 
         foreach (var set in TrashedFlashcardSets.OrderByDescending(s => s.Document.DeletedAt ?? DateTime.MinValue))
         {
-            items.Add(new TrashItemViewModel(
+            items.Add(new TrashItemEntry(
                 TrashItemKind.FlashcardSet,
                 set.Document.Id,
                 set.Title,
                 set.Document.DeletedAt,
-                set,
-                TrashRetentionDays));
+                set));
         }
 
         foreach (var map in TrashedMindMaps.OrderByDescending(m => m.Document.DeletedAt ?? DateTime.MinValue))
         {
-            items.Add(new TrashItemViewModel(
+            items.Add(new TrashItemEntry(
                 TrashItemKind.MindMap,
                 map.Document.Id,
                 map.Title,
                 map.Document.DeletedAt,
-                map,
-                TrashRetentionDays));
+                map));
         }
 
         foreach (var quiz in TrashedQuizzes.OrderByDescending(q => q.Document.DeletedAt ?? DateTime.MinValue))
         {
-            items.Add(new TrashItemViewModel(
+            items.Add(new TrashItemEntry(
                 TrashItemKind.Quiz,
                 quiz.Document.Id,
                 quiz.Title,
                 quiz.Document.DeletedAt,
-                quiz,
-                TrashRetentionDays));
+                quiz));
         }
 
-        TrashedItems.Clear();
-        if (TrashedItems is BulkObservableCollection<TrashItemViewModel> bulk)
-        {
-            bulk.AddRange(items);
-        }
-        else
-        {
-            foreach (var item in items)
-                TrashedItems.Add(item);
-        }
+        TrashedItems = new LazyTrashItemList(items.ToArray(), TrashRetentionDays);
+        OnPropertyChanged(nameof(TrashedItems));
     }
 
-    private void NotifyTrashChanged()
+    private void NotifyTrashChanged(bool refreshItems = true)
     {
         OnPropertyChanged(nameof(TrashItemCount));
         OnPropertyChanged(nameof(HasTrashItems));
-        RefreshTrashedItems();
+        if (refreshItems)
+            RefreshTrashedItems();
+        else
+        {
+            TrashedItems = new LazyTrashItemList([], TrashRetentionDays);
+            OnPropertyChanged(nameof(TrashedItems));
+        }
     }
 
     /// <summary>Runs once per app start (see ApplyLoadedNotes) rather than on a timer - a note-taking
@@ -5372,13 +5408,11 @@ public class MainViewModel : ViewModelBase
             return;
 
         foreach (var note in expired)
-        {
             DeleteNoteMediaFiles(note.Document);
-            TrashedNotes.Remove(note);
-        }
+        RemoveManyFromObservableCollection(TrashedNotes, expired);
 
         QueueSaveNotes();
-        NotifyTrashChanged();
+        NotifyTrashChanged(refreshItems: TrashedNotes.Count < 10_000);
     }
 
     /// <summary>Deletes photo files in the media directory that no attachment references
@@ -5578,14 +5612,18 @@ public class MainViewModel : ViewModelBase
         _massSelectedFlashcardSetIds.Clear();
         _massSelectedMindMapIds.Clear();
         _massSelectedQuizIds.Clear();
-        foreach (var note in Notes)
+        foreach (var note in _selectedNotes.Values)
             note.IsSelectedInMassSelect = false;
-        foreach (var set in FlashcardSets)
+        foreach (var set in _selectedFlashcardSets.Values)
             set.IsSelectedInMassSelect = false;
-        foreach (var map in MindMaps)
+        foreach (var map in _selectedMindMaps.Values)
             map.IsSelectedInMassSelect = false;
-        foreach (var quiz in Quizzes)
+        foreach (var quiz in _selectedQuizzes.Values)
             quiz.IsSelectedInMassSelect = false;
+        _selectedNotes.Clear();
+        _selectedFlashcardSets.Clear();
+        _selectedMindMaps.Clear();
+        _selectedQuizzes.Clear();
 
         IsMassSelectMode = false;
         NotifyMassSelectionChanged();
@@ -6716,6 +6754,7 @@ public class MainViewModel : ViewModelBase
         foreach (var set in sets)
         {
             _massSelectedFlashcardSetIds.Remove(set.Document.Id);
+            _selectedFlashcardSets.Remove(set.Document.Id);
             set.IsSelectedInMassSelect = false;
         }
 
@@ -6752,6 +6791,7 @@ public class MainViewModel : ViewModelBase
         foreach (var map in maps)
         {
             _massSelectedMindMapIds.Remove(map.Document.Id);
+            _selectedMindMaps.Remove(map.Document.Id);
             map.IsSelectedInMassSelect = false;
         }
 
@@ -6788,6 +6828,7 @@ public class MainViewModel : ViewModelBase
         foreach (var quiz in quizzes)
         {
             _massSelectedQuizIds.Remove(quiz.Document.Id);
+            _selectedQuizzes.Remove(quiz.Document.Id);
             quiz.IsSelectedInMassSelect = false;
         }
 
@@ -6817,15 +6858,30 @@ public class MainViewModel : ViewModelBase
 
     private void DeleteSelectedNotesBatch()
     {
+        var traceDelete = _massSelectedNoteIds.Count >= 1_000 && ScrollPerfDiag.Enabled;
+        var stageStartedAt = traceDelete ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        void TraceStage(string stage)
+        {
+            if (!traceDelete)
+                return;
+
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            ScrollPerfDiag.Log($"massDeleteStage\tstage={stage}\tselected={_massSelectedNoteIds.Count}\tnotes={Notes.Count}\ttrash={TrashedNotes.Count}\tdeltaMs={System.Diagnostics.Stopwatch.GetElapsedTime(stageStartedAt, now).TotalMilliseconds:F1}");
+            stageStartedAt = now;
+        }
+
         var notes = GetMassSelectedNotes();
         if (notes.Count == 0)
             return;
+        TraceStage("gather");
 
         foreach (var note in notes)
         {
             _massSelectedNoteIds.Remove(note.Document.Id);
+            _selectedNotes.Remove(note.Document.Id);
             note.IsSelectedInMassSelect = false;
         }
+        TraceStage("clearSelection");
 
         if (MotionHost is not null && notes.Count <= MassDeleteAnimatedMax)
         {
@@ -6837,18 +6893,49 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
-        MotionHost?.PrepareMutation(DashboardMotionScope.Notes);
+        // A large removal has no useful per-card motion to capture, and capturing its layout
+        // adds another synchronous pass before the collection can change.
+        var animateLayout = notes.Count <= 256;
+        if (animateLayout)
+            MotionHost?.PrepareMutation(DashboardMotionScope.Notes);
         CommitRemoveNotesBatch(notes);
+        TraceStage("commit");
         ApplyNotesDeleteReaction();
-        MotionHost?.CompleteMutation(DashboardMotionScope.Notes);
+        TraceStage("reaction");
+        if (animateLayout)
+            MotionHost?.CompleteMutation(DashboardMotionScope.Notes);
     }
 
     private void CommitRemoveNotesBatch(IReadOnlyList<NoteCardViewModel> notes)
     {
-        RemoveManyFromObservableCollection(Notes, notes);
+        _notesBatchAddInProgress = true;
+        try
+        {
+            RemoveManyFromObservableCollection(Notes, notes);
+        }
+        finally
+        {
+            _notesBatchAddInProgress = false;
+        }
+
+        var deletedAt = DateTime.UtcNow;
         foreach (var note in notes)
-            MoveNoteToTrashCore(note);
-        NotifyTrashChanged();
+        {
+            note.Document.IsDeleted = true;
+            note.Document.DeletedAt = deletedAt;
+        }
+
+        if (notes.Count >= 128 && TrashedNotes is BulkObservableCollection<NoteCardViewModel> bulkTrash)
+            bulkTrash.AddRange(notes);
+        else
+        {
+            foreach (var note in notes)
+                TrashedNotes.Add(note);
+        }
+
+        // The Trash panel repopulates on opening. Building and sorting a million wrappers here,
+        // while that panel is closed, needlessly blocks the dashboard's delete click.
+        NotifyTrashChanged(refreshItems: notes.Count < 10_000);
     }
 
     private void RemoveSelectedFromGroups()
@@ -7458,32 +7545,20 @@ public class MainViewModel : ViewModelBase
         switch (_massSelectDashboard)
         {
             case DashboardFlashcards:
-                foreach (var set in FlashcardSets)
-                {
-                    if (_massSelectedFlashcardSetIds.Contains(set.Document.Id))
-                        yield return (set.Document.GroupId, set.Document.IsPinned);
-                }
+                foreach (var set in _selectedFlashcardSets.Values)
+                    yield return (set.Document.GroupId, set.Document.IsPinned);
                 yield break;
             case DashboardMindMaps:
-                foreach (var map in MindMaps)
-                {
-                    if (_massSelectedMindMapIds.Contains(map.Document.Id))
-                        yield return (map.Document.GroupId, map.Document.IsPinned);
-                }
+                foreach (var map in _selectedMindMaps.Values)
+                    yield return (map.Document.GroupId, map.Document.IsPinned);
                 yield break;
             case DashboardQuizzes:
-                foreach (var quiz in Quizzes)
-                {
-                    if (_massSelectedQuizIds.Contains(quiz.Document.Id))
-                        yield return (quiz.Document.GroupId, quiz.Document.IsPinned);
-                }
+                foreach (var quiz in _selectedQuizzes.Values)
+                    yield return (quiz.Document.GroupId, quiz.Document.IsPinned);
                 yield break;
             default:
-                foreach (var note in Notes)
-                {
-                    if (_massSelectedNoteIds.Contains(note.Document.Id))
-                        yield return (note.Document.GroupId, note.Document.IsPinned);
-                }
+                foreach (var note in _selectedNotes.Values)
+                    yield return (note.Document.GroupId, note.Document.IsPinned);
                 yield break;
         }
     }
@@ -7621,11 +7696,13 @@ public class MainViewModel : ViewModelBase
         {
             if (_massSelectedNoteIds.Add(note.Document.Id))
                 note.IsSelectedInMassSelect = true;
+            _selectedNotes[note.Document.Id] = note;
         }
         else
         {
             if (_massSelectedNoteIds.Remove(note.Document.Id))
                 note.IsSelectedInMassSelect = false;
+            _selectedNotes.Remove(note.Document.Id);
         }
 
         if (notify)
@@ -7638,11 +7715,13 @@ public class MainViewModel : ViewModelBase
         {
             if (_massSelectedFlashcardSetIds.Add(set.Document.Id))
                 set.IsSelectedInMassSelect = true;
+            _selectedFlashcardSets[set.Document.Id] = set;
         }
         else
         {
             if (_massSelectedFlashcardSetIds.Remove(set.Document.Id))
                 set.IsSelectedInMassSelect = false;
+            _selectedFlashcardSets.Remove(set.Document.Id);
         }
 
         if (notify)
@@ -7655,11 +7734,13 @@ public class MainViewModel : ViewModelBase
         {
             if (_massSelectedMindMapIds.Add(map.Document.Id))
                 map.IsSelectedInMassSelect = true;
+            _selectedMindMaps[map.Document.Id] = map;
         }
         else
         {
             if (_massSelectedMindMapIds.Remove(map.Document.Id))
                 map.IsSelectedInMassSelect = false;
+            _selectedMindMaps.Remove(map.Document.Id);
         }
 
         if (notify)
@@ -7672,11 +7753,13 @@ public class MainViewModel : ViewModelBase
         {
             if (_massSelectedQuizIds.Add(quiz.Document.Id))
                 quiz.IsSelectedInMassSelect = true;
+            _selectedQuizzes[quiz.Document.Id] = quiz;
         }
         else
         {
             if (_massSelectedQuizIds.Remove(quiz.Document.Id))
                 quiz.IsSelectedInMassSelect = false;
+            _selectedQuizzes.Remove(quiz.Document.Id);
         }
 
         if (notify)
@@ -7810,30 +7893,55 @@ public class MainViewModel : ViewModelBase
 
     private void EnsureMassSelectionConsistency()
     {
-        var existingIds = Notes.Select(note => note.Document.Id).ToHashSet();
+        _selectedNotes.Clear();
         if (_massSelectedNoteIds.Count > 0)
+        {
+            var existingIds = Notes.Select(note => note.Document.Id).ToHashSet();
             _massSelectedNoteIds.RemoveWhere(id => !existingIds.Contains(id));
+            foreach (var note in Notes)
+            {
+                var selected = _massSelectedNoteIds.Contains(note.Document.Id);
+                note.IsSelectedInMassSelect = selected;
+                if (selected)
+                    _selectedNotes[note.Document.Id] = note;
+            }
+        }
 
-        foreach (var note in Notes)
-            note.IsSelectedInMassSelect = _massSelectedNoteIds.Contains(note.Document.Id);
-
+        _selectedFlashcardSets.Clear();
         var existingFlashcardSetIds = FlashcardSets.Select(set => set.Document.Id).ToHashSet();
         if (_massSelectedFlashcardSetIds.Count > 0)
             _massSelectedFlashcardSetIds.RemoveWhere(id => !existingFlashcardSetIds.Contains(id));
         foreach (var set in FlashcardSets)
-            set.IsSelectedInMassSelect = _massSelectedFlashcardSetIds.Contains(set.Document.Id);
+        {
+            var selected = _massSelectedFlashcardSetIds.Contains(set.Document.Id);
+            set.IsSelectedInMassSelect = selected;
+            if (selected)
+                _selectedFlashcardSets[set.Document.Id] = set;
+        }
 
+        _selectedMindMaps.Clear();
         var existingMindMapIds = MindMaps.Select(map => map.Document.Id).ToHashSet();
         if (_massSelectedMindMapIds.Count > 0)
             _massSelectedMindMapIds.RemoveWhere(id => !existingMindMapIds.Contains(id));
         foreach (var map in MindMaps)
-            map.IsSelectedInMassSelect = _massSelectedMindMapIds.Contains(map.Document.Id);
+        {
+            var selected = _massSelectedMindMapIds.Contains(map.Document.Id);
+            map.IsSelectedInMassSelect = selected;
+            if (selected)
+                _selectedMindMaps[map.Document.Id] = map;
+        }
 
+        _selectedQuizzes.Clear();
         var existingQuizIds = Quizzes.Select(quiz => quiz.Document.Id).ToHashSet();
         if (_massSelectedQuizIds.Count > 0)
             _massSelectedQuizIds.RemoveWhere(id => !existingQuizIds.Contains(id));
         foreach (var quiz in Quizzes)
-            quiz.IsSelectedInMassSelect = _massSelectedQuizIds.Contains(quiz.Document.Id);
+        {
+            var selected = _massSelectedQuizIds.Contains(quiz.Document.Id);
+            quiz.IsSelectedInMassSelect = selected;
+            if (selected)
+                _selectedQuizzes[quiz.Document.Id] = quiz;
+        }
 
         NotifyMassSelectionChanged();
     }
@@ -8731,140 +8839,97 @@ public class MainViewModel : ViewModelBase
         List<QuizViewModel> quizzes,
         DateTime selectedDate)
     {
-        var selected = selectedDate.Date;
-
-        var noteItems = notes
-            .Where(note => MatchesSelectedTags(note, selectedTags))
-            .SelectMany(note => GetEffectiveSchedules(note.Document).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.Note,
-                Note = note,
-                Title = note.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var flashcardItems = flashcardSets
-            .SelectMany(fs => (fs.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.Flashcard,
-                FlashcardSet = fs,
-                Title = fs.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var mindMapItems = mindMaps
-            .SelectMany(mm => (mm.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.MindMap,
-                MindMap = mm,
-                Title = mm.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var quizItems = quizzes
-            .SelectMany(q => (q.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.Quiz,
-                Quiz = q,
-                Title = q.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var allItems = noteItems
-            .Concat(flashcardItems)
-            .Concat(mindMapItems)
-            .Concat(quizItems)
-            .ToList();
-
-        var datesWithSchedules = allItems
-            .Select(item => item.ScheduledAt.Date)
-            .Distinct()
-            .OrderBy(date => date)
-            .ToArray();
-
-        var items = allItems
-            .Where(item => item.ScheduledAt.Date == selected)
-            .OrderBy(item => item.ScheduledAt)
-            .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-        return (items, datesWithSchedules);
+        return BuildCalendarScheduledNotes(
+            notes.Where(note => HasNoteSchedule(note.Document) && MatchesSelectedTags(note, selectedTags)),
+            flashcardSets, mindMaps, quizzes, selectedDate.Date);
     }
 
     private void RefreshCalendarScheduledNotes()
     {
-        var selected = CalendarSelectedDate.Date;
+        var (items, datesWithSchedules) = BuildCalendarScheduledNotes(
+            Notes.Where(note => HasNoteSchedule(note.Document) && MatchesSearch(note)),
+            FlashcardSets, MindMaps, Quizzes, CalendarSelectedDate.Date);
 
-        var noteItems = Notes
-            .Where(MatchesSearch)
-            .SelectMany(note => GetEffectiveSchedules(note.Document).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.Note,
-                Note = note,
-                Title = note.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var flashcardItems = FlashcardSets
-            .SelectMany(fs => (fs.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.Flashcard,
-                FlashcardSet = fs,
-                Title = fs.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var mindMapItems = MindMaps
-            .SelectMany(mm => (mm.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.MindMap,
-                MindMap = mm,
-                Title = mm.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var quizItems = Quizzes
-            .SelectMany(q => (q.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>()).Select(entry => new CalendarScheduledItemViewModel
-            {
-                ItemType = ScheduledItemType.Quiz,
-                Quiz = q,
-                Title = q.Title,
-                ScheduledAt = entry.ScheduledAt,
-                ScheduleNote = entry.Note ?? string.Empty
-            }));
-
-        var allItems = noteItems
-            .Concat(flashcardItems)
-            .Concat(mindMapItems)
-            .Concat(quizItems)
-            .ToList();
-
-        CalendarDatesWithSchedules = allItems
-            .Select(item => item.ScheduledAt.Date)
-            .Distinct()
-            .OrderBy(date => date)
-            .ToArray();
+        CalendarDatesWithSchedules = datesWithSchedules;
         OnPropertyChanged(nameof(CalendarDatesWithSchedules));
-
-        var items = allItems
-            .Where(item => item.ScheduledAt.Date == selected)
-            .OrderBy(item => item.ScheduledAt)
-            .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-        CalendarScheduledNotes.Clear();
-        foreach (var item in items)
-            CalendarScheduledNotes.Add(item);
+        ((BulkObservableCollection<CalendarScheduledItemViewModel>)CalendarScheduledNotes).ReplaceAll(items);
 
         OnPropertyChanged(nameof(HasCalendarScheduledNotes));
         OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
+    }
+
+    private static (List<CalendarScheduledItemViewModel> Items, DateTime[] DatesWithSchedules) BuildCalendarScheduledNotes(
+        IEnumerable<NoteCardViewModel> notes,
+        IEnumerable<FlashcardSetViewModel> flashcardSets,
+        IEnumerable<MindMapViewModel> mindMaps,
+        IEnumerable<QuizViewModel> quizzes,
+        DateTime selectedDate)
+    {
+        var items = new List<CalendarScheduledItemViewModel>();
+        var dates = new HashSet<DateTime>();
+
+        foreach (var note in notes)
+            AppendCalendarSchedules(GetEffectiveSchedules(note.Document), note, selectedDate, dates, items,
+                static (owner, entry) => new CalendarScheduledItemViewModel
+                {
+                    ItemType = ScheduledItemType.Note, Note = owner, Title = owner.Title,
+                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                });
+
+        foreach (var set in flashcardSets)
+            AppendCalendarSchedules(set.Document.Schedules, set, selectedDate, dates, items,
+                static (owner, entry) => new CalendarScheduledItemViewModel
+                {
+                    ItemType = ScheduledItemType.Flashcard, FlashcardSet = owner, Title = owner.Title,
+                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                });
+
+        foreach (var map in mindMaps)
+            AppendCalendarSchedules(map.Document.Schedules, map, selectedDate, dates, items,
+                static (owner, entry) => new CalendarScheduledItemViewModel
+                {
+                    ItemType = ScheduledItemType.MindMap, MindMap = owner, Title = owner.Title,
+                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                });
+
+        foreach (var quiz in quizzes)
+            AppendCalendarSchedules(quiz.Document.Schedules, quiz, selectedDate, dates, items,
+                static (owner, entry) => new CalendarScheduledItemViewModel
+                {
+                    ItemType = ScheduledItemType.Quiz, Quiz = owner, Title = owner.Title,
+                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                });
+
+        items.Sort((left, right) =>
+        {
+            var time = left.ScheduledAt.CompareTo(right.ScheduledAt);
+            return time != 0 ? time : StringComparer.CurrentCultureIgnoreCase.Compare(left.Title, right.Title);
+        });
+
+        return (items, dates.OrderBy(date => date).ToArray());
+    }
+
+    private static bool HasNoteSchedule(NoteDocument document)
+        => document.Schedules is { Count: > 0 } || document.ScheduledAt.HasValue;
+
+    private static void AppendCalendarSchedules<T>(
+        IEnumerable<NoteScheduleEntry>? schedules,
+        T owner,
+        DateTime selectedDate,
+        HashSet<DateTime> dates,
+        List<CalendarScheduledItemViewModel> items,
+        Func<T, NoteScheduleEntry, CalendarScheduledItemViewModel> createItem)
+    {
+        if (schedules is null)
+            return;
+
+        foreach (var entry in schedules)
+        {
+            var date = entry.ScheduledAt.Date;
+            dates.Add(date);
+            if (date == selectedDate)
+                items.Add(createItem(owner, entry));
+        }
     }
 
     private static bool AreSchedulesEqual(IReadOnlyList<NoteScheduleEntry> left, IReadOnlyList<NoteScheduleEntry> right)
@@ -8966,19 +9031,23 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Bulk removal for a List-backed ObservableCollection - avoids the O(n) IndexOf+shift
-    /// that ObservableCollection.Remove() pays per call, which turned batch delete/restore/purge at
-    /// library scale (tens of thousands of items) into O(m*n). Backward index iteration means
-    /// removing from the current tail costs nothing to shift, so the common "remove almost
-    /// everything" case is O(n) total; mirrors SyncObservableCollectionOrder's own HashSet-backed
-    /// idiom below.</summary>
-    private static void RemoveManyFromObservableCollection<T>(ObservableCollection<T> collection, IReadOnlyCollection<T> itemsToRemove)
+    /// <summary>Bulk removal for a List-backed ObservableCollection. Large batches use one Reset
+    /// rather than a notification for every removed item; small batches retain granular events.</summary>
+    internal static void RemoveManyFromObservableCollection<T>(ObservableCollection<T> collection, IReadOnlyCollection<T> itemsToRemove)
         where T : class
     {
         if (itemsToRemove.Count == 0)
             return;
 
         var toRemove = new HashSet<T>(itemsToRemove);
+        if (itemsToRemove.Count >= 128 && collection is BulkObservableCollection<T> bulk)
+        {
+            var remaining = collection.Where(item => !toRemove.Contains(item)).ToList();
+            if (remaining.Count != collection.Count)
+                bulk.ReplaceAll(remaining);
+            return;
+        }
+
         for (var i = collection.Count - 1; i >= 0; i--)
         {
             if (toRemove.Contains(collection[i]))
@@ -9238,9 +9307,8 @@ public class MainViewModel : ViewModelBase
         CalendarDatesWithSchedules = result.CalendarDatesWithSchedules;
         OnPropertyChanged(nameof(CalendarDatesWithSchedules));
 
-        CalendarScheduledNotes.Clear();
-        foreach (var item in result.CalendarScheduledNotes)
-            CalendarScheduledNotes.Add(item);
+        ((BulkObservableCollection<CalendarScheduledItemViewModel>)CalendarScheduledNotes)
+            .ReplaceAll(result.CalendarScheduledNotes);
 
         OnPropertyChanged(nameof(HasCalendarScheduledNotes));
         OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
@@ -9454,7 +9522,12 @@ public class MainViewModel : ViewModelBase
         string signature;
         try
         {
+            var signatureStartedAt = ScrollPerfDiag.Enabled && Notes.Count + TrashedNotes.Count >= 1_000
+                ? System.Diagnostics.Stopwatch.GetTimestamp()
+                : 0;
             signature = BuildNotesStoreSignature();
+            if (signatureStartedAt != 0)
+                ScrollPerfDiag.Log($"notesSaveSignature\tnotes={Notes.Count}\ttrash={TrashedNotes.Count}\tdurationMs={System.Diagnostics.Stopwatch.GetElapsedTime(signatureStartedAt).TotalMilliseconds:F1}");
             if (string.Equals(signature, _lastSavedNotesSignature, StringComparison.Ordinal))
                 return;
         }
@@ -9579,37 +9652,74 @@ public class MainViewModel : ViewModelBase
     /// renames, pinning, ordering, trash) are covered field-by-field. The note sequence order
     /// matters - a reorder must look like a change.
     /// </summary>
-    private string BuildNotesStoreSignature()
+    private string BuildNotesStoreSignature() => ComputeNotesStoreSignature(
+        Notes.Select(vm => vm.Document),
+        TrashedNotes.Select(vm => vm.Document),
+        TrashedNotes.Count,
+        _groupMetadata.Values);
+
+    internal static string ComputeNotesStoreSignature(
+        IEnumerable<NoteDocument> notes,
+        IEnumerable<NoteDocument> trashedNotes,
+        int trashedCount,
+        IEnumerable<NoteGroupData> groups)
     {
-        var builder = new System.Text.StringBuilder();
-        foreach (var vm in Notes)
+        // The old StringBuilder and retained signature each grew with every note. Stream the
+        // same fields into a cryptographic digest so save checks use bounded memory.
+        using var sha256 = SHA256.Create();
+        using var hashingStream = new CryptoStream(Stream.Null, sha256, CryptoStreamMode.Write,
+            leaveOpen: true);
+        using (var writer = new StreamWriter(hashingStream, new UTF8Encoding(false),
+            bufferSize: 8192, leaveOpen: true))
         {
-            var doc = vm.Document;
-            builder.Append(doc.Id).Append('|');
-            builder.Append(doc.LastModified.Ticks).Append('|');
-            builder.Append(doc.Content?.Length ?? 0).Append('|');
-            builder.Append(doc.Images?.Count ?? 0).Append('|');
-            builder.Append(doc.GroupId).Append('|');
-            builder.Append(doc.IsPinned).Append('|');
-            builder.Append(doc.IsEditorFontPanelOpen).Append('|');
-            builder.Append(doc.IsWordWrapEnabled).Append(';');
+            foreach (var doc in notes)
+            {
+                writer.Write(doc.Id.ToString());
+                writer.Write('|');
+                writer.Write(doc.LastModified.Ticks);
+                writer.Write('|');
+                writer.Write(doc.Content?.Length ?? 0);
+                writer.Write('|');
+                writer.Write(doc.Images?.Count ?? 0);
+                writer.Write('|');
+                writer.Write(doc.GroupId?.ToString());
+                writer.Write('|');
+                writer.Write(doc.IsPinned);
+                writer.Write('|');
+                writer.Write(doc.IsEditorFontPanelOpen?.ToString());
+                writer.Write('|');
+                writer.Write(doc.IsWordWrapEnabled?.ToString());
+                writer.Write(';');
+            }
+
+            writer.Write('T');
+            writer.Write(trashedCount);
+            writer.Write(';');
+            foreach (var doc in trashedNotes)
+            {
+                writer.Write(doc.Id.ToString());
+                writer.Write('|');
+                writer.Write(doc.LastModified.Ticks);
+                writer.Write(';');
+            }
+
+            foreach (var group in groups
+                .OrderBy(g => g.SortOrder ?? int.MaxValue)
+                .ThenBy(g => g.Name))
+            {
+                writer.Write(group.GroupId.ToString());
+                writer.Write('|');
+                writer.Write(group.Name);
+                writer.Write('|');
+                writer.Write(group.BackgroundColor);
+                writer.Write('|');
+                writer.Write(group.SortOrder?.ToString());
+                writer.Write(';');
+            }
         }
 
-        builder.Append("T").Append(TrashedNotes.Count).Append(';');
-        foreach (var vm in TrashedNotes)
-            builder.Append(vm.Document.Id).Append('|').Append(vm.Document.LastModified.Ticks).Append(';');
-
-        foreach (var group in _groupMetadata.Values
-            .OrderBy(g => g.SortOrder ?? int.MaxValue)
-            .ThenBy(g => g.Name))
-        {
-            builder.Append(group.GroupId).Append('|');
-            builder.Append(group.Name).Append('|');
-            builder.Append(group.BackgroundColor).Append('|');
-            builder.Append(group.SortOrder).Append(';');
-        }
-
-        return builder.ToString();
+        hashingStream.FlushFinalBlock();
+        return Convert.ToHexString(sha256.Hash ?? throw new InvalidOperationException("Note signature hash failed."));
     }
 
     private void ApplyAppSettings(AppSettings settings, bool applyThemeAndCulture)

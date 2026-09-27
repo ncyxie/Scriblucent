@@ -1,38 +1,38 @@
 using Scriblucent.Animations;
 using Scriblucent.Controls;
 using Scriblucent.Localization;
+using Scriblucent.ViewModels;
+using System.Diagnostics;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace Scriblucent.Views;
 
 public partial class InsertHyperlinkDialog : Window
 {
-    public readonly record struct NoteLinkOption(Guid Id, string Title);
-
     private const string InternalNoteScheme = "scriblucent-note";
 
     private readonly OverlayDialogAnimator _overlayAnimator;
-    private readonly IReadOnlyList<NoteLinkOption> _noteOptions;
-    private readonly ICollectionView _noteResultsView;
+    private readonly IReadOnlyList<NoteCardViewModel> _noteOptions;
+    private int _searchGeneration;
 
     public string LinkText { get; private set; } = string.Empty;
     public Uri? ResultUri { get; private set; }
 
-    public InsertHyperlinkDialog(string initialDisplayText, IReadOnlyList<NoteLinkOption> noteOptions)
+    public InsertHyperlinkDialog(string initialDisplayText, IReadOnlyList<NoteCardViewModel> noteOptions)
     {
+        _noteOptions = noteOptions;
         InitializeComponent();
         _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
         Scriblucent.Services.WindowThemeService.Register(this);
         Loaded += InsertHyperlinkDialog_Loaded;
 
-        _noteOptions = noteOptions;
-        _noteResultsView = CollectionViewSource.GetDefaultView(_noteOptions);
-        NoteResultsListBox.ItemsSource = _noteResultsView;
+        NoteResultsListBox.ItemsSource = _noteOptions;
         DisplayTextBox.Text = initialDisplayText;
+        Closed += (_, _) => _searchGeneration++;
 
         if (_noteOptions.Count == 0)
             NoteModeRadioButton.IsEnabled = false;
@@ -63,18 +63,44 @@ public partial class InsertHyperlinkDialog : Window
         HideValidationMessage();
     }
 
-    private void NoteSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    private async void NoteSearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        if (NoteResultsListBox is null)
+            return;
+
+        var generation = ++_searchGeneration;
         var query = NoteSearchTextBox.Text?.Trim() ?? string.Empty;
-        _noteResultsView.Filter = query.Length == 0
-            ? null
-            : option => option is NoteLinkOption noteLink
-                        && noteLink.Title.Contains(query, StringComparison.OrdinalIgnoreCase);
+        if (query.Length == 0)
+        {
+            NoteResultsListBox.ItemsSource = _noteOptions;
+            return;
+        }
+
+        var matches = new List<NoteCardViewModel>();
+        var sliceTimer = Stopwatch.StartNew();
+        for (var i = 0; i < _noteOptions.Count; i++)
+        {
+            if (generation != _searchGeneration)
+                return;
+
+            var option = _noteOptions[i];
+            if ((option.Title ?? string.Empty).Contains(query, StringComparison.OrdinalIgnoreCase))
+                matches.Add(option);
+
+            if (sliceTimer.ElapsedMilliseconds >= 4)
+            {
+                sliceTimer.Restart();
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+        }
+
+        if (generation == _searchGeneration)
+            NoteResultsListBox.ItemsSource = matches;
     }
 
     private void NoteResultsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (NoteResultsListBox.SelectedItem is not NoteLinkOption option)
+        if (NoteResultsListBox.SelectedItem is not NoteCardViewModel option)
             return;
 
         if (string.IsNullOrWhiteSpace(DisplayTextBox.Text))
@@ -99,13 +125,13 @@ public partial class InsertHyperlinkDialog : Window
         }
         else
         {
-            if (NoteResultsListBox.SelectedItem is not NoteLinkOption option)
+            if (NoteResultsListBox.SelectedItem is not NoteCardViewModel option)
             {
                 ShowValidationMessage(LocalizationService.GetString("InsertLinkNoNoteSelected"));
                 return;
             }
 
-            uri = new Uri($"{InternalNoteScheme}://{option.Id:D}");
+            uri = new Uri($"{InternalNoteScheme}://{option.Document.Id:D}");
         }
 
         var displayText = DisplayTextBox.Text?.Trim();

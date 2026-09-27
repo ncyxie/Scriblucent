@@ -889,10 +889,6 @@ namespace Scriblucent
                     AnimateMassSelectOverlay(vm.IsMassSelectMode);
                     MassSelectHighlightBehavior.ScheduleSyncAllDashboardGrids();
                 }
-                else if (e.PropertyName == nameof(MainViewModel.ActiveMassSelectedCount) && vm.IsMassSelectMode)
-                {
-                    MassSelectHighlightBehavior.ScheduleSyncAllDashboardGrids();
-                }
                 else if (e.PropertyName == nameof(MainViewModel.ActiveDashboard))
                 {
                     SyncDashboardLoadingState(vm);

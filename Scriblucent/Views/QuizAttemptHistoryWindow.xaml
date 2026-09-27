@@ -83,23 +83,28 @@
 
         <controls:FeatureWindowShell.Body>
             <Grid Margin="20,16,20,8">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled"
-                              Background="Transparent"
-                              Padding="0"
-                              ClipToBounds="True"
+                <ItemsControl ItemsSource="{Binding Attempts}"
                               UseLayoutRounding="True"
                               SnapsToDevicePixels="True"
-                              behaviors:ScrollTileBehavior.IsEnabled="True"
-                              behaviors:MiddleClickScrollBehavior.IsEnabled="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              VirtualizingPanel.ScrollUnit="Pixel"
+                              ScrollViewer.CanContentScroll="True"
                               Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
-                    <ItemsControl ItemsSource="{Binding Attempts}"
-                                  UseLayoutRounding="True"
-                                  SnapsToDevicePixels="True"
-                                  VirtualizingPanel.IsVirtualizing="True"
-                                  VirtualizingPanel.VirtualizationMode="Recycling"
-                                  VirtualizingPanel.ScrollUnit="Pixel"
-                                  ScrollViewer.CanContentScroll="True">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="{x:Type ItemsControl}">
+                                <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Background="Transparent"
+                                              ClipToBounds="True"
+                                              UseLayoutRounding="True"
+                                              SnapsToDevicePixels="True"
+                                              behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <VirtualizingStackPanel IsItemsHost="True"
@@ -119,7 +124,7 @@
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="BorderBrush" Value="Transparent"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding Passed}" Value="True">
                                                     <Setter Property="BorderBrush" Value="{DynamicResource AccentSuccess}"/>
@@ -140,10 +145,12 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <TextBlock Text="{Binding QuizTitle}"
+                                                       Height="22"
                                                        FontSize="{StaticResource Type.SectionTitle}"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource TextColor}"
-                                                       TextTrimming="CharacterEllipsis"/>
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding QuizTitle}"/>
                                             <StackPanel Orientation="Horizontal"
                                                         Margin="0,6,0,0">
                                                 <TextBlock Text="{Binding DateDisplay}"
@@ -199,8 +206,7 @@
                                 </controls:DashboardTileHost>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                </ItemsControl>
 
                 <TextBlock Text="No quiz attempts yet"
                            FontSize="{StaticResource Type.BlockTitle}"
@@ -208,7 +214,13 @@
                            Foreground="{DynamicResource TextColorSecondary}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Visibility="{Binding HasAttempts, Converter={StaticResource InverseBoolToVis}}"/>
+                           Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVis}}"/>
+                <TextBlock Text="Loading quiz history..."
+                           FontSize="{StaticResource Type.BlockTitle}"
+                           Foreground="{DynamicResource TextColorSecondary}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
             </Grid>
         </controls:FeatureWindowShell.Body>
 

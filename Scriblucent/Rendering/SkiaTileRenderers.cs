@@ -332,7 +332,7 @@ internal static class SkiaTileRenderers
                 (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).CardCountText, 12f, false),
                 (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).TagsDisplay, 12f, false),
             ],
-            IsVisible = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).IsVisible,
+            IsVisible = _ => true,
             Chip = null,
             Checkbox = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).IsSelected,
             LeftGlyph = null,

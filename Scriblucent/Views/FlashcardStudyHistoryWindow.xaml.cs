@@ -22,11 +22,16 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
     private readonly MainViewModel? _mainViewModel;
     private readonly Func<FlashcardSetDocument>? _documentProvider;
     private readonly Action? _clearAction;
-    private readonly ObservableCollection<StudyDisplayItem> _items = new();
+    private readonly BulkObservableCollection<StudyDisplayItem> _items = new();
     private int _totalCards;
     private int _knownCards;
     private int _unknownCards;
     private int _studiedCards;
+    private int _refreshGeneration;
+    private bool _isLoading;
+
+    private sealed record SetSnapshot(string Title, FlashcardItem[] Cards, Guid[] History);
+    private sealed record StudyResult(List<StudyDisplayItem> Items, int Total, int Known, int Unknown, int Studied);
 
     public FlashcardStudyHistoryWindow(MainViewModel mainViewModel)
     {
@@ -51,7 +56,11 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
 
     public ObservableCollection<StudyDisplayItem> Items => _items;
     public bool HasItems => _items.Count > 0;
-    public string SummaryText => _totalCards == 0
+    public bool IsLoading => _isLoading;
+    public bool ShowEmpty => !_isLoading && !HasItems;
+    public string SummaryText => _isLoading
+        ? "Loading history..."
+        : _totalCards == 0
         ? "No flashcard study progress yet"
         : string.Format(CultureInfo.CurrentCulture, "{0} studied, {1} known, {2} unknown, {3} total cards", _studiedCards, _knownCards, _unknownCards, _totalCards);
     public string KnownText => _totalCards == 0 ? "-" : string.Format(CultureInfo.CurrentCulture, "{0}/{1}", _knownCards, _totalCards);
@@ -59,65 +68,101 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
     public string StudiedText => _totalCards == 0 ? "-" : string.Format(CultureInfo.CurrentCulture, "{0}", _studiedCards);
     public string ClearButtonText => _documentProvider is null ? "Clear history" : "Clear this set history";
 
-    private void RefreshList()
+    private async void RefreshList()
     {
-        _items.Clear();
-        _totalCards = 0;
-        _knownCards = 0;
-        _unknownCards = 0;
-        _studiedCards = 0;
+        var generation = ++_refreshGeneration;
+        var snapshots = _documentProvider is not null
+            ? new[] { Snapshot(_documentProvider()) }
+            : _mainViewModel?.FlashcardSets
+                .Where(set => set.Document.Cards is { Count: > 0 })
+                .Select(set => Snapshot(set.Document)).ToArray() ?? Array.Empty<SetSnapshot>();
+        var isSingle = _documentProvider is not null;
+        var count = snapshots.Sum(snapshot => snapshot.Cards.Length);
 
-        if (_documentProvider is not null)
-            AddSingleSetItems(_documentProvider());
-        else if (_mainViewModel is not null)
-            AddGlobalSetItems(_mainViewModel.FlashcardSets.Select(set => set.Document));
+        StudyResult result;
+        if (count >= 10_000 || snapshots.Length >= 10_000)
+        {
+            _isLoading = true;
+            OnPropertyChanged(nameof(IsLoading));
+            OnPropertyChanged(nameof(ShowEmpty));
+            OnPropertyChanged(nameof(SummaryText));
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Loaded);
+            result = await Task.Run(() => isSingle
+                ? BuildSingleSetItems(snapshots[0])
+                : BuildGlobalSetItems(snapshots));
+            if (generation != _refreshGeneration || !IsVisible)
+                return;
+        }
+        else
+        {
+            result = isSingle ? BuildSingleSetItems(snapshots[0]) : BuildGlobalSetItems(snapshots);
+        }
+
+        _totalCards = result.Total;
+        _knownCards = result.Known;
+        _unknownCards = result.Unknown;
+        _studiedCards = result.Studied;
+        _items.ReplaceAll(result.Items);
+        _isLoading = false;
 
         OnPropertyChanged(nameof(HasItems));
+        OnPropertyChanged(nameof(IsLoading));
+        OnPropertyChanged(nameof(ShowEmpty));
         OnPropertyChanged(nameof(SummaryText));
         OnPropertyChanged(nameof(KnownText));
         OnPropertyChanged(nameof(UnknownText));
         OnPropertyChanged(nameof(StudiedText));
     }
 
-    private void AddGlobalSetItems(IEnumerable<FlashcardSetDocument> documents)
+    private static SetSnapshot Snapshot(FlashcardSetDocument document)
+        => new(document.Title, (document.Cards ?? new List<FlashcardItem>()).ToArray(),
+            (document.StudySession?.History ?? new List<Guid>()).ToArray());
+
+    private static StudyResult BuildGlobalSetItems(SetSnapshot[] snapshots)
     {
-        foreach (var document in documents.OrderByDescending(GetKnownRatio).ThenBy(document => document.Title))
+        var items = new List<StudyDisplayItem>();
+        var totalCards = 0;
+        var knownCards = 0;
+        var unknownCards = 0;
+        var studiedCards = 0;
+        foreach (var document in snapshots.OrderByDescending(GetKnownRatio).ThenBy(document => document.Title))
         {
-            var cards = document.Cards ?? new List<FlashcardItem>();
-            var historyIds = (document.StudySession?.History ?? new List<Guid>()).Distinct().ToHashSet();
+            var cards = document.Cards;
+            var historyIds = document.History.ToHashSet();
             var known = cards.Count(card => card.IsKnown);
             var unknown = cards.Count(card => card.IsUnknown);
             var studied = cards.Count(card => historyIds.Contains(card.Id) || card.IsKnown || card.IsUnknown);
 
-            _totalCards += cards.Count;
-            _knownCards += known;
-            _unknownCards += unknown;
-            _studiedCards += studied;
+            totalCards += cards.Length;
+            knownCards += known;
+            unknownCards += unknown;
+            studiedCards += studied;
 
-            if (cards.Count == 0 && studied == 0)
+            if (cards.Length == 0 && studied == 0)
                 continue;
 
-            var isComplete = cards.Count > 0 && known == cards.Count;
-            _items.Add(new StudyDisplayItem
+            var isComplete = cards.Length > 0 && known == cards.Length;
+            items.Add(new StudyDisplayItem
             {
                 Title = string.IsNullOrWhiteSpace(document.Title) ? "Untitled flashcards" : document.Title.Trim(),
-                Details = string.Format(CultureInfo.CurrentCulture, "{0} studied - {1} known - {2} unknown - {3} cards", studied, known, unknown, cards.Count),
+                Details = string.Format(CultureInfo.CurrentCulture, "{0} studied - {1} known - {2} unknown - {3} cards", studied, known, unknown, cards.Length),
                 StatusText = isComplete ? "Complete" : "In progress",
                 StatusKind = isComplete ? "Complete" : "InProgress",
                 IsComplete = isComplete
             });
         }
+        return new StudyResult(items, totalCards, knownCards, unknownCards, studiedCards);
     }
 
-    private void AddSingleSetItems(FlashcardSetDocument document)
+    private static StudyResult BuildSingleSetItems(SetSnapshot document)
     {
-        var cards = document.Cards ?? new List<FlashcardItem>();
-        var historyIds = (document.StudySession?.History ?? new List<Guid>()).Distinct().ToHashSet();
+        var cards = document.Cards;
+        var historyIds = document.History.ToHashSet();
 
-        _totalCards = cards.Count;
-        _knownCards = cards.Count(card => card.IsKnown);
-        _unknownCards = cards.Count(card => card.IsUnknown);
-        _studiedCards = cards.Count(card => historyIds.Contains(card.Id) || card.IsKnown || card.IsUnknown);
+        var knownCards = cards.Count(card => card.IsKnown);
+        var unknownCards = cards.Count(card => card.IsUnknown);
+        var studiedCards = cards.Count(card => historyIds.Contains(card.Id) || card.IsKnown || card.IsUnknown);
+        var items = new List<StudyDisplayItem>();
 
         foreach (var card in cards.OrderBy(card => Math.Max(1, card.SetIndex)).ThenBy(card => card.Question))
         {
@@ -126,7 +171,7 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
                 continue;
 
             var statusKind = card.IsKnown ? "Known" : card.IsUnknown ? "Unknown" : "Studied";
-            _items.Add(new StudyDisplayItem
+            items.Add(new StudyDisplayItem
             {
                 Title = string.IsNullOrWhiteSpace(card.Question) ? "Untitled card" : card.Question.Trim(),
                 Details = string.IsNullOrWhiteSpace(card.Category)
@@ -137,12 +182,13 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
                 IsComplete = card.IsKnown
             });
         }
+        return new StudyResult(items, cards.Length, knownCards, unknownCards, studiedCards);
     }
 
-    private static double GetKnownRatio(FlashcardSetDocument document)
+    private static double GetKnownRatio(SetSnapshot document)
     {
-        var cards = document.Cards ?? new List<FlashcardItem>();
-        return cards.Count == 0 ? 0 : cards.Count(card => card.IsKnown) / (double)cards.Count;
+        var cards = document.Cards;
+        return cards.Length == 0 ? 0 : cards.Count(card => card.IsKnown) / (double)cards.Length;
     }
 
     private void ClearAllButton_Click(object sender, RoutedEventArgs e)

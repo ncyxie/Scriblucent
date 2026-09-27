@@ -25,7 +25,17 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
 
     private readonly MainViewModel _mainViewModel;
     private readonly QuizDocument? _singleQuizDocument;
-    private readonly ObservableCollection<AttemptDisplayItem> _attempts = new();
+    private readonly BulkObservableCollection<AttemptDisplayItem> _attempts = new();
+    private int _refreshGeneration;
+    private int _quizCount;
+    private double _averageScore;
+    private double _bestScore;
+    private double _passRate;
+    private bool _isLoading;
+
+    private sealed record QuizSnapshot(QuizViewModel Quiz, Guid Id, string Title, QuizAttempt[] Attempts);
+    private sealed record HistoryResult(List<AttemptDisplayItem> Items, int QuizCount,
+        double AverageScore, double BestScore, double PassRate);
 
     public QuizAttemptHistoryWindow(MainViewModel mainViewModel)
     {
@@ -51,43 +61,74 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
     public ObservableCollection<AttemptDisplayItem> Attempts => _attempts;
 
     public bool HasAttempts => _attempts.Count > 0;
+    public bool IsLoading => _isLoading;
+    public bool ShowEmpty => !_isLoading && !HasAttempts;
 
     public string AverageScoreText => HasAttempts
-        ? string.Format(CultureInfo.CurrentCulture, "{0:F1}%", _attempts.Average(item => item.Attempt.Percentage))
+        ? string.Format(CultureInfo.CurrentCulture, "{0:F1}%", _averageScore)
         : "-";
 
     public string BestScoreText => HasAttempts
-        ? string.Format(CultureInfo.CurrentCulture, "{0:F1}%", _attempts.Max(item => item.Attempt.Percentage))
+        ? string.Format(CultureInfo.CurrentCulture, "{0:F1}%", _bestScore)
         : "-";
 
     public string PassRateText => HasAttempts
-        ? string.Format(CultureInfo.CurrentCulture, "{0:F1}%", _attempts.Count(item => item.Passed) / (double)_attempts.Count * 100)
+        ? string.Format(CultureInfo.CurrentCulture, "{0:F1}%", _passRate)
         : "-";
 
     public string ClearButtonText => _singleQuizDocument is not null
         ? "Clear this quiz history"
         : "Clear history";
 
-    public string SummaryText => _attempts.Count == 0
+    public string SummaryText => _isLoading
+        ? "Loading history..."
+        : _attempts.Count == 0
         ? "No quiz attempts yet"
         : _singleQuizDocument is not null
             ? string.Format(CultureInfo.CurrentCulture, "{0} attempts for this quiz", _attempts.Count)
-            : string.Format(CultureInfo.CurrentCulture, "{0} attempts across {1} quizzes", _attempts.Count, _attempts.Select(item => item.Quiz.Document.Id).Distinct().Count());
+            : string.Format(CultureInfo.CurrentCulture, "{0} attempts across {1} quizzes", _attempts.Count, _quizCount);
 
-    private void RefreshList()
+    private async void RefreshList()
     {
-        _attempts.Clear();
+        var generation = ++_refreshGeneration;
+        var singleQuiz = _singleQuizDocument;
+        var singleAttempts = singleQuiz?.Attempts?.ToArray();
+        var singleTitle = singleQuiz is null ? string.Empty : string.IsNullOrWhiteSpace(singleQuiz.Title) ? "Untitled Quiz" : singleQuiz.Title.Trim();
+        var snapshots = singleQuiz is null
+            ? _mainViewModel.Quizzes
+                .Where(quiz => quiz.Document.Attempts is { Count: > 0 })
+                .Select(quiz => new QuizSnapshot(
+                    quiz, quiz.Document.Id, quiz.Title, quiz.Document.Attempts.ToArray())).ToArray()
+            : Array.Empty<QuizSnapshot>();
+        var count = singleAttempts?.Length ?? snapshots.Sum(snapshot => snapshot.Attempts.Length);
 
-        var items = _singleQuizDocument is not null
-            ? BuildSingleQuizItems(_singleQuizDocument)
-            : BuildAllQuizItems()
-            .OrderByDescending(item => item.Attempt.Date)
-            .ToList();
+        HistoryResult result;
+        if (count >= 10_000)
+        {
+            _isLoading = true;
+            OnPropertyChanged(nameof(IsLoading));
+            OnPropertyChanged(nameof(ShowEmpty));
+            OnPropertyChanged(nameof(SummaryText));
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Loaded);
+            result = await Task.Run(() => BuildResult(singleAttempts, singleTitle, snapshots));
+            if (generation != _refreshGeneration || !IsVisible)
+                return;
+        }
+        else
+        {
+            result = BuildResult(singleAttempts, singleTitle, snapshots);
+        }
 
-        foreach (var item in items)
-            _attempts.Add(item);
+        _quizCount = result.QuizCount;
+        _averageScore = result.AverageScore;
+        _bestScore = result.BestScore;
+        _passRate = result.PassRate;
+        _attempts.ReplaceAll(result.Items);
+        _isLoading = false;
 
         OnPropertyChanged(nameof(HasAttempts));
+        OnPropertyChanged(nameof(IsLoading));
+        OnPropertyChanged(nameof(ShowEmpty));
         OnPropertyChanged(nameof(SummaryText));
         OnPropertyChanged(nameof(AverageScoreText));
         OnPropertyChanged(nameof(BestScoreText));
@@ -104,15 +145,39 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
             : string.Format(CultureInfo.CurrentCulture, "{0}/{1} ({2:F1}%)", attempt.CorrectCount, attempt.TotalQuestions, attempt.Percentage);
     }
 
-    private List<AttemptDisplayItem> BuildAllQuizItems()
+    private static HistoryResult BuildResult(QuizAttempt[]? singleAttempts, string singleTitle, QuizSnapshot[] snapshots)
     {
-        return _mainViewModel.Quizzes
-            .SelectMany(quiz => (quiz.Document.Attempts ?? new List<QuizAttempt>()).Select(attempt => new AttemptDisplayItem
+        var items = singleAttempts is not null
+            ? BuildSingleQuizItems(singleAttempts, singleTitle)
+            : BuildAllQuizItems(snapshots);
+
+        var quizCount = singleAttempts is not null ? 1 : snapshots.Select(snapshot => snapshot.Id).Distinct().Count();
+        double scoreSum = 0;
+        double bestScore = 0;
+        var passCount = 0;
+        foreach (var item in items)
+        {
+            scoreSum += item.Attempt.Percentage;
+            bestScore = Math.Max(bestScore, item.Attempt.Percentage);
+            if (item.Passed)
+                passCount++;
+        }
+
+        return new HistoryResult(items, quizCount,
+            items.Count == 0 ? 0 : scoreSum / items.Count,
+            bestScore,
+            items.Count == 0 ? 0 : passCount / (double)items.Count * 100);
+    }
+
+    private static List<AttemptDisplayItem> BuildAllQuizItems(QuizSnapshot[] snapshots)
+    {
+        return snapshots
+            .SelectMany(snapshot => snapshot.Attempts.Select(attempt => new AttemptDisplayItem
             {
-                Quiz = quiz,
+                Quiz = snapshot.Quiz,
                 Attempt = attempt,
                 QuizTitle = string.IsNullOrWhiteSpace(attempt.QuizTitle)
-                    ? quiz.Title
+                    ? snapshot.Title
                     : attempt.QuizTitle.Trim(),
                 ScoreDisplay = FormatScoreDisplay(attempt),
                 DateDisplay = attempt.Date.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),
@@ -123,14 +188,14 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
             .ToList();
     }
 
-    private static List<AttemptDisplayItem> BuildSingleQuizItems(QuizDocument quizDocument)
+    private static List<AttemptDisplayItem> BuildSingleQuizItems(QuizAttempt[] attempts, string quizTitle)
     {
-        return (quizDocument.Attempts ?? new List<QuizAttempt>())
+        return attempts
             .Select(attempt => new AttemptDisplayItem
             {
                 Attempt = attempt,
                 QuizTitle = string.IsNullOrWhiteSpace(attempt.QuizTitle)
-                    ? string.IsNullOrWhiteSpace(quizDocument.Title) ? "Untitled Quiz" : quizDocument.Title.Trim()
+                    ? quizTitle
                     : attempt.QuizTitle.Trim(),
                 ScoreDisplay = FormatScoreDisplay(attempt),
                 DateDisplay = attempt.Date.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),

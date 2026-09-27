@@ -7921,14 +7921,12 @@ namespace Scriblucent
             InsertOrReplaceHyperlink(dialog.LinkText, dialog.ResultUri);
         }
 
-        private static IReadOnlyList<InsertHyperlinkDialog.NoteLinkOption> ResolveNoteLinkOptions()
+        private static IReadOnlyList<NoteCardViewModel> ResolveNoteLinkOptions()
         {
             if (Application.Current.MainWindow is not MainWindow mainWindow || mainWindow.DataContext is not MainViewModel mainViewModel)
-                return Array.Empty<InsertHyperlinkDialog.NoteLinkOption>();
+                return Array.Empty<NoteCardViewModel>();
 
-            return mainViewModel.Notes
-                .Select(note => new InsertHyperlinkDialog.NoteLinkOption(note.Document.Id, note.Document.Title))
-                .ToList();
+            return mainViewModel.Notes;
         }
 
         /// <summary>Replaces the current selection (if any) with a Hyperlink, or inserts one at the

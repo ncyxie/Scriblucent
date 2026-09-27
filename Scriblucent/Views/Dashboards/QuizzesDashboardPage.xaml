@@ -197,8 +197,8 @@
                                                                Foreground="{DynamicResource TextColor}"
                                                                Margin="2,2,2,8"/>
                                                     <Grid Grid.Row="1">
-                                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="178" behaviors:ScrollTileBehavior.IsEnabled="True" behaviors:MiddleClickScrollBehavior.IsEnabled="True">
-                                                            <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}">
+                                                            <ItemsControl ItemsSource="{Binding CalendarScheduledNotes}"
+                                                                          Style="{StaticResource CalendarScheduledListStyle}">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate DataType="{x:Type vm:CalendarScheduledItemViewModel}">
                                                                         <controls:DashboardTileHost RendererKey="CalendarItem">
@@ -231,19 +231,10 @@
                                                                                                Margin="0,0,0,6"/>
                                                                                     <TextBlock Text="{Binding ScheduleNote}"
                                                                                                TextWrapping="Wrap"
-                                                                                               MaxHeight="34"
-                                                                                               Foreground="{DynamicResource TextColorSecondary}">
-                                                                                        <TextBlock.Style>
-                                                                                            <Style TargetType="TextBlock">
-                                                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                                                                <Style.Triggers>
-                                                                                                    <Trigger Property="Text" Value="">
-                                                                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                                                                    </Trigger>
-                                                                                                </Style.Triggers>
-                                                                                            </Style>
-                                                                                        </TextBlock.Style>
-                                                                                    </TextBlock>
+                                                                                               Height="34"
+                                                                                               TextTrimming="CharacterEllipsis"
+                                                                                               ToolTip="{Binding ScheduleNote}"
+                                                                                               Foreground="{DynamicResource TextColorSecondary}"/>
                                                                                 </StackPanel>
                                                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                                                                                     <Border Background="{DynamicResource SelectionBackground}" BorderBrush="Transparent" BorderThickness="0"
@@ -268,13 +259,7 @@
                                                                         </controls:DashboardTileHost>
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
-                                                                <ItemsControl.ItemsPanel>
-                                                                    <ItemsPanelTemplate>
-                                                                        <StackPanel/>
-                                                                    </ItemsPanelTemplate>
-                                                                </ItemsControl.ItemsPanel>
                                                             </ItemsControl>
-                                                        </ScrollViewer>
                                                         <TextBlock Text="{Binding [CalendarNoSchedulesForDay], Source={StaticResource Loc}}"
                                                                    Foreground="{DynamicResource TextColorSecondary}"
                                                                    FontStyle="Italic"

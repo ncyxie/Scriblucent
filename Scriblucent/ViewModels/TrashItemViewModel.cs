@@ -14,6 +14,14 @@ public enum TrashItemKind
 
 public sealed class TrashItemViewModel : ViewModelBase
 {
+    private bool _isExcludedFromLogicalSelection;
+
+    public bool IsExcludedFromLogicalSelection
+    {
+        get => _isExcludedFromLogicalSelection;
+        set => SetProperty(ref _isExcludedFromLogicalSelection, value);
+    }
+
     public TrashItemViewModel(
         TrashItemKind kind,
         Guid id,

@@ -22,7 +22,6 @@
                         <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
-                                      behaviors:ScrollTileBehavior.IsEnabled="True"
                                       behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                             <ItemsPresenter/>
                         </ScrollViewer>
@@ -186,10 +185,23 @@
                                                                    Foreground="{DynamicResource TextColorSecondary}"/>
                                                         <TextBlock Text="{Binding TagsDisplay}"
                                                                    Margin="0,4,0,0"
+                                                                   Height="18"
                                                                    FontSize="{StaticResource Type.Caption}"
                                                                    Foreground="{DynamicResource TextColorSecondary}"
-                                                                   TextWrapping="Wrap"
-                                                                   Visibility="{Binding HasTags, Converter={StaticResource BoolToVis}}"/>
+                                                                   TextWrapping="NoWrap"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   ToolTip="{Binding TagsDisplay}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Hidden"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding HasTags}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>

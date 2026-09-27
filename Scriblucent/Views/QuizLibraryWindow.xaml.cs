@@ -20,7 +20,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private readonly BulkObservableCollection<QuizLibraryItemViewModel> _quizzes = new();
     private readonly BulkObservableCollection<QuizLibraryItemViewModel> _visibleQuizzes = new();
     private readonly BulkObservableCollection<QuizLibraryItemViewModel> _selectedQuizzes = new();
-    private readonly ObservableCollection<TagFilterItemViewModel> _categoryFilters = new();
+    private readonly BulkObservableCollection<TagFilterItemViewModel> _categoryFilters = new();
     private readonly HashSet<string> _selectedTags = new(StringComparer.OrdinalIgnoreCase);
     private string _statusText = string.Empty;
     private string _searchText = string.Empty;
@@ -28,7 +28,12 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private bool _shuffleCombinedQuestions = true;
     private bool _skipDuplicateQuestions = true;
     private DispatcherTimer? _searchFilterDebounceTimer;
+    private int _filterGeneration;
     private bool _isClearingSelection;
+    private readonly Dictionary<string, int> _selectedQuestionSignatures = new(StringComparer.OrdinalIgnoreCase);
+    private int _selectedQuestionCount;
+    private bool _isLoading;
+    private bool _isClosed;
 
     public string QuizSearchQuery
     {
@@ -72,6 +77,9 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     private void QuizLibraryWindow_Closed(object? sender, EventArgs e)
     {
+        _isClosed = true;
+        _filterGeneration++;
+        _searchFilterDebounceTimer?.Stop();
         Closed -= QuizLibraryWindow_Closed;
         _mainViewModel.PropertyChanged -= MainViewModel_PropertyChanged;
         foreach (var quiz in _quizzes)
@@ -140,39 +148,78 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void LoadQuizzes()
+    private async void LoadQuizzes()
     {
         foreach (var quiz in _quizzes)
             quiz.PropertyChanged -= QuizWrapper_PropertyChanged;
 
-        var wrappers = new List<QuizLibraryItemViewModel>();
-        foreach (var quiz in _mainViewModel.Quizzes)
+        var source = _mainViewModel.Quizzes.ToArray();
+        var wrappers = new List<QuizLibraryItemViewModel>(source.Length);
+        if (source.Length >= 10_000)
         {
+            _isLoading = true;
+            StatusText = "Loading quizzes...";
+            await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Loaded);
+        }
+
+        var sliceTimer = System.Diagnostics.Stopwatch.StartNew();
+        foreach (var quiz in source)
+        {
+            if (_isClosed)
+            {
+                foreach (var createdWrapper in wrappers)
+                    createdWrapper.PropertyChanged -= QuizWrapper_PropertyChanged;
+                return;
+            }
+
             var wrapper = new QuizLibraryItemViewModel(quiz);
             wrapper.PropertyChanged += QuizWrapper_PropertyChanged;
             wrappers.Add(wrapper);
+            if (_isLoading && sliceTimer.ElapsedMilliseconds >= 4)
+            {
+                sliceTimer.Restart();
+                await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Background);
+            }
         }
 
         _quizzes.ReplaceAll(wrappers);
         _selectedQuizzes.ReplaceAll([]);
+        _selectedQuestionSignatures.Clear();
+        _selectedQuestionCount = 0;
+        _isLoading = false;
+        UpdateFilteredVisibility();
     }
 
     private void QuizWrapper_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(QuizLibraryItemViewModel.IsSelected)
-            && !_isClearingSelection)
-            RefreshSelectedQuizzes();
+            && !_isClearingSelection
+            && sender is QuizLibraryItemViewModel quiz)
+        {
+            if (quiz.IsSelected)
+            {
+                UpdateSelectedQuestionCounts(quiz, 1);
+                _selectedQuizzes.Add(quiz);
+            }
+            else
+            {
+                UpdateSelectedQuestionCounts(quiz, -1);
+                _selectedQuizzes.Remove(quiz);
+            }
+            NotifySelectedQuizzesChanged();
+        }
     }
 
     private void LoadCategories()
     {
-        _categoryFilters.Clear();
+        var filters = new List<TagFilterItemViewModel>();
         foreach (var filter in _mainViewModel.QuizTagFilters)
         {
             var existing = _selectedTags.Contains(filter.Tag);
             var wrapper = new TagFilterItemViewModel(filter.Tag, existing, SetTagSelected);
-            _categoryFilters.Add(wrapper);
+            filters.Add(wrapper);
         }
+        _categoryFilters.ReplaceAll(filters);
     }
 
     private void SetTagSelected(string tag, bool isSelected)
@@ -185,50 +232,73 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         UpdateFilteredVisibility();
     }
 
-    private void UpdateFilteredVisibility()
+    private async void UpdateFilteredVisibility()
     {
-        var visible = new List<QuizLibraryItemViewModel>();
-        foreach (var quiz in _quizzes)
+        var generation = ++_filterGeneration;
+        var tags = _selectedTags.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var search = _searchText;
+        if (tags.Count == 0 && string.IsNullOrWhiteSpace(search))
         {
-            if (MatchesFilter(quiz))
-                visible.Add(quiz);
+            _visibleQuizzes.ReplaceAll(_quizzes);
+            OnPropertyChanged(nameof(FilteredCountText));
+            UpdateStatusText();
+            return;
         }
 
+        var visible = new List<QuizLibraryItemViewModel>();
+        var sliceTimer = System.Diagnostics.Stopwatch.StartNew();
+        foreach (var quiz in _quizzes)
+        {
+            if (generation != _filterGeneration)
+                return;
+            if (MatchesFilter(quiz, tags, search))
+                visible.Add(quiz);
+            if (sliceTimer.ElapsedMilliseconds >= 4)
+            {
+                sliceTimer.Restart();
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+        }
+
+        if (generation != _filterGeneration)
+            return;
         _visibleQuizzes.ReplaceAll(visible);
         OnPropertyChanged(nameof(FilteredCountText));
         UpdateStatusText();
     }
 
-    private void RefreshSelectedQuizzes()
+    private void NotifySelectedQuizzesChanged()
     {
-        _selectedQuizzes.ReplaceAll(_quizzes.Where(quiz => quiz.IsSelected).ToList());
         OnPropertyChanged(nameof(SelectedCountText));
         OnPropertyChanged(nameof(SelectedQuestionCountText));
         OnPropertyChanged(nameof(HasSelectedQuizzes));
     }
 
-    private bool MatchesFilter(QuizLibraryItemViewModel quiz)
+    private static bool MatchesFilter(QuizLibraryItemViewModel quiz, HashSet<string> selectedTags, string search)
     {
-        if (_selectedTags.Count > 0)
+        if (selectedTags.Count > 0)
         {
             var tags = quiz.Document.Tags ?? [];
-            if (!tags.Any(tag => _selectedTags.Contains(tag)))
+            if (!tags.Any(selectedTags.Contains))
                 return false;
         }
 
-        if (string.IsNullOrWhiteSpace(_searchText))
+        if (string.IsNullOrWhiteSpace(search))
             return true;
 
-        return quiz.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
-               || quiz.TagsDisplay.Contains(_searchText, StringComparison.OrdinalIgnoreCase)
+        return quiz.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+               || quiz.TagsDisplay.Contains(search, StringComparison.OrdinalIgnoreCase)
                || quiz.Document.Questions.Any(question =>
-                   (question.Question ?? string.Empty).Contains(_searchText, StringComparison.OrdinalIgnoreCase)
-                   || (question.Explanation ?? string.Empty).Contains(_searchText, StringComparison.OrdinalIgnoreCase)
-                   || question.Options.Any(option => (option.Text ?? string.Empty).Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
+                   (question.Question ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
+                   || (question.Explanation ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
+                   || question.Options.Any(option => (option.Text ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)));
     }
 
     private void UpdateStatusText()
     {
+        if (_isLoading)
+            return;
+
         var visibleCount = _visibleQuizzes.Count;
         StatusText = string.Format(CultureInfo.CurrentCulture, "{0} of {1} quizzes shown", visibleCount, _quizzes.Count);
     }
@@ -255,7 +325,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         _isClearingSelection = true;
         try
         {
-            foreach (var quiz in _quizzes)
+            foreach (var quiz in _selectedQuizzes.ToArray())
                 quiz.IsSelected = false;
         }
         finally
@@ -263,7 +333,10 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
             _isClearingSelection = false;
         }
 
-        RefreshSelectedQuizzes();
+        _selectedQuizzes.ReplaceAll([]);
+        _selectedQuestionSignatures.Clear();
+        _selectedQuestionCount = 0;
+        NotifySelectedQuizzesChanged();
     }
 
     private void QuizItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -404,17 +477,20 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     }
 
     private int GetCombinedQuestionCount()
+        => SkipDuplicateQuestions ? _selectedQuestionSignatures.Count : _selectedQuestionCount;
+
+    private void UpdateSelectedQuestionCounts(QuizLibraryItemViewModel quiz, int direction)
     {
-        var questions = _selectedQuizzes
-            .SelectMany(quiz => quiz.Document.Questions ?? []);
-
-        if (!SkipDuplicateQuestions)
-            return questions.Count();
-
-        return questions
-            .Select(BuildQuestionSignature)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Count();
+        foreach (var question in quiz.Document.Questions ?? [])
+        {
+            _selectedQuestionCount += direction;
+            var signature = BuildQuestionSignature(question);
+            _selectedQuestionSignatures.TryGetValue(signature, out var count);
+            if (count + direction == 0)
+                _selectedQuestionSignatures.Remove(signature);
+            else
+                _selectedQuestionSignatures[signature] = count + direction;
+        }
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

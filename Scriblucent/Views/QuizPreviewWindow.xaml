@@ -34,7 +34,6 @@
                                       behaviors:RoundedClipBehavior.IsEnabled="True"
                                       behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Card}"
                                       behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                      behaviors:ScrollTileBehavior.IsEnabled="True"
                                       behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                             <ItemsPresenter/>
                         </ScrollViewer>

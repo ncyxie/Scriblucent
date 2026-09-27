@@ -10,6 +10,52 @@ namespace Scriblucent.Tests;
 public class EditorSmoothScrollTests
 {
     [Fact]
+    public void Virtualized_list_rows_are_not_baked_as_static_scroll_shells()
+    {
+        RunSta(() =>
+        {
+            if (ReducedMotionPreferences.ShouldReduceMotion)
+                return;
+
+            var staticShell = new Border
+            {
+                Height = 40,
+                Background = Brushes.White,
+                CornerRadius = new CornerRadius(8)
+            };
+            var recycledRow = new Border
+            {
+                Height = 60,
+                Background = Brushes.White,
+                CornerRadius = new CornerRadius(8)
+            };
+            var virtualizedRows = new VirtualizingStackPanel();
+            virtualizedRows.Children.Add(recycledRow);
+            var content = new StackPanel();
+            content.Children.Add(staticShell);
+            content.Children.Add(virtualizedRows);
+            content.Children.Add(new Border { Height = 1_000 });
+            var viewer = new ScrollViewer { Content = content, Width = 300, Height = 200 };
+            viewer.Measure(new Size(300, 200));
+            viewer.Arrange(new Rect(0, 0, 300, 200));
+            viewer.UpdateLayout();
+
+            Assert.True(viewer.ScrollableHeight > 1);
+            try
+            {
+                SmoothScrollCompositor.Begin(viewer, Array.Empty<DashboardVirtualizationHost>());
+                Assert.True(SmoothScrollCompositor.IsActive(viewer));
+                Assert.NotNull(staticShell.CacheMode);
+                Assert.Null(recycledRow.CacheMode);
+            }
+            finally
+            {
+                SmoothScrollCompositor.End(viewer, 0, viewer.VerticalOffset);
+            }
+        });
+    }
+
+    [Fact]
     public void Editor_scroll_commits_each_eased_position_without_moving_the_document_view()
     {
         RunSta(() =>

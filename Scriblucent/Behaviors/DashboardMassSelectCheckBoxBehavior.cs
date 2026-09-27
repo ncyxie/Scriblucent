@@ -128,15 +128,16 @@ public static class DashboardMassSelectCheckBoxBehavior
         if (!GetIsEnabled(checkBox))
             return;
 
-        checkBox.Visibility = IsMassSelectActive() ? Visibility.Visible : Visibility.Collapsed;
+        var isMassSelectActive = IsMassSelectActive();
+        checkBox.Visibility = isMassSelectActive ? Visibility.Visible : Visibility.Collapsed;
 
-        if (!IsMassSelectActive())
+        if (!isMassSelectActive)
         {
             checkBox.IsChecked = false;
             return;
         }
 
-        checkBox.IsChecked = ResolveItemDataContext(checkBox) switch
+        var shouldBeChecked = ResolveItemDataContext(checkBox) switch
         {
             NoteCardViewModel note => note.IsSelectedInMassSelect,
             FlashcardSetViewModel set => set.IsSelectedInMassSelect,
@@ -145,7 +146,13 @@ public static class DashboardMassSelectCheckBoxBehavior
             _ => false
         };
 
-        CheckBoxCheckMotionBehavior.SyncCheckBoxGlyph(checkBox);
+        // A direct click already changed IsChecked and started the checkmark animation.
+        // Re-syncing its glyph here would snap that animation to the final frame.
+        if (checkBox.IsChecked != shouldBeChecked)
+        {
+            checkBox.IsChecked = shouldBeChecked;
+            CheckBoxCheckMotionBehavior.SyncCheckBoxGlyph(checkBox);
+        }
     }
 
     private static void EnsureWatchingMainViewModel()

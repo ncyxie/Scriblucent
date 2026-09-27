@@ -248,20 +248,24 @@
                                    Margin="0,0,0,16"/>
                     </StackPanel>
 
-                    <ScrollViewer Grid.Row="1"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Background="Transparent"
-                                  Padding="20,0,20,20"
-                                  CanContentScroll="True"
-                                  behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                  behaviors:ScrollTileBehavior.IsEnabled="True"
-                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                         <ItemsControl x:Name="ResultsQuestionsList"
+                                      Grid.Row="1"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
                                       VirtualizingPanel.ScrollUnit="Pixel"
                                       ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="{x:Type ItemsControl}">
+                                    <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  Background="Transparent"
+                                                  behaviors:SmoothScrollBehavior.IsEnabled="True"
+                                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                        <ItemsPresenter Margin="20,0,20,20"/>
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <VirtualizingStackPanel IsItemsHost="True"/>
@@ -358,7 +362,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
                 </Grid>
             </Border>
 
@@ -383,19 +386,26 @@
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColorSecondary}"
                                Margin="0,0,6,10"/>
-                    <ScrollViewer Grid.Row="1"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Background="Transparent"
-                                  CanContentScroll="True"
-                                  VerticalAlignment="Stretch"
-                                  behaviors:SmoothScrollBehavior.IsEnabled="True"
-                                  behaviors:ScrollBarAutoHideBehavior.Enable="True"
-                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
                         <ItemsControl x:Name="QuestionNavItemsControl"
+                                      Grid.Row="1"
+                                      VerticalAlignment="Stretch"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
-                                      VirtualizingPanel.ScrollUnit="Pixel">
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="{x:Type ItemsControl}">
+                                    <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  Background="Transparent"
+                                                  behaviors:SmoothScrollBehavior.IsEnabled="True"
+                                                  behaviors:ScrollBarAutoHideBehavior.Enable="True"
+                                                  behaviors:MiddleClickScrollBehavior.IsEnabled="True">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <wpftoolkit:VirtualizingWrapPanel IsItemsHost="True" ItemSize="38,38"/>
@@ -424,7 +434,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>
