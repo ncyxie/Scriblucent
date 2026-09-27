@@ -31,6 +31,18 @@ public partial class BakedElevationLayer
         Apply();
     }
 
+    /// <summary>
+    /// The nine-slice is a shadow painted outside the sibling face. Reporting a size here
+    /// made accent buttons and empty-dashboard actions grow to fit the corner tiles.
+    /// </summary>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        if (Content is UIElement child)
+            child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+        return new Size(0, 0);
+    }
+
     private void Apply()
     {
         var profile = Kind switch

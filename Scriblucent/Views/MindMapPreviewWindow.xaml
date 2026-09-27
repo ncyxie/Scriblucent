@@ -143,7 +143,7 @@
 
                 <!-- White chrome strip matching title field (InputSurface + field elevation; no focus ring) -
                      mirrors NoteEditorWindow's dense icon-toolbar strip so both editors share one look. -->
-                <controls:BakedElevationLayer Grid.Column="1" Grid.Row="0" Kind="Field" VerticalAlignment="Center"/>
+                <controls:BakedElevationLayer Grid.Column="1" Grid.Row="0" Kind="Field"/>
                 <Border Grid.Column="1"
                         Grid.Row="0"
                         Background="{DynamicResource InputSurface}"

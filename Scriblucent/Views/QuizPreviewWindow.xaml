@@ -185,7 +185,7 @@
                     </Grid>
                 </Border>
 
-                <controls:BakedElevationLayer Grid.Column="1" Grid.Row="0" Kind="Field" VerticalAlignment="Center"/>
+                <controls:BakedElevationLayer Grid.Column="1" Grid.Row="0" Kind="Field"/>
                 <Border Grid.Column="1"
                         Grid.Row="0"
                         Background="{DynamicResource InputSurface}"
