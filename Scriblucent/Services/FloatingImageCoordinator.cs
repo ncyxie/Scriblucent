@@ -2439,13 +2439,11 @@ public sealed class FloatingImageCoordinator
     }
 
     /// <summary>
-    /// The app's line-spacing feature fixes every paragraph to
-    /// <see cref="LineStackingStrategy.BlockLineHeight"/>, which caps each line's box at the
-    /// paragraph's <see cref="Paragraph.LineHeight"/> - a tall in-line image would overflow the
-    /// line and render ON TOP of the neighbouring text (Word grows the line to fit the object).
-    /// Paragraphs hosting an in-line image therefore use <see cref="LineStackingStrategy.MaxHeight"/>
-    /// (the LineHeight still acts as the minimum for the other lines); the original strategy is
-    /// restored once the last image leaves the paragraph. Idempotent - safe to call often.
+    /// Older notes can contain <see cref="LineStackingStrategy.BlockLineHeight"/>, which caps
+    /// a line at <see cref="Paragraph.LineHeight"/>. A tall in-line image would then overlap
+    /// neighbouring text. Switch those image paragraphs to <see cref="LineStackingStrategy.MaxHeight"/>
+    /// and restore their original strategy when the last image leaves. New paragraphs already
+    /// use MaxHeight. Idempotent - safe to call often.
     /// </summary>
     public void SyncInlineParagraphLineStrategies()
     {

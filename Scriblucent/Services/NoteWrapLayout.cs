@@ -1575,8 +1575,8 @@ public sealed class NoteWrapLayoutEngine : IDisposable
 
     /// <summary>
     /// A stack of full-width inline containers whose combined height reaches the wrap band.
-    /// A single tall container would be capped by paragraphs with a fixed line height
-    /// (LineStackingStrategy.BlockLineHeight - the app's line-spacing feature), letting the
+    /// A single tall container can be capped by older paragraphs with a fixed line height
+    /// (LineStackingStrategy.BlockLineHeight), letting the
     /// following text start only one line below; stacking containers no taller than the line
     /// height sidesteps that cap in both line-stacking modes.
     /// </summary>

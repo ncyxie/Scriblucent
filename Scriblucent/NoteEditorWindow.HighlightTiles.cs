@@ -387,8 +387,8 @@ public partial class NoteEditorWindow
                 break;
             }
 
-            var next = line.GetLineStartPosition(1);
-            tile.CoveredEnd = next ?? line;
+            var (next, coveredEnd) = GetSelectionLineCoverage(line, ContentTextBox.Document);
+            tile.CoveredEnd = coveredEnd;
             if (line.CompareTo(selectionStart) >= 0 || next is null
                 || next.CompareTo(selectionStart) > 0)
             {
@@ -416,6 +416,15 @@ public partial class NoteEditorWindow
 
         tile.Complete = true;
         return painted;
+    }
+
+    internal static (TextPointer? NextLine, TextPointer CoverageEnd) GetSelectionLineCoverage(
+        TextPointer line, FlowDocument document)
+    {
+        var next = line.GetLineStartPosition(1);
+        // The final visual line still covers text after its start. Without a next
+        // line, using the start as the end makes later drags miss this cached tile.
+        return (next, next ?? document.ContentEnd);
     }
 
     private Rect GetBlueSelectionLineRect(HighlightTile tile, TextPointer line,

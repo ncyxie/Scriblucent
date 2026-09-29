@@ -176,6 +176,31 @@ public class FindHighlightPointerTests
     }
 
     [Fact]
+    public void Selection_growing_or_shrinking_on_the_final_line_rebuilds_its_highlight()
+    {
+        RunSta(() =>
+        {
+            var run = new Run("first line selection");
+            var document = new FlowDocument(new Paragraph(run)) { PagePadding = new Thickness(0) };
+            var editor = LayoutEditor(document);
+            var line = run.ContentStart.GetLineStartPosition(0)!;
+            var (next, coveredEnd) = NoteEditorWindow.GetSelectionLineCoverage(line, document);
+            Assert.Null(next);
+
+            var firstCharacter = run.ContentStart.GetPositionAtOffset(1, LogicalDirection.Forward)!;
+            editor.Selection.Select(run.ContentStart, firstCharacter);
+            var smallSelection = NoteEditorWindow.SelectionLineRect(editor.Selection.Start, editor.Selection.End);
+            editor.Selection.Select(run.ContentStart, run.ContentEnd);
+            var largeSelection = NoteEditorWindow.SelectionLineRect(editor.Selection.Start, editor.Selection.End);
+            Assert.True(largeSelection.Width > smallSelection.Width * 3);
+            Assert.True(NoteEditorWindow.SelectionChangeTouchesRange(line, coveredEnd, complete: true,
+                firstCharacter, run.ContentEnd));
+            Assert.True(NoteEditorWindow.SelectionChangeTouchesRange(line, coveredEnd, complete: true,
+                run.ContentEnd, firstCharacter));
+        });
+    }
+
+    [Fact]
     public void Normal_find_groups_include_the_separately_painted_active_result()
     {
         MatchSpan[] spans = [new(0, 1), new(1, 1), new(2, 1), new(3, 1)];

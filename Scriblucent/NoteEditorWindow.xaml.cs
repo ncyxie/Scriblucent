@@ -253,6 +253,7 @@ namespace Scriblucent
         private CancellationTokenSource? _testConversionCancellationSource;
         private bool _isSyncingFontSelectors;
         private bool _isApplyingTypography;
+        private bool _refreshLineSpacingAfterNextTyping;
         private bool _isApplyingHyperlinkCtrlHints;
         private bool _hyperlinkCtrlHintsVisible;
         private bool _isLoadingDocument;
@@ -375,6 +376,11 @@ namespace Scriblucent
             // swap), so setting it on this Window instance wouldn't survive; set it directly on
             // the RichTextBox instead.
             ContentTextBox.Language = XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag);
+            // The flow has its own language default. WPF's first input-language change
+            // can clear pending font formatting, so initialize it from the active keyboard.
+            // Saved language values on runs and spans continue to take precedence.
+            ContentTextBox.Document.Language = XmlLanguage.GetLanguage(
+                InputLanguageManager.Current.CurrentInputLanguage.IetfLanguageTag);
             ContentTextBox.IsDocumentEnabled = true;
             // IsDocumentEnabled also makes Hyperlinks raise RequestNavigate on click - always handle
             // it ourselves so unknown schemes (scriblucent-note://) and default navigation cannot crash.
@@ -1988,6 +1994,14 @@ namespace Scriblucent
                 if (_findBarOpen)
                     QueueFindOverlay(DispatcherPriority.Render);
                 return;
+            }
+
+            if (_refreshLineSpacingAfterNextTyping && !_isLoadingDocument
+                && e.Changes.Any(change => change.AddedLength > 0))
+            {
+                _refreshLineSpacingAfterNextTyping = false;
+                if (ContentTextBox.CaretPosition.Paragraph is { } typedParagraph)
+                    ApplyLineSpacingToParagraph(typedParagraph, _lineSpacingMultiplier);
             }
 
             InvalidateSelectionTiles();
@@ -4552,6 +4566,7 @@ namespace Scriblucent
         // Load data FROM a NoteDocument
         public void LoadFromDocument(NoteDocument document)
         {
+            _refreshLineSpacingAfterNextTyping = false;
             DropParkedSelection();
             _findDocumentVersion++;
             ReleaseFindCache();
@@ -4654,7 +4669,12 @@ namespace Scriblucent
                     // note's own paragraph line spacing stay as they were saved.
                     ApplyRichTextBoxTheme();
                     ApplyEditorTextLayout();
-                    if (!TrySyncLineSpacingFromDocument())
+                    // The constructor gives the empty placeholder paragraph a line height
+                    // using the XAML font size. A new note can use a different preferred font
+                    // size, so that placeholder is not saved note formatting to sync from.
+                    var isNewBlankNote = string.IsNullOrEmpty(document.Content)
+                        && (document.Images is null || document.Images.Count == 0);
+                    if (isNewBlankNote || !TrySyncLineSpacingFromDocument())
                         ApplyCurrentLineSpacingToDocument();
 
                     _floatingImages.MediaDirectory = MainViewModel.NotesMediaDirectory;
@@ -7113,18 +7133,30 @@ namespace Scriblucent
             if (!TryGetSelectedComboBoxContent(FontFamilyBox, out var fontName))
                 return;
 
+            ApplyEditorFontFamily(fontName, persistPreference: true);
+        }
+
+        private void ApplyEditorFontFamily(string fontName, bool persistPreference)
+        {
             var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
+            var fontFamily = CreateEditorFontFamily(fontName);
+            ContentTextBox.Focus();
             _isApplyingTypography = true;
             try
             {
-                ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, CreateEditorFontFamily(fontName));
+                // WPF normalizes the first insertion into an empty paragraph and can
+                // discard its pending format. There is no existing text to restyle here.
+                if (!selectionChangesDocument && EditorEdgeSpacing.IsEmpty(ContentTextBox.Document))
+                    ContentTextBox.FontFamily = fontFamily;
+                ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, fontFamily);
             }
             finally
             {
                 _isApplyingTypography = false;
             }
 
-            SavePreferredFontFamily(GetPrimaryFontFamily(fontName));
+            if (persistPreference)
+                SavePreferredFontFamily(GetPrimaryFontFamily(fontName));
             UpdateFontButtonText();
 
             if (selectionChangesDocument)
@@ -7202,24 +7234,42 @@ namespace Scriblucent
             var selectionStart = selection?.Start;
             var selectionEnd = selection?.End;
             var selectionChangesDocument = selection is { IsEmpty: false };
+            var isEmptyNote = !selectionChangesDocument && EditorEdgeSpacing.IsEmpty(ContentTextBox.Document);
             var activeLists = GetActiveDocumentLists();
 
             ContentTextBox.Focus();
             _isApplyingTypography = true;
             try
             {
+                if (isEmptyNote)
+                {
+                    ContentTextBox.FontSize = size;
+                    if (ContentTextBox.CaretPosition.Paragraph is { } emptyParagraph)
+                        ApplyLineSpacingToParagraph(emptyParagraph, _lineSpacingMultiplier);
+                }
                 ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
-                Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
-                SyncListMarkerAppearance(activeLists, size, markerForeground);
-                ApplyLineSpacingToInlineFormattingTargetIfNeeded(size);
-                _floatingImages.SyncInlineParagraphLineStrategies();
+                if (selectionChangesDocument)
+                {
+                    Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
+                    SyncListMarkerAppearance(activeLists, size, markerForeground);
+                    ApplyLineSpacingToInlineFormattingTargetIfNeeded(size);
+                    _floatingImages.SyncInlineParagraphLineStrategies();
+                }
+                else
+                {
+                    // WPF springloads the new font size at an empty caret. Recalculate
+                    // its paragraph only once the first character has actually arrived.
+                    _refreshLineSpacingAfterNextTyping = !isEmptyNote;
+                }
             }
             finally
             {
                 _isApplyingTypography = false;
             }
 
-            if (selectionStart is not null && selectionEnd is not null)
+            // Reselecting an empty range discards WPF's pending typing format. Keep the
+            // caret's font size for the next characters, Word-style.
+            if (selectionChangesDocument && selectionStart is not null && selectionEnd is not null)
                 RefreshEditorSelectionLayout(selectionStart, selectionEnd);
 
             if (persistPreference)
@@ -7227,7 +7277,7 @@ namespace Scriblucent
 
             UpdateFontButtonText();
 
-            if (selectionChangesDocument || activeLists.Count > 0)
+            if (selectionChangesDocument)
             {
                 MarkEditorContentChanged();
                 UpdateEditedIndicator();
@@ -7436,7 +7486,7 @@ namespace Scriblucent
             foreach (var paragraph in GetTargetParagraphsForInlineFormatting())
             {
                 var targetLineHeight = ResolveParagraphLineHeight(paragraph, _lineSpacingMultiplier, minimumFontSize);
-                if (paragraph.LineStackingStrategy == LineStackingStrategy.BlockLineHeight
+                if (paragraph.LineStackingStrategy == LineStackingStrategy.MaxHeight
                     && Math.Abs(paragraph.LineHeight - targetLineHeight) < 0.01)
                 {
                     continue;
@@ -7480,8 +7530,10 @@ namespace Scriblucent
 
         private void ApplyLineSpacingToParagraph(Paragraph paragraph, double spacingMultiplier, double? minimumFontSize = null)
         {
-            if (paragraph.LineStackingStrategy != LineStackingStrategy.BlockLineHeight)
-                paragraph.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+            // LineHeight is a minimum. WPF must be free to grow the line around glyphs
+            // taller than their em size, including when the user shrinks other text.
+            if (paragraph.LineStackingStrategy != LineStackingStrategy.MaxHeight)
+                paragraph.LineStackingStrategy = LineStackingStrategy.MaxHeight;
             var lineHeight = ResolveParagraphLineHeight(paragraph, spacingMultiplier, minimumFontSize);
             if (double.IsNaN(paragraph.LineHeight) || Math.Abs(paragraph.LineHeight - lineHeight) >= 0.01)
                 paragraph.LineHeight = lineHeight;
@@ -7646,26 +7698,29 @@ namespace Scriblucent
 
         private double ResolveLargestParagraphFontSize(Paragraph paragraph)
         {
-            var fontSize = NormalizeFontSizeValue(paragraph.FontSize);
+            var fontSize = 0d;
             foreach (var inlineFontSize in EnumerateInlineFontSizes(paragraph.Inlines))
             {
                 if (inlineFontSize > fontSize)
                     fontSize = inlineFontSize;
             }
 
-            return fontSize;
+            // A paragraph can retain an old font size after every Run was restyled.
+            // Only use it when the paragraph has no text to measure yet.
+            return fontSize > 0 ? fontSize : NormalizeFontSizeValue(paragraph.FontSize);
         }
 
         private static IEnumerable<double> EnumerateInlineFontSizes(InlineCollection inlines)
         {
             foreach (Inline inline in inlines)
             {
-                var fontSize = NormalizeFontSizeValue(inline.FontSize);
-                if (fontSize > 0)
-                    yield return fontSize;
-
                 switch (inline)
                 {
+                    case Run run when run.Text.Length > 0:
+                        var fontSize = NormalizeFontSizeValue(run.FontSize);
+                        if (fontSize > 0)
+                            yield return fontSize;
+                        break;
                     case Span span:
                         foreach (var nestedFontSize in EnumerateInlineFontSizes(span.Inlines))
                             yield return nestedFontSize;
@@ -7682,16 +7737,20 @@ namespace Scriblucent
         {
             foreach (Block block in blocks)
             {
-                var fontSize = NormalizeFontSizeValue(block.FontSize);
-                if (fontSize > 0)
-                    yield return fontSize;
-
                 switch (block)
                 {
                     case Paragraph paragraph:
+                    {
+                        var foundText = false;
                         foreach (var nestedFontSize in EnumerateInlineFontSizes(paragraph.Inlines))
+                        {
+                            foundText = true;
                             yield return nestedFontSize;
+                        }
+                        if (!foundText)
+                            yield return NormalizeFontSizeValue(paragraph.FontSize);
                         break;
+                    }
                     case Section section:
                         foreach (var nestedFontSize in EnumerateBlockFontSizes(section.Blocks))
                             yield return nestedFontSize;
@@ -7762,7 +7821,8 @@ namespace Scriblucent
             Paragraph? spaced = null;
             foreach (var paragraph in paragraphs)
             {
-                if (paragraph.LineStackingStrategy == LineStackingStrategy.BlockLineHeight
+                if ((paragraph.LineStackingStrategy == LineStackingStrategy.BlockLineHeight
+                        || paragraph.LineStackingStrategy == LineStackingStrategy.MaxHeight)
                     && !double.IsNaN(paragraph.LineHeight)
                     && paragraph.LineHeight > 0)
                 {
