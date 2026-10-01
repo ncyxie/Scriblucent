@@ -96,20 +96,22 @@ namespace Scriblucent
             public required double Width;
             public required GeometryGroup NormalGeometry;
             public readonly List<Rect> NormalRects = new();
+            public readonly List<Geometry> SelectionGeometry = new();
             public TextPointer? NextLine;
-            public Dictionary<Paragraph, LineBandOrigin>? LineOrigins;
             public FindLineRange? CurrentFindRange;
             public FindDrawCursor? PendingFindDraw;
             public bool Initialized;
             public bool Complete;
             public bool ValidatedInViewport;
+            public double ValidatedTop;
+            public double ValidatedBottom;
             public HighlightTile? PendingReplacement;
             public bool NeedsSelectionRebuild;
             public TextPointer? CoveredStart;
             public TextPointer? CoveredEnd;
         }
 
-        private readonly record struct BlueLineMeasure(Rect DocumentRect, bool ValidatedInViewport);
+        private readonly record struct BlueLineMeasure(Geometry DocumentGeometry, bool ValidatedInViewport);
 
         private sealed class FindLineRange
         {
@@ -404,6 +406,7 @@ namespace Scriblucent
             // ContentTextBox_ContextMenuOpening can restore it after showing a dynamic
             // spell-check suggestions menu for a right-click that landed on a misspelled word.
             _defaultContentTextBoxContextMenu = ContentTextBox.ContextMenu;
+            InitializeTableEditing();
             ContentTextBox.ContextMenuOpening += ContentTextBox_ContextMenuOpening;
             PreviewKeyDown += NoteEditorWindow_PreviewKeyDown;
             PreviewKeyUp += NoteEditorWindow_PreviewKeyUp;
@@ -674,6 +677,7 @@ namespace Scriblucent
 
         private void ApplyEditorTextLayout()
         {
+            ScheduleTableLayout();
             var scrollbars = ResolveEditorScrollbarSettings();
             var horizontalScrollEnabled = scrollbars.Horizontal && !_isWordWrapEnabled;
 
@@ -819,13 +823,16 @@ namespace Scriblucent
 
         private void ContentScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
+            RefreshTableChrome();
             UpdateEditorScrollbarMirror();
             UpdateEditorScrollbarCorner();
             ShowEditorScrollbars();
             if (_selectionCollapsedForScroll || ContentTextBox.Selection is { IsEmpty: false })
             {
                 ApplySelectionOverlayCommit();
-                if (HighlightTilesNeedUpdate(_selectionTiles)
+                if ((TryGetPaintedSelection(out var start, out var end)
+                        && EditorTables.TryGetRange(start, end, out _, out _))
+                    || HighlightTilesNeedUpdate(_selectionTiles)
                     || SelectionTilesNeedVisibleValidation())
                     QueueSelectionOverlay();
             }
@@ -841,6 +848,8 @@ namespace Scriblucent
 
         private void ContentTextBox_SizeChanged(object sender, SizeChangedEventArgs e)
         {
+            CancelTableResize();
+            ScheduleTableLayout();
             UpdateFindHighlightClip();
             InvalidateSelectionTiles();
             InvalidateFindTiles();
@@ -1539,6 +1548,8 @@ namespace Scriblucent
 
         private void ContentTextBox_SelectionChanged(object sender, RoutedEventArgs e)
         {
+            UpdateTableToolsState();
+            RefreshTableChrome();
             if (_suppressSelectionChange)
                 return;
 
@@ -1763,83 +1774,7 @@ namespace Scriblucent
             Dictionary<Paragraph, LineBandOrigin>? lineOrigins,
             double verticalOffset)
         {
-            var rect = SelectionLineRect(start, end);
-            if (rect.IsEmpty)
-                return rect;
-
-            var lineRect = SafeCharacterRect(lineStart, LogicalDirection.Forward);
-            if (lineRect.IsEmpty || lineRect.Height <= 0)
-                return rect;
-
-            var paragraph = lineStart.Paragraph;
-            var lineHeight = paragraph?.LineHeight ?? double.NaN;
-            if (double.IsNaN(lineHeight) || lineHeight <= 0)
-                lineHeight = lineRect.Height;
-
-            rect.Y = lineRect.Top;
-            rect.Height = lineHeight;
-
-            if (paragraph?.LineStackingStrategy == LineStackingStrategy.BlockLineHeight)
-            {
-                // A caret rect follows its run's font metrics, so its top can jump within
-                // a paragraph even though WPF stacks the line boxes at fixed intervals.
-                if (lineOrigins is null || !lineOrigins.TryGetValue(paragraph, out var origin))
-                {
-                    var firstText = SafeCharacterRect(paragraph.ContentStart, LogicalDirection.Forward);
-                    var firstBox = SafeCharacterRect(paragraph.ContentStart, LogicalDirection.Backward);
-                    origin = new LineBandOrigin(
-                        firstText.Top + firstText.Height * 0.5 + verticalOffset,
-                        firstBox.Top + verticalOffset);
-                    lineOrigins?.Add(paragraph, origin);
-                }
-
-                if (double.IsFinite(origin.TextCenter) && double.IsFinite(origin.BoxTop))
-                {
-                    // Centers are less sensitive than tops to changes in font size at
-                    // the beginning of a wrapped or explicitly broken line.
-                    var lineCenter = lineRect.Top + lineRect.Height * 0.5 + verticalOffset;
-                    var lineNumber = Math.Round((lineCenter - origin.TextCenter) / lineHeight);
-                    if (double.IsFinite(lineNumber) && lineNumber >= 0)
-                        rect.Y = origin.BoxTop + lineNumber * lineHeight - verticalOffset;
-                }
-            }
-            else if (paragraph?.LineStackingStrategy == LineStackingStrategy.MaxHeight)
-            {
-                var inlineRect = InlineContainerLineRect(lineStart, nextLine, paragraph.ContentEnd);
-                if (!inlineRect.IsEmpty && inlineRect.Height > rect.Height)
-                {
-                    rect.Y = inlineRect.Top;
-                    rect.Height = inlineRect.Height;
-                }
-            }
-
-            return rect;
-        }
-
-        private static Rect InlineContainerLineRect(TextPointer lineStart, TextPointer? nextLine, TextPointer paragraphEnd)
-        {
-            var end = nextLine is not null && nextLine.CompareTo(paragraphEnd) < 0 ? nextLine : paragraphEnd;
-            var position = lineStart;
-            var result = Rect.Empty;
-            while (position.CompareTo(end) < 0)
-            {
-                if (position.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.ElementStart
-                    && position.GetAdjacentElement(LogicalDirection.Forward) is InlineUIContainer container)
-                {
-                    var imageRect = SafeCharacterRect(container.ContentStart, LogicalDirection.Forward);
-                    if (!imageRect.IsEmpty && imageRect.Height > 0)
-                        result = result.IsEmpty ? imageRect : Rect.Union(result, imageRect);
-                }
-
-                var next = position.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text
-                    ? position.GetPositionAtOffset(position.GetTextRunLength(LogicalDirection.Forward), LogicalDirection.Forward)
-                    : position.GetNextContextPosition(LogicalDirection.Forward);
-                if (next is null || next.CompareTo(position) <= 0)
-                    break;
-                position = next;
-            }
-
-            return result;
+            return WpfEditorGeometry.SelectionBounds(start, end);
         }
 
         private static Rect EndRectOnLine(TextPointer start, TextPointer end, Rect startRect)
@@ -1985,6 +1920,7 @@ namespace Scriblucent
 
         private void ContentTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            TableEditor_TextChanged(e);
             if (_isApplyingEditorEdgeSpacing)
             {
                 InvalidateSelectionTiles();
@@ -2853,6 +2789,7 @@ namespace Scriblucent
 
         private void NoteEditorWindow_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (TryHandleTableKey(e)) return;
             UpdateHyperlinkCtrlHintsFromKeyEvent(e, isDown: true);
 
             if (TryHandleFloatingImageKey(e))
@@ -2870,6 +2807,7 @@ namespace Scriblucent
 
         private void RootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (TryHandleTableKey(e)) return;
             if (_selectionCollapsedForScroll
                 && Keyboard.FocusedElement is DependencyObject focused
                 && (ReferenceEquals(focused, ContentTextBox) || IsEditorDescendant(focused))
@@ -4759,17 +4697,19 @@ namespace Scriblucent
         {
             try
             {
-                // Use the FlowDocument from RichTextBox
-                FlowDocument documentToPrint = ContentTextBox.Document;
-
-                // Format the document for printing
-                documentToPrint.PagePadding = new Thickness(50);
-
                 // Create a PrintDialog
                 PrintDialog pd = new PrintDialog();
                 if (pd.ShowDialog() == true)
                 {
-                    documentToPrint.ColumnWidth = pd.PrintableAreaWidth;
+                    FlowDocument documentToPrint;
+                    using (_tableLayout.UsePreferredWidths(ContentTextBox.Document))
+                        documentToPrint = CloneFlowDocument(ContentTextBox.Document)
+                            ?? throw new InvalidOperationException("Unable to create the print document.");
+                    documentToPrint.PagePadding = new Thickness(50);
+                    documentToPrint.PageWidth = pd.PrintableAreaWidth;
+                    documentToPrint.PageHeight = pd.PrintableAreaHeight;
+                    documentToPrint.ColumnWidth = Math.Max(1, pd.PrintableAreaWidth - 100);
+                    new EditorTableLayout().Apply(documentToPrint, Math.Max(1, pd.PrintableAreaWidth - 100));
 
                     // Print the document with fonts and formatting
                     pd.PrintDocument(((IDocumentPaginatorSource)documentToPrint).DocumentPaginator, TitleTextBox.Text);
@@ -4971,6 +4911,7 @@ namespace Scriblucent
 
         private void ContentTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (TryHandleTableKey(e)) return;
             if (TryHandleEditorTabKey(e))
                 return;
 
@@ -4987,6 +4928,13 @@ namespace Scriblucent
             // the default paste run rather than swallowing the command.
             if (e.DataObject is not { } data)
                 return;
+
+            if (TryPasteTableGrid(data))
+            {
+                e.CancelCommand();
+                e.Handled = true;
+                return;
+            }
 
             if (IsImageData(data))
             {
@@ -5280,6 +5228,16 @@ namespace Scriblucent
             try
             {
                 var dataObject = new DataObject();
+                if (EditorTables.TryGetRange(selection.Start, selection.End, out var table, out var cells) && table is not null)
+                {
+                    var gridText = EditorTables.CopyGrid(table, cells);
+                    dataObject.SetText(gridText, TextDataFormat.UnicodeText);
+                    dataObject.SetText(gridText, TextDataFormat.Text);
+                    dataObject.SetData(EditorTables.ClipboardGridFormat, gridText);
+                    TryAddSelectionRtfToClipboardData(dataObject, selection);
+                    Clipboard.SetDataObject(dataObject, true);
+                    return true;
+                }
                 var plainText = GetClipboardPlainText(selection, out var convertedIndentationForPlainText);
                 dataObject.SetText(plainText, TextDataFormat.UnicodeText);
                 dataObject.SetText(plainText, TextDataFormat.Text);
@@ -6551,6 +6509,7 @@ namespace Scriblucent
                 ".rtf",
                 path =>
                 {
+                    using var tableWidths = _tableLayout.UsePreferredWidths(ContentTextBox.Document);
                     ClearSpellCheckDecorations();
                     _wrapLayout?.Clear();
                     SaveWithInlineMarkers(() =>
@@ -6818,6 +6777,7 @@ namespace Scriblucent
             sourceDocument.PageHeight = PdfPageHeight;
             sourceDocument.PagePadding = new Thickness(PdfPagePadding);
             sourceDocument.ColumnWidth = PdfPageWidth - (PdfPagePadding * 2);
+            new EditorTableLayout().Apply(sourceDocument, PdfPageWidth - (PdfPagePadding * 2));
 
             var paginator = ((IDocumentPaginatorSource)sourceDocument).DocumentPaginator;
             paginator.PageSize = new Size(PdfPageWidth, PdfPageHeight);
@@ -6966,14 +6926,12 @@ namespace Scriblucent
 
         private void UndoButton_Click(object sender, RoutedEventArgs e)
         {
-            if (ContentTextBox.CanUndo)
-                ContentTextBox.Undo();
+            TableAwareUndo(false);
         }
 
         private void RedoButton_Click(object sender, RoutedEventArgs e)
         {
-            if (ContentTextBox.CanRedo)
-                ContentTextBox.Redo();
+            TableAwareUndo(true);
         }
 
         private void EditHistoryButton_Click(object sender, RoutedEventArgs e)
@@ -8305,6 +8263,12 @@ namespace Scriblucent
 
         private void InsertTableButton_Click(object sender, RoutedEventArgs e)
         {
+            if (ActiveTable() is not null) OpenTableTools();
+            else OpenTableSizePicker();
+        }
+
+        private void OpenTableSizePicker()
+        {
             EnsureTableSizePickerInitialized();
             HighlightTableSizePicker(DefaultInsertedTableRows, DefaultInsertedTableColumns);
             TableSizePickerPopup.IsOpen = true;
@@ -8390,7 +8354,10 @@ namespace Scriblucent
         private void InsertTableOfSize(int rows, int columns)
         {
             var table = BuildTable(rows, columns);
-            InsertTableAtCaret(table);
+            ContentTextBox.BeginChange();
+            try { InsertTableAtCaret(table); }
+            finally { ContentTextBox.EndChange(); }
+            _tableLayout.Apply(ContentTextBox.Document, TableViewportWidth);
             FocusTableCell(table, 0, 0);
             MarkEditorContentChanged();
             UpdateEditedIndicator();
@@ -8401,43 +8368,17 @@ namespace Scriblucent
         {
             rows = Math.Clamp(rows, 1, MaxTableSizePickerDimension);
             columns = Math.Clamp(columns, 1, MaxTableSizePickerDimension);
-
-            var table = new Table();
-            for (var c = 0; c < columns; c++)
-            {
-                table.Columns.Add(new TableColumn
-                {
-                    Width = new GridLength(1, GridUnitType.Star)
-                });
-            }
-
-            var rowGroup = new TableRowGroup();
-            for (var r = 0; r < rows; r++)
-            {
-                var row = new TableRow();
-                for (var c = 0; c < columns; c++)
-                    row.Cells.Add(CreateEmptyTableCell());
-
-                rowGroup.Rows.Add(row);
-            }
-
-            table.RowGroups.Add(rowGroup);
-            return table;
+            return EditorTables.Create(rows, columns, ResolveTableCellBorderBrush());
         }
 
         private static TableCell CreateEmptyTableCell()
         {
-            return new TableCell(new Paragraph())
-            {
-                BorderBrush = ResolveTableCellBorderBrush(),
-                BorderThickness = new Thickness(1),
-                Padding = new Thickness(6, 4, 6, 4)
-            };
+            return EditorTables.CreateCell(ResolveTableCellBorderBrush());
         }
 
         private static Brush ResolveTableCellBorderBrush()
         {
-            if (Application.Current.Resources.Contains("BorderColor")
+            if (Application.Current?.Resources.Contains("BorderColor") == true
                 && Application.Current.Resources["BorderColor"] is Brush brush)
             {
                 return brush;
@@ -8513,7 +8454,11 @@ namespace Scriblucent
             {
                 if (rowIndex == rowCount - 1 && columnIndex == columnCount - 1)
                 {
-                    InsertTableRow(table, rowCount);
+                    RunTableEdit(table, () =>
+                    {
+                        InsertTableRow(table, rowCount);
+                        FocusTableCell(table, rowCount, 0);
+                    });
                     rowIndex = rowCount;
                     columnIndex = 0;
                     MarkEditorContentChanged();
@@ -8541,18 +8486,24 @@ namespace Scriblucent
             if (table is null || !TryGetTableCellIndices(table, cell, out var rowIndex, out var columnIndex))
                 return _defaultContentTextBoxContextMenu ?? menu;
 
+            MenuItem Edit(string key, Action action, bool preserveView = false)
+                => CreateTableMenuItem(key, action, table, preserveView);
+            menu.Items.Add(CreateTableMenuItem("InsertAnotherTable", OpenTableSizePicker));
+            menu.Items.Add(new Separator());
+            AddTableLayoutMenu(menu, table, cell, rowIndex, columnIndex);
+            var selectedCells = EditorTables.SelectedCells(ContentTextBox.Selection.Start, ContentTextBox.Selection.End, table, cell);
             var rowCount = GetTableRowCount(table);
             var columnCount = Math.Max(1, table.Columns.Count);
 
             var insertMenu = CreateTableSubMenu("TableInsert");
-            insertMenu.Items.Add(CreateTableMenuItem(
+            insertMenu.Items.Add(Edit(
                 "TableInsertRowAbove",
                 () =>
                 {
                     InsertTableRow(table, rowIndex);
                     FocusTableCell(table, rowIndex, columnIndex);
                 }));
-            insertMenu.Items.Add(CreateTableMenuItem(
+            insertMenu.Items.Add(Edit(
                 "TableInsertRowBelow",
                 () =>
                 {
@@ -8560,41 +8511,43 @@ namespace Scriblucent
                     FocusTableCell(table, rowIndex + 1, columnIndex);
                 }));
             insertMenu.Items.Add(new Separator());
-            insertMenu.Items.Add(CreateTableMenuItem(
+            insertMenu.Items.Add(Edit(
                 "TableInsertColumnLeft",
                 () =>
                 {
                     InsertTableColumn(table, columnIndex);
                     FocusTableCell(table, rowIndex, columnIndex);
                 }));
-            insertMenu.Items.Add(CreateTableMenuItem(
+            insertMenu.Items.Add(Edit(
                 "TableInsertColumnRight",
                 () =>
                 {
                     InsertTableColumn(table, columnIndex + 1);
                     FocusTableCell(table, rowIndex, columnIndex + 1);
                 }));
+            insertMenu.IsEnabled = EditorTables.IsRectangular(table);
             menu.Items.Add(insertMenu);
 
             var duplicateMenu = CreateTableSubMenu("TableDuplicate");
-            duplicateMenu.Items.Add(CreateTableMenuItem(
+            duplicateMenu.Items.Add(Edit(
                 "TableDuplicateRow",
                 () =>
                 {
                     DuplicateTableRow(table, rowIndex);
                     FocusTableCell(table, rowIndex + 1, columnIndex);
                 }));
-            duplicateMenu.Items.Add(CreateTableMenuItem(
+            duplicateMenu.Items.Add(Edit(
                 "TableDuplicateColumn",
                 () =>
                 {
                     DuplicateTableColumn(table, columnIndex);
                     FocusTableCell(table, rowIndex, columnIndex + 1);
                 }));
+            duplicateMenu.IsEnabled = EditorTables.IsRectangular(table);
             menu.Items.Add(duplicateMenu);
 
             var moveMenu = CreateTableSubMenu("TableMove");
-            var moveUpItem = CreateTableMenuItem(
+            var moveUpItem = Edit(
                 "TableMoveRowUp",
                 () =>
                 {
@@ -8602,9 +8555,10 @@ namespace Scriblucent
                         FocusTableCell(table, rowIndex - 1, columnIndex);
                 });
             moveUpItem.IsEnabled = rowIndex > 0;
+            moveUpItem.IsEnabled &= EditorTables.IsRectangular(table);
             moveMenu.Items.Add(moveUpItem);
 
-            var moveDownItem = CreateTableMenuItem(
+            var moveDownItem = Edit(
                 "TableMoveRowDown",
                 () =>
                 {
@@ -8612,36 +8566,58 @@ namespace Scriblucent
                         FocusTableCell(table, rowIndex + 1, columnIndex);
                 });
             moveDownItem.IsEnabled = rowIndex < rowCount - 1;
+            moveDownItem.IsEnabled &= EditorTables.IsRectangular(table);
             moveMenu.Items.Add(moveDownItem);
+            moveMenu.Items.Add(new Separator());
+            var moveLeft = Edit("TableMoveColumnLeft", () =>
+            {
+                EditorTables.MoveColumn(table, columnIndex, -1);
+                FocusTableCell(table, rowIndex, columnIndex - 1);
+            });
+            moveLeft.IsEnabled = columnIndex > 0 && EditorTables.IsRectangular(table);
+            moveMenu.Items.Add(moveLeft);
+            var moveRight = Edit("TableMoveColumnRight", () =>
+            {
+                EditorTables.MoveColumn(table, columnIndex, 1);
+                FocusTableCell(table, rowIndex, columnIndex + 1);
+            });
+            moveRight.IsEnabled = columnIndex < columnCount - 1 && EditorTables.IsRectangular(table);
+            moveMenu.Items.Add(moveRight);
             menu.Items.Add(moveMenu);
 
             var clearMenu = CreateTableSubMenu("TableClear");
-            clearMenu.Items.Add(CreateTableMenuItem(
+            clearMenu.Items.Add(Edit(
                 "TableClearCell",
                 () =>
                 {
                     ClearTableCell(cell);
                     FocusTableCell(table, rowIndex, columnIndex);
                 }));
-            clearMenu.Items.Add(CreateTableMenuItem(
+            clearMenu.Items.Add(Edit(
                 "TableClearRow",
                 () =>
                 {
                     ClearTableRow(table, rowIndex);
                     FocusTableCell(table, rowIndex, columnIndex);
                 }));
+            clearMenu.Items.Add(Edit("TableClearColumn", () =>
+            {
+                foreach (var row in EditorTables.Rows(table))
+                    if (columnIndex < row.Cells.Count) ClearTableCell(row.Cells[columnIndex]);
+                FocusTableCell(table, rowIndex, columnIndex);
+            }));
             menu.Items.Add(clearMenu);
 
             var alignMenu = CreateTableSubMenu("TableAlign");
-            alignMenu.Items.Add(CreateTableMenuItem(
+            alignMenu.Items.Add(Edit(
                 "TableAlignLeft",
-                () => SetTableCellAlignment(cell, TextAlignment.Left)));
-            alignMenu.Items.Add(CreateTableMenuItem(
+                () => EditorTables.Align(selectedCells, TextAlignment.Left), preserveView: true));
+            alignMenu.Items.Add(Edit(
                 "TableAlignCenter",
-                () => SetTableCellAlignment(cell, TextAlignment.Center)));
-            alignMenu.Items.Add(CreateTableMenuItem(
+                () => EditorTables.Align(selectedCells, TextAlignment.Center), preserveView: true));
+            alignMenu.Items.Add(Edit(
                 "TableAlignRight",
-                () => SetTableCellAlignment(cell, TextAlignment.Right)));
+                () => EditorTables.Align(selectedCells, TextAlignment.Right), preserveView: true));
             menu.Items.Add(alignMenu);
 
             var selectMenu = CreateTableSubMenu("TableSelect");
@@ -8657,7 +8633,7 @@ namespace Scriblucent
             menu.Items.Add(selectMenu);
 
             var deleteMenu = CreateTableSubMenu("TableDelete");
-            deleteMenu.Items.Add(CreateTableMenuItem(
+            deleteMenu.Items.Add(Edit(
                 "TableDeleteRow",
                 () =>
                 {
@@ -8670,7 +8646,7 @@ namespace Scriblucent
                     DeleteTableRow(table, rowIndex);
                     FocusTableCell(table, Math.Min(rowIndex, rowCount - 2), columnIndex);
                 }));
-            deleteMenu.Items.Add(CreateTableMenuItem(
+            deleteMenu.Items.Add(Edit(
                 "TableDeleteColumn",
                 () =>
                 {
@@ -8684,13 +8660,19 @@ namespace Scriblucent
                     FocusTableCell(table, rowIndex, Math.Min(columnIndex, columnCount - 2));
                 }));
             deleteMenu.Items.Add(new Separator());
-            deleteMenu.Items.Add(CreateTableMenuItem("TableDeleteTable", () => DeleteTable(table)));
+            deleteMenu.Items.Add(Edit("TableDeleteTable", () => DeleteTable(table)));
+            if (!EditorTables.IsRectangular(table))
+            {
+                ((MenuItem)deleteMenu.Items[0]).IsEnabled = false;
+                ((MenuItem)deleteMenu.Items[1]).IsEnabled = false;
+            }
             menu.Items.Add(deleteMenu);
 
             menu.Items.Add(new Separator());
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Cut"), Command = ApplicationCommands.Cut });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Copy"), Command = ApplicationCommands.Copy });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Paste"), Command = ApplicationCommands.Paste });
+            menu.Items.Add(CreatePasteAsTableMenuItem());
             menu.Items.Add(new Separator());
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("SelectAll"), Command = ApplicationCommands.SelectAll });
             return menu;
@@ -8699,7 +8681,7 @@ namespace Scriblucent
         private static MenuItem CreateTableSubMenu(string localizationKey)
             => new() { Header = LocalizationService.GetString(localizationKey) };
 
-        private MenuItem CreateTableMenuItem(string localizationKey, Action action)
+        private MenuItem CreateTableMenuItem(string localizationKey, Action action, Table? table = null, bool preserveView = false)
         {
             var item = new MenuItem { Header = LocalizationService.GetString(localizationKey) };
             item.Click += (_, _) =>
@@ -8707,9 +8689,8 @@ namespace Scriblucent
                 // Run after the context menu closes so FlowDocument edits are not discarded.
                 Dispatcher.BeginInvoke(() =>
                 {
-                    action();
-                    MarkEditorContentChanged();
-                    UpdateEditedIndicator();
+                    if (table is not null) RunTableEdit(table, action, preserveView: preserveView);
+                    else action();
                     ContentTextBox.Focus();
                 }, DispatcherPriority.Input);
             };
@@ -8718,7 +8699,9 @@ namespace Scriblucent
 
         private static void InsertTableRow(Table table, int rowIndex)
         {
-            var rowGroup = GetPrimaryTableRowGroup(table);
+            var rows = EditorTables.Rows(table);
+            rowIndex = Math.Clamp(rowIndex, 0, rows.Length);
+            var rowGroup = rowIndex < rows.Length ? (TableRowGroup)rows[rowIndex].Parent : table.RowGroups.LastOrDefault();
             if (rowGroup is null)
                 return;
 
@@ -8727,7 +8710,7 @@ namespace Scriblucent
             {
                 table.Columns.Add(new TableColumn
                 {
-                    Width = new GridLength(1, GridUnitType.Star)
+                    Width = new GridLength(EditorTables.DefaultColumnWidth)
                 });
             }
 
@@ -8735,8 +8718,8 @@ namespace Scriblucent
             for (var c = 0; c < columnCount; c++)
                 row.Cells.Add(CreateEmptyTableCell());
 
-            rowIndex = Math.Clamp(rowIndex, 0, rowGroup.Rows.Count);
-            rowGroup.Rows.Insert(rowIndex, row);
+            var insertAt = rowIndex < rows.Length ? rowGroup.Rows.IndexOf(rows[rowIndex]) : rowGroup.Rows.Count;
+            rowGroup.Rows.Insert(insertAt, row);
         }
 
         private static void InsertTableColumn(Table table, int columnIndex)
@@ -8748,10 +8731,10 @@ namespace Scriblucent
             columnIndex = Math.Clamp(columnIndex, 0, table.Columns.Count);
             table.Columns.Insert(columnIndex, new TableColumn
             {
-                Width = new GridLength(1, GridUnitType.Star)
+                Width = new GridLength(EditorTables.DefaultColumnWidth)
             });
 
-            foreach (TableRow row in rowGroup.Rows)
+            foreach (var row in EditorTables.Rows(table))
             {
                 var insertAt = Math.Min(columnIndex, row.Cells.Count);
                 row.Cells.Insert(insertAt, CreateEmptyTableCell());
@@ -8760,16 +8743,16 @@ namespace Scriblucent
 
         private static void DuplicateTableRow(Table table, int rowIndex)
         {
-            var rowGroup = GetPrimaryTableRowGroup(table);
-            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+            var rows = EditorTables.Rows(table);
+            if (rowIndex < 0 || rowIndex >= rows.Length)
                 return;
-
-            var source = rowGroup.Rows[rowIndex];
-            var copy = new TableRow();
+            var source = rows[rowIndex];
+            var rowGroup = (TableRowGroup)source.Parent;
+            var copy = new TableRow { FontWeight = source.FontWeight, Background = source.Background };
             foreach (TableCell cell in source.Cells)
                 copy.Cells.Add(CloneTableCell(cell));
 
-            rowGroup.Rows.Insert(rowIndex + 1, copy);
+            rowGroup.Rows.Insert(rowGroup.Rows.IndexOf(source) + 1, copy);
         }
 
         private static void DuplicateTableColumn(Table table, int columnIndex)
@@ -8780,10 +8763,10 @@ namespace Scriblucent
 
             table.Columns.Insert(columnIndex + 1, new TableColumn
             {
-                Width = new GridLength(1, GridUnitType.Star)
+                Width = table.Columns[columnIndex].Width
             });
 
-            foreach (TableRow row in rowGroup.Rows)
+            foreach (var row in EditorTables.Rows(table))
             {
                 if (columnIndex >= row.Cells.Count)
                 {
@@ -8797,17 +8780,15 @@ namespace Scriblucent
 
         private static bool MoveTableRow(Table table, int rowIndex, int delta)
         {
-            var rowGroup = GetPrimaryTableRowGroup(table);
-            if (rowGroup is null)
-                return false;
-
+            var rows = EditorTables.Rows(table);
             var targetIndex = rowIndex + delta;
-            if (rowIndex < 0 || rowIndex >= rowGroup.Rows.Count || targetIndex < 0 || targetIndex >= rowGroup.Rows.Count)
+            if (rowIndex < 0 || rowIndex >= rows.Length || targetIndex < 0 || targetIndex >= rows.Length)
                 return false;
-
-            var row = rowGroup.Rows[rowIndex];
-            rowGroup.Rows.RemoveAt(rowIndex);
-            rowGroup.Rows.Insert(targetIndex, row);
+            var row = rows[rowIndex];
+            var target = rows[targetIndex];
+            ((TableRowGroup)row.Parent).Rows.Remove(row);
+            var group = (TableRowGroup)target.Parent;
+            group.Rows.Insert(group.Rows.IndexOf(target) + (delta > 0 ? 1 : 0), row);
             return true;
         }
 
@@ -8819,31 +8800,19 @@ namespace Scriblucent
 
         private static void ClearTableRow(Table table, int rowIndex)
         {
-            var rowGroup = GetPrimaryTableRowGroup(table);
-            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+            var rows = EditorTables.Rows(table);
+            if (rowIndex < 0 || rowIndex >= rows.Length)
                 return;
-
-            foreach (TableCell cell in rowGroup.Rows[rowIndex].Cells)
+            foreach (TableCell cell in rows[rowIndex].Cells)
                 ClearTableCell(cell);
-        }
-
-        private static void SetTableCellAlignment(TableCell cell, TextAlignment alignment)
-        {
-            cell.TextAlignment = alignment;
-            foreach (Block block in cell.Blocks)
-            {
-                if (block is Paragraph paragraph)
-                    paragraph.TextAlignment = alignment;
-            }
         }
 
         private void SelectTableRow(Table table, int rowIndex)
         {
-            var rowGroup = GetPrimaryTableRowGroup(table);
-            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+            var rows = EditorTables.Rows(table);
+            if (rowIndex < 0 || rowIndex >= rows.Length)
                 return;
-
-            var row = rowGroup.Rows[rowIndex];
+            var row = rows[rowIndex];
             if (row.Cells.Count == 0)
                 return;
 
@@ -8863,7 +8832,7 @@ namespace Scriblucent
 
             TextPointer? start = null;
             TextPointer? end = null;
-            foreach (TableRow row in rowGroup.Rows)
+            foreach (var row in EditorTables.Rows(table))
             {
                 if (columnIndex >= row.Cells.Count)
                     continue;
@@ -8891,34 +8860,30 @@ namespace Scriblucent
         {
             var clone = CreateEmptyTableCell();
             clone.TextAlignment = source.TextAlignment;
+            clone.Padding = source.Padding;
+            clone.BorderThickness = source.BorderThickness;
+            clone.BorderBrush = source.BorderBrush;
+            clone.FontWeight = source.FontWeight;
             if (source.Background is not null)
                 clone.Background = source.Background;
 
-            try
-            {
-                var sourceRange = new TextRange(source.ContentStart, source.ContentEnd);
-                using var stream = new MemoryStream();
-                sourceRange.Save(stream, DataFormats.Xaml);
-                stream.Position = 0;
-                clone.Blocks.Clear();
-                clone.Blocks.Add(new Paragraph());
-                new TextRange(clone.ContentStart, clone.ContentEnd).Load(stream, DataFormats.Xaml);
-            }
-            catch
-            {
-                // Keep empty cell on clone failure.
-            }
-
+            var sourceRange = new TextRange(source.ContentStart, source.ContentEnd);
+            using var stream = new MemoryStream();
+            sourceRange.Save(stream, DataFormats.Xaml);
+            stream.Position = 0;
+            clone.Blocks.Clear();
+            clone.Blocks.Add(new Paragraph());
+            new TextRange(clone.ContentStart, clone.ContentEnd).Load(stream, DataFormats.Xaml);
             return clone;
         }
 
         private static void DeleteTableRow(Table table, int rowIndex)
         {
-            var rowGroup = GetPrimaryTableRowGroup(table);
-            if (rowGroup is null || rowIndex < 0 || rowIndex >= rowGroup.Rows.Count)
+            var rows = EditorTables.Rows(table);
+            if (rowIndex < 0 || rowIndex >= rows.Length)
                 return;
-
-            rowGroup.Rows.RemoveAt(rowIndex);
+            var row = rows[rowIndex];
+            ((TableRowGroup)row.Parent).Rows.Remove(row);
         }
 
         private static void DeleteTableColumn(Table table, int columnIndex)
@@ -8928,7 +8893,7 @@ namespace Scriblucent
                 return;
 
             table.Columns.RemoveAt(columnIndex);
-            foreach (TableRow row in rowGroup.Rows)
+            foreach (var row in EditorTables.Rows(table))
             {
                 if (columnIndex < row.Cells.Count)
                     row.Cells.RemoveAt(columnIndex);
@@ -8937,12 +8902,18 @@ namespace Scriblucent
 
         private void DeleteTable(Table table)
         {
+            if (ReferenceEquals(table, _tableEditTarget)) { _tableDeleteRequested = true; return; }
             var parentBlocks = GetParentBlockCollection(table);
             parentBlocks?.Remove(table);
         }
 
         private void FocusTableCell(Table table, int rowIndex, int columnIndex)
         {
+            if (ReferenceEquals(table, _tableEditTarget))
+            {
+                _tableEditFocus = (table, rowIndex, columnIndex);
+                return;
+            }
             if (!TryGetTableCell(table, rowIndex, columnIndex, out var cell))
                 return;
 
@@ -10454,6 +10425,7 @@ namespace Scriblucent
             var viewState = _floatingImages.CaptureViewState();
             try
             {
+                using var tableWidths = _tableLayout.UsePreferredWidths(ContentTextBox.Document);
                 _floatingImages.StripImageExtentPad();
                 SuspendEditorEdgeSpacing();
 

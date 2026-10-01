@@ -65,6 +65,7 @@ public sealed class FloatingImageCoordinator
     private int _attachGeneration;
     private readonly Dictionary<Guid, NoteImageSession> _sessions = new();
     private readonly Dictionary<Guid, InlineUIContainer> _inlineContainers = new();
+    private bool _isReconcilingInlineElements;
     private readonly Dictionary<Paragraph, LineStackingStrategy> _inlineStrategyOverrides = new();
     private readonly Dictionary<Guid, TextBlock> _captionElements = new();
     private List<Guid>? _pendingInlineRestoreOrder;
@@ -371,6 +372,13 @@ public sealed class FloatingImageCoordinator
         foreach (var session in _sessions.Values)
         {
             if (session.Bytes.Length == 0)
+                continue;
+
+            // Keep removed inline sessions available for native Undo, but never export
+            // attachments whose controls no longer belong to the current document.
+            if (session.WrapMode == NoteImageWrapMode.Inline
+                && _pendingInlineRestoreOrder?.Contains(session.Id) != true
+                && (!_inlineContainers.TryGetValue(session.Id, out var inline) || !IsInlineInDocument(inline)))
                 continue;
 
             if (session.WrapMode != NoteImageWrapMode.Inline && FindWidget(session.Id) is { } widget)
@@ -1931,7 +1939,7 @@ public sealed class FloatingImageCoordinator
         // Anchor at the nearest text position to the image's document top-left.
         var position = FindNearestTextPosition(session.DocumentLeft, session.DocumentTop);
         var element = CreateInlineElement(session);
-        var container = new InlineUIContainer(element);
+        var container = new InlineUIContainer(element) { Tag = session.Id };
         _inlineContainers[session.Id] = container;
 
         if (position is not null && FindParagraphFor(position) is { } paragraph)
@@ -2222,7 +2230,7 @@ public sealed class FloatingImageCoordinator
         foreach (var (id, container) in _inlineContainers.ToList())
         {
             var host = GetInlineHost(container);
-            if (host is null || !_sessions.ContainsKey(id))
+            if (host is null || !_sessions.ContainsKey(id) || !IsInlineInDocument(container))
                 continue;
 
             var marker = new Run(new string(InlineMarkerChar, 1)) { Tag = id };
@@ -2426,6 +2434,10 @@ public sealed class FloatingImageCoordinator
 
     private void Editor_TextChanged(object sender, TextChangedEventArgs e)
     {
+        // Native Undo substitutes custom controls with placeholders. Restore their
+        // editor-owned controls before the host reacts to the completed change.
+        if (e.UndoAction is UndoAction.Undo or UndoAction.Redo)
+            ReconcileInlineElementsAfterTableEdit();
         // Undo/redo can resurrect the in-line photo marker char (renders as "obj") from the
         // save-cycle operations; the char is never legitimate text, so sweep it on sight.
         // Skipped while the marker swap is in flight (serialization), while sessions are
@@ -2434,6 +2446,56 @@ public sealed class FloatingImageCoordinator
         if (_pendingInlineRestoreOrder is null && !_isRestoring && !SuppressMarkerSweep)
             SweepStrayInlineMarkers(e);
 
+        SyncInlineParagraphLineStrategies();
+        SyncInlineButtonPlacement();
+    }
+
+    private bool IsInlineInDocument(InlineUIContainer container)
+        => _editor is not null && ReferenceEquals(EditorTables.Ancestor<FlowDocument>(container.Parent), _editor.Document);
+
+    /// <summary>WPF recreates embedded controls when it undoes a table fragment replacement.</summary>
+    internal void ReconcileInlineElementsAfterTableEdit()
+    {
+        if (_editor is null || _inlineContainers.Count == 0 || _isReconcilingInlineElements) return;
+        var containers = EnumerateParagraphs(_editor.Document)
+            .SelectMany(paragraph => EnumerateInlines(paragraph.Inlines).OfType<InlineUIContainer>())
+            .Where(container =>
+            {
+                var id = container.Child is InlineNoteImageElement current ? current.ImageId : container.Tag as Guid?;
+                return id is not null && _sessions.TryGetValue(id.Value, out var session)
+                    && session.WrapMode == NoteImageWrapMode.Inline
+                    && (!_inlineContainers.TryGetValue(id.Value, out var previous) || !ReferenceEquals(previous, container));
+            }).ToArray();
+        if (containers.Length == 0) return;
+        _isReconcilingInlineElements = true;
+        try
+        {
+            WpfNonUndoChange.Run(_editor, () =>
+            {
+                foreach (var container in containers)
+                {
+                    var id = container.Child is InlineNoteImageElement current ? current.ImageId : (Guid)container.Tag;
+                    var session = _sessions[id];
+                    _inlineContainers.TryGetValue(id, out var previous);
+                    // WPF's restrictive Undo reader substitutes custom controls with an empty
+                    // Grid. The native container's local Tag still identifies the photo session.
+                    var element = previous?.Child as InlineNoteImageElement;
+                    if (element is not null && previous is not null)
+                        previous.Child = null;
+                    else element = CreateInlineElement(session);
+                    container.Child = element;
+                    container.Tag = id;
+                    _inlineContainers[id] = container;
+                    element.WrapMode = NoteImageWrapMode.Inline;
+                    element.LockAspectRatio = session.LockAspectRatio;
+                    element.SetDisplaySize(session.Width, session.Height);
+                    element.Source = DecodeDisplaySource(session);
+                    element.SetCaption(session.HasCaption ? BuildCaptionText(session) : null);
+                    element.IsSelected = _selectedInlineId == element.ImageId;
+                }
+            });
+        }
+        finally { _isReconcilingInlineElements = false; }
         SyncInlineParagraphLineStrategies();
         SyncInlineButtonPlacement();
     }
@@ -2599,7 +2661,7 @@ public sealed class FloatingImageCoordinator
             }
 
             var element = CreateInlineElement(session);
-            var container = new InlineUIContainer(element);
+            var container = new InlineUIContainer(element) { Tag = session.Id };
             _inlineContainers[session.Id] = container;
 
             // Insert the element at the marker's position first (the position is still inside

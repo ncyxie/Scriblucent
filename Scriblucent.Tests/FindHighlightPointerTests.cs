@@ -56,11 +56,11 @@ public class FindHighlightPointerTests
         });
     }
 
-    private static RichTextBox LayoutEditor(FlowDocument document)
+    private static RichTextBox LayoutEditor(FlowDocument document, double height = 180)
     {
-        var editor = new RichTextBox { Document = document, Width = 400, Height = 180, Padding = new Thickness(0) };
-        editor.Measure(new Size(400, 180));
-        editor.Arrange(new Rect(0, 0, 400, 180));
+        var editor = new RichTextBox { Document = document, Width = 400, Height = height, Padding = new Thickness(0) };
+        editor.Measure(new Size(400, height));
+        editor.Arrange(new Rect(0, 0, 400, height));
         editor.UpdateLayout();
         return editor;
     }
@@ -251,16 +251,43 @@ public class FindHighlightPointerTests
                 line = line.GetLineStartPosition(1)!;
             var next = line.GetLineStartPosition(1)!;
             var origins = new Dictionary<Paragraph, NoteEditorWindow.LineBandOrigin>();
-            var before = NoteEditorWindow.BlueSelectionLineRect(line, next, line, next, origins, 0);
             var viewer = (ScrollViewer)editor.Template.FindName("PART_ContentHost", editor)!;
-            viewer.ScrollToVerticalOffset(before.Top - 50);
+            // Native selection geometry is deliberately restricted to rendered text.
+            Assert.True(NoteEditorWindow.BlueSelectionLineRect(line, next, line, next).IsEmpty);
+            viewer.ScrollToVerticalOffset(line.GetCharacterRect(LogicalDirection.Forward).Top - 50);
+            editor.UpdateLayout();
+            var firstOffset = viewer.VerticalOffset;
+            var before = NoteEditorWindow.BlueSelectionLineRect(line, next, line, next, origins, firstOffset);
+            viewer.ScrollToVerticalOffset(firstOffset + 20);
             editor.UpdateLayout();
             var after = NoteEditorWindow.BlueSelectionLineRect(line, next, line, next,
                 origins, viewer.VerticalOffset);
 
             Assert.False(before.IsEmpty);
-            Assert.InRange(Math.Abs(before.Top - after.Top - viewer.VerticalOffset), 0, 0.5);
+            Assert.False(after.IsEmpty);
+            Assert.InRange(Math.Abs(before.Top + firstOffset - after.Top - viewer.VerticalOffset), 0, 0.5);
             Assert.InRange(Math.Abs(before.Height - after.Height), 0, 0.01);
+        });
+    }
+
+    [Fact]
+    public void Blue_selection_covers_large_fonts_on_a_MaxHeight_line_even_when_only_small_text_is_selected()
+    {
+        RunSta(() =>
+        {
+            var small = new Run("small ") { FontSize = 12 };
+            var large = new Run("LARGE") { FontSize = 48 };
+            var paragraph = new Paragraph { LineHeight = 20, LineStackingStrategy = LineStackingStrategy.MaxHeight };
+            paragraph.Inlines.Add(small);
+            paragraph.Inlines.Add(large);
+            LayoutEditor(new FlowDocument(paragraph));
+            var smallBlue = NoteEditorWindow.BlueSelectionLineRect(paragraph.ContentStart, null, small.ContentStart, small.ContentEnd);
+            var largeBlue = NoteEditorWindow.BlueSelectionLineRect(paragraph.ContentStart, null, large.ContentStart, large.ContentEnd);
+            var largeGlyph = large.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            Assert.True(smallBlue.Height > 48);
+            Assert.Equal(largeBlue.Top, smallBlue.Top, precision: 2);
+            Assert.Equal(largeBlue.Height, smallBlue.Height, precision: 2);
+            Assert.True(smallBlue.Top <= largeGlyph.Top + 0.5 && smallBlue.Bottom >= largeGlyph.Bottom - 0.5);
         });
     }
 
@@ -337,7 +364,7 @@ public class FindHighlightPointerTests
             paragraph.Inlines.Add(middle);
             paragraph.Inlines.Add(new LineBreak());
             paragraph.Inlines.Add(last);
-            LayoutEditor(new FlowDocument(paragraph) { PagePadding = new Thickness(0) });
+            LayoutEditor(new FlowDocument(paragraph) { PagePadding = new Thickness(0) }, height: 600);
 
             var firstBlue = NoteEditorWindow.BlueSelectionLineRect(first.ContentStart, middle.ContentStart, first.ContentStart, first.ContentEnd);
             var middleBlue = NoteEditorWindow.BlueSelectionLineRect(middle.ContentStart, last.ContentStart, middle.ContentStart, middle.ContentEnd);
@@ -387,9 +414,9 @@ public class FindHighlightPointerTests
             paragraph.Inlines.Add(new Run("GIANT") { FontSize = 48 });
             paragraph.Inlines.Add(new Run(" nine ten eleven twelve") { FontSize = 12 });
             var document = new FlowDocument(paragraph) { PagePadding = new Thickness(0) };
-            var editor = new RichTextBox { Document = document, Width = 110, Height = 300, Padding = new Thickness(0) };
-            editor.Measure(new Size(110, 300));
-            editor.Arrange(new Rect(0, 0, 110, 300));
+            var editor = new RichTextBox { Document = document, Width = 110, Height = 900, Padding = new Thickness(0) };
+            editor.Measure(new Size(110, 900));
+            editor.Arrange(new Rect(0, 0, 110, 900));
             editor.UpdateLayout();
 
             var line = paragraph.ContentStart;
@@ -438,7 +465,10 @@ public class FindHighlightPointerTests
             var nextLineBlue = NoteEditorWindow.BlueSelectionLineRect(secondLine, null, next.ContentStart, next.ContentEnd);
 
             Assert.True(imageLineBlue.Height >= 80);
-            Assert.InRange(nextLineBlue.Height, 23.99, 24.01);
+            var glyph = next.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            Assert.True(nextLineBlue.Top <= glyph.Top + 0.5);
+            Assert.True(nextLineBlue.Bottom >= glyph.Bottom - 0.5);
+            Assert.True(nextLineBlue.Height < imageLineBlue.Height);
             Assert.True(imageLineBlue.Bottom <= nextLineBlue.Bottom);
         });
     }

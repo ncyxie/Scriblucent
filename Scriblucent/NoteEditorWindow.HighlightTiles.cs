@@ -12,6 +12,7 @@ public partial class NoteEditorWindow
 {
     private void InvalidateSelectionTiles()
     {
+        if (_tableSelectionPath is not null) _tableSelectionPath.Data = Geometry.Empty;
         _selectionTileStart = null;
         _selectionTileEnd = null;
         _selectionLineRects.Clear();
@@ -58,8 +59,17 @@ public partial class NoteEditorWindow
     }
 
     private bool SelectionTilesNeedVisibleValidation()
-        => _selectionTiles.Values.Any(tile => tile.Complete && !tile.ValidatedInViewport
+        => _selectionTiles.Values.Any(tile => tile.Complete && !SelectionTileValidated(tile)
             && IsHighlightTileVisible(tile));
+
+    private bool SelectionTileValidated(HighlightTile tile)
+    {
+        if (!tile.ValidatedInViewport) return false;
+        var top = Math.Max(tile.Index * HighlightTileHeight, _contentScrollViewer!.VerticalOffset);
+        var bottom = Math.Min((tile.Index + 1) * HighlightTileHeight,
+            _contentScrollViewer.VerticalOffset + ContentTextBox.ActualHeight);
+        return top >= tile.ValidatedTop - 0.1 && bottom <= tile.ValidatedBottom + 0.1;
+    }
 
     private bool IsHighlightTileVisible(HighlightTile tile)
     {
@@ -230,6 +240,7 @@ public partial class NoteEditorWindow
         }
 
         ApplySelectionOverlayCommit();
+        if (TryPaintTableSelection(start, end)) return;
         EnsureHighlightPaths();
         _selectionHighlightPath!.Fill = CreateSelectionOverlayBrush();
         MarkChangedSelectionTiles(start, end);
@@ -244,7 +255,7 @@ public partial class NoteEditorWindow
         foreach (var tile in tiles)
         {
             var replacing = tile.NeedsSelectionRebuild;
-            var validating = tile.Complete && !tile.ValidatedInViewport
+            var validating = tile.Complete && !SelectionTileValidated(tile)
                 && IsHighlightTileVisible(tile);
             if (tile.Complete && !replacing && !validating)
                 continue;
@@ -291,7 +302,7 @@ public partial class NoteEditorWindow
         {
             var visiblePending = tiles.Any(tile => IsHighlightTileVisible(tile)
                 && (tile.NeedsSelectionRebuild || !tile.Complete
-                    || !tile.ValidatedInViewport));
+                    || !SelectionTileValidated(tile)));
             QueueSelectionOverlay(visiblePending
                 ? System.Windows.Threading.DispatcherPriority.Render
                 : System.Windows.Threading.DispatcherPriority.Background);
@@ -348,13 +359,15 @@ public partial class NoteEditorWindow
         {
             tile.Initialized = true;
             tile.ValidatedInViewport = visible;
+            tile.ValidatedTop = Math.Max(tile.Index * HighlightTileHeight, viewer.VerticalOffset);
+            tile.ValidatedBottom = Math.Min((tile.Index + 1) * HighlightTileHeight,
+                viewer.VerticalOffset + ContentTextBox.ActualHeight);
             var hit = ContentTextBox.GetPositionFromPoint(
-                new Point(8, tile.Index * HighlightTileHeight - viewer.VerticalOffset - 1),
+                new Point(SelectionHitX(selectionStart), tile.Index * HighlightTileHeight - viewer.VerticalOffset - 1),
                 snapToText: true);
             var line = hit?.GetLineStartPosition(0) ?? hit;
             tile.NextLine = line?.GetLineStartPosition(-1) ?? line;
             tile.CoveredStart = tile.NextLine;
-            tile.LineOrigins = new Dictionary<Paragraph, LineBandOrigin>();
         }
         else if (!visible)
         {
@@ -396,11 +409,11 @@ public partial class NoteEditorWindow
                 var drawEnd = next is not null && next.CompareTo(selectionEnd) < 0 ? next : selectionEnd;
                 if (drawStart.CompareTo(drawEnd) < 0)
                 {
-                    var rect = GetBlueSelectionLineRect(tile, line, next, drawStart, drawEnd);
-                    if (!rect.IsEmpty && rect.Top + viewer.VerticalOffset
+                    if (!TryGetBlueSelectionLineGeometry(tile, line, drawStart, drawEnd, out var geometry)) return painted;
+                    if (!geometry.IsEmpty() && geometry.Bounds.Top + viewer.VerticalOffset
                         >= (tile.Index + 1) * HighlightTileHeight)
                         break;
-                    AppendHighlightRect(tile, tile.NormalRects, rect);
+                    AppendSelectionGeometry(tile, geometry);
                     painted++;
                 }
             }
@@ -427,27 +440,49 @@ public partial class NoteEditorWindow
         return (next, next ?? document.ContentEnd);
     }
 
-    private Rect GetBlueSelectionLineRect(HighlightTile tile, TextPointer line,
-        TextPointer? next, TextPointer start, TextPointer end)
+    private double SelectionHitX(TextPointer start)
+    {
+        if (EditorTables.Ancestor<TableCell>(start.Parent) is not { } cell) return 8;
+        var bounds = WpfEditorGeometry.For(ContentTextBox).ElementBounds(cell);
+        return bounds.IsEmpty ? 8 : bounds.Left + cell.Padding.Left + cell.BorderThickness.Left + 1;
+    }
+
+    private bool TryGetBlueSelectionLineGeometry(HighlightTile tile, TextPointer line,
+        TextPointer start, TextPointer end, out Geometry geometry)
     {
         var viewer = _contentScrollViewer!;
         var visible = IsHighlightTileVisible(tile);
         if (!_selectionLineRects.TryGetValue(line, out var measured)
             || (visible && !measured.ValidatedInViewport))
         {
-            var rect = BlueSelectionLineRect(line, next, start, end,
-                tile.LineOrigins, viewer.VerticalOffset);
-            var documentRect = rect;
-            if (!documentRect.IsEmpty)
-                documentRect.Offset(viewer.HorizontalOffset, viewer.VerticalOffset);
-            measured = new BlueLineMeasure(documentRect, visible);
+            if (!WpfEditorGeometry.For(ContentTextBox).TrySelection(start, end, out var viewportGeometry))
+            {
+                geometry = Geometry.Empty;
+                return false;
+            }
+            var bounds = viewportGeometry.Bounds;
+            var fullyVisible = visible && !bounds.IsEmpty
+                && bounds.Top > ContentTextBox.Padding.Top + 0.5
+                && bounds.Bottom < ContentTextBox.ActualHeight - ContentTextBox.Padding.Bottom - 0.5;
+            measured = new BlueLineMeasure(WpfEditorGeometry.Transform(viewportGeometry,
+                new Matrix(1, 0, 0, 1, viewer.HorizontalOffset, viewer.VerticalOffset)), fullyVisible);
             _selectionLineRects[line] = measured;
         }
 
-        var result = measured.DocumentRect;
-        if (!result.IsEmpty)
-            result.Offset(-viewer.HorizontalOffset, -viewer.VerticalOffset);
-        return result;
+        geometry = WpfEditorGeometry.Transform(measured.DocumentGeometry,
+            new Matrix(1, 0, 0, 1, -viewer.HorizontalOffset, -viewer.VerticalOffset));
+        return true;
+    }
+
+    private void AppendSelectionGeometry(HighlightTile tile, Geometry geometry)
+    {
+        if (geometry.IsEmpty() || _contentScrollViewer is null) return;
+        var local = WpfEditorGeometry.Transform(geometry, new Matrix(1, 0, 0, 1,
+            _contentScrollViewer.HorizontalOffset - tile.Left,
+            _contentScrollViewer.VerticalOffset - tile.Index * HighlightTileHeight));
+        var clipped = Geometry.Combine(local, new RectangleGeometry(new Rect(0, 0, tile.Width, HighlightTileHeight)),
+            GeometryCombineMode.Intersect, null);
+        if (!clipped.IsEmpty()) { clipped.Freeze(); tile.SelectionGeometry.Add(clipped); }
     }
 
     private bool PaintFindTiles()
@@ -740,6 +775,12 @@ public partial class NoteEditorWindow
     private static bool PublishHighlightTile(HighlightTile tile)
     {
         var changed = false;
+        if (tile.SelectionGeometry.Count > 0)
+        {
+            foreach (var geometry in tile.SelectionGeometry) tile.NormalGeometry.Children.Add(geometry);
+            tile.SelectionGeometry.Clear();
+            changed = true;
+        }
         if (tile.NormalRects.Count > 0)
         {
             tile.NormalGeometry.Children.Add(BuildHighlightGeometry(tile.NormalRects));

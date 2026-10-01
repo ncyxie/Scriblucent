@@ -1085,4 +1085,21 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="StudyCoveragePlansCleared" xml:space="preserve"><value>Išsaugoti mokymosi planai išvalyti.</value></data>
   <data name="MindMapAdditionalFacts" xml:space="preserve"><value>Papildomi faktai</value></data>
   <data name="AiGenerationItemCoverageFormat" xml:space="preserve"><value>{0} ({1} iš {2} mokymosi punktų)</value></data>
+  <data name="InsertAnotherTable" xml:space="preserve"><value>Įterpti kitą lentelę</value></data>
+  <data name="TableToolsHint" xml:space="preserve"><value>Lentelės įrankiai · Ctrl+Enter išeiti iš lentelės</value></data>
+  <data name="TableLayout" xml:space="preserve"><value>Išdėstymas</value></data>
+  <data name="TableFitToNote" xml:space="preserve"><value>Pritaikyti prie užrašo pločio</value></data>
+  <data name="TableDistributeColumns" xml:space="preserve"><value>Suvienodinti stulpelių plotį</value></data>
+  <data name="TableHeaderRow" xml:space="preserve"><value>Antraštės eilutė</value></data>
+  <data name="TableCellShading" xml:space="preserve"><value>Langelių fonas</value></data>
+  <data name="TableShadingNone" xml:space="preserve"><value>Be užpildo</value></data>
+  <data name="TableShadingGray" xml:space="preserve"><value>Pilka</value></data>
+  <data name="TableShadingBlue" xml:space="preserve"><value>Mėlyna</value></data>
+  <data name="TableShadingGreen" xml:space="preserve"><value>Žalia</value></data>
+  <data name="TableShadingYellow" xml:space="preserve"><value>Geltona</value></data>
+  <data name="TableShadingRed" xml:space="preserve"><value>Raudona</value></data>
+  <data name="TablePasteAsTable" xml:space="preserve"><value>Įklijuoti kaip lentelę</value></data>
+  <data name="TableMoveColumnLeft" xml:space="preserve"><value>Stulpelį kairėn</value></data>
+  <data name="TableMoveColumnRight" xml:space="preserve"><value>Stulpelį dešinėn</value></data>
+  <data name="TableClearColumn" xml:space="preserve"><value>Stulpelį</value></data>
 </root>

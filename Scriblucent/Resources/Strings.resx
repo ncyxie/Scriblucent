@@ -1086,4 +1086,21 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="StudyCoveragePlansCleared" xml:space="preserve"><value>Saved study plans cleared.</value></data>
   <data name="MindMapAdditionalFacts" xml:space="preserve"><value>Additional facts</value></data>
   <data name="AiGenerationItemCoverageFormat" xml:space="preserve"><value>{0} ({1} of {2} study points)</value></data>
+  <data name="InsertAnotherTable" xml:space="preserve"><value>Insert another table</value></data>
+  <data name="TableToolsHint" xml:space="preserve"><value>Table tools · Ctrl+Enter to exit table</value></data>
+  <data name="TableLayout" xml:space="preserve"><value>Layout</value></data>
+  <data name="TableFitToNote" xml:space="preserve"><value>Fit to note</value></data>
+  <data name="TableDistributeColumns" xml:space="preserve"><value>Distribute columns evenly</value></data>
+  <data name="TableHeaderRow" xml:space="preserve"><value>Header row</value></data>
+  <data name="TableCellShading" xml:space="preserve"><value>Cell background</value></data>
+  <data name="TableShadingNone" xml:space="preserve"><value>No fill</value></data>
+  <data name="TableShadingGray" xml:space="preserve"><value>Gray</value></data>
+  <data name="TableShadingBlue" xml:space="preserve"><value>Blue</value></data>
+  <data name="TableShadingGreen" xml:space="preserve"><value>Green</value></data>
+  <data name="TableShadingYellow" xml:space="preserve"><value>Yellow</value></data>
+  <data name="TableShadingRed" xml:space="preserve"><value>Red</value></data>
+  <data name="TablePasteAsTable" xml:space="preserve"><value>Paste as table</value></data>
+  <data name="TableMoveColumnLeft" xml:space="preserve"><value>Column left</value></data>
+  <data name="TableMoveColumnRight" xml:space="preserve"><value>Column right</value></data>
+  <data name="TableClearColumn" xml:space="preserve"><value>Column</value></data>
 </root>

@@ -927,6 +927,14 @@
                             </ContextMenu>
                         </RichTextBox.ContextMenu>
                     </RichTextBox>
+                    <Canvas x:Name="TableSelectionOverlay"
+                            Panel.ZIndex="10"
+                            IsHitTestVisible="False"
+                            ClipToBounds="True"/>
+                    <Canvas x:Name="TableResizeOverlay"
+                            Panel.ZIndex="15"
+                            IsHitTestVisible="False"
+                            ClipToBounds="True"/>
                     <Canvas x:Name="FloatingImageOverlay"
                             Panel.ZIndex="20"
                             ClipToBounds="True"/>

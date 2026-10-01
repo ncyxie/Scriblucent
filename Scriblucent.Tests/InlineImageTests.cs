@@ -30,6 +30,70 @@ public class InlineImageTests
         System.IO.Path.Combine(AppContext.BaseDirectory, "TestData", "Images", "pixel.png");
 
     [Fact]
+    public void TableResizeUndo_ReconnectsInlinePhotoControlsAndSerialization()
+        => RunOnSta(() =>
+        {
+            using var harness = CreateHarness();
+            harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+            var container = FindInlineContainer(harness.Editor.Document)!;
+            var original = (InlineNoteImageElement)container.Child;
+            var table = EditorTables.Create(1, 2);
+            ((Paragraph)container.Parent).Inlines.Remove(container);
+            ((Paragraph)table.RowGroups[0].Rows[0].Cells[0].Blocks.FirstBlock!).Inlines.Add(container);
+            harness.Editor.Document.Blocks.InsertBefore(harness.Editor.Document.Blocks.FirstBlock!, table);
+            harness.Editor.UpdateLayout();
+            harness.Editor.IsUndoEnabled = false;
+            harness.Editor.IsUndoEnabled = true;
+
+            EditorTables.Edit(harness.Editor, table, () => EditorTableLayout.SetWidths(table, [240, 160]));
+            Assert.Same(original, FindInlineElement(harness.Editor.Document));
+            harness.Editor.Undo();
+            Assert.True(harness.Editor.CanRedo);
+            harness.Coordinator.ReconcileInlineElementsAfterTableEdit();
+            Assert.True(harness.Editor.CanRedo);
+            var restored = FindInlineElement(harness.Editor.Document)!;
+            Assert.NotNull(restored);
+            Assert.Equal(harness.ImageId, restored.ImageId);
+            Assert.NotNull(restored.Source);
+            Assert.True(harness.Coordinator.SelectImage(harness.ImageId));
+            Assert.True(restored.IsSelected);
+            var visibleImage = (Image)LogicalTreeHelper.FindLogicalNode((DependencyObject)restored.Content, "DisplayImage");
+            Assert.Same(restored.Source, visibleImage.Source);
+            Assert.True(harness.Editor.CanRedo);
+
+            harness.Editor.Redo();
+            harness.Coordinator.ReconcileInlineElementsAfterTableEdit();
+            harness.Coordinator.PrepareInlineImagesForSerialization();
+            Assert.Null(FindInlineElement(harness.Editor.Document));
+            Assert.Single(harness.Coordinator.BuildAttachments());
+            harness.Coordinator.RestoreInlineImagesAfterSerialization();
+            Assert.NotNull(FindInlineElement(harness.Editor.Document));
+            Assert.DoesNotContain("\uFFFC", GetRunsText(harness.Editor.Document));
+        });
+
+    [Fact]
+    public void RemovedTablePhoto_IsExcludedFromAttachmentsUntilUndoRestoresIt()
+        => RunOnSta(() =>
+        {
+            using var harness = CreateHarness();
+            harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Inline);
+            var container = FindInlineContainer(harness.Editor.Document)!;
+            var table = EditorTables.Create(1, 2);
+            ((Paragraph)container.Parent).Inlines.Remove(container);
+            ((Paragraph)table.RowGroups[0].Rows[0].Cells[0].Blocks.FirstBlock!).Inlines.Add(container);
+            harness.Editor.Document.Blocks.InsertBefore(harness.Editor.Document.Blocks.FirstBlock!, table);
+            harness.Editor.UpdateLayout();
+            harness.Editor.IsUndoEnabled = false;
+            harness.Editor.IsUndoEnabled = true;
+            EditorTables.Edit(harness.Editor, table, () => table.RowGroups[0].Rows[0].Cells[0].Blocks.Clear());
+            Assert.Empty(harness.Coordinator.BuildAttachments());
+            harness.Editor.Undo();
+            harness.Coordinator.ReconcileInlineElementsAfterTableEdit();
+            Assert.Single(harness.Coordinator.BuildAttachments());
+            Assert.True(harness.Coordinator.SelectImage(harness.ImageId));
+        });
+
+    [Fact]
     public void FloatingToInline_MovesElementIntoFlow()
         => RunOnSta(RunFloatingToInlineScenario);
 
@@ -3186,7 +3250,7 @@ public class InlineImageTests
         thread.Start();
         done.Wait();
 
-        if (failure is not null)
-            throw failure;
+            if (failure is not null)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 }
