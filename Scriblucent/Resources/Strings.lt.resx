@@ -39,6 +39,7 @@
   <data name="SettingsCategoryAiTools" xml:space="preserve"><value>DI įrankiai</value></data>
   <data name="SettingsCategoryActivity" xml:space="preserve"><value>Aktyvumas</value></data>
   <data name="SettingsCategoryData" xml:space="preserve"><value>Duomenys</value></data>
+  <data name="SettingsCategoryNoteEditor" xml:space="preserve"><value>Užrašų rengyklė</value></data>
   <data name="SettingsLanguageAndTheme" xml:space="preserve"><value>Kalba ir tema</value></data>
   <data name="RecentNotes" xml:space="preserve"><value>Naujausi užrašai</value></data>
   <data name="RecentFlashcards" xml:space="preserve"><value>Naujausios kortelės</value></data>
@@ -172,6 +173,9 @@
   <data name="DefaultNoteTemplate" xml:space="preserve"><value>Numatytasis šablonas</value></data>
   <data name="DefaultNoteTemplateDescription" xml:space="preserve"><value>Puslapis, kuriuo prasideda kiekvienas naujas užrašas: šriftas, dydis, tarpai, įtrauka ir žodžių laužymas. Jau parašyti užrašai lieka savi.</value></data>
   <data name="WordWrap" xml:space="preserve"><value>Žodžių laužymas</value></data>
+  <data name="PasteChoiceDescription" xml:space="preserve"><value>Taip į užrašą įklijuojamas nukopijuotas tekstas, kai jis turi savo šriftą ir stilių. Kitą būdą vis vien galima pasirinkti meniu, vienam kartui.</value></data>
+  <data name="PasteKeepFormatting" xml:space="preserve"><value>Įklijuoti su formatavimu</value></data>
+  <data name="PasteAsText" xml:space="preserve"><value>Įklijuoti kaip tekstą</value></data>
   <data name="Animations" xml:space="preserve"><value>Animacijos</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Mažinti animacijas</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>

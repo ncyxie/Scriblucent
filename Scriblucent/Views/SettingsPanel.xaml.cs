@@ -176,6 +176,11 @@ namespace Scriblucent.Views
             if (EnableSpellCheckCheckBox is not null)
                 EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
             PopulateDefaultNoteTemplate(settings);
+            if (DefaultPasteModeBox is not null)
+                SelectComboBoxItemByTag(
+                    DefaultPasteModeBox,
+                    settings.DefaultPasteMode == EditorPasteMode.TextOnly ? "TextOnly" : "KeepFormatting",
+                    "KeepFormatting");
             if (UseGpuAccelerationCheckBox is not null)
                 UseGpuAccelerationCheckBox.IsChecked = settings.UseGpuAcceleration;
             if (EnableAiFeaturesCheckBox is not null)
@@ -1529,6 +1534,18 @@ namespace Scriblucent.Views
 
         private void DefaultNoteWordWrapCheckBox_Changed(object sender, RoutedEventArgs e)
             => SaveDefaultNoteTemplate();
+
+        private void DefaultPasteModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isApplyingSettings || DefaultPasteModeBox?.SelectedItem is not ComboBoxItem item)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.DefaultPasteMode = string.Equals(item.Tag?.ToString(), "TextOnly", StringComparison.Ordinal)
+                ? EditorPasteMode.TextOnly
+                : EditorPasteMode.KeepFormatting;
+            AppSettingsService.Save(settings);
+        }
 
         private void PopulateDefaultNoteTemplate(AppSettings settings)
         {

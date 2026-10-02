@@ -145,6 +145,9 @@ public class AppSettings
 
     public double PreferredIndentSize { get; set; } = 48.0;
 
+    /// <summary>What Ctrl+V does with formatted text. Keep formatting is Word's default.</summary>
+    public EditorPasteMode DefaultPasteMode { get; set; } = EditorPasteMode.KeepFormatting;
+
     public string FlashcardModelKey { get; set; } = "AutoSelect";
     public bool UseGpuAcceleration { get; set; } = true;
     /// <summary>When false, Convert, model download, and AI chrome are hidden so the app is a

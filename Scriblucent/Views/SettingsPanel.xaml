@@ -198,6 +198,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Appearance -->
@@ -322,7 +324,7 @@
                 </Border>
 
                 <TextBlock Grid.Row="5"
-                           Text="{Binding [DefaultNoteTemplate], Source={StaticResource Loc}}"
+                           Text="{Binding [SettingsCategoryNoteEditor], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
                 <Border Grid.Row="6"
@@ -331,7 +333,10 @@
                         CornerRadius="{StaticResource Radius.Card}"
                         Padding="16,12">
                     <StackPanel>
+                        <TextBlock Text="{Binding [DefaultNoteTemplate], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
                         <TextBlock Text="{Binding [DefaultNoteTemplateDescription], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
                                    Style="{StaticResource FormHelperTextStyle}"/>
                         <Grid Margin="0,12,0,0">
                             <Grid.ColumnDefinitions>
@@ -396,12 +401,35 @@
                     </StackPanel>
                 </Border>
 
+                <Border Grid.Row="7"
+                        Margin="0,14,0,0"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Paste], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormSectionTitleStyle}"/>
+                        <TextBlock Text="{Binding [PasteChoiceDescription], Source={StaticResource Loc}}"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+                        <ComboBox x:Name="DefaultPasteModeBox"
+                                  Margin="0,8,0,0"
+                                  MinWidth="220"
+                                  HorizontalAlignment="Left"
+                                  SelectionChanged="DefaultPasteModeBox_SelectionChanged">
+                            <ComboBoxItem Tag="KeepFormatting" Content="{Binding [PasteKeepFormatting], Source={StaticResource Loc}}"/>
+                            <ComboBoxItem Tag="TextOnly" Content="{Binding [PasteAsText], Source={StaticResource Loc}}"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
                 <!-- Workspace -->
-                <TextBlock Grid.Row="9"
+                <TextBlock Grid.Row="11"
                            Text="{Binding [SettingsCategoryWorkspace], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="10"
+                <Border Grid.Row="12"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -458,7 +486,7 @@
                 </Border>
 
                 <Border x:Name="AutoSaveSettingsCard"
-                        Grid.Row="11"
+                        Grid.Row="13"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -512,7 +540,7 @@
                 </Border>
 
                 <Border x:Name="SpellCheckSettingsCard"
-                        Grid.Row="12"
+                        Grid.Row="14"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -619,11 +647,11 @@
                 </Border>
 
                 <!-- AI Tools -->
-                <TextBlock Grid.Row="7"
+                <TextBlock Grid.Row="9"
                            Text="{Binding [SettingsCategoryAiTools], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="8"
+                <Border Grid.Row="10"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -838,11 +866,11 @@
                 </Border>
 
                 <!-- Flashcards -->
-                <TextBlock Grid.Row="13"
+                <TextBlock Grid.Row="15"
                            Text="{Binding [SettingsCategoryFlashcards], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="14"
+                <Border Grid.Row="16"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -863,7 +891,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="15"
+                <Border Grid.Row="17"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -894,11 +922,11 @@
                 </Border>
 
                 <!-- Activity -->
-                <TextBlock Grid.Row="16"
+                <TextBlock Grid.Row="18"
                            Text="{Binding [SettingsCategoryActivity], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="17"
+                <Border Grid.Row="19"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -940,11 +968,11 @@
                 </Border>
 
                 <!-- Data -->
-                <TextBlock Grid.Row="18"
+                <TextBlock Grid.Row="20"
                            Text="{Binding [SettingsCategoryData], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="19"
+                <Border Grid.Row="21"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -964,7 +992,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="20"
+                <Border Grid.Row="22"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -995,7 +1023,7 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Grid.Row="21" Margin="0,20,0,0">
+                <Grid Grid.Row="23" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

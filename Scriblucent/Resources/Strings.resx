@@ -39,6 +39,7 @@
   <data name="SettingsCategoryAiTools" xml:space="preserve"><value>AI Tools</value></data>
   <data name="SettingsCategoryActivity" xml:space="preserve"><value>Activity</value></data>
   <data name="SettingsCategoryData" xml:space="preserve"><value>Data</value></data>
+  <data name="SettingsCategoryNoteEditor" xml:space="preserve"><value>Note editor</value></data>
   <data name="SettingsLanguageAndTheme" xml:space="preserve"><value>Language &amp; theme</value></data>
   <data name="RecentNotes" xml:space="preserve"><value>Recent Notes</value></data>
   <data name="RecentFlashcards" xml:space="preserve"><value>Recent Flashcards</value></data>
@@ -172,6 +173,9 @@
   <data name="DefaultNoteTemplate" xml:space="preserve"><value>Default template</value></data>
   <data name="DefaultNoteTemplateDescription" xml:space="preserve"><value>The page every new note opens on: font, size, spacing, indent, and word wrap. Notes already written keep their own.</value></data>
   <data name="WordWrap" xml:space="preserve"><value>Word wrap</value></data>
+  <data name="PasteChoiceDescription" xml:space="preserve"><value>This is what Paste does when the copied text brings its own font and style. The other choice stays in the menu for a single paste.</value></data>
+  <data name="PasteKeepFormatting" xml:space="preserve"><value>Paste with formatting</value></data>
+  <data name="PasteAsText" xml:space="preserve"><value>Paste as text</value></data>
   <data name="Animations" xml:space="preserve"><value>Animations</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Reduce animations</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>

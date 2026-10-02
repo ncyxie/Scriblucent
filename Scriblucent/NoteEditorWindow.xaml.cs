@@ -2181,7 +2181,7 @@ namespace Scriblucent
                 ?? ContentTextBox.CaretPosition;
             var cell = FindAncestorTableCell(pointer);
             if (cell is null)
-                SyncPasteAsTableOffer(_defaultContentTextBoxContextMenu);
+                SyncPasteOffers(_defaultContentTextBoxContextMenu);
             ContentTextBox.ContextMenu = cell is not null
                 ? BuildTableContextMenu(cell)
                 : _defaultContentTextBoxContextMenu;
@@ -4932,37 +4932,41 @@ namespace Scriblucent
 
         private void ContentTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
         {
-            // Image data on the clipboard (with or without text) becomes a new floating photo
-            // at the caret; plain text keeps the default paste. If the image insert fails, let
-            // the default paste run rather than swallowing the command.
+            // A picture with no text becomes a floating photo. Formatted text keeps the
+            // fragment Word would keep, including its line spacing. Text only inserts the
+            // characters and then uses this note's spacing.
             if (e.DataObject is not { } data)
                 return;
 
-            if (TryPasteTableGrid(data))
+            var mode = _pasteModeOverride ?? AppSettingsService.Load().DefaultPasteMode;
+            if (ContainsInlineMarkers(data))
             {
-                e.CancelCommand();
-                e.Handled = true;
-                return;
+                data = SanitizePasteDataObject(data);
+                e.DataObject = data;
             }
 
-            if (IsImageData(data))
+            switch (EditorPaste.Resolve(mode, data))
             {
-                if (PasteImageFromDataObject(data))
-                {
+                case EditorPaste.PasteAction.Image:
+                    if (PasteImageFromDataObject(data))
+                    {
+                        e.CancelCommand();
+                        e.Handled = true;
+                    }
+                    return;
+                case EditorPaste.PasteAction.RichFragment when EditorPaste.TryPasteRich(ContentTextBox, data):
                     e.CancelCommand();
                     e.Handled = true;
+                    MarkEditorContentChanged();
+                    UpdateEditedIndicator();
                     return;
-                }
             }
 
-            // Text/RTF pastes can carry the in-line photo marker (\uFFFC) when the source was a
-            // selection copied from this editor - the marker is the photo's transient
-            // serialization stand-in. It renders as "obj", so strip it from the pasted data.
-            if (ContainsInlineMarkers(data))
-                e.DataObject = SanitizePasteDataObject(data);
+            if (data.GetDataPresent(DataFormats.UnicodeText))
+                e.FormatToApply = DataFormats.UnicodeText;
+            else if (data.GetDataPresent(DataFormats.Text))
+                e.FormatToApply = DataFormats.Text;
 
-            // Keep the source's inline formatting, but apply this editor's paragraph
-            // spacing after WPF has inserted the fragment.
             QueuePastedTextSpacing(ContentTextBox,
                 (start, end) => ApplyLineSpacingToRange(start, end, _lineSpacingMultiplier));
         }
@@ -5020,6 +5024,8 @@ namespace Scriblucent
                 sanitized.SetData(DataFormats.Text, text.Replace('\uFFFC', ' '));
             if (data.GetDataPresent(DataFormats.Rtf) && data.GetData(DataFormats.Rtf) is string rtf)
                 sanitized.SetData(DataFormats.Rtf, System.Text.RegularExpressions.Regex.Replace(rtf, @"\\u-4\?", " "));
+            if (data.GetDataPresent(DataFormats.Html) && data.GetData(DataFormats.Html) is string html)
+                sanitized.SetData(DataFormats.Html, html.Replace('\uFFFC', ' '));
 
             return sanitized;
         }
@@ -8674,6 +8680,11 @@ namespace Scriblucent
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Cut"), Command = ApplicationCommands.Cut });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Copy"), Command = ApplicationCommands.Copy });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Paste"), Command = ApplicationCommands.Paste });
+            if (ClipboardHasRichFormatting())
+            {
+                menu.Items.Add(CreatePasteModeMenuItem("PasteKeepFormatting", EditorPasteMode.KeepFormatting));
+                menu.Items.Add(CreatePasteModeMenuItem("PasteAsText", EditorPasteMode.TextOnly));
+            }
             if (ClipboardHasTableGrid())
                 menu.Items.Add(CreatePasteAsTableMenuItem());
             menu.Items.Add(new Separator());

@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Scriblucent.Localization;
+using Scriblucent.Models;
 using Scriblucent.Services;
 
 namespace Scriblucent;
@@ -14,6 +15,7 @@ namespace Scriblucent;
 public partial class NoteEditorWindow
 {
     private readonly EditorTableLayout _tableLayout = new();
+    private EditorPasteMode? _pasteModeOverride;
     private DispatcherOperation? _tableLayoutOperation;
     private Table? _tableEditTarget;
     private bool _tableDeleteRequested;
@@ -62,7 +64,11 @@ public partial class NoteEditorWindow
             (_, e) => { e.CanExecute = ContentTextBox.CanRedo; e.Handled = true; }));
         if (_defaultContentTextBoxContextMenu is { } defaultMenu)
         {
+            var keepFormatting = CreatePasteModeMenuItem("PasteKeepFormatting", EditorPasteMode.KeepFormatting);
+            var pasteAsText = CreatePasteModeMenuItem("PasteAsText", EditorPasteMode.TextOnly);
             var pasteAsTable = CreatePasteAsTableMenuItem();
+            keepFormatting.Visibility = Visibility.Collapsed;
+            pasteAsText.Visibility = Visibility.Collapsed;
             pasteAsTable.Visibility = Visibility.Collapsed;
             var pasteIndex = defaultMenu.Items.Count;
             for (var i = 0; i < defaultMenu.Items.Count; i++)
@@ -73,20 +79,59 @@ public partial class NoteEditorWindow
                     break;
                 }
             }
-            defaultMenu.Items.Insert(pasteIndex, pasteAsTable);
-            defaultMenu.Opened += (_, _) => SyncPasteAsTableOffer(defaultMenu);
+            defaultMenu.Items.Insert(pasteIndex, keepFormatting);
+            defaultMenu.Items.Insert(pasteIndex + 1, pasteAsText);
+            defaultMenu.Items.Insert(pasteIndex + 2, pasteAsTable);
+            defaultMenu.Opened += (_, _) => SyncPasteOffers(defaultMenu);
         }
     }
 
-    private void SyncPasteAsTableOffer(ItemsControl? menu)
+    private void SyncPasteOffers(ItemsControl? menu)
     {
         if (menu is null) return;
-        var offer = ClipboardHasTableGrid() ? Visibility.Visible : Visibility.Collapsed;
+        var formatted = ClipboardHasRichFormatting();
+        var table = ClipboardHasTableGrid();
         foreach (var item in menu.Items)
         {
-            if (item is FrameworkElement element && Equals(element.Tag, "TablePasteAsTable"))
-                element.Visibility = offer;
+            if (item is not FrameworkElement element)
+                continue;
+            element.Visibility = element.Tag switch
+            {
+                "PasteKeepFormatting" or "PasteAsText" => formatted ? Visibility.Visible : Visibility.Collapsed,
+                "TablePasteAsTable" => table ? Visibility.Visible : Visibility.Collapsed,
+                _ => element.Visibility
+            };
         }
+    }
+
+    private void PasteWithMode(EditorPasteMode mode)
+    {
+        _pasteModeOverride = mode;
+        try
+        {
+            ApplicationCommands.Paste.Execute(null, ContentTextBox);
+        }
+        finally
+        {
+            _pasteModeOverride = null;
+        }
+    }
+
+    private MenuItem CreatePasteModeMenuItem(string localizationKey, EditorPasteMode mode)
+    {
+        var item = new MenuItem
+        {
+            Header = LocalizationService.GetString(localizationKey),
+            Tag = localizationKey
+        };
+        item.Click += (_, _) => Dispatcher.InvokeAsync(() => PasteWithMode(mode), DispatcherPriority.Input);
+        return item;
+    }
+
+    private static bool ClipboardHasRichFormatting()
+    {
+        try { return Clipboard.GetDataObject() is { } data && EditorPaste.HasRichFormatting(data); }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
     }
 
     private Table[] EditorTableSnapshot()
