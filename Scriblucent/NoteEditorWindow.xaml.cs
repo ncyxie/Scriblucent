@@ -8049,6 +8049,7 @@ namespace Scriblucent
         /// scheme differs.</summary>
         private void InsertLinkButton_Click(object sender, RoutedEventArgs e)
         {
+            MaterializeSelectionForAction();
             var selection = ContentTextBox.Selection;
             var initialText = selection is { IsEmpty: false } ? selection.Text : string.Empty;
 
@@ -8071,35 +8072,69 @@ namespace Scriblucent
             return mainViewModel.Notes;
         }
 
-        /// <summary>Replaces the current selection (if any) with a Hyperlink, or inserts one at the
-        /// caret otherwise. Uses Hyperlink's own (Inline, TextPointer) constructor to insert directly
-        /// at a position rather than manipulating BlockCollections - selection.Text is cleared first
-        /// so the TextPointer captured beforehand tracks the correct now-collapsed insertion spot
-        /// (same TextPointer-auto-tracks-edits guarantee the spell-check feature already relies on).</summary>
+        /// <summary>Keep selected runs when linking their existing words. A new or renamed
+        /// label takes the selection's formatting before its text is replaced.</summary>
         private void InsertOrReplaceHyperlink(string displayText, Uri uri)
         {
+            MaterializeSelectionForAction();
             var selection = ContentTextBox.Selection;
             var insertionPoint = selection.IsEmpty ? ContentTextBox.CaretPosition : selection.Start;
-
-            if (!selection.IsEmpty)
-                selection.Text = string.Empty;
-
-            var hyperlink = new Hyperlink(new Run(displayText), insertionPoint)
+            var firstPosition = selection.Start.GetInsertionPosition(LogicalDirection.Forward) ?? selection.Start;
+            var lastPosition = selection.End.GetInsertionPosition(LogicalDirection.Backward) ?? selection.End;
+            bool keepRuns = !selection.IsEmpty && displayText == selection.Text
+                && firstPosition.Paragraph is { } paragraph && ReferenceEquals(paragraph, lastPosition.Paragraph)
+                && !SelectionContainsHyperlink(selection);
+            var run = new Run(displayText);
+            if (!keepRuns)
             {
-                NavigateUri = uri,
+                foreach (var property in new[]
+                {
+                    TextElement.FontFamilyProperty, TextElement.FontSizeProperty, TextElement.FontWeightProperty,
+                    TextElement.FontStyleProperty, TextElement.FontStretchProperty, TextElement.BackgroundProperty,
+                    Inline.TextDecorationsProperty, Inline.BaselineAlignmentProperty, FrameworkContentElement.LanguageProperty
+                })
+                {
+                    var value = selection.GetPropertyValue(property);
+                    if (value == DependencyProperty.UnsetValue)
+                        value = new TextRange(firstPosition,
+                            firstPosition.GetNextInsertionPosition(LogicalDirection.Forward) ?? firstPosition).GetPropertyValue(property);
+                    if (value != DependencyProperty.UnsetValue) run.SetValue(property, value);
+                }
+            }
+
+            ListEditor.Mutate(() =>
+            {
+                Hyperlink hyperlink;
+                if (keepRuns)
+                    hyperlink = new Hyperlink(firstPosition, lastPosition);
+                else
+                {
+                    if (!selection.IsEmpty) selection.Text = string.Empty;
+                    hyperlink = new Hyperlink(run, insertionPoint);
+                }
+                hyperlink.NavigateUri = uri;
                 // Keep links accent-colored and undecorated; Ctrl-hint underlines are drawn on
                 // HyperlinkHintOverlay so we never mutate TextDecorations via TextRange (that
                 // corrupted older links and could crash on click).
-                TextDecorations = null,
-                Foreground = ResolveHyperlinkForeground()
-            };
-
-            ContentTextBox.CaretPosition = hyperlink.ElementEnd;
+                hyperlink.TextDecorations = null;
+                hyperlink.Foreground = ResolveHyperlinkForeground();
+                ContentTextBox.CaretPosition = hyperlink.ElementEnd;
+            });
             MarkEditorContentChanged();
             UpdateEditedIndicator();
             ContentTextBox.Focus();
             if (_hyperlinkCtrlHintsVisible)
                 ApplyHyperlinkCtrlHintDecorations(true);
+        }
+
+        private static bool SelectionContainsHyperlink(TextSelection selection)
+        {
+            if (EditorLists.Ancestor<Hyperlink>(selection.Start.Parent) is not null
+                || EditorLists.Ancestor<Hyperlink>(selection.End.Parent) is not null) return true;
+            for (var pointer = selection.Start; pointer is not null && pointer.CompareTo(selection.End) < 0;
+                pointer = pointer.GetNextContextPosition(LogicalDirection.Forward))
+                if (pointer.GetAdjacentElement(LogicalDirection.Forward) is Hyperlink) return true;
+            return false;
         }
 
         private void ContentTextBox_HyperlinkHintPreviewKeyDown(object sender, KeyEventArgs e)
