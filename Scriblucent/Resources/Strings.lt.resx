@@ -169,6 +169,9 @@
   <data name="MeasurementUnitSystem" xml:space="preserve"><value>Matavimo sistema</value></data>
   <data name="MeasurementUnitImperial" xml:space="preserve"><value>Imperinė (coliai)</value></data>
   <data name="MeasurementUnitMetric" xml:space="preserve"><value>Metrinė (centimetrai)</value></data>
+  <data name="DefaultNoteTemplate" xml:space="preserve"><value>Numatytasis šablonas</value></data>
+  <data name="DefaultNoteTemplateDescription" xml:space="preserve"><value>Puslapis, kuriuo prasideda kiekvienas naujas užrašas: šriftas, dydis, tarpai, įtrauka ir žodžių laužymas. Jau parašyti užrašai lieka savi.</value></data>
+  <data name="WordWrap" xml:space="preserve"><value>Žodžių laužymas</value></data>
   <data name="Animations" xml:space="preserve"><value>Animacijos</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Mažinti animacijas</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>

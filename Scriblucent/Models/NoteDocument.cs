@@ -13,6 +13,9 @@ public class NoteDocument
     public List<string> Tags { get; set; } = new();
     public string FontFamily { get; set; } = "Calibri";
     public double FontSize { get; set; } = 14;
+    /// <summary>List step for this note, in device-independent pixels. Null until the note
+    /// is created or saved, so older notes keep using the default template until then.</summary>
+    public double? IndentSize { get; set; }
     public bool? IsEditorFontPanelOpen { get; set; }
     public bool? IsEditorTagsPanelOpen { get; set; }
     public bool? IsWordWrapEnabled { get; set; }

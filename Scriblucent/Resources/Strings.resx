@@ -169,6 +169,9 @@
   <data name="MeasurementUnitSystem" xml:space="preserve"><value>Measurement system</value></data>
   <data name="MeasurementUnitImperial" xml:space="preserve"><value>Imperial (inches)</value></data>
   <data name="MeasurementUnitMetric" xml:space="preserve"><value>Metric (centimeters)</value></data>
+  <data name="DefaultNoteTemplate" xml:space="preserve"><value>Default template</value></data>
+  <data name="DefaultNoteTemplateDescription" xml:space="preserve"><value>The page every new note opens on: font, size, spacing, indent, and word wrap. Notes already written keep their own.</value></data>
+  <data name="WordWrap" xml:space="preserve"><value>Word wrap</value></data>
   <data name="Animations" xml:space="preserve"><value>Animations</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Reduce animations</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>

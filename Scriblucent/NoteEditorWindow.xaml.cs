@@ -4571,6 +4571,9 @@ namespace Scriblucent
 
                     var settings = AppSettingsService.Load();
                     _isWordWrapEnabled = document.IsWordWrapEnabled ?? settings.IsEditorWordWrapEnabled;
+                    if (document.IndentSize is double noteIndent && noteIndent > 0)
+                        _indentSize = NormalizeIndentSize(noteIndent);
+                    SyncIndentSizeSelectorFromPreference();
                     SetFontPanelOpen(
                         document.IsEditorFontPanelOpen ?? settings.IsEditorFontPanelOpen,
                         animate: false,
@@ -4797,8 +4800,11 @@ namespace Scriblucent
             var tagsChanged = !AreTagListsEqual(previousTags, newTags);
             var fontChanged = !string.Equals(previousFontFamily, newFontFamily, StringComparison.Ordinal)
                 || !previousFontSize.Equals(newFontSize);
+            var previousIndent = document.IndentSize;
+            var indentChanged = previousIndent is not double storedIndent
+                || Math.Abs(storedIndent - _indentSize) >= 0.1;
 
-            if (contentChanged || imagesChanged || titleChanged || tagsChanged || fontChanged)
+            if (contentChanged || imagesChanged || titleChanged || tagsChanged || fontChanged || indentChanged)
             {
                 document.LastModified = DateTime.Now;
             }
@@ -4809,6 +4815,7 @@ namespace Scriblucent
             document.Images = newImages;
             document.FontFamily = newFontFamily;
             document.FontSize = newFontSize;
+            document.IndentSize = _indentSize;
             document.IsEditorFontPanelOpen = _isFontPanelOpen;
             document.IsEditorTagsPanelOpen = _isTagsPanelOpen;
             document.IsWordWrapEnabled = _isWordWrapEnabled;
@@ -7093,10 +7100,10 @@ namespace Scriblucent
             if (!TryGetSelectedComboBoxContent(FontFamilyBox, out var fontName))
                 return;
 
-            ApplyEditorFontFamily(fontName, persistPreference: true);
+            ApplyEditorFontFamily(fontName);
         }
 
-        private void ApplyEditorFontFamily(string fontName, bool persistPreference)
+        private void ApplyEditorFontFamily(string fontName)
         {
             var selectionChangesDocument = ContentTextBox.Selection is { IsEmpty: false };
             var fontFamily = CreateEditorFontFamily(fontName);
@@ -7115,15 +7122,12 @@ namespace Scriblucent
                 _isApplyingTypography = false;
             }
 
-            if (persistPreference)
-                SavePreferredFontFamily(GetPrimaryFontFamily(fontName));
             UpdateFontButtonText();
 
             if (selectionChangesDocument)
-            {
                 MarkEditorContentChanged();
+            if (selectionChangesDocument || EditorEdgeSpacing.IsEmpty(ContentTextBox.Document))
                 UpdateEditedIndicator();
-            }
         }
 
         private void FontSizeBox_Changed(object sender, SelectionChangedEventArgs e)
@@ -7137,7 +7141,7 @@ namespace Scriblucent
                 return;
             }
 
-            ApplyEditorFontSize(NormalizeEditorFontSize(size), persistPreference: true);
+            ApplyEditorFontSize(NormalizeEditorFontSize(size));
         }
 
         private void IncreaseFontSizeButton_Click(object sender, RoutedEventArgs e)
@@ -7153,7 +7157,7 @@ namespace Scriblucent
             if (Math.Abs(nextSize - currentSize) < 0.01)
                 return;
 
-            ApplyEditorFontSize(nextSize, persistPreference: true);
+            ApplyEditorFontSize(nextSize);
             _isSyncingFontSelectors = true;
             try
             {
@@ -7187,7 +7191,7 @@ namespace Scriblucent
             return WordFontSizes[0];
         }
 
-        private void ApplyEditorFontSize(double size, bool persistPreference)
+        private void ApplyEditorFontSize(double size)
         {
             size = NormalizeEditorFontSize(size);
             var selection = ContentTextBox.Selection;
@@ -7232,16 +7236,12 @@ namespace Scriblucent
             if (selectionChangesDocument && selectionStart is not null && selectionEnd is not null)
                 RefreshEditorSelectionLayout(selectionStart, selectionEnd);
 
-            if (persistPreference)
-                SavePreferredFontSize(size);
-
             UpdateFontButtonText();
 
             if (selectionChangesDocument)
-            {
                 MarkEditorContentChanged();
+            if (selectionChangesDocument || isEmptyNote)
                 UpdateEditedIndicator();
-            }
         }
 
         private void ClearFormattingButton_Click(object sender, RoutedEventArgs e)
@@ -7288,7 +7288,6 @@ namespace Scriblucent
                 _isApplyingTypography = false;
             }
 
-            SavePreferredLineSpacing(_lineSpacingMultiplier);
             MarkEditorContentChanged();
             UpdateEditedIndicator();
         }
@@ -7313,7 +7312,8 @@ namespace Scriblucent
             }
 
             _indentSize = NormalizeIndentSize(indentSize);
-            SavePreferredIndentSize(_indentSize);
+            MarkEditorContentChanged();
+            UpdateEditedIndicator();
         }
 
         private void FontSettings_Click(object sender, RoutedEventArgs e)
@@ -9957,45 +9957,11 @@ namespace Scriblucent
             return string.Equals(text, "MixedSelection", StringComparison.Ordinal) ? "Mixed" : text;
         }
 
-        private static void SavePreferredFontFamily(string fontFamily)
-        {
-            var settings = AppSettingsService.Load();
-            settings.PreferredFontFamily = string.IsNullOrWhiteSpace(fontFamily) ? DefaultEditorFontFamily : fontFamily;
-            AppSettingsService.Save(settings);
-        }
-
-        private static void SavePreferredFontSize(double fontSize)
-        {
-            var settings = AppSettingsService.Load();
-            settings.PreferredFontSize = NormalizeEditorFontSize(fontSize);
-            AppSettingsService.Save(settings);
-        }
-
-        private static void SavePreferredLineSpacing(double lineSpacing)
-        {
-            var settings = AppSettingsService.Load();
-            settings.PreferredLineSpacing = NormalizeLineSpacingMultiplier(lineSpacing);
-            AppSettingsService.Save(settings);
-        }
-
-        private static void SavePreferredIndentSize(double indentSize)
-        {
-            var settings = AppSettingsService.Load();
-            settings.PreferredIndentSize = NormalizeIndentSize(indentSize);
-            AppSettingsService.Save(settings);
-        }
 
         private static void SaveEditorFontPanelPreference(bool isOpen)
         {
             var settings = AppSettingsService.Load();
             settings.IsEditorFontPanelOpen = isOpen;
-            AppSettingsService.Save(settings);
-        }
-
-        private static void SaveEditorWordWrapPreference(bool isEnabled)
-        {
-            var settings = AppSettingsService.Load();
-            settings.IsEditorWordWrapEnabled = isEnabled;
             AppSettingsService.Save(settings);
         }
 
@@ -10558,7 +10524,6 @@ namespace Scriblucent
         private void ToggleWordWrap_Click(object sender, RoutedEventArgs e)
         {
             _isWordWrapEnabled = !_isWordWrapEnabled;
-            SaveEditorWordWrapPreference(_isWordWrapEnabled);
             PersistCurrentDocumentEditorUiState();
             ApplyEditorTextLayout();
         }

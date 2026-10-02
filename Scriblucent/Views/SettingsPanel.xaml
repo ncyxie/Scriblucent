@@ -197,6 +197,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Appearance -->
@@ -320,12 +321,87 @@
                     </StackPanel>
                 </Border>
 
+                <TextBlock Grid.Row="5"
+                           Text="{Binding [DefaultNoteTemplate], Source={StaticResource Loc}}"
+                           Style="{StaticResource FormCategoryTitleStyle}"/>
+
+                <Border Grid.Row="6"
+                        Background="{DynamicResource SidebarBackground}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource Radius.Card}"
+                        Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [DefaultNoteTemplateDescription], Source={StaticResource Loc}}"
+                                   Style="{StaticResource FormHelperTextStyle}"/>
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="22"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [FontLabel], Source={StaticResource Loc}}"
+                                           Style="{StaticResource FormOptionLabelStyle}"/>
+                                <ComboBox x:Name="DefaultNoteFontFamilyBox"
+                                          Margin="0,8,0,0"
+                                          MinWidth="180"
+                                          SelectionChanged="DefaultNoteTemplate_SelectionChanged"/>
+                            </StackPanel>
+                            <Border Grid.Column="1"
+                                    Width="1"
+                                    Margin="10,0"
+                                    Background="{DynamicResource BorderColor}"/>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="{Binding [SizeLabel], Source={StaticResource Loc}}"
+                                           Style="{StaticResource FormOptionLabelStyle}"/>
+                                <ComboBox x:Name="DefaultNoteFontSizeBox"
+                                          Margin="0,8,0,0"
+                                          MinWidth="120"
+                                          SelectionChanged="DefaultNoteTemplate_SelectionChanged"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="22"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{Binding [SpacingLabel], Source={StaticResource Loc}}"
+                                           Style="{StaticResource FormOptionLabelStyle}"/>
+                                <ComboBox x:Name="DefaultNoteLineSpacingBox"
+                                          Margin="0,8,0,0"
+                                          MinWidth="120"
+                                          SelectionChanged="DefaultNoteTemplate_SelectionChanged"/>
+                            </StackPanel>
+                            <Border Grid.Column="1"
+                                    Width="1"
+                                    Margin="10,0"
+                                    Background="{DynamicResource BorderColor}"/>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="{Binding [IndentLabel], Source={StaticResource Loc}}"
+                                           Style="{StaticResource FormOptionLabelStyle}"/>
+                                <ComboBox x:Name="DefaultNoteIndentBox"
+                                          Margin="0,8,0,0"
+                                          MinWidth="120"
+                                          SelectionChanged="DefaultNoteTemplate_SelectionChanged"/>
+                            </StackPanel>
+                        </Grid>
+                        <CheckBox x:Name="DefaultNoteWordWrapCheckBox"
+                                  Margin="0,14,0,0"
+                                  Content="{Binding [WordWrap], Source={StaticResource Loc}}"
+                                  HorizontalAlignment="Left"
+                                  Checked="DefaultNoteWordWrapCheckBox_Changed"
+                                  Unchecked="DefaultNoteWordWrapCheckBox_Changed"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Workspace -->
-                <TextBlock Grid.Row="7"
+                <TextBlock Grid.Row="9"
                            Text="{Binding [SettingsCategoryWorkspace], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="8"
+                <Border Grid.Row="10"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -382,7 +458,7 @@
                 </Border>
 
                 <Border x:Name="AutoSaveSettingsCard"
-                        Grid.Row="9"
+                        Grid.Row="11"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -436,7 +512,7 @@
                 </Border>
 
                 <Border x:Name="SpellCheckSettingsCard"
-                        Grid.Row="10"
+                        Grid.Row="12"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -543,11 +619,11 @@
                 </Border>
 
                 <!-- AI Tools -->
-                <TextBlock Grid.Row="5"
+                <TextBlock Grid.Row="7"
                            Text="{Binding [SettingsCategoryAiTools], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="6"
+                <Border Grid.Row="8"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -762,11 +838,11 @@
                 </Border>
 
                 <!-- Flashcards -->
-                <TextBlock Grid.Row="11"
+                <TextBlock Grid.Row="13"
                            Text="{Binding [SettingsCategoryFlashcards], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="12"
+                <Border Grid.Row="14"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -787,7 +863,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="13"
+                <Border Grid.Row="15"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -818,11 +894,11 @@
                 </Border>
 
                 <!-- Activity -->
-                <TextBlock Grid.Row="14"
+                <TextBlock Grid.Row="16"
                            Text="{Binding [SettingsCategoryActivity], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="15"
+                <Border Grid.Row="17"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -864,11 +940,11 @@
                 </Border>
 
                 <!-- Data -->
-                <TextBlock Grid.Row="16"
+                <TextBlock Grid.Row="18"
                            Text="{Binding [SettingsCategoryData], Source={StaticResource Loc}}"
                            Style="{StaticResource FormCategoryTitleStyle}"/>
 
-                <Border Grid.Row="17"
+                <Border Grid.Row="19"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Card}"
@@ -888,7 +964,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="18"
+                <Border Grid.Row="20"
                         Margin="0,14,0,0"
                         Background="{DynamicResource SidebarBackground}"
                         BorderThickness="0"
@@ -919,7 +995,7 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Grid.Row="19" Margin="0,20,0,0">
+                <Grid Grid.Row="21" Margin="0,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

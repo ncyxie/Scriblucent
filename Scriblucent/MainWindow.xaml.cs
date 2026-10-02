@@ -2064,17 +2064,14 @@ namespace Scriblucent
                 else
                 {
                     var settings = AppSettingsService.Load();
-                    var preferredFontFamily = "Calibri";
-                    var preferredFontSize = settings.PreferredFontSize > 0
-                        ? settings.PreferredFontSize
-                        : 14;
-
                     var doc = new Scriblucent.Models.NoteDocument
                     {
                         Title = System.IO.Path.GetFileNameWithoutExtension(path),
                         Content = content,
-                        FontFamily = preferredFontFamily,
-                        FontSize = preferredFontSize
+                        FontFamily = string.IsNullOrWhiteSpace(settings.PreferredFontFamily) ? "Calibri" : settings.PreferredFontFamily,
+                        FontSize = settings.PreferredFontSize > 0 ? settings.PreferredFontSize : 14,
+                        IndentSize = settings.PreferredIndentSize > 0 ? settings.PreferredIndentSize : 48,
+                        IsWordWrapEnabled = settings.IsEditorWordWrapEnabled
                     };
                     target = vm.AddNoteFromDocument(doc);
                 }
@@ -5140,18 +5137,15 @@ namespace Scriblucent
                                     continue;
 
                                 var settings = AppSettingsService.Load();
-                                var preferredFontFamily = "Calibri";
-                                var preferredFontSize = settings.PreferredFontSize > 0
-                                    ? settings.PreferredFontSize
-                                    : 14;
-
                                 newDocument = new NoteDocument
                                 {
                                     Title = Path.GetFileNameWithoutExtension(filePath),
                                     Content = content,
                                     Tags = new List<string>(),
-                                    FontFamily = preferredFontFamily,
-                                    FontSize = preferredFontSize
+                                    FontFamily = string.IsNullOrWhiteSpace(settings.PreferredFontFamily) ? "Calibri" : settings.PreferredFontFamily,
+                                    FontSize = settings.PreferredFontSize > 0 ? settings.PreferredFontSize : 14,
+                                    IndentSize = settings.PreferredIndentSize > 0 ? settings.PreferredIndentSize : 48,
+                                    IsWordWrapEnabled = settings.IsEditorWordWrapEnabled
                                 };
                             }
 

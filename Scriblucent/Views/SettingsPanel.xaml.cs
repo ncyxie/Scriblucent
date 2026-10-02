@@ -12,8 +12,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Input;
 using System.Windows.Threading;
 namespace Scriblucent.Views
@@ -52,6 +54,15 @@ namespace Scriblucent.Views
 
         private readonly OverlayPanelAnimator _overlayAnimator;
         private bool _isApplyingSettings;
+        private static readonly double[] DefaultNoteFontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+        private static readonly double[] DefaultNoteLineSpacings = [1.0, 1.15, 1.5, 2.0];
+        private static readonly double[] DefaultNoteIndentSizes = [24, 48, 72, 96, 120, 144];
+        private static readonly string[] PreferredTemplateFonts =
+        [
+            "Calibri", "Aptos", "Segoe UI", "Arial", "Times New Roman", "Verdana", "Tahoma",
+            "Georgia", "Trebuchet MS", "Cambria", "Garamond", "Consolas", "Courier New"
+        ];
+        private static List<string>? _templateFontNames;
         private bool _isDownloadingAiModel;
         private bool _isCheckingForUpdates;
         private string _lastSelectedFlashcardModelKey = "Qwen3.5-0.8B";
@@ -164,6 +175,7 @@ namespace Scriblucent.Views
                 ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
             if (EnableSpellCheckCheckBox is not null)
                 EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
+            PopulateDefaultNoteTemplate(settings);
             if (UseGpuAccelerationCheckBox is not null)
                 UseGpuAccelerationCheckBox.IsChecked = settings.UseGpuAcceleration;
             if (EnableAiFeaturesCheckBox is not null)
@@ -1509,6 +1521,161 @@ namespace Scriblucent.Views
             settings.MeasurementUnitSystem = selected;
             AppSettingsService.Save(settings);
             RefreshOpenEditorMeasurementUnits(selected);
+            PopulateDefaultNoteTemplate(settings);
+        }
+
+        private void DefaultNoteTemplate_SelectionChanged(object sender, SelectionChangedEventArgs e)
+            => SaveDefaultNoteTemplate();
+
+        private void DefaultNoteWordWrapCheckBox_Changed(object sender, RoutedEventArgs e)
+            => SaveDefaultNoteTemplate();
+
+        private void PopulateDefaultNoteTemplate(AppSettings settings)
+        {
+            if (DefaultNoteFontFamilyBox is null)
+                return;
+
+            var wasApplying = _isApplyingSettings;
+            _isApplyingSettings = true;
+            try
+            {
+                if (DefaultNoteFontFamilyBox.Items.Count == 0)
+                {
+                    foreach (var fontName in TemplateFontNames())
+                        DefaultNoteFontFamilyBox.Items.Add(new ComboBoxItem { Content = fontName });
+                }
+
+                var font = string.IsNullOrWhiteSpace(settings.PreferredFontFamily) ? "Calibri" : settings.PreferredFontFamily;
+                SelectOrInsertComboContent(DefaultNoteFontFamilyBox, font);
+
+                if (DefaultNoteFontSizeBox.Items.Count == 0)
+                {
+                    foreach (var size in DefaultNoteFontSizes)
+                        DefaultNoteFontSizeBox.Items.Add(new ComboBoxItem { Content = FormatTemplateNumber(size), Tag = size });
+                }
+
+                var fontSize = settings.PreferredFontSize > 0 ? settings.PreferredFontSize : 14;
+                SelectOrInsertComboTag(DefaultNoteFontSizeBox, fontSize, FormatTemplateNumber(fontSize));
+
+                if (DefaultNoteLineSpacingBox.Items.Count == 0)
+                {
+                    foreach (var spacing in DefaultNoteLineSpacings)
+                        DefaultNoteLineSpacingBox.Items.Add(new ComboBoxItem { Content = FormatTemplateNumber(spacing), Tag = spacing });
+                }
+
+                var lineSpacing = settings.PreferredLineSpacing > 0 ? settings.PreferredLineSpacing : 1;
+                SelectOrInsertComboTag(DefaultNoteLineSpacingBox, lineSpacing, FormatTemplateNumber(lineSpacing));
+
+                var indent = settings.PreferredIndentSize > 0 ? settings.PreferredIndentSize : 48;
+                DefaultNoteIndentBox.Items.Clear();
+                foreach (var step in DefaultNoteIndentSizes)
+                {
+                    DefaultNoteIndentBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = FormatTemplateIndent(step, settings.MeasurementUnitSystem),
+                        Tag = step
+                    });
+                }
+
+                SelectOrInsertComboTag(DefaultNoteIndentBox, indent, FormatTemplateIndent(indent, settings.MeasurementUnitSystem));
+                if (DefaultNoteWordWrapCheckBox is not null)
+                    DefaultNoteWordWrapCheckBox.IsChecked = settings.IsEditorWordWrapEnabled;
+            }
+            finally
+            {
+                _isApplyingSettings = wasApplying;
+            }
+        }
+
+        private void SaveDefaultNoteTemplate()
+        {
+            if (_isApplyingSettings
+                || DefaultNoteFontFamilyBox?.SelectedItem is not ComboBoxItem fontItem
+                || DefaultNoteFontSizeBox?.SelectedItem is not ComboBoxItem sizeItem
+                || DefaultNoteLineSpacingBox?.SelectedItem is not ComboBoxItem spacingItem
+                || DefaultNoteIndentBox?.SelectedItem is not ComboBoxItem indentItem
+                || DefaultNoteWordWrapCheckBox is null)
+                return;
+
+            var settings = AppSettingsService.Load();
+            settings.PreferredFontFamily = fontItem.Content?.ToString() ?? "Calibri";
+            settings.PreferredFontSize = TemplateTag(sizeItem, 14);
+            settings.PreferredLineSpacing = TemplateTag(spacingItem, 1);
+            settings.PreferredIndentSize = TemplateTag(indentItem, 48);
+            settings.IsEditorWordWrapEnabled = DefaultNoteWordWrapCheckBox.IsChecked == true;
+            AppSettingsService.Save(settings);
+            if (Application.Current?.MainWindow?.DataContext is MainViewModel mainViewModel)
+                mainViewModel.InvalidatePreferredTypographyCache();
+        }
+
+        private static List<string> TemplateFontNames()
+        {
+            if (_templateFontNames is { } cached)
+                return cached;
+
+            var names = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var fontName in PreferredTemplateFonts)
+            {
+                if (seen.Add(fontName))
+                    names.Add(fontName);
+            }
+
+            foreach (var fontFamily in Fonts.SystemFontFamilies
+                         .Select(fontFamily => fontFamily.Source)
+                         .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(fontFamily) && seen.Add(fontFamily))
+                    names.Add(fontFamily);
+            }
+
+            _templateFontNames = names;
+            return names;
+        }
+
+        private static void SelectOrInsertComboContent(ComboBox comboBox, string content)
+        {
+            foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (!string.Equals(item.Content?.ToString(), content, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                comboBox.SelectedItem = item;
+                return;
+            }
+
+            var added = new ComboBoxItem { Content = content };
+            comboBox.Items.Insert(0, added);
+            comboBox.SelectedItem = added;
+        }
+
+        private static void SelectOrInsertComboTag(ComboBox comboBox, double value, string content)
+        {
+            foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (Math.Abs(TemplateTag(item, double.NaN) - value) >= 0.1)
+                    continue;
+                comboBox.SelectedItem = item;
+                return;
+            }
+
+            var added = new ComboBoxItem { Content = content, Tag = value };
+            comboBox.Items.Add(added);
+            comboBox.SelectedItem = added;
+        }
+
+        private static double TemplateTag(ComboBoxItem item, double fallback)
+            => item.Tag is double value && !double.IsNaN(value) && !double.IsInfinity(value) ? value : fallback;
+
+        private static string FormatTemplateNumber(double value)
+            => Math.Abs(value - Math.Round(value)) < 0.01
+                ? Math.Round(value).ToString(CultureInfo.InvariantCulture)
+                : value.ToString("0.##", CultureInfo.InvariantCulture);
+
+        private static string FormatTemplateIndent(double indentSize, string? unitSystem)
+        {
+            if (string.Equals(AppSettings.NormalizeMeasurementUnitSystem(unitSystem), AppSettings.UnitSystemMetric, StringComparison.Ordinal))
+                return $"{FormatTemplateNumber(indentSize / 96.0 * 2.54)} cm";
+            return $"{FormatTemplateNumber(indentSize / 96.0)} in";
         }
 
         private static void RefreshOpenEditorMeasurementUnits(string unitSystem)

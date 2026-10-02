@@ -49,8 +49,7 @@ public class MainViewModel : ViewModelBase
     private DispatcherTimer? _flashcardMutationReactionTimer;
     private DispatcherTimer? _quizMutationReactionTimer;
     private DispatcherTimer? _mindMapMutationReactionTimer;
-    private string? _cachedPreferredFontFamily;
-    private double _cachedPreferredFontSize;
+    private (string FontFamily, double FontSize, double IndentSize, bool WordWrap)? _cachedNoteTemplate;
     private int _ungroupedVisibleCount = -1;
     private bool? _hasUngroupedFlashcardSetsCache;
     private bool? _hasUngroupedMindMapsCache;
@@ -4434,54 +4433,53 @@ public class MainViewModel : ViewModelBase
         if (IsMassSelectMode)
             return;
 
-        var (fontFamily, fontSize) = GetCachedPreferredTypography();
+        var template = GetCachedNoteTemplate();
 
         var document = new NoteDocument
         {
             Title = LocalizationService.GetString("NewNoteTitle"),
             Content = string.Empty,
-            FontFamily = fontFamily,
-            FontSize = fontSize
+            FontFamily = template.FontFamily,
+            FontSize = template.FontSize,
+            IndentSize = template.IndentSize,
+            IsWordWrapEnabled = template.WordWrap
         };
         AddNoteFromDocument(document);
     }
 
     private void EnsureDocumentTypography(NoteDocument document)
     {
-        var (fontFamily, fontSize) = GetCachedPreferredTypography();
+        var template = GetCachedNoteTemplate();
 
         if (string.IsNullOrWhiteSpace(document.FontFamily))
-            document.FontFamily = fontFamily;
+            document.FontFamily = template.FontFamily;
 
         if (document.FontSize <= 0)
-            document.FontSize = fontSize;
+            document.FontSize = template.FontSize;
+
+        if (document.IndentSize is not > 0)
+            document.IndentSize = template.IndentSize;
+
+        if (document.IsWordWrapEnabled is null)
+            document.IsWordWrapEnabled = template.WordWrap;
     }
 
-    private static (string FontFamily, double FontSize) GetPreferredTypography()
+    private (string FontFamily, double FontSize, double IndentSize, bool WordWrap) GetCachedNoteTemplate()
     {
+        if (_cachedNoteTemplate is { } cached)
+            return cached;
+
         var settings = AppSettingsService.Load();
-        return (
+        _cachedNoteTemplate = (
             string.IsNullOrWhiteSpace(settings.PreferredFontFamily) ? "Calibri" : settings.PreferredFontFamily,
-            settings.PreferredFontSize > 0 ? settings.PreferredFontSize : 14);
-    }
-
-    private (string FontFamily, double FontSize) GetCachedPreferredTypography()
-    {
-        if (_cachedPreferredFontFamily is null)
-        {
-            var (fontFamily, fontSize) = GetPreferredTypography();
-            _cachedPreferredFontFamily = fontFamily;
-            _cachedPreferredFontSize = fontSize;
-        }
-
-        return (_cachedPreferredFontFamily, _cachedPreferredFontSize);
+            settings.PreferredFontSize > 0 ? settings.PreferredFontSize : 14,
+            settings.PreferredIndentSize > 0 ? settings.PreferredIndentSize : 48,
+            settings.IsEditorWordWrapEnabled);
+        return _cachedNoteTemplate.Value;
     }
 
     public void InvalidatePreferredTypographyCache()
-    {
-        _cachedPreferredFontFamily = null;
-        _cachedPreferredFontSize = 0;
-    }
+        => _cachedNoteTemplate = null;
 
     private void DuplicateNote(NoteCardViewModel noteCard)
     {
@@ -4495,6 +4493,8 @@ public class MainViewModel : ViewModelBase
             Tags = noteCard.Document.Tags?.ToList() ?? new List<string>(), // Copy tags if they exist
             FontFamily = noteCard.Document.FontFamily,
             FontSize = noteCard.Document.FontSize,
+            IndentSize = noteCard.Document.IndentSize,
+            IsWordWrapEnabled = noteCard.Document.IsWordWrapEnabled,
             CreatedAt = DateTime.Now,
             LastModified = DateTime.Now,
             GroupId = noteCard.Document.GroupId
