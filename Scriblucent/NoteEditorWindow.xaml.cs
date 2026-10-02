@@ -2180,6 +2180,8 @@ namespace Scriblucent
             var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: true)
                 ?? ContentTextBox.CaretPosition;
             var cell = FindAncestorTableCell(pointer);
+            if (cell is null)
+                SyncPasteAsTableOffer(_defaultContentTextBoxContextMenu);
             ContentTextBox.ContextMenu = cell is not null
                 ? BuildTableContextMenu(cell)
                 : _defaultContentTextBoxContextMenu;
@@ -8672,7 +8674,8 @@ namespace Scriblucent
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Cut"), Command = ApplicationCommands.Cut });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Copy"), Command = ApplicationCommands.Copy });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Paste"), Command = ApplicationCommands.Paste });
-            menu.Items.Add(CreatePasteAsTableMenuItem());
+            if (ClipboardHasTableGrid())
+                menu.Items.Add(CreatePasteAsTableMenuItem());
             menu.Items.Add(new Separator());
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("SelectAll"), Command = ApplicationCommands.SelectAll });
             return menu;

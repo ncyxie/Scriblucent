@@ -60,14 +60,33 @@ public partial class NoteEditorWindow
         ContentTextBox.CommandBindings.Add(new CommandBinding(ApplicationCommands.Redo,
             (_, e) => { TableAwareUndo(true); e.Handled = true; },
             (_, e) => { e.CanExecute = ContentTextBox.CanRedo; e.Handled = true; }));
-        _defaultContentTextBoxContextMenu?.Items.Add(new Separator());
-        _defaultContentTextBoxContextMenu?.Items.Add(CreatePasteAsTableMenuItem());
         if (_defaultContentTextBoxContextMenu is { } defaultMenu)
-            defaultMenu.Opened += (_, _) =>
+        {
+            var pasteAsTable = CreatePasteAsTableMenuItem();
+            pasteAsTable.Visibility = Visibility.Collapsed;
+            var pasteIndex = defaultMenu.Items.Count;
+            for (var i = 0; i < defaultMenu.Items.Count; i++)
             {
-                foreach (var item in defaultMenu.Items.OfType<MenuItem>().Where(item => Equals(item.Tag, "TablePasteAsTable")))
-                    item.IsEnabled = ClipboardHasTableGrid();
-            };
+                if (defaultMenu.Items[i] is MenuItem { Command: { } command } && command == ApplicationCommands.Paste)
+                {
+                    pasteIndex = i + 1;
+                    break;
+                }
+            }
+            defaultMenu.Items.Insert(pasteIndex, pasteAsTable);
+            defaultMenu.Opened += (_, _) => SyncPasteAsTableOffer(defaultMenu);
+        }
+    }
+
+    private void SyncPasteAsTableOffer(ItemsControl? menu)
+    {
+        if (menu is null) return;
+        var offer = ClipboardHasTableGrid() ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var item in menu.Items)
+        {
+            if (item is FrameworkElement element && Equals(element.Tag, "TablePasteAsTable"))
+                element.Visibility = offer;
+        }
     }
 
     private Table[] EditorTableSnapshot()
@@ -256,7 +275,6 @@ public partial class NoteEditorWindow
                 ScheduleTableLayout();
             }
         }, DispatcherPriority.Input);
-        item.IsEnabled = ClipboardHasTableGrid();
         return item;
     }
 
