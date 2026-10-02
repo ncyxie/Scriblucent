@@ -921,6 +921,10 @@ public class InlineImageTests
         => RunOnSta(RunResizeStableScenario);
 
     [Fact]
+    public void ImagePosition_WidenAfterInsert_KeepsThePhotoOffTheTextEnd()
+        => RunOnSta(RunWidenAfterInsertScenario);
+
+    [Fact]
     public void ImagePosition_WrapOff_KeepsFarRightX()
         => RunOnSta(RunWrapOffScenario);
     [Fact]
@@ -1277,6 +1281,39 @@ public class InlineImageTests
         var widget2 = harness.Overlay.Children.OfType<NoteImageWidget>().Single();
         Assert.Equal(left1, Canvas.GetLeft(widget2), precision: 2);
         Assert.Equal(top1, Canvas.GetTop(widget2), precision: 2);
+    }
+
+    private static void RunWidenAfterInsertScenario()
+    {
+        using var harness = CreateHarness();
+        harness.Coordinator.Clear(raiseChanged: false);
+        for (var i = 0; i < 8; i++)
+            harness.Editor.Document.Blocks.InsertBefore(
+                harness.Editor.Document.Blocks.FirstBlock,
+                new Paragraph(new Run(string.Join(" ", Enumerable.Repeat("A narrow line of note text that wraps.", 12)))));
+
+        // A narrow page makes the note tall. The photo sits in that tall document, in view.
+        harness.Window.Width = 420;
+        harness.Editor.Document.PageWidth = 280;
+        harness.Editor.UpdateLayout();
+        var inserted = harness.Coordinator.Insert(harness.Load, 160, 120, new Point(24, 700));
+        Assert.NotNull(inserted);
+        harness.Editor.UpdateLayout();
+        var placed = harness.Overlay.Children.OfType<NoteImageWidget>().Single(widget => widget.ImageId == inserted);
+        Assert.Equal(700, placed.DocumentTop, precision: 1);
+        var top = placed.DocumentTop;
+
+        // Maximizing widens the page. Wrapped text gets shorter, but the photo stays put
+        // instead of being pinned to the new end of the text.
+        harness.Window.Width = 1400;
+        harness.Editor.Document.PageWidth = double.NaN;
+        harness.Editor.UpdateLayout();
+        harness.Window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+        harness.Editor.UpdateLayout();
+
+        var after = harness.Overlay.Children.OfType<NoteImageWidget>().Single(widget => widget.ImageId == inserted);
+        Assert.Equal(top, after.DocumentTop, precision: 2);
+        Assert.True(after.DocumentTop < 700 + 1);
     }
 
     private static void RunWrapOffScenario()

@@ -317,6 +317,7 @@ public sealed class FloatingImageCoordinator
         _overlay.Children.Add(widget);
         EnsureImageExtentPad();
         ClampSessionAndProject(session, widget);
+        RememberRestoredPlacement(session);
         Select(widget);
         SyncWidget(widget);
         RaiseImagesChanged();
@@ -2795,6 +2796,7 @@ public sealed class FloatingImageCoordinator
             CommitWidgetGeometryToSession(session, widget);
             EnsureImageExtentPad(stabilizeViewport: true);
             ClampSessionAndProject(session, widget);
+            RememberRestoredPlacement(session);
         }
         else
         {
@@ -3241,8 +3243,8 @@ public sealed class FloatingImageCoordinator
             boundsWidth);
     }
 
-    /// <summary>Keeps a just-loaded photo at its saved geometry. A narrower page (word wrap,
-    /// a smaller window) may still pull it back in; growing the page does not move it.</summary>
+    /// <summary>Keeps a photo at the geometry it was given, including one just inserted.
+    /// A narrower page may still pull it back in; growing the page does not move it.</summary>
     private bool TryKeepRestoredPlacement(NoteImageSession session, NoteImageWidget widget)
     {
         if (!_restoredPlacement.TryGetValue(session.Id, out var saved))
@@ -3287,12 +3289,10 @@ public sealed class FloatingImageCoordinator
             session.LockAspectRatio,
             resizeToFit: false);
 
-        // The ScrollViewer extent can lag the pad by up to the throttle window - if the clamp
-        // would displace the photo during that window, the extent is probably stale (the pad
-        // was just re-sized). Flush the layout once and re-clamp against the settled extent,
-        // so deep photos are never pinned to a lagging content bottom.
-        if ((Math.Abs(clamped.Left - session.DocumentLeft) > 0.5 || Math.Abs(clamped.Top - session.DocumentTop) > 0.5)
-            && (DateTime.UtcNow - _lastFullLayoutAt).TotalMilliseconds < FullLayoutThrottleMs)
+        // A resize can reflow wrapped text before the extent pad has been measured, so the
+        // first bounds height is the short text bottom. Remeasure before keeping a move,
+        // including when no layout has run inside the throttle window.
+        if (Math.Abs(clamped.Left - session.DocumentLeft) > 0.5 || Math.Abs(clamped.Top - session.DocumentTop) > 0.5)
         {
             _lastFullLayoutAt = DateTime.UtcNow;
             _editor?.UpdateLayout();
