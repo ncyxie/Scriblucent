@@ -1114,7 +1114,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="ListRestartNumbering" xml:space="preserve"><value>Pradėti nuo 1</value></data>
   <data name="ListContinueNumbering" xml:space="preserve"><value>Tęsti numeravimą</value></data>
   <data name="ListSetStartingValue" xml:space="preserve"><value>Nustatyti pradinį skaičių…</value></data>
-  <data name="ListStartingValueHint" xml:space="preserve"><value>Pradinis skaičius (teigiamas sveikasis skaičius)</value></data>
+  <data name="ListStartingValueTitle" xml:space="preserve"><value>Pradinis skaičius</value></data>
   <data name="ListDecreaseIndent" xml:space="preserve"><value>Sumažinti sąrašo lygį (Ctrl+Shift+M)</value></data>
   <data name="ListIncreaseIndent" xml:space="preserve"><value>Padidinti sąrašo lygį (Ctrl+M)</value></data>
   <data name="AutoFormatLists" xml:space="preserve"><value>Kurti sąrašus rašant</value></data>

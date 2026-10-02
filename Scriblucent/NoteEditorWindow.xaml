@@ -606,9 +606,9 @@
                                     Click="NumberedListButton_Click">
                                     <Button.ContextMenu>
                                         <ContextMenu>
-                                            <MenuItem Header="{Binding [ListNumberDecimal], Source={StaticResource Loc}}" Click="ListNumberDecimalMenuItem_Click" />
-                                            <MenuItem Header="{Binding [ListNumberLowerLatin], Source={StaticResource Loc}}" Click="ListNumberLowerLatinMenuItem_Click" />
-                                            <MenuItem Header="{Binding [ListNumberUpperRoman], Source={StaticResource Loc}}" Click="ListNumberUpperRomanMenuItem_Click" />
+                                            <MenuItem x:Name="ListNumberDecimalMenuItem" Header="{Binding [ListNumberDecimal], Source={StaticResource Loc}}" Click="ListNumberDecimalMenuItem_Click" />
+                                            <MenuItem x:Name="ListNumberLowerLatinMenuItem" Header="{Binding [ListNumberLowerLatin], Source={StaticResource Loc}}" Click="ListNumberLowerLatinMenuItem_Click" />
+                                            <MenuItem x:Name="ListNumberUpperRomanMenuItem" Header="{Binding [ListNumberUpperRoman], Source={StaticResource Loc}}" Click="ListNumberUpperRomanMenuItem_Click" />
                                             <Separator x:Name="ListNumberingSeparator"/>
                                             <MenuItem x:Name="ListRestartMenuItem" Header="{Binding [ListRestartNumbering], Source={StaticResource Loc}}" Click="ListRestartMenuItem_Click" />
                                             <MenuItem x:Name="ListContinueMenuItem" Header="{Binding [ListContinueNumbering], Source={StaticResource Loc}}" Click="ListContinueMenuItem_Click" />

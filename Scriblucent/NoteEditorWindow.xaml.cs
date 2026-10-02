@@ -9326,7 +9326,7 @@ namespace Scriblucent
             ChecklistButton.ToolTip = LocalizationService.GetString("Checklist") + (mixed.Length > 0 ? " — " + mixed : string.Empty);
             ListIncreaseIndentButton.IsEnabled = hasList && ListEditor.CanIndent;
             ListDecreaseIndentButton.IsEnabled = hasList;
-            ListContinueMenuItem.IsEnabled = hasList && ListEditor.CanContinue;
+            UpdateNumberingMenuState();
         }
 
         private bool SelectionExtendsOutsideViewport()

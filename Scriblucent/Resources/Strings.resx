@@ -1115,7 +1115,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ListRestartNumbering" xml:space="preserve"><value>Restart at 1</value></data>
   <data name="ListContinueNumbering" xml:space="preserve"><value>Continue numbering</value></data>
   <data name="ListSetStartingValue" xml:space="preserve"><value>Set starting value…</value></data>
-  <data name="ListStartingValueHint" xml:space="preserve"><value>Starting value (a positive whole number)</value></data>
+  <data name="ListStartingValueTitle" xml:space="preserve"><value>Starting number</value></data>
   <data name="ListDecreaseIndent" xml:space="preserve"><value>Decrease list level (Ctrl+Shift+M)</value></data>
   <data name="ListIncreaseIndent" xml:space="preserve"><value>Increase list level (Ctrl+M)</value></data>
   <data name="AutoFormatLists" xml:space="preserve"><value>Create lists as you type</value></data>

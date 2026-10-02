@@ -181,10 +181,14 @@ internal sealed class EditorLists
     {
         var selection = _editor.Selection;
         if (selection.IsEmpty)
-            return selection.Start.Paragraph is { } paragraph ? [paragraph] : [];
+            return ParagraphAt(selection.Start) is { } paragraph ? [paragraph] : [];
         return Paragraphs(_editor.Document.Blocks).Where(p =>
             p.ElementEnd.CompareTo(selection.Start) > 0 && p.ContentStart.CompareTo(selection.End) < 0).ToList();
     }
+
+    private static Paragraph? ParagraphAt(TextPointer pointer) => pointer.Paragraph
+        ?? pointer.GetInsertionPosition(LogicalDirection.Forward)?.Paragraph
+        ?? pointer.GetInsertionPosition(LogicalDirection.Backward)?.Paragraph;
 
     internal bool HasList => Targets().Any(p => Ancestor<ListItem>(p) is not null || Checkbox(p, out _, out _));
     internal bool CanIndent => TargetItems(true).Any(item => item.Parent is DocumentList list && Depth(list) < 8);
@@ -216,7 +220,7 @@ internal sealed class EditorLists
     private readonly record struct Endpoint(Paragraph Paragraph, int Characters);
     private Endpoint? CaptureEndpoint(TextPointer pointer)
     {
-        var paragraph = pointer.Paragraph ?? pointer.GetInsertionPosition(LogicalDirection.Backward)?.Paragraph;
+        var paragraph = ParagraphAt(pointer);
         if (paragraph is null) return null;
         int prefix = Checkbox(paragraph, out _, out _) ? 2 : 0;
         return new Endpoint(paragraph, Math.Max(0, RawText(paragraph.ContentStart, pointer).Length - prefix));
@@ -503,7 +507,20 @@ internal sealed class EditorLists
     internal void ApplyStyle(TextMarkerStyle style, bool toggle = false, bool explicitStyle = true)
     {
         var paragraphs = Targets();
-        if (paragraphs.Count == 0) return;
+        if (paragraphs.Count == 0)
+        {
+            if (!_editor.Selection.IsEmpty || _editor.Document.Blocks.Count != 0) return;
+            // A cleared document may have no paragraph at all. Create the first
+            // item in the same undo unit as its marker, without requiring typing.
+            Edit(() =>
+            {
+                var paragraph = new Paragraph();
+                _editor.Document.Blocks.Add(paragraph);
+                _editor.CaretPosition = paragraph.ContentStart;
+                ApplyStyle(style, toggle, explicitStyle);
+            }, preserveSelection: false);
+            return;
+        }
         if (toggle && paragraphs.All(p => Ancestor<DocumentList>(p) is { } list &&
             (style == TextMarkerStyle.None ? IsChecklist(list) : Numbered(style)
                 ? Numbered(list.MarkerStyle) : list.MarkerStyle is TextMarkerStyle.Disc or TextMarkerStyle.Circle or TextMarkerStyle.Square)))
@@ -1029,9 +1046,33 @@ internal sealed class EditorLists
         }, preserveSelection: false);
     }
 
-    internal bool CanContinue => ContinuationCandidate() is not null;
-    private DocumentList? ActiveNumberedList() => Ancestor<DocumentList>(_editor.CaretPosition.Parent) is { } list
-        && Numbered(list.MarkerStyle) ? list : null;
+    private ListItem? NumberingTarget()
+    {
+        var paragraphs = Targets();
+        if (paragraphs.Count == 0) return null;
+        var item = Ancestor<ListItem>(paragraphs[0]);
+        if (item?.Parent is not DocumentList list || !Numbered(list.MarkerStyle)
+            || paragraphs.Any(p => !ReferenceEquals(Ancestor<DocumentList>(p), list))) return null;
+        return item;
+    }
+
+    internal bool CanSetNumbering => NumberingTarget() is not null;
+    internal int? CurrentNumber
+    {
+        get
+        {
+            if (NumberingTarget() is not { Parent: DocumentList list } item) return null;
+            int index = list.ListItems.Cast<ListItem>().TakeWhile(candidate => !ReferenceEquals(candidate, item)).Count();
+            return SafeStart(list.StartIndex, index);
+        }
+    }
+    internal bool CanRestartNumbering => NumberingTarget() is { Parent: DocumentList list }
+        && (CurrentNumber != 1 || State(list).ContinuesFrom is not null);
+    internal bool CanContinue => NumberingTarget() is { Parent: DocumentList list } item
+        && ContinuationCandidate() is { } candidate
+        && (long)candidate.StartIndex + candidate.ListItems.Count <= int.MaxValue
+        && (!ReferenceEquals(item, list.ListItems.FirstListItem) || State(list).ContinuesFrom != State(candidate).Id);
+    private DocumentList? ActiveNumberedList() => NumberingTarget()?.Parent as DocumentList;
     private DocumentList? ContinuationCandidate()
     {
         if (ActiveNumberedList() is not { } active) return null;
@@ -1044,11 +1085,11 @@ internal sealed class EditorLists
 
     internal void SetNumbering(int? start)
     {
-        if (ActiveNumberedList() is not { } list) return;
+        if (NumberingTarget() is not { Parent: DocumentList list } item) return;
+        if (start is null && !CanContinue || start == 1 && !CanRestartNumbering) return;
         var candidate = start is null ? ContinuationCandidate() : null;
         if (start is null && candidate is null) return;
-        var item = Ancestor<ListItem>(_editor.CaretPosition.Parent);
-        if (item is null) return;
+        if (start is { } requestedValue && requestedValue == CurrentNumber && State(list).ContinuesFrom is null) return;
         Edit(() =>
         {
             var tail = new List<ListItem>();

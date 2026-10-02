@@ -26,11 +26,8 @@ public partial class NoteEditorWindow
         };
         NumberedListButton.ContextMenu.Opened += (_, _) =>
         {
-            bool numbered = _floatingImages?.SelectedImageId is null
-                && ListEditor.SelectionStyle is { } style && EditorLists.Numbered(style);
-            ListNumberingSeparator.Visibility = ListRestartMenuItem.Visibility = ListContinueMenuItem.Visibility
-                = ListStartingValueMenuItem.Visibility = numbered ? Visibility.Visible : Visibility.Collapsed;
-            ListContinueMenuItem.IsEnabled = numbered && ListEditor.CanContinue;
+            MaterializeSelectionForAction();
+            UpdateNumberingMenuState();
         };
         ListEditor.BeforeChange = () => WpfNonUndoChange.Run(ContentTextBox,
             () => { SuspendEditorEdgeSpacing(); _wrapLayout?.Clear(); });
@@ -71,14 +68,31 @@ public partial class NoteEditorWindow
             menu.Items.Add(continuation); menu.Items.Add(start); menu.Items.Add(remove);
             menu.Opened += (_, _) =>
             {
+                MaterializeSelectionForAction();
                 bool hasList = ListEditor.HasList;
-                bool numbered = ListEditor.SelectionStyle is { } style && EditorLists.Numbered(style);
+                bool numbered = ListEditor.Targets().Any(p => EditorLists.Ancestor<System.Windows.Documents.List>(p)
+                    is { } list && EditorLists.Numbered(list.MarkerStyle));
                 separator.Visibility = remove.Visibility = hasList ? Visibility.Visible : Visibility.Collapsed;
                 toggle.Visibility = ListEditor.SelectionStyle == TextMarkerStyle.None ? Visibility.Visible : Visibility.Collapsed;
                 restart.Visibility = continuation.Visibility = start.Visibility = numbered ? Visibility.Visible : Visibility.Collapsed;
-                continuation.IsEnabled = ListEditor.CanContinue;
+                bool textSelected = _floatingImages?.SelectedImageId is null;
+                restart.IsEnabled = textSelected && ListEditor.CanRestartNumbering;
+                continuation.IsEnabled = textSelected && ListEditor.CanContinue;
+                start.IsEnabled = textSelected && ListEditor.CanSetNumbering;
             };
         }
+    }
+
+    private void UpdateNumberingMenuState()
+    {
+        bool textSelected = _floatingImages?.SelectedImageId is null;
+        ListRestartMenuItem.IsEnabled = textSelected && ListEditor.CanRestartNumbering;
+        ListContinueMenuItem.IsEnabled = textSelected && ListEditor.CanContinue;
+        ListStartingValueMenuItem.IsEnabled = textSelected && ListEditor.CanSetNumbering;
+        var style = textSelected ? ListEditor.SelectionStyle : null;
+        ListNumberDecimalMenuItem.IsChecked = style == TextMarkerStyle.Decimal;
+        ListNumberLowerLatinMenuItem.IsChecked = style == TextMarkerStyle.LowerLatin;
+        ListNumberUpperRomanMenuItem.IsChecked = style == TextMarkerStyle.UpperRoman;
     }
 
     private MenuItem ListMenu(string key, Action action)
@@ -123,18 +137,14 @@ public partial class NoteEditorWindow
     private void ShowListStartingValue()
     {
         MaterializeSelectionForAction();
-        var list = EditorLists.Ancestor<System.Windows.Documents.List>(ContentTextBox.CaretPosition.Parent);
-        if (list is null || !EditorLists.Numbered(list.MarkerStyle)) return;
-        var activeItem = EditorLists.Ancestor<ListItem>(ContentTextBox.CaretPosition.Parent);
-        int itemIndex = list.ListItems.Cast<ListItem>().TakeWhile(item => !ReferenceEquals(item, activeItem)).Count();
-        int currentValue = (int)Math.Min(int.MaxValue, (long)list.StartIndex + itemIndex);
+        if (_floatingImages?.SelectedImageId is not null || ListEditor.CurrentNumber is not { } currentValue) return;
         var dialog = new SimpleInputDialog(
-            LocalizationService.GetString("ListSetStartingValue"),
-            LocalizationService.GetString("ListStartingValueHint"),
+            LocalizationService.GetString("ListStartingValueTitle"),
+            LocalizationService.GetString("ListStartingValueTitle"),
             currentValue.ToString(CultureInfo.InvariantCulture),
             input => int.TryParse(input.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int number) && number > 0,
             LocalizationService.GetString("ListStartingValueInvalid"))
-        { Owner = this };
+        { Owner = GetDialogOwnerWindow() };
         if (dialog.ShowDialog() == true
             && int.TryParse(dialog.InputText.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int value) && value > 0)
             RunListEdit(() => ListEditor.SetNumbering(value));
