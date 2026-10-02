@@ -21,7 +21,7 @@ public static class NoteWrapMath
     /// <summary>Default gap between a wrapped image and the text (DIPs). A generous gap keeps
     /// the photo visually apart from the surrounding words - like the breathing room office
     /// suites leave around an image.</summary>
-    public const double DefaultWrapGap = 16;
+    public const double DefaultWrapGap = 24;
 
     /// <summary>
     /// Minimum lane width before a lane is considered usable, mirroring ONLYOFFICE's
@@ -1073,14 +1073,18 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                     if (!intersects)
                         continue;
 
-                    // Word-style "word word [photo] word word": find the first character of the
-                    // line that starts at or after the photo's left edge. The words before it
-                    // stay in place on the left; the spacer fills the gap to the photo's right
-                    // edge, so the remaining words continue on the same line beside the photo.
-                    // When the photo starts before the line's first word, the spacer leads the
-                    // line (split lands on the line's first character); when it starts past the
-                    // line's last word, no character qualifies and the line stays full width.
-                    var split = FindSplitCharInLine(paragraph, line.Position, lineEnd, photoLeft);
+                    // The photo is painted one padding-width to the right of its document
+                    // point. The keep-out edges have to use that painted box, or one side
+                    // of the text loses the gap and the other side gains it.
+                    var padLeft = _editor?.Padding.Left ?? 0;
+                    var scrollX = GetScrollOffset().X;
+                    var layoutLeft = photoLeft + padLeft - scrollX;
+                    var layoutRight = photoRight + padLeft - scrollX;
+
+                    // Word-style "word word [photo] word word": the first glyph that would
+                    // enter the keep-out box moves to the far side. Words that stay on the
+                    // near side end before the gap; the spacer starts the rest at the far gap.
+                    var split = FindSplitCharInLine(paragraph, line.Position, lineEnd, layoutLeft);
                     if (split is null)
                         continue; // the photo is past this line's text - the line stays full width
 
@@ -1088,7 +1092,7 @@ public sealed class NoteWrapLayoutEngine : IDisposable
                     if (splitRect.IsEmpty)
                         continue;
 
-                    var width = photoRight - splitRect.Left;
+                    var width = layoutRight - splitRect.Left;
                     if (width < 1)
                         continue;
 
@@ -1222,9 +1226,9 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     }
 
     /// <summary>First text position inside the line [<paramref name="lineStart"/>, <paramref name="lineEnd"/>)
-    /// whose character starts at or after <paramref name="xTarget"/> - the Word-style split point
-    /// where the photo sits between the words. Null when the whole line's text stays left of the
-    /// photo. Character x is monotonic within a line, so this is a binary search.</summary>
+    /// whose glyph enters the keep-out box at <paramref name="xTarget"/>. A word that started
+    /// just outside but runs into the gap moves to the far side, so the near side ends before
+    /// the gap. Null when the whole line's text stays clear of the box.</summary>
     private static TextPointer? FindSplitCharInLine(
         Paragraph paragraph,
         TextPointer lineStart,
@@ -1249,8 +1253,8 @@ public sealed class NoteWrapLayoutEngine : IDisposable
             }
 
             var rect = position.GetCharacterRect(LogicalDirection.Forward);
-            var left = rect.IsEmpty ? double.NegativeInfinity : rect.Left;
-            if (left >= xTarget)
+            var right = rect.IsEmpty ? double.NegativeInfinity : rect.Right;
+            if (right > xTarget)
             {
                 found = position;
                 hi = mid;

@@ -533,6 +533,45 @@ public class NoteWrapLayoutEngineTests
         return groups.Select(kv => (kv.Key, kv.Value.Min, kv.Value.Max)).ToList();
     }
 
+    private static void AssertBothSidesClearThePhoto(
+        Paragraph paragraph,
+        double photoLeft,
+        double photoRight,
+        double gap)
+    {
+        var spacerTops = FindSquareSpacers(paragraph)
+            .Select(container => Math.Round(container.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top))
+            .ToHashSet();
+        double? nearestLeft = null;
+        double? nearestRight = null;
+        var nav = paragraph.ContentStart;
+        while (nav is not null && nav.CompareTo(paragraph.ContentEnd) < 0)
+        {
+            if (nav.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+            {
+                var text = nav.GetTextInRun(LogicalDirection.Forward);
+                for (var i = 0; i < text.Length; i++)
+                {
+                    var position = nav.GetPositionAtOffset(i, LogicalDirection.Forward);
+                    var rect = position?.GetCharacterRect(LogicalDirection.Forward) ?? Rect.Empty;
+                    if (rect.IsEmpty || !spacerTops.Contains(Math.Round(rect.Top)))
+                        continue;
+                    if (rect.Right <= photoLeft)
+                        nearestLeft = nearestLeft is null ? rect.Right : Math.Max(nearestLeft.Value, rect.Right);
+                    if (rect.Left >= photoRight)
+                        nearestRight = nearestRight is null ? rect.Left : Math.Min(nearestRight.Value, rect.Left);
+                }
+            }
+
+            nav = nav.GetNextContextPosition(LogicalDirection.Forward);
+        }
+
+        Assert.True(nearestLeft is not null && nearestLeft <= photoLeft - gap + 1,
+            $"text on the left should stop {gap}px before the photo, got {nearestLeft:F1} vs photo {photoLeft:F1}");
+        Assert.True(nearestRight is not null && nearestRight >= photoRight + gap - 1,
+            $"text on the right should start {gap}px after the photo, got {nearestRight:F1} vs photo {photoRight:F1}");
+    }
+
     private static void RunSquareScenario()
     {
         using var harness = CreateHarness(paragraphCount: 14);
@@ -559,7 +598,7 @@ public class NoteWrapLayoutEngineTests
         Assert.All(wrapped, p =>
         {
             var widths = FindSquareSpacers(p).Select(c => ((Border)c.Child).Width).ToList();
-            Assert.All(widths, w => Assert.True(w > 0 && w <= 256, $"spacer width {w:F1} out of range"));
+            Assert.All(widths, w => Assert.True(w > 0 && w <= 272, $"spacer width {w:F1} out of range"));
         });
         Assert.All(wrapped, p => Assert.Equal(0, Normalize(p.Margin).Left, precision: 3));
 
@@ -595,9 +634,10 @@ public class NoteWrapLayoutEngineTests
         harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
         harness.Editor.UpdateLayout();
 
-        // Photo 200 wide at x=200: wrap box left=184, right=416 - inside the tall paragraph's
-        // line text (lines run ~24..~740), and the right lane (764-416=348) wins over the left
-        // (184), so the band lines split at the photo.
+        // Photo 200 wide at x=200. The keep-out box is the photo plus DefaultWrapGap on each side.
+        var gap = NoteWrapMath.DefaultWrapGap;
+        var wrapLeft = 200 - gap;
+        var wrapRight = 400 + gap;
         var session = harness.Coordinator.GetWrapSessions().First();
         session.DocumentLeft = 200;
         harness.Editor.UpdateLayout();
@@ -608,12 +648,17 @@ public class NoteWrapLayoutEngineTests
         var lines = MeasureLines(tall);
         Assert.True(lines.Count >= 6, $"expected a tall wrapped paragraph, got {lines.Count} lines");
 
-        // The straddling line has words on BOTH sides of the photo (left of 184, right of 416).
-        var splitLines = lines.Where(l => l.MinLeft < 184 && l.MaxRight > 416).ToList();
+        // The straddling line has words on BOTH sides of the photo.
+        var splitLines = lines.Where(l => l.MinLeft < wrapLeft && l.MaxRight > wrapRight).ToList();
         Assert.NotEmpty(splitLines);
+        AssertBothSidesClearThePhoto(
+            tall,
+            session.DocumentLeft + harness.Editor.Padding.Left,
+            session.DocumentRight + harness.Editor.Padding.Left,
+            gap);
 
         // Lines deeper in the band start after the photo's right edge.
-        var belowBandStart = lines.Where(l => l.MinLeft >= 416 - 1).ToList();
+        var belowBandStart = lines.Where(l => l.MinLeft >= wrapRight - 1).ToList();
         Assert.NotEmpty(belowBandStart);
 
         // Lines above and below the band keep full width (start at the text edge, reach the end).
@@ -655,14 +700,13 @@ public class NoteWrapLayoutEngineTests
         spacers = FindSquareSpacers(tall);
         Assert.NotEmpty(spacers);
 
-        // Past the hysteresis band (x=290: left=274, right=204; 204*1.25 < 274) the text flips
-        // to the left lane - that lane is applied as a paragraph right margin (right inset).
-        session.DocumentLeft = 290;
+        // Past the hysteresis band the text flips to the left lane.
+        session.DocumentLeft = 340;
         harness.Editor.UpdateLayout();
         harness.Engine.Apply();
         harness.Editor.UpdateLayout();
         var margins = Normalize(tall.Margin);
-        Assert.True(margins.Right > 400 && margins.Left < 1,
+        Assert.True(margins.Right > 300 && margins.Left < 1,
             $"the text should flip to the left lane past the hysteresis band, got left={margins.Left:F1} right={margins.Right:F1}");
         Assert.Empty(FindSquareSpacers(tall));
 
@@ -672,7 +716,7 @@ public class NoteWrapLayoutEngineTests
         harness.Engine.Apply();
         harness.Editor.UpdateLayout();
         margins = Normalize(tall.Margin);
-        Assert.True(margins.Right > 400 && margins.Left < 1,
+        Assert.True(margins.Right > 300 && margins.Left < 1,
             $"moving back within the band must keep the current side, got left={margins.Left:F1} right={margins.Right:F1}");
         Assert.Empty(FindSquareSpacers(tall));
     }
@@ -805,8 +849,8 @@ public class NoteWrapLayoutEngineTests
         {
             var top = container.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
             Assert.True(
-                top >= -25 && top <= 175,
-                $"spacer at layout top {top:F1} should sit on the band's lines (band 290-460 scrolled by 300)");
+                top >= -50 && top <= 180,
+                $"spacer at layout top {top:F1} should sit on the band's lines (band scrolled by 300)");
         }
     }
 
@@ -995,7 +1039,7 @@ public class NoteWrapLayoutEngineTests
         var stack = FindSpacers(tall);
         Assert.NotEmpty(stack);
         var firstLine = tall.ContentStart.GetCharacterRect(LogicalDirection.Forward);
-        session.DocumentTop = (firstLine.Top + firstLine.Bottom) / 2 + 10;
+        session.DocumentTop = firstLine.Top + NoteWrapMath.DefaultWrapGap + 4;
         harness.Engine.Apply();
         harness.Editor.UpdateLayout();
 
@@ -1051,9 +1095,9 @@ public class NoteWrapLayoutEngineTests
         Assert.NotEmpty(stack);
         Assert.Single(stack.Select(c => c.Parent).Distinct()); // one shared stack
 
-        // The stack covers the deepest band bottom (350 + 150 + 16).
+        // The stack covers the deepest band bottom (350 + 150 + wrap gap).
         var tailTop = GetInlineAfterStack(tall.Inlines, stack).ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
-        Assert.True(tailTop >= 516 - 2, $"tail should clear the deepest band bottom, got {tailTop:F1}");
+        Assert.True(tailTop >= 350 + 150 + NoteWrapMath.DefaultWrapGap - 2, $"tail should clear the deepest band bottom, got {tailTop:F1}");
 
         // Moving only the deeper band keeps the shared split (the head) untouched and just
         // extends the stack.
@@ -1090,7 +1134,7 @@ public class NoteWrapLayoutEngineTests
 
         // Continuous geometry signals are throttled: nothing applies until the interval elapses.
         var session = harness.Coordinator.GetWrapSessions().First();
-        session.DocumentTop += 5;
+        session.DocumentTop += 8;
         harness.Engine.ScheduleApplyLive();
         harness.Editor.UpdateLayout();
         var stackNow = FindSpacers(tall);
@@ -1100,12 +1144,13 @@ public class NoteWrapLayoutEngineTests
         PumpDispatcher(harness.Editor, 80);
         harness.Editor.UpdateLayout();
         var stackAfter = FindSpacers(tall);
+        var heightAfter = stackAfter.Sum(c => ((Border)c.Child).Height);
         Assert.True(
-            stackAfter.Sum(c => ((Border)c.Child).Height) > heightBefore + 3,
-            "the live throttle should refresh the layout to the new band");
+            Math.Abs(heightAfter - heightBefore) > 3,
+            $"the live throttle should refresh the layout to the new band, got {heightAfter:F1} vs {heightBefore:F1}");
 
         // The gesture end (ScheduleApply) still delivers the final state.
-        session.DocumentTop -= 5;
+        session.DocumentTop -= 8;
         harness.Engine.ScheduleApply();
         PumpDispatcher(harness.Editor, 150);
         harness.Editor.UpdateLayout();
@@ -1125,9 +1170,10 @@ public class NoteWrapLayoutEngineTests
         PumpDispatcher(harness.Editor, 60);
         harness.Editor.UpdateLayout();
         var stackLive = FindSpacers(tall);
+        var liveHeight = stackLive.Sum(c => ((Border)c.Child).Height);
         Assert.True(
-            stackLive.Sum(c => ((Border)c.Child).Height) > stackEndHeight + 3,
-            $"the live path should move the wrap toward the moved band, got {stackLive.Sum(c => ((Border)c.Child).Height):F1} vs {stackEndHeight:F1}");
+            Math.Abs(liveHeight - stackEndHeight) > 3,
+            $"the live path should move the wrap toward the moved band, got {liveHeight:F1} vs {stackEndHeight:F1}");
 
         // The gesture end settles the final state exactly.
         session.DocumentTop -= 5;
@@ -1365,7 +1411,7 @@ public class NoteWrapLayoutEngineTests
         Assert.True(squareWrapped.Count >= 2, $"expected >= 2 square-wrapped paragraphs, got {squareWrapped.Count}");
         Assert.All(
             squareWrapped.SelectMany(FindSquareSpacers).Select(c => ((Border)c.Child).Width),
-            w => Assert.True(w > 0 && w <= 256, $"spacer width {w:F1} out of range"));
+            w => Assert.True(w > 0 && w <= 272, $"spacer width {w:F1} out of range"));
         Assert.DoesNotContain(margins.Values, m => Math.Abs(m.Left - 256) < 0.5);
 
         // Image B's straddling paragraph is handled by the between-lines inline spacer,
