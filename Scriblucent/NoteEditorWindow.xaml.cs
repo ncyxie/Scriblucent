@@ -4608,8 +4608,8 @@ namespace Scriblucent
                     // Initialize last saved content
                     MarkCurrentStateSaved();
 
-                    // Apply theme colors to the loaded content. Custom text colors and the
-                    // note's own paragraph line spacing stay as they were saved.
+                    // Apply theme colors to the loaded content. Custom text colors stay as saved.
+                    // A menu spacing step is brought onto the font's own line.
                     ApplyRichTextBoxTheme();
                     ApplyEditorTextLayout();
                     // The constructor gives the empty placeholder paragraph a line height
@@ -4927,8 +4927,7 @@ namespace Scriblucent
         private void ContentTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
         {
             // A picture with no text becomes a floating photo. Formatted text keeps the
-            // fragment Word would keep, including its line spacing. Text only inserts the
-            // characters and then uses this note's spacing.
+            // source font and styles. Either kind of text then takes this note's line spacing.
             if (e.DataObject is not { } data)
                 return;
 
@@ -4939,7 +4938,14 @@ namespace Scriblucent
                 e.DataObject = data;
             }
 
-            switch (EditorPaste.Resolve(mode, data))
+            var action = EditorPaste.Resolve(mode, data);
+            if (action != EditorPaste.PasteAction.Image)
+            {
+                QueuePastedTextSpacing(ContentTextBox,
+                    (start, end) => ApplyLineSpacingToRange(start, end, _lineSpacingMultiplier));
+            }
+
+            switch (action)
             {
                 case EditorPaste.PasteAction.Image:
                     if (PasteImageFromDataObject(data))
@@ -4960,9 +4966,6 @@ namespace Scriblucent
                 e.FormatToApply = DataFormats.UnicodeText;
             else if (data.GetDataPresent(DataFormats.Text))
                 e.FormatToApply = DataFormats.Text;
-
-            QueuePastedTextSpacing(ContentTextBox,
-                (start, end) => ApplyLineSpacingToRange(start, end, _lineSpacingMultiplier));
         }
 
         internal static DispatcherOperation QueuePastedTextSpacing(
@@ -7504,8 +7507,8 @@ namespace Scriblucent
 
         private void ApplyLineSpacingToParagraph(Paragraph paragraph, double spacingMultiplier, double? minimumFontSize = null)
         {
-            // LineHeight is a minimum. WPF must be free to grow the line around glyphs
-            // taller than their em size, including when the user shrinks other text.
+            // LineHeight is the font's own single line times the spacing step, and a minimum.
+            // WPF may still grow the line around a taller glyph.
             if (paragraph.LineStackingStrategy != LineStackingStrategy.MaxHeight)
                 paragraph.LineStackingStrategy = LineStackingStrategy.MaxHeight;
             var lineHeight = ResolveParagraphLineHeight(paragraph, spacingMultiplier, minimumFontSize);
@@ -7655,36 +7658,48 @@ namespace Scriblucent
             }
         }
 
+        private readonly record struct InlineFontMeasure(double FontSize, double SingleSpacing);
+
+        private readonly record struct ParagraphLineBasis(double FontSize, double SingleLine);
+
         private double ResolveParagraphLineHeight(Paragraph paragraph, double spacingMultiplier, double? minimumFontSize = null)
         {
-            var fontSize = ResolveLargestParagraphFontSize(paragraph);
-            if (minimumFontSize.HasValue && minimumFontSize.Value > fontSize)
-                fontSize = minimumFontSize.Value;
+            var basis = ResolveParagraphLineBasis(paragraph);
+            if (minimumFontSize is double floor && floor > basis.FontSize && basis.FontSize > 0)
+            {
+                var ratio = basis.SingleLine / basis.FontSize;
+                basis = new ParagraphLineBasis(floor, floor * ratio);
+            }
 
-            if (double.IsNaN(fontSize) || fontSize <= 0)
-                fontSize = ContentTextBox.FontSize;
-
-            if (double.IsNaN(fontSize) || fontSize <= 0)
-                fontSize = 14;
-
-            return Math.Max(1, fontSize * spacingMultiplier);
+            return EditorLineSpacing.LineHeight(basis.SingleLine, spacingMultiplier);
         }
 
-        private double ResolveLargestParagraphFontSize(Paragraph paragraph)
+        private ParagraphLineBasis ResolveParagraphLineBasis(Paragraph paragraph)
         {
             var fontSize = 0d;
-            foreach (var inlineFontSize in EnumerateInlineFontSizes(paragraph.Inlines))
+            var singleLine = 0d;
+            foreach (var measure in EnumerateInlineFontSizes(paragraph.Inlines))
             {
-                if (inlineFontSize > fontSize)
-                    fontSize = inlineFontSize;
+                if (measure.FontSize > fontSize)
+                    fontSize = measure.FontSize;
+                var line = measure.FontSize * measure.SingleSpacing;
+                if (line > singleLine)
+                    singleLine = line;
             }
 
             // A paragraph can retain an old font size after every Run was restyled.
             // Only use it when the paragraph has no text to measure yet.
-            return fontSize > 0 ? fontSize : NormalizeFontSizeValue(paragraph.FontSize);
+            if (fontSize <= 0)
+                fontSize = NormalizeFontSizeValue(paragraph.FontSize);
+            if (fontSize <= 0)
+                fontSize = ContentTextBox.FontSize > 0 ? ContentTextBox.FontSize : 14;
+            if (singleLine <= 0)
+                singleLine = fontSize * EditorLineSpacing.SingleSpacing(paragraph.FontFamily);
+
+            return new ParagraphLineBasis(fontSize, singleLine);
         }
 
-        private static IEnumerable<double> EnumerateInlineFontSizes(InlineCollection inlines)
+        private static IEnumerable<InlineFontMeasure> EnumerateInlineFontSizes(InlineCollection inlines)
         {
             foreach (Inline inline in inlines)
             {
@@ -7693,7 +7708,7 @@ namespace Scriblucent
                     case Run run when run.Text.Length > 0:
                         var fontSize = NormalizeFontSizeValue(run.FontSize);
                         if (fontSize > 0)
-                            yield return fontSize;
+                            yield return new InlineFontMeasure(fontSize, EditorLineSpacing.SingleSpacing(run.FontFamily));
                         break;
                     case Span span:
                         foreach (var nestedFontSize in EnumerateInlineFontSizes(span.Inlines))
@@ -7707,7 +7722,7 @@ namespace Scriblucent
             }
         }
 
-        private static IEnumerable<double> EnumerateBlockFontSizes(BlockCollection blocks)
+        private static IEnumerable<InlineFontMeasure> EnumerateBlockFontSizes(BlockCollection blocks)
         {
             foreach (Block block in blocks)
             {
@@ -7722,7 +7737,11 @@ namespace Scriblucent
                             yield return nestedFontSize;
                         }
                         if (!foundText)
-                            yield return NormalizeFontSizeValue(paragraph.FontSize);
+                        {
+                            yield return new InlineFontMeasure(
+                                NormalizeFontSizeValue(paragraph.FontSize),
+                                EditorLineSpacing.SingleSpacing(paragraph.FontFamily));
+                        }
                         break;
                     }
                     case Section section:
@@ -7808,13 +7827,37 @@ namespace Scriblucent
             if (spaced is null)
                 return false;
 
-            var fontSize = ResolveLargestParagraphFontSize(spaced);
-            if (double.IsNaN(fontSize) || fontSize <= 0)
-                fontSize = ContentTextBox.FontSize > 0 ? ContentTextBox.FontSize : 14;
-
-            _lineSpacingMultiplier = NormalizeLineSpacingMultiplier(spaced.LineHeight / fontSize);
+            var basis = ResolveParagraphLineBasis(spaced);
+            _lineSpacingMultiplier = NormalizeLineSpacingMultiplier(
+                EditorLineSpacing.ReadMultiplier(spaced.LineHeight, basis.FontSize, basis.SingleLine));
             SyncLineSpacingSelectorFromPreference();
+            UpgradeLegacyLineHeights();
             return true;
+        }
+
+        private void UpgradeLegacyLineHeights()
+        {
+            var paragraphs = new List<Paragraph>();
+            var document = ContentTextBox.Document;
+            CollectParagraphs(document.Blocks, document.ContentStart, document.ContentEnd, paragraphs);
+            foreach (var paragraph in paragraphs)
+            {
+                if (double.IsNaN(paragraph.LineHeight) || paragraph.LineHeight <= 0)
+                    continue;
+
+                var basis = ResolveParagraphLineBasis(paragraph);
+                if (!EditorLineSpacing.IsLegacyPointSizeStep(paragraph.LineHeight, basis.FontSize, basis.SingleLine, out var step))
+                    continue;
+
+                var lineHeight = EditorLineSpacing.LineHeight(basis.SingleLine, step);
+                if (Math.Abs(paragraph.LineHeight - lineHeight) < 0.01
+                    && paragraph.LineStackingStrategy == LineStackingStrategy.MaxHeight)
+                    continue;
+
+                if (paragraph.LineStackingStrategy != LineStackingStrategy.MaxHeight)
+                    paragraph.LineStackingStrategy = LineStackingStrategy.MaxHeight;
+                paragraph.LineHeight = lineHeight;
+            }
         }
 
         private void SyncIndentSizeSelectorFromPreference()

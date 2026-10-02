@@ -8,7 +8,7 @@ using Scriblucent.Models;
 namespace Scriblucent.Services;
 
 /// <summary>Chooses how a clipboard fragment enters a note. Keep formatting inserts the
-/// rich fragment unchanged. Text only inserts characters and lets the note's spacing apply.</summary>
+/// source font and styles. Either text paste then takes the note's line spacing.</summary>
 internal static class EditorPaste
 {
     internal enum PasteAction
@@ -31,8 +31,9 @@ internal static class EditorPaste
         return PasteAction.PlainText;
     }
 
+    /// <summary>Text pasted into a note takes the note's line spacing. A lone picture does not.</summary>
     internal static bool ApplyNoteLineSpacing(EditorPasteMode mode, IDataObject data)
-        => Resolve(mode, data) == PasteAction.PlainText;
+        => Resolve(mode, data) != PasteAction.Image;
 
     internal static bool TryPasteRich(RichTextBox editor, IDataObject data)
     {

@@ -34,12 +34,12 @@ public class EditorPasteTests
         html.SetData(DataFormats.Html, "<html><body><b>Hello</b></body></html>");
         html.SetData(DataFormats.UnicodeText, "Hello");
         Assert.True(EditorPaste.HasRichFormatting(html));
-        Assert.False(EditorPaste.ApplyNoteLineSpacing(EditorPasteMode.KeepFormatting, rtf));
+        Assert.True(EditorPaste.ApplyNoteLineSpacing(EditorPasteMode.KeepFormatting, rtf));
         Assert.True(EditorPaste.ApplyNoteLineSpacing(EditorPasteMode.TextOnly, rtf));
     }
 
     [Fact]
-    public void Text_only_paste_drops_the_source_font_and_keep_formatting_leaves_source_spacing() => RunSta(() =>
+    public void Text_only_paste_drops_the_source_font_and_keep_formatting_keeps_it() => RunSta(() =>
     {
         var source = new RichTextBox();
         var paragraph = new Paragraph(new Run("Spaced"))
@@ -66,8 +66,6 @@ public class EditorPasteTests
             .First(item => new TextRange(item.ContentStart, item.ContentEnd).Text.Contains("Spaced", StringComparison.Ordinal));
         Assert.Contains("Arial", pasted.FontFamily.Source, StringComparison.OrdinalIgnoreCase);
         Assert.True(Math.Abs(pasted.FontSize - 22) < 1 || pasted.Inlines.OfType<Run>().Any(run => Math.Abs(run.FontSize - 22) < 1));
-        Assert.True(double.IsNaN(pasted.LineHeight) || pasted.LineHeight > 30,
-            "Keep formatting must not rewrite the fragment to the note's 14px line.");
 
         var plain = new RichTextBox { FontFamily = new FontFamily("Calibri"), FontSize = 14 };
         plain.Document.Blocks.Clear();
