@@ -72,6 +72,8 @@ public static class AppIconKindMap
         AppIconKind.ZoomOut => PackIconLucideKind.ZoomOut,
         AppIconKind.ZoomReset => PackIconLucideKind.Ratio,
         AppIconKind.Bullet => PackIconLucideKind.List,
+        AppIconKind.IndentIncrease => PackIconLucideKind.ListIndentIncrease,
+        AppIconKind.IndentDecrease => PackIconLucideKind.ListIndentDecrease,
         AppIconKind.Play => PackIconLucideKind.Play,
         AppIconKind.Pause => PackIconLucideKind.Pause,
         AppIconKind.Lightbulb => PackIconLucideKind.Lightbulb,

@@ -29,6 +29,57 @@
         <Style x:Key="EditorFontComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource ChromeComboBoxStyle}">
             <Setter Property="Height" Value="32"/>
         </Style>
+        <Style x:Key="EditorFormattingToolButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorToolButtonBaseStyle}">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+        <Style x:Key="EditorSplitMainButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorFormattingToolButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" CornerRadius="10,0,0,10"
+                                Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="EditorSplitArrowButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorFormattingToolButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" CornerRadius="0,10,10,0" Background="{TemplateBinding Background}">
+                            <Grid>
+                                <Border Width="1" Height="16" HorizontalAlignment="Left" Background="{DynamicResource SidebarSeparator}"/>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Body><Grid x:Name="RootGrid">
@@ -340,388 +391,422 @@
             </Grid>
         </Border>
 
-        <Border x:Name="FontPanel"
-                Grid.Row="2"
-                Margin="20,8,20,0"
-                Style="{StaticResource ChromePanelBorderStyle}"
-                Padding="10,7"
-                Visibility="Collapsed">
+        <Border x:Name="FontPanel" Grid.Row="2" Margin="20,6,20,0" Style="{StaticResource ChromePanelBorderStyle}" Padding="10,6" Visibility="Collapsed">
             <StackPanel>
-            <WrapPanel VerticalAlignment="Center"
-                       Margin="0,0,0,8">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Margin="0,0,10,0">
-                    <TextBlock Text="{Binding [FontLabel], Source={StaticResource Loc}}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,6,0"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <ComboBox x:Name="FontFamilyBox"
-                              Width="180"
-                              Style="{StaticResource EditorFontComboBoxStyle}"
-                              SelectionChanged="FontFamilyBox_Changed">
-                        <ComboBoxItem Content="Calibri"/>
-                        <ComboBoxItem Content="Segoe UI"/>
-                        <ComboBoxItem Content="Arial"/>
-                        <ComboBoxItem Content="Times New Roman"/>
-                        <ComboBoxItem Content="Verdana"/>
-                        <ComboBoxItem Content="Tahoma"/>
-                        <ComboBoxItem Content="Georgia"/>
-                        <ComboBoxItem Content="Trebuchet MS"/>
-                        <ComboBoxItem Content="Cambria"/>
-                        <ComboBoxItem Content="Garamond"/>
-                        <ComboBoxItem Content="Consolas"/>
-                    </ComboBox>
-
-                    <TextBlock Text="{Binding [SizeLabel], Source={StaticResource Loc}}"
-                               Margin="12,0,6,0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <ComboBox x:Name="FontSizeBox"
-                              Width="80"
-                              Style="{StaticResource EditorFontComboBoxStyle}"
-                              SelectionChanged="FontSizeBox_Changed">
-                        <ComboBoxItem Content="8"/>
-                        <ComboBoxItem Content="9"/>
-                        <ComboBoxItem Content="10"/>
-                        <ComboBoxItem Content="11"/>
-                        <ComboBoxItem Content="12"/>
-                        <ComboBoxItem Content="14"/>
-                        <ComboBoxItem Content="16"/>
-                        <ComboBoxItem Content="18"/>
-                        <ComboBoxItem Content="20"/>
-                        <ComboBoxItem Content="22"/>
-                        <ComboBoxItem Content="24"/>
-                        <ComboBoxItem Content="26"/>
-                        <ComboBoxItem Content="28"/>
-                        <ComboBoxItem Content="36"/>
-                        <ComboBoxItem Content="48"/>
-                        <ComboBoxItem Content="72"/>
-                    </ComboBox>
-                    <Button Content="{icons:Icon Kind=Minus, Size=14}"
-                            Width="32"
-                            Height="32"
-                            Margin="6,0,0,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [DecreaseFontSize], Source={StaticResource Loc}}"
-                            Click="DecreaseFontSizeButton_Click"/>
-                    <Button Content="{icons:Icon Kind=Plus, Size=14}"
-                            Width="32"
-                            Height="32"
-                            Margin="6,0,0,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [IncreaseFontSize], Source={StaticResource Loc}}"
-                            Click="IncreaseFontSizeButton_Click"/>
-                </StackPanel>
-
-                <Border Width="1"
-                        Height="20"
-                        Margin="0,6,10,6"
-                        Background="{DynamicResource BorderColor}"/>
-
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Margin="0,0,10,0">
-                    <TextBlock Text="{Binding [SpacingLabel], Source={StaticResource Loc}}"
-                               Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <ComboBox x:Name="LineSpacingBox"
-                              Width="80"
-                              Style="{StaticResource EditorFontComboBoxStyle}"
-                              SelectionChanged="LineSpacingBox_Changed">
-                        <ComboBoxItem Content="1.0"/>
-                        <ComboBoxItem Content="1.15"/>
-                        <ComboBoxItem Content="1.5"/>
-                        <ComboBoxItem Content="2.0"/>
-                    </ComboBox>
-                </StackPanel>
-
-                <Border Width="1"
-                        Height="20"
-                        Margin="0,6,10,6"
-                        Background="{DynamicResource BorderColor}"/>
-
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{Binding [IndentLabel], Source={StaticResource Loc}}"
-                               Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <ComboBox x:Name="IndentSizeBox"
-                              Width="92"
-                              Style="{StaticResource EditorFontComboBoxStyle}"
-                              ToolTip="{Binding [IndentSize], Source={StaticResource Loc}}"
-                              SelectionChanged="IndentSizeBox_Changed">
-                        <ComboBoxItem Content="0.25 in" Tag="24"/>
-                        <ComboBoxItem Content="0.5 in" Tag="48"/>
-                        <ComboBoxItem Content="0.75 in" Tag="72"/>
-                        <ComboBoxItem Content="1 in" Tag="96"/>
-                        <ComboBoxItem Content="1.25 in" Tag="120"/>
-                        <ComboBoxItem Content="1.5 in" Tag="144"/>
-                    </ComboBox>
-                </StackPanel>
-
-            </WrapPanel>
-
-            <WrapPanel VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center"
-                            Margin="0,0,10,0">
-                    <TextBlock Text="{Binding [TextStyleLabel], Source={StaticResource Loc}}"
-                               Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <Button Content="{icons:Icon Kind=Bold, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Bold], Source={StaticResource Loc}}"
-                            Click="ToggleBoldButton_Click"/>
-
-                    <Button Content="{icons:Icon Kind=Italic, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Italic], Source={StaticResource Loc}}"
-                            Click="ToggleItalicButton_Click"/>
-
-                    <Button Content="{icons:Icon Kind=Underline, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Underline], Source={StaticResource Loc}}"
-                            Click="ToggleUnderlineButton_Click"/>
-
-                    <Button Content="{icons:Icon Kind=Strikethrough, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Strikethrough], Source={StaticResource Loc}}"
-                            Click="ToggleStrikethroughButton_Click"/>
-
-                    <Button x:Name="TextColorButton"
-                            Content="{icons:Icon Kind=Color, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [TextColor], Source={StaticResource Loc}}"
-                            Click="TextColorButton_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{Binding [SelectColor], Source={StaticResource Loc}}"
-                                          Click="TextColorChooseMenuItem_Click"/>
-                                <MenuItem Header="{Binding [ClearColor], Source={StaticResource Loc}}"
-                                          Click="TextColorClearMenuItem_Click"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-
-                    <Button x:Name="HighlightButton"
-                            Content="{icons:Icon Kind=Highlight, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Highlight], Source={StaticResource Loc}}"
-                            Click="HighlightButton_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{Binding [SelectColor], Source={StaticResource Loc}}"
-                                          Click="HighlightChooseMenuItem_Click"/>
-                                <MenuItem Header="{Binding [ClearColor], Source={StaticResource Loc}}"
-                                          Click="HighlightClearMenuItem_Click"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-
-                    <Button Content="{icons:Icon Kind=Clear, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [ClearFormatting], Source={StaticResource Loc}}"
-                            Click="ClearFormattingButton_Click"/>
-                </StackPanel>
-
-                <Border Width="1"
-                        Height="20"
-                        Margin="0,6,10,6"
-                        Background="{DynamicResource BorderColor}"/>
-
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{Binding [ListStyle], Source={StaticResource Loc}}"
-                               Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextColor}"/>
-                    <Button x:Name="BulletListButton"
-                            Content="{icons:Icon Kind=Bullet, Size=14}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            FontSize="{StaticResource Type.EmptyState}"
-                            ToolTip="{Binding [BulletListStyle], Source={StaticResource Loc}}"
-                            Click="BulletListButton_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{Binding [ListBulletDisc], Source={StaticResource Loc}}"
-                                          Click="ListBulletDiscMenuItem_Click"/>
-                                <MenuItem Header="{Binding [ListBulletCircle], Source={StaticResource Loc}}"
-                                          Click="ListBulletCircleMenuItem_Click"/>
-                                <MenuItem Header="{Binding [ListBulletSquare], Source={StaticResource Loc}}"
-                                          Click="ListBulletSquareMenuItem_Click"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-
-                    <Button x:Name="NumberedListButton"
-                            Content="{icons:Icon Kind=NumberedList, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [NumberedListStyle], Source={StaticResource Loc}}"
-                            Click="NumberedListButton_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="{Binding [ListNumberDecimal], Source={StaticResource Loc}}"
-                                          Click="ListNumberDecimalMenuItem_Click"/>
-                                <MenuItem Header="{Binding [ListNumberLowerLatin], Source={StaticResource Loc}}"
-                                          Click="ListNumberLowerLatinMenuItem_Click"/>
-                                <MenuItem Header="{Binding [ListNumberUpperRoman], Source={StaticResource Loc}}"
-                                          Click="ListNumberUpperRomanMenuItem_Click"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-
-                    <Button x:Name="ChecklistButton"
-                            Content="{icons:Icon Kind=Checklist, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Checklist], Source={StaticResource Loc}}"
-                            Click="ChecklistButton_Click"/>
-
-                    <Button x:Name="ListRemoveButton"
-                            Content="{icons:Icon Kind=Close, Size=12}"
-                            Width="32"
-                            Height="32"
-                            Margin="0"
-                            Style="{StaticResource EditorDangerToolButtonStyle}"
-                            FontSize="{StaticResource Type.BlockTitle}"
-                            IsEnabled="False"
-                            ToolTip="{Binding [ListRemove], Source={StaticResource Loc}}"
-                            Click="ListRemoveButton_Click"/>
-                </StackPanel>
-
-                <Border Width="1"
-                        Height="20"
-                        Margin="10,6,10,6"
-                        Background="{DynamicResource BorderColor}"/>
-
-                <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <Grid VerticalAlignment="Center"
-                          Margin="0,0,6,0">
-                        <Button x:Name="InsertTableButton"
-                                Content="{icons:Icon Kind=Table, Size=15}"
+                <Grid x:Name="FormattingToolbarRow" Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <WrapPanel Margin="0">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0" x:Name="FontToolsGroup">
+                            <TextBlock Text="{Binding [FontLabel], Source={StaticResource Loc}}"
+                                Foreground="{DynamicResource TextColorSecondary}"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"/>
+                            <ComboBox x:Name="FontFamilyBox"
+                                Width="156"
+                                Style="{StaticResource EditorFontComboBoxStyle}"
+                                SelectionChanged="FontFamilyBox_Changed"
+                                Margin="0,0,6,0"
+                                ToolTip="{Binding [FontLabel], Source={StaticResource Loc}}"
+                                AutomationProperties.Name="{Binding [FontLabel], Source={StaticResource Loc}}">
+                                <ComboBoxItem Content="Calibri" />
+                                <ComboBoxItem Content="Segoe UI" />
+                                <ComboBoxItem Content="Arial" />
+                                <ComboBoxItem Content="Times New Roman" />
+                                <ComboBoxItem Content="Verdana" />
+                                <ComboBoxItem Content="Tahoma" />
+                                <ComboBoxItem Content="Georgia" />
+                                <ComboBoxItem Content="Trebuchet MS" />
+                                <ComboBoxItem Content="Cambria" />
+                                <ComboBoxItem Content="Garamond" />
+                                <ComboBoxItem Content="Consolas" />
+                            </ComboBox>
+                            <ComboBox x:Name="FontSizeBox"
+                                Width="64"
+                                Style="{StaticResource EditorFontComboBoxStyle}"
+                                SelectionChanged="FontSizeBox_Changed"
+                                Margin="0,0,6,0"
+                                ToolTip="{Binding [SizeLabel], Source={StaticResource Loc}}"
+                                AutomationProperties.Name="{Binding [SizeLabel], Source={StaticResource Loc}}">
+                                <ComboBoxItem Content="8" />
+                                <ComboBoxItem Content="9" />
+                                <ComboBoxItem Content="10" />
+                                <ComboBoxItem Content="11" />
+                                <ComboBoxItem Content="12" />
+                                <ComboBoxItem Content="14" />
+                                <ComboBoxItem Content="16" />
+                                <ComboBoxItem Content="18" />
+                                <ComboBoxItem Content="20" />
+                                <ComboBoxItem Content="22" />
+                                <ComboBoxItem Content="24" />
+                                <ComboBoxItem Content="26" />
+                                <ComboBoxItem Content="28" />
+                                <ComboBoxItem Content="36" />
+                                <ComboBoxItem Content="48" />
+                                <ComboBoxItem Content="72" />
+                            </ComboBox>
+                            <Button Content="{icons:Icon Kind=Minus, Size=14}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [DecreaseFontSize], Source={StaticResource Loc}}"
+                                Click="DecreaseFontSizeButton_Click"/>
+                            <Button Content="{icons:Icon Kind=Plus, Size=14}"
                                 Width="32"
                                 Height="32"
                                 Margin="0"
-                                Style="{StaticResource EditorToolButtonBaseStyle}"
-                                ToolTip="{Binding [InsertTable], Source={StaticResource Loc}}"
-                                Click="InsertTableButton_Click"/>
-                        <Popup x:Name="TableSizePickerPopup"
-                               PlacementTarget="{Binding ElementName=InsertTableButton}"
-                               Placement="Bottom"
-                               HorizontalOffset="-28"
-                               VerticalOffset="-24"
-                               StaysOpen="False"
-                               AllowsTransparency="True"
-                               PopupAnimation="None">
-                            <Border Background="Transparent"
-                                    Padding="32"
-                                    ClipToBounds="False">
-                                <Grid HorizontalAlignment="Left"
-                                      UseLayoutRounding="True"
-                                      SnapsToDevicePixels="True">
-                                    <Border Background="{DynamicResource CardBackground}"
-                                            BorderBrush="{DynamicResource PopupBorder}"
-                                            BorderThickness="1"
-                                            CornerRadius="{StaticResource Radius.Card}"
-                                            IsHitTestVisible="False"
-                                            Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
-                                            BorderBrush="{DynamicResource PopupBorder}"
-                                            BorderThickness="1"
-                                            CornerRadius="{StaticResource Radius.Card}"
-                                            SnapsToDevicePixels="True">
-                                        <StackPanel Margin="10">
-                                            <TextBlock x:Name="TableSizePickerLabel"
-                                                       Text="{Binding [InsertTable], Source={StaticResource Loc}}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextColor}"
-                                                       Margin="0,0,0,8"/>
-                                            <UniformGrid x:Name="TableSizePickerGrid"
-                                                         Columns="8"
-                                                         Rows="8"
-                                                         Width="176"
-                                                         Height="176"/>
-                                        </StackPanel>
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [IncreaseFontSize], Source={StaticResource Loc}}"
+                                Click="IncreaseFontSizeButton_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0" x:Name="TextToolsGroup">
+                            <Border Width="1" Height="20" Margin="12,0,12,0" Background="{DynamicResource SidebarSeparator}" />
+                            <Button Content="{icons:Icon Kind=Bold, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Bold], Source={StaticResource Loc}}"
+                                Click="ToggleBoldButton_Click"/>
+                            <Button Content="{icons:Icon Kind=Italic, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Italic], Source={StaticResource Loc}}"
+                                Click="ToggleItalicButton_Click"/>
+                            <Button Content="{icons:Icon Kind=Underline, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Underline], Source={StaticResource Loc}}"
+                                Click="ToggleUnderlineButton_Click"/>
+                            <Button Content="{icons:Icon Kind=Strikethrough, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Strikethrough], Source={StaticResource Loc}}"
+                                Click="ToggleStrikethroughButton_Click"/>
+                            <Button x:Name="TextColorButton"
+                                Content="{icons:Icon Kind=Color, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [TextColor], Source={StaticResource Loc}}"
+                                Click="TextColorButton_Click">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="{Binding [SelectColor], Source={StaticResource Loc}}" Click="TextColorChooseMenuItem_Click" />
+                                        <MenuItem Header="{Binding [ClearColor], Source={StaticResource Loc}}" Click="TextColorClearMenuItem_Click" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                            <Button x:Name="HighlightButton"
+                                Content="{icons:Icon Kind=Highlight, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Highlight], Source={StaticResource Loc}}"
+                                Click="HighlightButton_Click">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="{Binding [SelectColor], Source={StaticResource Loc}}" Click="HighlightChooseMenuItem_Click" />
+                                        <MenuItem Header="{Binding [ClearColor], Source={StaticResource Loc}}" Click="HighlightClearMenuItem_Click" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0" x:Name="SpacingToolsGroup">
+                            <Border Width="1" Height="20" Margin="12,0,12,0" Background="{DynamicResource SidebarSeparator}" />
+                            <TextBlock Text="{Binding [SpacingLabel], Source={StaticResource Loc}}"
+                                Margin="0,0,6,0"
+                                VerticalAlignment="Center"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource TextColorSecondary}"/>
+                            <ComboBox x:Name="LineSpacingBox"
+                                Width="72"
+                                Style="{StaticResource EditorFontComboBoxStyle}"
+                                SelectionChanged="LineSpacingBox_Changed"
+                                Margin="0"
+                                ToolTip="{Binding [SpacingLabel], Source={StaticResource Loc}}"
+                                AutomationProperties.Name="{Binding [SpacingLabel], Source={StaticResource Loc}}">
+                                <ComboBoxItem Content="1.0" />
+                                <ComboBoxItem Content="1.15" />
+                                <ComboBoxItem Content="1.5" />
+                                <ComboBoxItem Content="2.0" />
+                            </ComboBox>
+                        </StackPanel>
+                    </WrapPanel>
+                </Grid>
+                <Grid x:Name="StructureToolbarRow">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <WrapPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0" x:Name="ListCreationToolsGroup">
+                            <TextBlock Text="{Binding [EditorListGroup], Source={StaticResource Loc}}"
+                                Foreground="{DynamicResource TextColorSecondary}"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
+                                <Button x:Name="BulletListButton"
+                                    AutomationProperties.Name="{Binding [BulletListStyle], Source={StaticResource Loc}}"
+                                    Content="{icons:Icon Kind=Bullet, Size=16}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="0"
+                                    Style="{StaticResource EditorSplitMainButtonStyle}"
+                                    FontSize="{StaticResource Type.EmptyState}"
+                                    ToolTip="{Binding [BulletListStyle], Source={StaticResource Loc}}"
+                                    Click="BulletListButton_Click">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{Binding [ListBulletDisc], Source={StaticResource Loc}}" Click="ListBulletDiscMenuItem_Click" />
+                                            <MenuItem Header="{Binding [ListBulletCircle], Source={StaticResource Loc}}" Click="ListBulletCircleMenuItem_Click" />
+                                            <MenuItem Header="{Binding [ListBulletSquare], Source={StaticResource Loc}}" Click="ListBulletSquareMenuItem_Click" />
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+                                <Button Width="20"
+                                    Height="32"
+                                    Margin="0"
+                                    Style="{StaticResource EditorSplitArrowButtonStyle}"
+                                    ToolTip="{Binding [BulletListStyle], Source={StaticResource Loc}}"
+                                    Click="BulletStylesButton_Click"
+                                    AutomationProperties.Name="{Binding [BulletListStyle], Source={StaticResource Loc}}">
+                                    <Path Data="M 0,0 L 4,4 L 8,0"
+                                        Width="8"
+                                        Height="4"
+                                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                        StrokeThickness="1.5"
+                                        StrokeStartLineCap="Round"
+                                        StrokeEndLineCap="Round"
+                                        StrokeLineJoin="Round"/>
+                                </Button>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
+                                <Button x:Name="NumberedListButton"
+                                    AutomationProperties.Name="{Binding [NumberedListStyle], Source={StaticResource Loc}}"
+                                    Content="{icons:Icon Kind=NumberedList, Size=16}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="0"
+                                    Style="{StaticResource EditorSplitMainButtonStyle}"
+                                    ToolTip="{Binding [NumberedListStyle], Source={StaticResource Loc}}"
+                                    Click="NumberedListButton_Click">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="{Binding [ListNumberDecimal], Source={StaticResource Loc}}" Click="ListNumberDecimalMenuItem_Click" />
+                                            <MenuItem Header="{Binding [ListNumberLowerLatin], Source={StaticResource Loc}}" Click="ListNumberLowerLatinMenuItem_Click" />
+                                            <MenuItem Header="{Binding [ListNumberUpperRoman], Source={StaticResource Loc}}" Click="ListNumberUpperRomanMenuItem_Click" />
+                                            <Separator x:Name="ListNumberingSeparator"/>
+                                            <MenuItem x:Name="ListRestartMenuItem" Header="{Binding [ListRestartNumbering], Source={StaticResource Loc}}" Click="ListRestartMenuItem_Click" />
+                                            <MenuItem x:Name="ListContinueMenuItem" Header="{Binding [ListContinueNumbering], Source={StaticResource Loc}}" Click="ListContinueMenuItem_Click" />
+                                            <MenuItem x:Name="ListStartingValueMenuItem" Header="{Binding [ListSetStartingValue], Source={StaticResource Loc}}" Click="ListStartingValueMenuItem_Click" />
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                </Button>
+                                <Button Width="20"
+                                    Height="32"
+                                    Margin="0"
+                                    Style="{StaticResource EditorSplitArrowButtonStyle}"
+                                    ToolTip="{Binding [NumberedListStyle], Source={StaticResource Loc}}"
+                                    Click="NumberStylesButton_Click"
+                                    AutomationProperties.Name="{Binding [NumberedListStyle], Source={StaticResource Loc}}">
+                                    <Path Data="M 0,0 L 4,4 L 8,0"
+                                        Width="8"
+                                        Height="4"
+                                        Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                        StrokeThickness="1.5"
+                                        StrokeStartLineCap="Round"
+                                        StrokeEndLineCap="Round"
+                                        StrokeLineJoin="Round"/>
+                                </Button>
+                            </StackPanel>
+                            <Button x:Name="ChecklistButton"
+                                AutomationProperties.Name="{Binding [Checklist], Source={StaticResource Loc}}"
+                                Content="{icons:Icon Kind=Checklist, Size=16}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Checklist], Source={StaticResource Loc}}"
+                                Click="ChecklistButton_Click"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0" x:Name="IndentStepToolsGroup">
+                            <Border Width="1" Height="20" Margin="10,0,10,0" Background="{DynamicResource SidebarSeparator}" />
+                            <TextBlock Text="{Binding [IndentLabel], Source={StaticResource Loc}}"
+                                Margin="0,0,6,0"
+                                VerticalAlignment="Center"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource TextColorSecondary}"/>
+                            <ComboBox x:Name="IndentSizeBox"
+                                Width="84"
+                                Style="{StaticResource EditorFontComboBoxStyle}"
+                                ToolTip="{Binding [IndentSize], Source={StaticResource Loc}}"
+                                SelectionChanged="IndentSizeBox_Changed"
+                                Margin="0"
+                                AutomationProperties.Name="{Binding [IndentSize], Source={StaticResource Loc}}">
+                                <ComboBoxItem Content="0.25 in" Tag="24" />
+                                <ComboBoxItem Content="0.5 in" Tag="48" />
+                                <ComboBoxItem Content="0.75 in" Tag="72" />
+                                <ComboBoxItem Content="1 in" Tag="96" />
+                                <ComboBoxItem Content="1.25 in" Tag="120" />
+                                <ComboBoxItem Content="1.5 in" Tag="144" />
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0">
+                            <Border Width="1" Height="20" Margin="10,0,10,0" Background="{DynamicResource SidebarSeparator}" />
+                            <TextBlock Text="{Binding [EditorInsertGroup], Source={StaticResource Loc}}"
+                                Foreground="{DynamicResource TextColorSecondary}"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"/>
+                            <Grid VerticalAlignment="Center" Margin="0,0,6,0">
+                                <Button x:Name="InsertTableButton"
+                                    Content="{icons:Icon Kind=Table, Size=15}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="0"
+                                    Style="{StaticResource EditorToolButtonBaseStyle}"
+                                    ToolTip="{Binding [InsertTable], Source={StaticResource Loc}}"
+                                    Click="InsertTableButton_Click"/>
+                                <Popup x:Name="TableSizePickerPopup"
+                                    PlacementTarget="{Binding ElementName=InsertTableButton}"
+                                    Placement="Bottom"
+                                    HorizontalOffset="-28"
+                                    VerticalOffset="-24"
+                                    StaysOpen="False"
+                                    AllowsTransparency="True"
+                                    PopupAnimation="None">
+                                    <Border Background="Transparent" Padding="32" ClipToBounds="False">
+                                        <Grid HorizontalAlignment="Left" UseLayoutRounding="True" SnapsToDevicePixels="True">
+                                            <Border Background="{DynamicResource CardBackground}"
+                                                BorderBrush="{DynamicResource PopupBorder}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource Radius.Card}"
+                                                IsHitTestVisible="False"
+                                                Effect="{StaticResource Elevation.Popup}"/>
+                                            <Border Background="{DynamicResource CardBackground}"
+                                                BorderBrush="{DynamicResource PopupBorder}"
+                                                BorderThickness="1"
+                                                CornerRadius="{StaticResource Radius.Card}"
+                                                SnapsToDevicePixels="True">
+                                                <StackPanel Margin="10">
+                                                    <TextBlock x:Name="TableSizePickerLabel"
+                                                        Text="{Binding [InsertTable], Source={StaticResource Loc}}"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{DynamicResource TextColorSecondary}"
+                                                        Margin="0,0,0,8"/>
+                                                    <UniformGrid x:Name="TableSizePickerGrid" Columns="8" Rows="8" Width="176" Height="176" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
                                     </Border>
-                                </Grid>
-                            </Border>
-                        </Popup>
-                    </Grid>
-                    <Button x:Name="InsertPictureButton"
-                            Content="{icons:Icon Kind=Image, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [InsertPicture], Source={StaticResource Loc}}"
-                            Click="InsertPictureButton_Click"/>
-                    <Button x:Name="InsertCaptionButton"
-                            Content="{icons:Icon Kind=Tag, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Visibility="Collapsed"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [InsertCaption], Source={StaticResource Loc}}"
-                            Click="InsertCaptionButton_Click"/>
-                    <Button x:Name="InsertLinkButton"
-                            Content="{icons:Icon Kind=Link, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [InsertLink], Source={StaticResource Loc}}"
-                            Click="InsertLinkButton_Click"/>
-                    <Button x:Name="InsertSketchButton"
-                            Content="{icons:Icon Kind=Pen, Size=15}"
-                            Width="32"
-                            Height="32"
-                            Margin="0"
-                            Style="{StaticResource EditorToolButtonBaseStyle}"
-                            ToolTip="{Binding [Sketch], Source={StaticResource Loc}}"
-                            Click="InsertSketchButton_Click"/>
-                </StackPanel>
-            </WrapPanel>
+                                </Popup>
+                            </Grid>
+                            <Button x:Name="InsertPictureButton"
+                                Content="{icons:Icon Kind=Image, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [InsertPicture], Source={StaticResource Loc}}"
+                                Click="InsertPictureButton_Click"/>
+                            <Button x:Name="InsertLinkButton"
+                                Content="{icons:Icon Kind=Link, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,4,0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [InsertLink], Source={StaticResource Loc}}"
+                                Click="InsertLinkButton_Click"/>
+                            <Button x:Name="InsertSketchButton"
+                                Content="{icons:Icon Kind=Pen, Size=15}"
+                                Width="32"
+                                Height="32"
+                                Margin="0"
+                                Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                ToolTip="{Binding [Sketch], Source={StaticResource Loc}}"
+                                Click="InsertSketchButton_Click"/>
+                        </StackPanel>
+                    </WrapPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Border x:Name="ClearFormattingSlot" Width="0" Height="32" Visibility="Collapsed" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="60">
+                                <Border Width="1" Height="20" Background="{DynamicResource SidebarSeparator}" Margin="12,0,12,0" />
+                                <Button Content="{icons:Icon Kind=Clear, Size=15}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="0"
+                                    Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                    ToolTip="{Binding [ClearFormatting], Source={StaticResource Loc}}"
+                                    Click="ClearFormattingButton_Click"
+                                    x:Name="ClearFormattingButton"/>
+                            </StackPanel>
+                        </Border>
+                        <Border x:Name="ListActionsSlot" Width="0" Height="32" Visibility="Collapsed" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="136">
+                                <Border Width="1" Height="20" Background="{DynamicResource SidebarSeparator}" Margin="12,0,12,0" />
+                                <Button x:Name="ListDecreaseIndentButton"
+                                    Content="{icons:Icon Kind=IndentDecrease, Size=16}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="0,0,4,0"
+                                    Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                    ToolTip="{Binding [ListDecreaseIndent], Source={StaticResource Loc}}"
+                                    Click="ListDecreaseIndentButton_Click"/>
+                                <Button x:Name="ListIncreaseIndentButton"
+                                    Content="{icons:Icon Kind=IndentIncrease, Size=16}"
+                                    Width="32"
+                                    Height="32"
+                                    Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                    ToolTip="{Binding [ListIncreaseIndent], Source={StaticResource Loc}}"
+                                    Click="ListIncreaseIndentButton_Click"
+                                    Margin="0,0,4,0"/>
+                                <Button x:Name="ListRemoveButton"
+                                    AutomationProperties.Name="{Binding [ListRemove], Source={StaticResource Loc}}"
+                                    Content="{icons:Icon Kind=Close, Size=12}"
+                                    Width="32"
+                                    Height="32"
+                                    Margin="4,0,0,0"
+                                    Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                    FontSize="{StaticResource Type.BlockTitle}"
+                                    IsEnabled="False"
+                                    ToolTip="{Binding [ListRemove], Source={StaticResource Loc}}"
+                                    Click="ListRemoveButton_Click"/>
+                            </StackPanel>
+                        </Border>
+                        <Border x:Name="CaptionActionsSlot" Width="0" Height="32" Visibility="Collapsed" ClipToBounds="True">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="164">
+                                <Border Width="1" Height="20" Background="{DynamicResource SidebarSeparator}" Margin="12,0,12,0" />
+                                <Button x:Name="InsertCaptionButton"
+                                    Width="136"
+                                    Height="32"
+                                    Margin="0"
+                                    Visibility="Visible"
+                                    Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                    ToolTip="{Binding [InsertCaption], Source={StaticResource Loc}}"
+                                    Click="InsertCaptionButton_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <icons:AppIcon Kind="Tag" Width="15" Height="15" Margin="0,0,6,0" />
+                                        <TextBlock x:Name="CaptionActionText" Text="{Binding [InsertCaption], Source={StaticResource Loc}}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
             </StackPanel>
         </Border>
 

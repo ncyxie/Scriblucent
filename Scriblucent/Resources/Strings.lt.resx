@@ -1110,4 +1110,19 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="TableMoveColumnLeft" xml:space="preserve"><value>Stulpelį kairėn</value></data>
   <data name="TableMoveColumnRight" xml:space="preserve"><value>Stulpelį dešinėn</value></data>
   <data name="TableClearColumn" xml:space="preserve"><value>Stulpelį</value></data>
+  <data name="ListToggleCheckbox" xml:space="preserve"><value>Pažymėti arba atžymėti langelį</value></data>
+  <data name="ListRestartNumbering" xml:space="preserve"><value>Pradėti nuo 1</value></data>
+  <data name="ListContinueNumbering" xml:space="preserve"><value>Tęsti numeravimą</value></data>
+  <data name="ListSetStartingValue" xml:space="preserve"><value>Nustatyti pradinį skaičių…</value></data>
+  <data name="ListStartingValueHint" xml:space="preserve"><value>Pradinis skaičius (teigiamas sveikasis skaičius)</value></data>
+  <data name="ListDecreaseIndent" xml:space="preserve"><value>Sumažinti sąrašo lygį (Ctrl+Shift+M)</value></data>
+  <data name="ListIncreaseIndent" xml:space="preserve"><value>Padidinti sąrašo lygį (Ctrl+M)</value></data>
+  <data name="AutoFormatLists" xml:space="preserve"><value>Kurti sąrašus rašant</value></data>
+  <data name="AutoFormatListsHint" xml:space="preserve"><value>Pastraipos pradžioje įrašykite *, -, 1., [] arba [ ] ir paspauskite tarpo klavišą.</value></data>
+  <data name="ListMixedStyles" xml:space="preserve"><value>Mišrūs sąrašo stiliai</value></data>
+  <data name="ListApply" xml:space="preserve"><value>Taikyti</value></data>
+  <data name="EditorListGroup" xml:space="preserve"><value>Sąrašai:</value></data>
+  <data name="EditorInsertGroup" xml:space="preserve"><value>Įterpti:</value></data>
+  <data name="ListStartingValueInvalid" xml:space="preserve"><value>Įveskite sveikąjį skaičių nuo 1 iki 2 147 483 647.</value></data>
+  <data name="EditCaption" xml:space="preserve"><value>Keisti antraštę</value></data>
 </root>

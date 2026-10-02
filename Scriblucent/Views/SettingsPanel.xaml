@@ -398,6 +398,11 @@
                                   HorizontalAlignment="Left"
                                   Checked="DefaultNoteWordWrapCheckBox_Changed"
                                   Unchecked="DefaultNoteWordWrapCheckBox_Changed"/>
+                        <CheckBox x:Name="AutoFormatListsCheckBox" Margin="0,10,0,0"
+                                  Content="{Binding [AutoFormatLists], Source={StaticResource Loc}}"
+                                  ToolTip="{Binding [AutoFormatListsHint], Source={StaticResource Loc}}"
+                                  Checked="AutoFormatListsCheckBox_Changed"
+                                  Unchecked="AutoFormatListsCheckBox_Changed"/>
                     </StackPanel>
                 </Border>
 

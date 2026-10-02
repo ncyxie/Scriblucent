@@ -8,6 +8,9 @@ namespace Scriblucent.Views;
 public partial class SimpleInputDialog : Window
 {
     private readonly OverlayDialogAnimator _overlayAnimator;
+    private readonly Func<string, bool>? _inputValidator;
+    private readonly string? _validationMessage;
+    private bool _isClosing;
 
     public SimpleInputDialog(string title, string prompt)
     {
@@ -17,12 +20,17 @@ public partial class SimpleInputDialog : Window
         Title = title;
         PromptText.Text = prompt;
         Loaded += SimpleInputDialog_Loaded;
+        InputBox.TextChanged += (_, _) => ValidateInput();
     }
 
-    public SimpleInputDialog(string title, string prompt, string initialText)
+    public SimpleInputDialog(string title, string prompt, string initialText,
+        Func<string, bool>? inputValidator = null, string? validationMessage = null)
         : this(title, prompt)
     {
+        _inputValidator = inputValidator;
+        _validationMessage = validationMessage;
         InputBox.Text = initialText ?? string.Empty;
+        ValidateInput();
         InputBox.SelectAll();
         InputBox.Focus();
     }
@@ -45,7 +53,17 @@ public partial class SimpleInputDialog : Window
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        BeginCloseAnimation(true);
+        if (ValidateInput()) BeginCloseAnimation(true);
+    }
+
+    private bool ValidateInput()
+    {
+        bool valid = _inputValidator?.Invoke(InputText) ?? true;
+        ConfirmButton.IsEnabled = valid;
+        ValidationText.Text = valid ? string.Empty : _validationMessage ?? string.Empty;
+        ValidationText.Visibility = !valid && !string.IsNullOrEmpty(_validationMessage)
+            ? Visibility.Visible : Visibility.Collapsed;
+        return valid;
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
@@ -65,6 +83,8 @@ public partial class SimpleInputDialog : Window
 
     private void BeginCloseAnimation(bool accepted)
     {
+        if (_isClosing) return;
+        _isClosing = true;
         _overlayAnimator.BeginClose(() =>
         {
             DialogResult = accepted;

@@ -121,6 +121,8 @@ public class AppSettings
 
     public bool IsEditorWordWrapEnabled { get; set; } = true;
 
+    public bool AutoFormatLists { get; set; } = true;
+
     /// <summary>Master on/off switch for the note editor's spell checker - on by default, matching
     /// the app's own initial hardcoded behavior before this became a setting. Which single
     /// language is actually checked against is SpellCheckLanguageKey.</summary>

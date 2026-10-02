@@ -66,6 +66,8 @@ public enum AppIconKind
     ZoomOut,
     ZoomReset,
     Bullet,
+    IndentIncrease,
+    IndentDecrease,
     Play,
     Pause,
     Lightbulb,

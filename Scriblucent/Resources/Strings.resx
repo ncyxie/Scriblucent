@@ -1111,4 +1111,19 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="TableMoveColumnLeft" xml:space="preserve"><value>Column left</value></data>
   <data name="TableMoveColumnRight" xml:space="preserve"><value>Column right</value></data>
   <data name="TableClearColumn" xml:space="preserve"><value>Column</value></data>
+  <data name="ListToggleCheckbox" xml:space="preserve"><value>Toggle checkbox</value></data>
+  <data name="ListRestartNumbering" xml:space="preserve"><value>Restart at 1</value></data>
+  <data name="ListContinueNumbering" xml:space="preserve"><value>Continue numbering</value></data>
+  <data name="ListSetStartingValue" xml:space="preserve"><value>Set starting value…</value></data>
+  <data name="ListStartingValueHint" xml:space="preserve"><value>Starting value (a positive whole number)</value></data>
+  <data name="ListDecreaseIndent" xml:space="preserve"><value>Decrease list level (Ctrl+Shift+M)</value></data>
+  <data name="ListIncreaseIndent" xml:space="preserve"><value>Increase list level (Ctrl+M)</value></data>
+  <data name="AutoFormatLists" xml:space="preserve"><value>Create lists as you type</value></data>
+  <data name="AutoFormatListsHint" xml:space="preserve"><value>Type *, -, 1., [] or [ ] and press Space at the start of a paragraph.</value></data>
+  <data name="ListMixedStyles" xml:space="preserve"><value>Mixed list styles</value></data>
+  <data name="ListApply" xml:space="preserve"><value>Apply</value></data>
+  <data name="EditorListGroup" xml:space="preserve"><value>Lists:</value></data>
+  <data name="EditorInsertGroup" xml:space="preserve"><value>Insert:</value></data>
+  <data name="ListStartingValueInvalid" xml:space="preserve"><value>Enter a whole number from 1 to 2,147,483,647.</value></data>
+  <data name="EditCaption" xml:space="preserve"><value>Edit caption</value></data>
 </root>

@@ -30,13 +30,18 @@
         </controls:OverlayDialogShell.Header>
 
         <controls:OverlayDialogShell.Body>
-            <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                    Background="{DynamicResource WindowBackground}"
-                    Margin="0,0,0,14">
-                <TextBox x:Name="InputBox"
-                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                         FontSize="{StaticResource Type.Meta}"/>
-            </Border>
+            <StackPanel>
+                <Border Style="{StaticResource ChromeFieldBorderStyle}"
+                        Background="{DynamicResource WindowBackground}"
+                        Margin="0,0,0,14">
+                    <TextBox x:Name="InputBox"
+                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                             FontSize="{StaticResource Type.Meta}"/>
+                </Border>
+                <TextBlock x:Name="ValidationText" Visibility="Collapsed"
+                           Foreground="{DynamicResource AccentDanger}" TextWrapping="Wrap"
+                           FontSize="{StaticResource Type.Caption}" Margin="0,0,0,12"/>
+            </StackPanel>
         </controls:OverlayDialogShell.Body>
 
         <controls:OverlayDialogShell.Footer>
@@ -48,7 +53,8 @@
                         Padding="14,7"
                         Margin="0,0,8,0"
                         Click="Cancel_Click"/>
-                <Button Content="{Binding [Ok], Source={StaticResource Loc}}"
+                <Button x:Name="ConfirmButton" Content="{Binding [Ok], Source={StaticResource Loc}}"
+                        IsDefault="True"
                         Style="{StaticResource DialogPrimaryButtonStyle}"
                         MinWidth="84"
                         Padding="14,7"

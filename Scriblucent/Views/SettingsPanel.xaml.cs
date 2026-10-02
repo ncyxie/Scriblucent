@@ -141,6 +141,7 @@ namespace Scriblucent.Views
             EnableVerticalScrollbarCheckBox.IsChecked = settings.EnableVerticalScrollbar;
             EnableHorizontalScrollbarCheckBox.IsChecked = settings.EnableHorizontalScrollbar;
             EnableAutoSaveCheckBox.IsChecked = settings.EnableAutoSave;
+            AutoFormatListsCheckBox.IsChecked = settings.AutoFormatLists;
 
             UpdateAutoSaveIntervalControls(settings.AutoSaveIntervalSeconds);
 
@@ -1531,6 +1532,14 @@ namespace Scriblucent.Views
 
         private void DefaultNoteTemplate_SelectionChanged(object sender, SelectionChangedEventArgs e)
             => SaveDefaultNoteTemplate();
+
+        private void AutoFormatListsCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings) return;
+            var settings = AppSettingsService.Load();
+            settings.AutoFormatLists = AutoFormatListsCheckBox.IsChecked == true;
+            AppSettingsService.Save(settings);
+        }
 
         private void DefaultNoteWordWrapCheckBox_Changed(object sender, RoutedEventArgs e)
             => SaveDefaultNoteTemplate();

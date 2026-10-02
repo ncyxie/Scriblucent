@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
@@ -169,21 +169,6 @@ namespace Scriblucent
         private bool _isInsertingPicture;
         private bool _isInsertingSketch;
         private const int MaxEditHistoryEntries = 100;
-        // Checklist items are plain text (glyph + separator) followed by the item's own runs, not
-        // a real embedded control - see ChecklistButton_Click for why. That keeps them round-
-        // tripping through the existing XamlPackage save/load automatically, same as Bold/Italic/
-        // Underline, with no custom-UIElement marker-swap serialization needed.
-        private const string ChecklistUncheckedGlyph = "☐";
-        private const string ChecklistCheckedGlyph = "☑";
-        private const string ChecklistPrefixSeparator = " ";
-        private static readonly SolidColorBrush ChecklistCompletedForegroundBrush = CreateChecklistCompletedForegroundBrush();
-
-        private static SolidColorBrush CreateChecklistCompletedForegroundBrush()
-        {
-            var brush = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-            brush.Freeze();
-            return brush;
-        }
 
         /// <summary>Draws spell-check waves with a tiled zigzag brush. Baseline keeps the
         /// decoration independent of underline and strikethrough formatting.</summary>
@@ -407,6 +392,7 @@ namespace Scriblucent
             // spell-check suggestions menu for a right-click that landed on a misspelled word.
             _defaultContentTextBoxContextMenu = ContentTextBox.ContextMenu;
             InitializeTableEditing();
+            InitializeListEditing();
             ContentTextBox.ContextMenuOpening += ContentTextBox_ContextMenuOpening;
             PreviewKeyDown += NoteEditorWindow_PreviewKeyDown;
             PreviewKeyUp += NoteEditorWindow_PreviewKeyUp;
@@ -438,7 +424,13 @@ namespace Scriblucent
             _floatingImages.CutRequested += FloatingImages_CutRequested;
             _floatingImages.ChangePictureRequested += FloatingImages_ChangePictureRequested;
             _floatingImages.CaptionRequested += FloatingImages_CaptionRequested;
-            _floatingImages.SelectionChanged += (_, _) => UpdateInsertCaptionAvailability();
+            _floatingImages.SelectionChanged += (_, _) =>
+            {
+                UpdateInsertCaptionAvailability();
+                if (_floatingImages.SelectedImageId is not null) UpdateFormattingToolbarState();
+                ScheduleSelectionChromeRefresh();
+            };
+            UpdateInsertCaptionAvailability();
 
             // Square text wrap around floating images (paragraph lane margins, recomputed on
             // text/size changes and cleared before any content serialization).
@@ -1604,7 +1596,7 @@ namespace Scriblucent
             // never in SelectionChanged or a scroll callback.
             if (!SelectionExtendsOutsideViewport())
                 UpdateFontButtonText();
-            UpdateListRemoveButtonState();
+            UpdateFormattingToolbarState();
         }
 
         private void FontButton_ToolTipOpening(object sender, ToolTipEventArgs e)
@@ -1922,6 +1914,9 @@ namespace Scriblucent
         private void ContentTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             TableEditor_TextChanged(e);
+            if (!_isLoadingDocument && !_isApplyingEditorEdgeSpacing && !_isSerializingEditorContent
+                && !_isApplyingHyperlinkCtrlHints && !_isApplyingSpellCheckDecorations && !_floatingImages.IsAdjustingExtentPad)
+                _lists?.TextChanged(e);
             if (_isApplyingEditorEdgeSpacing)
             {
                 InvalidateSelectionTiles();
@@ -2315,6 +2310,7 @@ namespace Scriblucent
                 return;
 
             _editorChangeVersion++;
+            ScheduleSelectionChromeRefresh();
         }
 
         private void OnlineSearchButton_Click(object sender, RoutedEventArgs e)
@@ -2440,7 +2436,8 @@ namespace Scriblucent
             RowDefinition row,
             FrameworkElement content,
             bool expand,
-            Action? onCollapsed = null)
+            Action? onCollapsed = null,
+            Action? onExpanded = null)
         {
             if (row == null)
                 return;
@@ -2456,6 +2453,8 @@ namespace Scriblucent
                 row.Height = new GridLength(Math.Max(0, targetHeight), GridUnitType.Pixel);
                 if (!expand)
                     onCollapsed?.Invoke();
+                else
+                    onExpanded?.Invoke();
                 return;
             }
 
@@ -2470,6 +2469,8 @@ namespace Scriblucent
                 {
                     if (!expand)
                         onCollapsed?.Invoke();
+                    else
+                        onExpanded?.Invoke();
                 });
         }
 
@@ -2798,10 +2799,10 @@ namespace Scriblucent
             if (TryHandleFloatingImageKey(e))
                 return;
 
-            if (TryHandleEditorTabKey(e))
+            if (TryHandleChecklistKey(e))
                 return;
 
-            if (TryHandleChecklistEnterKey(e))
+            if (TryHandleEditorTabKey(e))
                 return;
         }
 
@@ -2811,6 +2812,7 @@ namespace Scriblucent
         private void RootGrid_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (TryHandleTableKey(e)) return;
+            if (TryHandleChecklistKey(e)) return;
             if (_selectionCollapsedForScroll
                 && Keyboard.FocusedElement is DependencyObject focused
                 && (ReferenceEquals(focused, ContentTextBox) || IsEditorDescendant(focused))
@@ -4518,6 +4520,7 @@ namespace Scriblucent
                 {
                     _isLoadingDocument = true;
                     _currentDocument = document; // Set current document
+                    _indentSize = NormalizeIndentSize(document.IndentSize ?? AppSettingsService.Load().PreferredIndentSize);
                     SuspendEditorEdgeSpacing();
                     TitleTextBox.Text = document.Title;
                     TagsTextBox.Text = string.Join(", ", document.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).Select(tag => tag.Trim()));
@@ -4545,14 +4548,14 @@ namespace Scriblucent
                                 {
                                     using (MemoryStream ms = new MemoryStream(bytes))
                                     {
-                                        tr.Load(ms, DataFormats.Rtf);
+                                        ListEditor.LoadContent(ms, DataFormats.Rtf);
                                     }
                                 }
                                 else if (bytes[0] == 0x50 && bytes[1] == 0x4B) // ZIP / XamlPackage
                                 {
                                     using (MemoryStream ms = new MemoryStream(bytes))
                                     {
-                                        tr.Load(ms, DataFormats.XamlPackage);
+                                        ListEditor.LoadContent(ms, DataFormats.XamlPackage);
                                     }
                                 }
                                 else
@@ -4574,6 +4577,7 @@ namespace Scriblucent
                     _isWordWrapEnabled = document.IsWordWrapEnabled ?? settings.IsEditorWordWrapEnabled;
                     if (document.IndentSize is double noteIndent && noteIndent > 0)
                         _indentSize = NormalizeIndentSize(noteIndent);
+                    ListEditor.NormalizeLegacy(resetHistory: false);
                     SyncIndentSizeSelectorFromPreference();
                     SetFontPanelOpen(
                         document.IsEditorFontPanelOpen ?? settings.IsEditorFontPanelOpen,
@@ -4646,6 +4650,9 @@ namespace Scriblucent
             finally
             {
                 ApplyEditorEdgeSpacing();
+                ContentTextBox.IsUndoEnabled = false;
+                ContentTextBox.IsUndoEnabled = true;
+                ListEditor.ResetHistory();
                 _isLoadingDocument = false;
                 _floatingImages.SuppressMarkerSweep = false;
                 UpdateEditedIndicator();
@@ -4907,6 +4914,21 @@ namespace Scriblucent
 
         private void ContentTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
+            if (!_isLoadingDocument && Keyboard.Modifiers == ModifierKeys.None
+                && AppSettingsService.Load().AutoFormatLists && ListEditor.AutoStart(e.Text))
+            {
+                e.Handled = true;
+                return;
+            }
+            if (ContentTextBox.Selection.IsEmpty && ContentTextBox.CaretPosition.Paragraph is { } checkboxParagraph
+                && EditorLists.Checkbox(checkboxParagraph, out var checkboxTextStart, out _)
+                && ContentTextBox.CaretPosition.CompareTo(checkboxTextStart) < 0)
+                ContentTextBox.CaretPosition = checkboxTextStart;
+            if (!ContentTextBox.Selection.IsEmpty && ListEditor.HasList && !string.IsNullOrEmpty(e.Text))
+            {
+                ListEditor.ReplaceSelection(e.Text);
+                e.Handled = true;
+            }
             if (!string.IsNullOrEmpty(e.Text))
             {
                 Scriblucent.Services.ActivityTracker.RecordTyping(e.Text.Length, 0);
@@ -4916,6 +4938,7 @@ namespace Scriblucent
         private void ContentTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (TryHandleTableKey(e)) return;
+            if (TryHandleChecklistKey(e)) return;
             if (TryHandleEditorTabKey(e))
                 return;
 
@@ -4941,10 +4964,12 @@ namespace Scriblucent
             }
 
             var action = EditorPaste.Resolve(mode, data);
-            if (action != EditorPaste.PasteAction.Image)
+            var pasteStartOffset = ContentTextBox.Document.ContentStart.GetOffsetToPosition(ContentTextBox.Selection.Start);
+            void ApplyPasteSpacing()
             {
-                QueuePastedTextSpacing(ContentTextBox,
-                    (start, end) => ApplyLineSpacingToRange(start, end, _lineSpacingMultiplier));
+                var pasteStart = ContentTextBox.Document.ContentStart.GetPositionAtOffset(pasteStartOffset);
+                if (pasteStart is not null && pasteStart.CompareTo(ContentTextBox.Selection.End) < 0)
+                    ApplyLineSpacingToRange(pasteStart, ContentTextBox.Selection.End, _lineSpacingMultiplier);
             }
 
             switch (action)
@@ -4954,18 +4979,31 @@ namespace Scriblucent
                     e.CancelCommand();
                     e.Handled = true;
                     return;
-                case EditorPaste.PasteAction.RichFragment when EditorPaste.TryPasteRich(ContentTextBox, data):
-                    e.CancelCommand();
-                    e.Handled = true;
-                    MarkEditorContentChanged();
-                    UpdateEditedIndicator();
-                    return;
+                case EditorPaste.PasteAction.RichFragment:
+                    bool pasted = false;
+                    ListEditor.Mutate(() =>
+                    {
+                        pasted = EditorPaste.TryPasteRich(ContentTextBox, data);
+                        if (pasted)
+                        {
+                            ApplyPasteSpacing();
+                            ContentTextBox.CaretPosition = ContentTextBox.Selection.End;
+                        }
+                    });
+                    if (pasted)
+                    {
+                        e.CancelCommand(); e.Handled = true;
+                        MarkEditorContentChanged(); UpdateEditedIndicator();
+                        return;
+                    }
+                    break;
             }
 
-            if (data.GetDataPresent(DataFormats.UnicodeText))
-                e.FormatToApply = DataFormats.UnicodeText;
-            else if (data.GetDataPresent(DataFormats.Text))
-                e.FormatToApply = DataFormats.Text;
+            if (EditorPaste.PlainText(data) is { } plainText)
+            {
+                ListEditor.PasteText(plainText, ApplyPasteSpacing);
+                e.CancelCommand(); e.Handled = true;
+            }
         }
 
         internal static DispatcherOperation QueuePastedTextSpacing(
@@ -5199,7 +5237,8 @@ namespace Scriblucent
 
         private void ContentTextBox_CutExecuted(object sender, ExecutedRoutedEventArgs e)
         {
-            if (!_selectionCollapsedForScroll)
+            if (_floatingImages.SelectedImageId is not null
+                || !_selectionCollapsedForScroll && ContentTextBox.Selection.IsEmpty)
                 return;
 
             e.Handled = true;
@@ -5207,7 +5246,7 @@ namespace Scriblucent
             if (!CopyEditorSelectionToClipboard())
                 return;
 
-            ContentTextBox.Selection.Text = string.Empty;
+            ListEditor.Mutate(() => ContentTextBox.Selection.Text = string.Empty);
             QueueSelectionOverlay();
         }
 
@@ -5253,8 +5292,7 @@ namespace Scriblucent
                 var plainText = GetClipboardPlainText(selection, out var convertedIndentationForPlainText);
                 dataObject.SetText(plainText, TextDataFormat.UnicodeText);
                 dataObject.SetText(plainText, TextDataFormat.Text);
-                if (!convertedIndentationForPlainText)
-                    TryAddSelectionRtfToClipboardData(dataObject, selection);
+                TryAddSelectionRtfToClipboardData(dataObject, selection);
                 Clipboard.SetDataObject(dataObject, true);
                 return true;
             }
@@ -5289,8 +5327,8 @@ namespace Scriblucent
                 if (prefix.Length > 0)
                     convertedIndentationForPlainText = true;
 
-                var paragraphText = new TextRange(paragraph.ContentStart, paragraph.ContentEnd).Text;
-                paragraphText = TrimSingleTrailingLineBreak(paragraphText)
+                var paragraphText = BuildListParagraphClipboardText(paragraph);
+                paragraphText = paragraphText
                     .Replace("\r\n", "\n", StringComparison.Ordinal)
                     .Replace('\r', '\n');
 
@@ -5308,6 +5346,11 @@ namespace Scriblucent
 
         private string ResolveParagraphMarginIndentClipboardPrefix(Paragraph paragraph)
         {
+            if (EditorLists.Ancestor<ListItem>(paragraph) is { } item)
+            {
+                int depth = item.Parent is System.Windows.Documents.List list ? ListEditor.NestingDepth(list) : 0;
+                return new string('\t', depth);
+            }
             var indentLevel = (int)Math.Round(
                 NormalizeAppliedIndent(paragraph.Margin.Left) / NormalizeIndentSize(_indentSize),
                 MidpointRounding.AwayFromZero);
@@ -5384,6 +5427,12 @@ namespace Scriblucent
             {
                 if (!decreaseIndent)
                     return TryInsertIndentAtCaret();
+
+                if (EditorLists.Ancestor<ListItem>(selection.Start.Parent) is not null)
+                {
+                    TryRemoveIndentBeforeCaret();
+                    return true;
+                }
 
                 return TryRemoveIndentBeforeCaret() || AdjustEditorIndent(decreaseIndent);
             }
@@ -6219,7 +6268,7 @@ namespace Scriblucent
             var text = sb.ToString().Replace('\uFFFC', ' ');
 
             // Collapse multiple spaces (from uFFFC replacement or formatting)
-            text = Regex.Replace(text, @"[^\S\n]+", " ");
+            text = Regex.Replace(text, @"(?<=\S)[^\S\r\n]+", " ");
 
             // Collapse multiple blank lines into one
             text = Regex.Replace(text, @"\n{3,}", "\n\n");
@@ -6249,7 +6298,7 @@ namespace Scriblucent
                     target.AppendLine();
                     break;
                 case System.Windows.Documents.List list:
-                    var itemIndex = 0;
+                    var itemIndex = list.StartIndex - 1;
                     foreach (ListItem item in list.ListItems)
                     {
                         itemIndex++;
@@ -6271,36 +6320,8 @@ namespace Scriblucent
         private static string GetListMarker(TextMarkerStyle style, int index, int depth)
         {
             var indent = new string(' ', depth * 2);
-            return style switch
-            {
-                TextMarkerStyle.Disc => $"{indent}- ",
-                TextMarkerStyle.Circle => $"{indent}• ",
-                TextMarkerStyle.Square => $"{indent}■ ",
-                TextMarkerStyle.Decimal => $"{indent}{index}. ",
-                TextMarkerStyle.LowerLatin => $"{indent}{(char)('a' + index - 1)}. ",
-                TextMarkerStyle.UpperLatin => $"{indent}{(char)('A' + index - 1)}. ",
-                TextMarkerStyle.LowerRoman => $"{indent}{ToRoman(index).ToLowerInvariant()}. ",
-                TextMarkerStyle.UpperRoman => $"{indent}{ToRoman(index)}. ",
-                _ => $"{indent}- "
-            };
-        }
-
-        private static string ToRoman(int number)
-        {
-            if (number < 1 || number > 3999) return number.ToString();
-            var sb = new StringBuilder();
-            var vals = new[] { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
-            var syms = new[] { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
-            for (var i = 0; i < vals.Length; i++)
-            {
-                while (number >= vals[i])
-                {
-                    sb.Append(syms[i]);
-                    number -= vals[i];
-                }
-            }
-            return sb.ToString();
-        }
+            return indent + EditorLists.Marker(style, index);
+       }
 
         private static void AppendInlineTextForAi(InlineCollection inlines, StringBuilder target)
         {
@@ -6675,7 +6696,7 @@ namespace Scriblucent
         private void AppendParagraphPlainTextForFileExport(Paragraph paragraph, ICollection<string> lines)
         {
             var prefix = ResolveParagraphMarginIndentClipboardPrefix(paragraph);
-            var paragraphText = new TextRange(paragraph.ContentStart, paragraph.ContentEnd).Text;
+            var paragraphText = BuildListParagraphClipboardText(paragraph);
             AppendPlainTextLinesForFileExport(paragraphText, prefix, lines);
         }
 
@@ -7040,7 +7061,7 @@ namespace Scriblucent
 
                 if (string.IsNullOrEmpty(content))
                 {
-                    tr.Text = string.Empty;
+                    ListEditor.ReplaceContent(string.Empty);
                     SyncFontSelectorsFromSelection();
                     return;
                 }
@@ -7055,14 +7076,14 @@ namespace Scriblucent
                         {
                             using (MemoryStream ms = new MemoryStream(bytes))
                             {
-                                tr.Load(ms, DataFormats.Rtf);
+                                ListEditor.LoadContent(ms, DataFormats.Rtf);
                             }
                         }
                         else if (bytes[0] == 0x50 && bytes[1] == 0x4B) // ZIP / XamlPackage
                         {
                             using (MemoryStream ms = new MemoryStream(bytes))
                             {
-                                tr.Load(ms, DataFormats.XamlPackage);
+                                ListEditor.LoadContent(ms, DataFormats.XamlPackage);
                             }
                         }
                         else
@@ -7073,7 +7094,7 @@ namespace Scriblucent
                 }
                 catch (FormatException)
                 {
-                    tr.Text = content;
+                    ListEditor.ReplaceContent(content ?? string.Empty);
                 }
 
                 SyncFontSelectorsFromSelection();
@@ -7082,6 +7103,7 @@ namespace Scriblucent
             {
                 _suspendEditorEdgeSpacingForLoad = false;
                 RemoveLegacyEditorEndPads();
+                ListEditor.NormalizeLegacy(resetHistory: false);
             }
         }
 
@@ -7126,6 +7148,7 @@ namespace Scriblucent
             var fontFamily = CreateEditorFontFamily(fontName);
             ContentTextBox.Focus();
             _isApplyingTypography = true;
+            if (selectionChangesDocument) ContentTextBox.BeginChange();
             try
             {
                 // WPF normalizes the first insertion into an empty paragraph and can
@@ -7133,9 +7156,11 @@ namespace Scriblucent
                 if (!selectionChangesDocument && EditorEdgeSpacing.IsEmpty(ContentTextBox.Document))
                     ContentTextBox.FontFamily = fontFamily;
                 ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, fontFamily);
+                if (selectionChangesDocument) ListEditor.RefreshLayout();
             }
             finally
             {
+                if (selectionChangesDocument) ContentTextBox.EndChange();
                 _isApplyingTypography = false;
             }
 
@@ -7216,10 +7241,10 @@ namespace Scriblucent
             var selectionEnd = selection?.End;
             var selectionChangesDocument = selection is { IsEmpty: false };
             var isEmptyNote = !selectionChangesDocument && EditorEdgeSpacing.IsEmpty(ContentTextBox.Document);
-            var activeLists = GetActiveDocumentLists();
 
             ContentTextBox.Focus();
             _isApplyingTypography = true;
+            if (selectionChangesDocument) ContentTextBox.BeginChange();
             try
             {
                 if (isEmptyNote)
@@ -7231,10 +7256,9 @@ namespace Scriblucent
                 ContentTextBox.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
                 if (selectionChangesDocument)
                 {
-                    Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
-                    SyncListMarkerAppearance(activeLists, size, markerForeground);
                     ApplyLineSpacingToInlineFormattingTargetIfNeeded(size);
                     _floatingImages.SyncInlineParagraphLineStrategies();
+                    ListEditor.RefreshLayout();
                 }
                 else
                 {
@@ -7245,8 +7269,9 @@ namespace Scriblucent
             }
             finally
             {
+                if (selectionChangesDocument) ContentTextBox.EndChange();
                 _isApplyingTypography = false;
-            }
+        }
 
             // Reselecting an empty range discards WPF's pending typing format. Keep the
             // caret's font size for the next characters, Word-style.
@@ -7263,14 +7288,17 @@ namespace Scriblucent
 
         private void ClearFormattingButton_Click(object sender, RoutedEventArgs e)
         {
+            MaterializeSelectionForAction();
             var selection = ContentTextBox.Selection;
-            selection.ClearAllProperties();
-
-            // ClearAllProperties leaves some brushes as UnsetValue; normalize colors/decorations
-            // the same way the color-clear menu items do so theme defaults apply cleanly.
-            ApplySelectionColor(TextElement.ForegroundProperty, null);
-            ApplySelectionColor(TextElement.BackgroundProperty, null);
-            selection.ApplyPropertyValue(Inline.TextDecorationsProperty, new TextDecorationCollection());
+            ListEditor.Mutate(() =>
+            {
+                selection.ClearAllProperties();
+                // Normalize brushes left unset by WPF and retain list marker alignment.
+                ApplySelectionColor(TextElement.ForegroundProperty, null);
+                ApplySelectionColor(TextElement.BackgroundProperty, null);
+                selection.ApplyPropertyValue(Inline.TextDecorationsProperty, new TextDecorationCollection());
+                ListEditor.RefreshLayout();
+            });
 
             SyncFontSelectorsFromSelection();
             UpdateFontButtonText();
@@ -7328,13 +7356,16 @@ namespace Scriblucent
                 return;
             }
 
+            var previousIndentSize = _indentSize;
             _indentSize = NormalizeIndentSize(indentSize);
+            RunListEdit(() => ListEditor.ChangeIndentStep(previousIndentSize));
             MarkEditorContentChanged();
             UpdateEditedIndicator();
         }
 
         private void FontSettings_Click(object sender, RoutedEventArgs e)
         {
+            if (!_isFontPanelOpen) MaterializeSelectionForAction();
             SetFontPanelOpen(!_isFontPanelOpen, animate: true);
             UpdateFontButtonText();
         }
@@ -7357,7 +7388,7 @@ namespace Scriblucent
             {
                 UiMotion.Clear(FontPanelRow, RowDefinition.HeightProperty);
                 FontPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-                FontPanelRow.Height = new GridLength(isOpen ? MeasureRowContent(FontPanel) : 0, GridUnitType.Pixel);
+                FontPanelRow.Height = isOpen ? GridLength.Auto : new GridLength(0);
                 return;
             }
 
@@ -7372,6 +7403,14 @@ namespace Scriblucent
                 {
                     if (!_isFontPanelOpen)
                         FontPanel.Visibility = Visibility.Collapsed;
+                },
+                onExpanded: () =>
+                {
+                    if (_isFontPanelOpen)
+                    {
+                        UiMotion.Clear(FontPanelRow, RowDefinition.HeightProperty);
+                        FontPanelRow.Height = GridLength.Auto;
+                    }
                 });
         }
 
@@ -7940,23 +7979,49 @@ namespace Scriblucent
         /// Underline/Strikethrough toolbar toggles and checklist item completion styling.</summary>
         private static void SetRangeTextDecoration(TextRange range, TextDecoration decoration, bool enabled)
         {
-            var currentValue = range.GetPropertyValue(Inline.TextDecorationsProperty);
-            var currentDecorations = currentValue as TextDecorationCollection ?? new TextDecorationCollection();
-            var hasDecoration = currentDecorations.Any(d => d.Location == decoration.Location);
-            if (hasDecoration == enabled)
-                return;
+            // GetPropertyValue returns UnsetValue for a range with mixed formatting. Walking
+            // text runs lets the off path clear each run, even when only some of the item's
+            // words were previously struck through.
+            var pointer = range.Start;
+            while (pointer.CompareTo(range.End) < 0)
+            {
+                if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                {
+                    var runText = pointer.GetTextInRun(LogicalDirection.Forward);
+                    if (runText.Length > 0)
+                    {
+                        var next = pointer.GetPositionAtOffset(runText.Length, LogicalDirection.Forward);
+                        if (next is null || next.CompareTo(pointer) <= 0)
+                            break;
+                        if (next.CompareTo(range.End) > 0)
+                            next = range.End;
 
-            var newDecorations = new TextDecorationCollection(
-                currentDecorations.Where(d => d.Location != decoration.Location));
-            if (enabled)
-                newDecorations.Add(decoration);
+                        var run = new TextRange(pointer, next);
+                        var currentValue = run.GetPropertyValue(Inline.TextDecorationsProperty);
+                        var currentDecorations = currentValue as TextDecorationCollection ?? new TextDecorationCollection();
+                        var hasDecoration = currentDecorations.Any(d => d.Location == decoration.Location);
+                        if (hasDecoration != enabled)
+                        {
+                            var newDecorations = new TextDecorationCollection(
+                                currentDecorations.Where(d => d.Location != decoration.Location));
+                            if (enabled)
+                                newDecorations.Add(decoration);
 
-            // TextRange.ApplyPropertyValue rejects DependencyProperty.UnsetValue for
-            // TextDecorations too (same ArgumentException("'NamedObject' parameter type is not
-            // valid...") already hit and fixed for Foreground/Background) - an empty
-            // TextDecorationCollection is a properly-typed value that means the same thing ("no
-            // decorations") and is accepted.
-            range.ApplyPropertyValue(Inline.TextDecorationsProperty, newDecorations);
+                            // An empty, typed collection means "no decorations" and is accepted
+                            // by ApplyPropertyValue, unlike DependencyProperty.UnsetValue.
+                            run.ApplyPropertyValue(Inline.TextDecorationsProperty, newDecorations);
+                        }
+
+                        pointer = next;
+                        continue;
+                    }
+                }
+
+                var stepped = pointer.GetNextContextPosition(LogicalDirection.Forward);
+                if (stepped is null || stepped.CompareTo(pointer) <= 0)
+                    break;
+                pointer = stepped;
+            }
         }
 
         private void TextColorButton_Click(object sender, RoutedEventArgs e)
@@ -9151,10 +9216,10 @@ namespace Scriblucent
         }
 
         private void BulletListButton_Click(object sender, RoutedEventArgs e)
-            => OpenButtonContextMenu(BulletListButton);
+            => RunListEdit(() => ListEditor.ApplyStyle(_lastBulletStyle, toggle: true, explicitStyle: false));
 
         private void NumberedListButton_Click(object sender, RoutedEventArgs e)
-            => OpenButtonContextMenu(NumberedListButton);
+            => RunListEdit(() => ListEditor.ApplyStyle(_lastNumberStyle, toggle: true, explicitStyle: false));
 
         private static void OpenButtonContextMenu(Button button)
         {
@@ -9182,345 +9247,44 @@ namespace Scriblucent
         private void ListNumberUpperRomanMenuItem_Click(object sender, RoutedEventArgs e)
             => ApplyListStyle(TextMarkerStyle.UpperRoman);
 
-        /// <summary>Toggle semantics matching bullet/numbered lists: if every targeted paragraph
-        /// is already a checklist item, strip the prefix from all of them; otherwise add it to
-        /// whichever ones don't have it yet (leaving already-checklist paragraphs untouched).</summary>
         private void ChecklistButton_Click(object sender, RoutedEventArgs e)
-        {
-            var paragraphs = GetTargetParagraphsForInlineFormatting();
-            if (paragraphs.Count == 0)
-                return;
+            => RunListEdit(() => ListEditor.ApplyStyle(TextMarkerStyle.None, toggle: true));
 
-            var allAreChecklistItems = paragraphs.All(IsChecklistParagraph);
-            var changeStarted = false;
-
-            try
-            {
-                ContentTextBox.BeginChange();
-                changeStarted = true;
-
-                foreach (var paragraph in paragraphs)
-                {
-                    if (allAreChecklistItems)
-                        RemoveChecklistPrefix(paragraph);
-                    else if (!IsChecklistParagraph(paragraph))
-                        InsertChecklistPrefix(paragraph, ChecklistUncheckedGlyph);
-                }
-            }
-            finally
-            {
-                if (changeStarted)
-                    ContentTextBox.EndChange();
-            }
-
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-            ContentTextBox.Focus();
-        }
-
-        private static bool IsChecklistParagraph(Paragraph paragraph)
-            => TryGetChecklistPrefixEnd(paragraph, out _, out _);
-
-        /// <summary>True if the paragraph starts with a checklist glyph + separator. When true,
-        /// prefixEnd is the position right after the separator (start of the item's own text) and
-        /// isChecked reflects which glyph. Reads via plain text (TextRange.Text), not by assuming
-        /// the glyph stays its own dedicated Run - WPF coalesces adjacent same-formatted Runs as
-        /// the user types, so a Run-identity check would break the moment someone typed past it.</summary>
         internal static bool TryGetChecklistPrefixEnd(Paragraph paragraph, out TextPointer? prefixEnd, out bool isChecked)
         {
-            prefixEnd = null;
-            isChecked = false;
-
-            var start = paragraph.ContentStart;
-            var text = new TextRange(start, paragraph.ContentEnd).Text;
-            if (text.StartsWith(ChecklistUncheckedGlyph + ChecklistPrefixSeparator, StringComparison.Ordinal))
-            {
-                isChecked = false;
-            }
-            else if (text.StartsWith(ChecklistCheckedGlyph + ChecklistPrefixSeparator, StringComparison.Ordinal))
-            {
-                isChecked = true;
-            }
-            else
-            {
-                return false;
-            }
-
-            // Walk real characters. GetPositionAtOffset also counts element edges, which
-            // lands the style on the gap after the box and sometimes on the box itself.
-            prefixEnd = AdvanceByCharacters(start, ChecklistUncheckedGlyph.Length + ChecklistPrefixSeparator.Length);
-            return prefixEnd != null;
+            var found = EditorLists.Checkbox(paragraph, out var textStart, out isChecked);
+            prefixEnd = found ? textStart : null;
+            return found;
         }
 
-        private static TextPointer? AdvanceByCharacters(TextPointer origin, int count)
+        private bool TryToggleChecklistGlyphAtPoint(Point point) => ListEditor.ToggleAt(point);
+
+        private bool TryHandleChecklistKey(KeyEventArgs e)
         {
-            var pointer = origin;
-            var remaining = count;
-            while (pointer != null && remaining > 0)
-            {
-                if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-                {
-                    var runText = pointer.GetTextInRun(LogicalDirection.Forward);
-                    if (runText.Length == 0)
-                    {
-                        pointer = pointer.GetNextContextPosition(LogicalDirection.Forward);
-                        continue;
-                    }
-
-                    var take = Math.Min(remaining, runText.Length);
-                    var next = pointer.GetPositionAtOffset(take, LogicalDirection.Forward);
-                    if (next == null || next.CompareTo(pointer) <= 0)
-                        return null;
-
-                    pointer = next;
-                    remaining -= take;
-                    continue;
-                }
-
-                var stepped = pointer.GetNextContextPosition(LogicalDirection.Forward);
-                if (stepped == null || stepped.CompareTo(pointer) <= 0)
-                    return null;
-
-                pointer = stepped;
-            }
-
-            return remaining == 0 ? pointer : null;
-        }
-
-        private static void InsertChecklistPrefix(Paragraph paragraph, string glyph)
-        {
-            var start = paragraph.ContentStart;
-            new TextRange(start, start).Text = glyph + ChecklistPrefixSeparator;
-        }
-
-        private static void RemoveChecklistPrefix(Paragraph paragraph)
-        {
-            if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
-                return;
-
-            // Clear completion styling before the prefix text goes away - once IsChecklistParagraph
-            // can no longer see the glyph there is nothing left to target it with.
-            ApplyChecklistCompletionStyle(paragraph, isChecked: false);
-            new TextRange(paragraph.ContentStart, prefixEnd).Text = string.Empty;
-        }
-
-        /// <summary>Strikethrough + dimmed foreground on the item's own text (after the prefix),
-        /// reusing the same per-decoration-Location toggle Underline/Strikethrough already use so
-        /// this never clobbers a decoration the user applied manually. The dimmed color is a fixed
-        /// neutral gray rather than a theme resource - simpler than re-walking every checked item
-        /// on ThemeManager.ThemeChanged, and reads acceptably in both themes.</summary>
-        internal static void ApplyChecklistCompletionStyle(Paragraph paragraph, bool isChecked)
-        {
-            if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
-                return;
-
-            // The box and the gap after it stay plain. Only the item's own words are struck.
-            SetRangeTextDecoration(new TextRange(paragraph.ContentStart, prefixEnd), TextDecorations.Strikethrough[0], enabled: false);
-
-            var itemRange = new TextRange(prefixEnd, paragraph.ContentEnd);
-            if (itemRange.IsEmpty)
-                return;
-
-            SetRangeTextDecoration(itemRange, TextDecorations.Strikethrough[0], isChecked);
-            itemRange.ApplyPropertyValue(
-                TextElement.ForegroundProperty,
-                isChecked ? ChecklistCompletedForegroundBrush : ResolveSelectionColorBrush(TextElement.ForegroundProperty, null));
-        }
-
-        /// <summary>Hit-tests a mouse-down against the checklist glyph at the very start of
-        /// whatever paragraph was clicked. Clicking the glyph itself toggles checked/unchecked;
-        /// clicking anywhere else on a checklist line just moves the caret as normal, same as any
-        /// other text.</summary>
-        private bool TryToggleChecklistGlyphAtPoint(Point point)
-        {
-            var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: true);
-            var paragraph = pointer?.Paragraph;
-            if (pointer is null || paragraph is null)
+            if (e.Handled || _floatingImages.SelectedImageId is not null || !IsEditorKeyboardFocusWithin(e.OriginalSource))
                 return false;
-
-            if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out var isChecked) || prefixEnd is null)
+            if (e.Key is not (Key.Tab or Key.Return or Key.Back or Key.Delete or Key.Home or Key.Left or Key.L or Key.M or Key.Up or Key.Down))
                 return false;
-
-            if (pointer.CompareTo(paragraph.ContentStart) < 0 || pointer.CompareTo(prefixEnd) >= 0)
-                return false;
-
-            var changeStarted = false;
-            try
+            MaterializeSelectionForAction();
+            bool handled = ListEditor.HandleKey(e.Key, Keyboard.Modifiers,
+                EditorLists.Ancestor<TableCell>(ContentTextBox.Selection.Start.Parent) is not null);
+            if (handled)
             {
-                ContentTextBox.BeginChange();
-                changeStarted = true;
-                new TextRange(paragraph.ContentStart, prefixEnd).Text =
-                    (isChecked ? ChecklistUncheckedGlyph : ChecklistCheckedGlyph) + ChecklistPrefixSeparator;
-                ApplyChecklistCompletionStyle(paragraph, !isChecked);
+                e.Handled = true;
+                MarkEditorContentChanged(); UpdateEditedIndicator(); UpdateFormattingToolbarState();
             }
-            finally
-            {
-                if (changeStarted)
-                    ContentTextBox.EndChange();
-            }
-
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-            return true;
-        }
-
-        /// <summary>Enter on a non-empty checklist item continues the list with a fresh unchecked
-        /// item, matching bullet/numbered lists. Enter on an EMPTY checklist item exits the list
-        /// instead (strips the prefix, then falls through to a normal paragraph break) - same
-        /// escape hatch Word/most editors give empty list items. Runs the native paragraph-break
-        /// command itself (rather than manually splitting Inlines) so arbitrary rich content -
-        /// images, mixed formatting - splits exactly the way native Enter would.</summary>
-        private bool TryHandleChecklistEnterKey(KeyEventArgs e)
-        {
-            if (e.Key != Key.Return
-                || (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift
-                || !IsEditorKeyboardFocusWithin(e.OriginalSource))
-            {
-                return false;
-            }
-
-            var selection = ContentTextBox.Selection;
-            if (selection is null || !selection.IsEmpty)
-                return false;
-
-            var paragraph = ContentTextBox.CaretPosition?.Paragraph;
-            if (paragraph is null || !TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
-                return false;
-
-            var itemIsEmpty = string.IsNullOrWhiteSpace(new TextRange(prefixEnd, paragraph.ContentEnd).Text);
-
-            var changeStarted = false;
-            try
-            {
-                ContentTextBox.BeginChange();
-                changeStarted = true;
-
-                if (itemIsEmpty)
-                {
-                    RemoveChecklistPrefix(paragraph);
-                    return false; // let the native Enter handler create a plain new paragraph
-                }
-
-                if (EditingCommands.EnterParagraphBreak.CanExecute(null, ContentTextBox))
-                    EditingCommands.EnterParagraphBreak.Execute(null, ContentTextBox);
-
-                var newParagraph = ContentTextBox.CaretPosition?.Paragraph;
-                if (newParagraph is not null && !IsChecklistParagraph(newParagraph))
-                {
-                    InsertChecklistPrefix(newParagraph, ChecklistUncheckedGlyph);
-                    ContentTextBox.CaretPosition = newParagraph.ContentStart.GetPositionAtOffset(2, LogicalDirection.Forward)
-                        ?? newParagraph.ContentStart;
-                    ContentTextBox.Selection.Select(ContentTextBox.CaretPosition, ContentTextBox.CaretPosition);
-                }
-            }
-            finally
-            {
-                if (changeStarted)
-                    ContentTextBox.EndChange();
-            }
-
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-            e.Handled = true;
-            return true;
+            return handled;
         }
 
         private void ListRemoveButton_Click(object sender, RoutedEventArgs e)
-        {
-            ContentTextBox.Focus();
-            var activeLists = GetActiveDocumentLists();
-            if (activeLists.Count == 0)
-                return;
-
-            var markerStyle = activeLists.First().MarkerStyle;
-            var command = IsNumberedMarkerStyle(markerStyle)
-                ? EditingCommands.ToggleNumbering
-                : EditingCommands.ToggleBullets;
-
-            if (command.CanExecute(null, ContentTextBox))
-                command.Execute(null, ContentTextBox);
-
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-            UpdateListRemoveButtonState();
-            ContentTextBox.Focus();
-        }
+            => RunListEdit(() => ListEditor.Remove());
 
         private void ApplyListStyle(TextMarkerStyle markerStyle)
         {
-            ContentTextBox.Focus();
-
-            var selection = ContentTextBox.Selection;
-            var selectionStart = selection?.Start;
-            var selectionEnd = selection?.End;
-
-            var activeLists = GetActiveDocumentLists();
-            if (activeLists.Count == 0)
-            {
-                var command = IsNumberedMarkerStyle(markerStyle)
-                    ? EditingCommands.ToggleNumbering
-                    : EditingCommands.ToggleBullets;
-
-                if (command.CanExecute(null, ContentTextBox))
-                    command.Execute(null, ContentTextBox);
-
-                activeLists = GetActiveDocumentLists();
-            }
-
-            foreach (var list in activeLists)
-            {
-                list.MarkerStyle = markerStyle;
-            }
-
-            var markerSize = ResolveCurrentSelectionTypography().FontSize;
-            if (markerSize <= 0)
-                markerSize = ContentTextBox.FontSize;
-            Brush? markerForeground = TryGetRichTextBoxForeground(out var brush) ? brush : null;
-            SyncListMarkerAppearance(activeLists, markerSize, markerForeground);
-
-            if (selectionStart is not null && selectionEnd is not null)
-                RefreshEditorSelectionLayout(selectionStart, selectionEnd);
-
-            MarkEditorContentChanged();
-            UpdateEditedIndicator();
-            UpdateListRemoveButtonState();
-            ContentTextBox.Focus();
+            if (EditorLists.Numbered(markerStyle)) _lastNumberStyle = markerStyle;
+            else _lastBulletStyle = markerStyle;
+            RunListEdit(() => ListEditor.ApplyStyle(markerStyle));
         }
-
-        /// <summary>
-        /// WPF draws list markers from List/ListItem FontSize and Foreground, not from Runs inside the paragraph.
-        /// Keep those in sync so bullets/numbers match the text size and theme.
-        /// </summary>
-        private static void SyncListMarkerAppearance(
-            IEnumerable<System.Windows.Documents.List> lists,
-            double? fontSize = null,
-            Brush? foreground = null)
-        {
-            double? normalizedSize = fontSize is double size
-                ? NormalizeEditorFontSize(size)
-                : null;
-
-            foreach (var list in lists)
-            {
-                if (normalizedSize.HasValue)
-                    list.FontSize = normalizedSize.Value;
-
-                if (foreground != null)
-                    list.Foreground = foreground;
-
-                list.ClearValue(System.Windows.Documents.List.MarkerOffsetProperty);
-
-                foreach (ListItem item in list.ListItems)
-                {
-                    if (normalizedSize.HasValue)
-                        item.FontSize = normalizedSize.Value;
-
-                    if (foreground != null)
-                        item.Foreground = foreground;
-                }
-            }
-        }
-
         private void RefreshEditorSelectionLayout(TextPointer selectionStart, TextPointer selectionEnd)
         {
             ContentTextBox.InvalidateVisual();
@@ -9536,33 +9300,33 @@ namespace Scriblucent
             }
         }
 
-        private void UpdateListRemoveButtonState()
+        private void UpdateFormattingToolbarState()
         {
             if (ListRemoveButton is null)
                 return;
 
-            ListRemoveButton.IsEnabled = GetActiveDocumentLists().Count > 0;
-        }
-
-        private HashSet<System.Windows.Documents.List> GetActiveDocumentLists()
-        {
-            var lists = new HashSet<System.Windows.Documents.List>();
-            var selection = ContentTextBox.Selection;
-
-            if (selection is null)
-                return lists;
-
-            if (selection.IsEmpty || SelectionExtendsOutsideViewport())
-            {
-                AddActiveDocumentList(ContentTextBox.CaretPosition ?? selection.Start, lists);
-                return lists;
-            }
-
-            CollectDocumentLists(ContentTextBox.Document.Blocks, selection.Start, selection.End, lists);
-            AddActiveDocumentList(selection.Start, lists);
-            AddActiveDocumentList(selection.End, lists);
-            AddActiveDocumentList(ContentTextBox.CaretPosition, lists);
-            return lists;
+            bool hasImage = _floatingImages?.SelectedImageId is not null;
+            bool hasList = !hasImage && ListEditor.HasList;
+            ListRemoveButton.IsEnabled = hasList;
+            EditorToolbarReveal.SetVisible(ListActionsSlot, hasList);
+            EditorToolbarReveal.SetVisible(ClearFormattingSlot, !hasImage && EditorToolbarContext.HasFormattingToClear(ContentTextBox));
+            FontToolsGroup.IsEnabled = TextToolsGroup.IsEnabled = SpacingToolsGroup.IsEnabled = !hasImage;
+            ListCreationToolsGroup.IsEnabled = IndentStepToolsGroup.IsEnabled = !hasImage;
+            var style = hasImage ? null : ListEditor.SelectionStyle;
+            SetEditorToolButtonActive(BulletListButton,
+                style is TextMarkerStyle.Disc or TextMarkerStyle.Circle or TextMarkerStyle.Square);
+            SetEditorToolButtonActive(NumberedListButton, style is { } marker && EditorLists.Numbered(marker));
+            SetEditorToolButtonActive(ChecklistButton, style == TextMarkerStyle.None);
+            var mixed = ListEditor.MixedSelection ? LocalizationService.GetString("ListMixedStyles") : string.Empty;
+            System.Windows.Automation.AutomationProperties.SetItemStatus(BulletListButton, mixed);
+            System.Windows.Automation.AutomationProperties.SetItemStatus(NumberedListButton, mixed);
+            System.Windows.Automation.AutomationProperties.SetItemStatus(ChecklistButton, mixed);
+            BulletListButton.ToolTip = LocalizationService.GetString("BulletListStyle") + (mixed.Length > 0 ? " — " + mixed : string.Empty);
+            NumberedListButton.ToolTip = LocalizationService.GetString("NumberedListStyle") + (mixed.Length > 0 ? " — " + mixed : string.Empty);
+            ChecklistButton.ToolTip = LocalizationService.GetString("Checklist") + (mixed.Length > 0 ? " — " + mixed : string.Empty);
+            ListIncreaseIndentButton.IsEnabled = hasList && ListEditor.CanIndent;
+            ListDecreaseIndentButton.IsEnabled = hasList;
+            ListContinueMenuItem.IsEnabled = hasList && ListEditor.CanContinue;
         }
 
         private bool SelectionExtendsOutsideViewport()
@@ -9583,115 +9347,6 @@ namespace Scriblucent
 
             return selection.Start.CompareTo(top) < 0 || selection.End.CompareTo(bottom) > 0;
         }
-
-        private HashSet<System.Windows.Documents.List> CollectAllDocumentLists()
-        {
-            var lists = new HashSet<System.Windows.Documents.List>();
-            CollectAllDocumentLists(ContentTextBox.Document.Blocks, lists);
-            return lists;
-        }
-
-        private static void CollectAllDocumentLists(
-            BlockCollection blocks,
-            ISet<System.Windows.Documents.List> lists)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case System.Windows.Documents.List list:
-                        lists.Add(list);
-                        foreach (ListItem item in list.ListItems)
-                            CollectAllDocumentLists(item.Blocks, lists);
-                        break;
-                    case Section section:
-                        CollectAllDocumentLists(section.Blocks, lists);
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                    CollectAllDocumentLists(cell.Blocks, lists);
-                            }
-                        }
-
-                        break;
-                }
-            }
-        }
-
-        private static void CollectDocumentLists(
-            BlockCollection blocks,
-            TextPointer start,
-            TextPointer end,
-            ISet<System.Windows.Documents.List> lists)
-        {
-            foreach (Block block in blocks)
-            {
-                switch (block)
-                {
-                    case System.Windows.Documents.List list:
-                        if (TextElementIntersectsRange(list, start, end))
-                            lists.Add(list);
-
-                        foreach (ListItem item in list.ListItems)
-                            CollectDocumentLists(item.Blocks, start, end, lists);
-
-                        break;
-                    case Section section:
-                        CollectDocumentLists(section.Blocks, start, end, lists);
-                        break;
-                    case Table table:
-                        foreach (TableRowGroup rowGroup in table.RowGroups)
-                        {
-                            foreach (TableRow row in rowGroup.Rows)
-                            {
-                                foreach (TableCell cell in row.Cells)
-                                    CollectDocumentLists(cell.Blocks, start, end, lists);
-                            }
-                        }
-
-                        break;
-                }
-            }
-        }
-
-        private static void AddActiveDocumentList(
-            TextPointer? pointer,
-            ISet<System.Windows.Documents.List> lists)
-        {
-            var list = FindAncestorDocumentList(pointer);
-            if (list != null)
-                lists.Add(list);
-        }
-
-        private static System.Windows.Documents.List? FindAncestorDocumentList(TextPointer? pointer)
-        {
-            DependencyObject? current = pointer?.Parent as DependencyObject;
-            while (current != null)
-            {
-                if (current is System.Windows.Documents.List list)
-                    return list;
-
-                current = current switch
-                {
-                    FrameworkContentElement contentElement => contentElement.Parent,
-                    FrameworkElement frameworkElement => frameworkElement.Parent,
-                    _ => LogicalTreeHelper.GetParent(current)
-                };
-            }
-
-            return null;
-        }
-
-        private static bool IsNumberedMarkerStyle(TextMarkerStyle markerStyle)
-            => markerStyle == TextMarkerStyle.Decimal
-                || markerStyle == TextMarkerStyle.LowerLatin
-                || markerStyle == TextMarkerStyle.UpperLatin
-                || markerStyle == TextMarkerStyle.LowerRoman
-                || markerStyle == TextMarkerStyle.UpperRoman;
 
         private void ToggleSelectionTextStyle(DependencyProperty property, object enabledValue, object disabledValue)
         {
@@ -10192,7 +9847,7 @@ namespace Scriblucent
                 {
                     // Clear all content from the RichTextBox
                     TextRange tr = new TextRange(ContentTextBox.Document.ContentStart, ContentTextBox.Document.ContentEnd);
-                    tr.Text = string.Empty;
+                    ListEditor.ReplaceContent(string.Empty);
                     MarkEditorContentChanged();
                     UpdateEditedIndicator();
                 }
@@ -10275,9 +9930,13 @@ namespace Scriblucent
             if (InsertCaptionButton is null)
                 return;
 
-            InsertCaptionButton.Visibility = _floatingImages.SelectedImageId is not null
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            var shouldShow = _floatingImages.SelectedImageId is not null;
+            string captionAction = shouldShow && _floatingImages.GetCaption(_floatingImages.SelectedImageId!.Value) is not null
+                ? "EditCaption" : "InsertCaption";
+            CaptionActionText.Text = LocalizationService.GetString(captionAction);
+            InsertCaptionButton.ToolTip = LocalizationService.GetString(captionAction);
+            System.Windows.Automation.AutomationProperties.SetName(InsertCaptionButton, LocalizationService.GetString(captionAction));
+            EditorToolbarReveal.SetVisible(CaptionActionsSlot, shouldShow);
         }
 
         private void FloatingImages_CaptionRequested(object? sender, Guid imageId)
@@ -10343,6 +10002,7 @@ namespace Scriblucent
                 .Where(label => !DefaultCaptionLabels.Contains(label))
                 .ToList();
             AppSettingsService.Save(settings);
+            UpdateInsertCaptionAvailability();
         }
 
         private void FloatingImages_CopyRequested(object? sender, Guid imageId)
@@ -10526,6 +10186,7 @@ namespace Scriblucent
                 try
                 {
                     textRange.Save(stream, DataFormats.XamlPackage);
+                    ListEditor.WriteMetadata(stream);
                 }
                 finally
                 {
