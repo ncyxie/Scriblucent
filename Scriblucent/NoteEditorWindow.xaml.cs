@@ -438,6 +438,7 @@ namespace Scriblucent
             _floatingImages.CutRequested += FloatingImages_CutRequested;
             _floatingImages.ChangePictureRequested += FloatingImages_ChangePictureRequested;
             _floatingImages.CaptionRequested += FloatingImages_CaptionRequested;
+            _floatingImages.SelectionChanged += (_, _) => UpdateInsertCaptionAvailability();
 
             // Square text wrap around floating images (paragraph lane margins, recomputed on
             // text/size changes and cleared before any content serialization).
@@ -1503,7 +1504,7 @@ namespace Scriblucent
 
         private static bool TryGetRichTextBoxForeground(out Brush foregroundBrush)
         {
-            if (Application.Current.Resources.Contains("RichTextBoxForeground")
+            if (Application.Current?.Resources.Contains("RichTextBoxForeground") == true
                 && Application.Current.Resources["RichTextBoxForeground"] is Brush brush)
             {
                 foregroundBrush = brush;
@@ -4926,8 +4927,9 @@ namespace Scriblucent
 
         private void ContentTextBox_Pasting(object sender, DataObjectPastingEventArgs e)
         {
-            // A picture with no text becomes a floating photo. Formatted text keeps the
-            // source font and styles. Either kind of text then takes this note's line spacing.
+            // A photo becomes one of this note's photos, including when the clipboard wraps
+            // the picture in HTML. Formatted text keeps the source font and styles, then
+            // takes this note's line spacing.
             if (e.DataObject is not { } data)
                 return;
 
@@ -4948,11 +4950,9 @@ namespace Scriblucent
             switch (action)
             {
                 case EditorPaste.PasteAction.Image:
-                    if (PasteImageFromDataObject(data))
-                    {
-                        e.CancelCommand();
-                        e.Handled = true;
-                    }
+                    PasteImageFromDataObject(data);
+                    e.CancelCommand();
+                    e.Handled = true;
                     return;
                 case EditorPaste.PasteAction.RichFragment when EditorPaste.TryPasteRich(ContentTextBox, data):
                     e.CancelCommand();
@@ -8731,11 +8731,13 @@ namespace Scriblucent
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Cut"), Command = ApplicationCommands.Cut });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Copy"), Command = ApplicationCommands.Copy });
             menu.Items.Add(new MenuItem { Header = LocalizationService.GetString("Paste"), Command = ApplicationCommands.Paste });
-            if (ClipboardHasRichFormatting())
+            if (ClipboardOffersTextPasteChoices())
             {
                 menu.Items.Add(CreatePasteModeMenuItem("PasteKeepFormatting", EditorPasteMode.KeepFormatting));
                 menu.Items.Add(CreatePasteModeMenuItem("PasteAsText", EditorPasteMode.TextOnly));
             }
+            if (ClipboardIsPhoto())
+                menu.Items.Add(CreatePasteAsPhotoMenuItem());
             if (ClipboardHasTableGrid())
                 menu.Items.Add(CreatePasteAsTableMenuItem());
             menu.Items.Add(new Separator());
@@ -9224,7 +9226,7 @@ namespace Scriblucent
         /// isChecked reflects which glyph. Reads via plain text (TextRange.Text), not by assuming
         /// the glyph stays its own dedicated Run - WPF coalesces adjacent same-formatted Runs as
         /// the user types, so a Run-identity check would break the moment someone typed past it.</summary>
-        private static bool TryGetChecklistPrefixEnd(Paragraph paragraph, out TextPointer? prefixEnd, out bool isChecked)
+        internal static bool TryGetChecklistPrefixEnd(Paragraph paragraph, out TextPointer? prefixEnd, out bool isChecked)
         {
             prefixEnd = null;
             isChecked = false;
@@ -9244,8 +9246,45 @@ namespace Scriblucent
                 return false;
             }
 
-            prefixEnd = start.GetPositionAtOffset(2, LogicalDirection.Forward);
+            // Walk real characters. GetPositionAtOffset also counts element edges, which
+            // lands the style on the gap after the box and sometimes on the box itself.
+            prefixEnd = AdvanceByCharacters(start, ChecklistUncheckedGlyph.Length + ChecklistPrefixSeparator.Length);
             return prefixEnd != null;
+        }
+
+        private static TextPointer? AdvanceByCharacters(TextPointer origin, int count)
+        {
+            var pointer = origin;
+            var remaining = count;
+            while (pointer != null && remaining > 0)
+            {
+                if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
+                {
+                    var runText = pointer.GetTextInRun(LogicalDirection.Forward);
+                    if (runText.Length == 0)
+                    {
+                        pointer = pointer.GetNextContextPosition(LogicalDirection.Forward);
+                        continue;
+                    }
+
+                    var take = Math.Min(remaining, runText.Length);
+                    var next = pointer.GetPositionAtOffset(take, LogicalDirection.Forward);
+                    if (next == null || next.CompareTo(pointer) <= 0)
+                        return null;
+
+                    pointer = next;
+                    remaining -= take;
+                    continue;
+                }
+
+                var stepped = pointer.GetNextContextPosition(LogicalDirection.Forward);
+                if (stepped == null || stepped.CompareTo(pointer) <= 0)
+                    return null;
+
+                pointer = stepped;
+            }
+
+            return remaining == 0 ? pointer : null;
         }
 
         private static void InsertChecklistPrefix(Paragraph paragraph, string glyph)
@@ -9270,12 +9309,18 @@ namespace Scriblucent
         /// this never clobbers a decoration the user applied manually. The dimmed color is a fixed
         /// neutral gray rather than a theme resource - simpler than re-walking every checked item
         /// on ThemeManager.ThemeChanged, and reads acceptably in both themes.</summary>
-        private static void ApplyChecklistCompletionStyle(Paragraph paragraph, bool isChecked)
+        internal static void ApplyChecklistCompletionStyle(Paragraph paragraph, bool isChecked)
         {
             if (!TryGetChecklistPrefixEnd(paragraph, out var prefixEnd, out _) || prefixEnd is null)
                 return;
 
+            // The box and the gap after it stay plain. Only the item's own words are struck.
+            SetRangeTextDecoration(new TextRange(paragraph.ContentStart, prefixEnd), TextDecorations.Strikethrough[0], enabled: false);
+
             var itemRange = new TextRange(prefixEnd, paragraph.ContentEnd);
+            if (itemRange.IsEmpty)
+                return;
+
             SetRangeTextDecoration(itemRange, TextDecorations.Strikethrough[0], isChecked);
             itemRange.ApplyPropertyValue(
                 TextElement.ForegroundProperty,
@@ -10223,6 +10268,16 @@ namespace Scriblucent
                 if (InsertPictureButton is not null)
                     InsertPictureButton.IsEnabled = true;
             }
+        }
+
+        private void UpdateInsertCaptionAvailability()
+        {
+            if (InsertCaptionButton is null)
+                return;
+
+            InsertCaptionButton.Visibility = _floatingImages.SelectedImageId is not null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         private void FloatingImages_CaptionRequested(object? sender, Guid imageId)

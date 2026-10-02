@@ -39,6 +39,37 @@ public class EditorPasteTests
     }
 
     [Fact]
+    public void A_photo_wrapped_in_html_stays_a_photo()
+    {
+        var data = new DataObject();
+        data.SetData("PNG", new byte[] { 137, 80, 78, 71 });
+        data.SetData(DataFormats.Html,
+            "Version:0.9\nStartHTML:00000000\n<html><body><!--StartFragment-->"
+            + "<img src=\"https://example.com/a.png\" alt=\"shot\"><!--EndFragment--></body></html>");
+        data.SetData(DataFormats.UnicodeText, "https://example.com/a.png");
+
+        Assert.True(EditorPaste.HasRichFormatting(data));
+        Assert.True(EditorPaste.IsPhoto(data));
+        Assert.False(EditorPaste.OffersTextPasteChoices(data));
+        Assert.Equal(EditorPaste.PasteAction.Image, EditorPaste.Resolve(EditorPasteMode.KeepFormatting, data));
+        Assert.Equal(EditorPaste.PasteAction.Image, EditorPaste.Resolve(EditorPasteMode.TextOnly, data));
+        Assert.False(EditorPaste.ApplyNoteLineSpacing(EditorPasteMode.KeepFormatting, data));
+    }
+
+    [Fact]
+    public void Formatted_words_beside_a_picture_stay_text()
+    {
+        var data = new DataObject();
+        data.SetData("PNG", new byte[] { 1, 2, 3 });
+        data.SetData(DataFormats.Html, "<html><body><b>Hello</b><img src=\"x.png\"></body></html>");
+        data.SetData(DataFormats.UnicodeText, "Hello");
+
+        Assert.False(EditorPaste.IsPhoto(data));
+        Assert.True(EditorPaste.OffersTextPasteChoices(data));
+        Assert.Equal(EditorPaste.PasteAction.RichFragment, EditorPaste.Resolve(EditorPasteMode.KeepFormatting, data));
+    }
+
+    [Fact]
     public void Text_only_paste_drops_the_source_font_and_keep_formatting_keeps_it() => RunSta(() =>
     {
         var source = new RichTextBox();

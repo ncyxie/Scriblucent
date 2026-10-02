@@ -66,9 +66,11 @@ public partial class NoteEditorWindow
         {
             var keepFormatting = CreatePasteModeMenuItem("PasteKeepFormatting", EditorPasteMode.KeepFormatting);
             var pasteAsText = CreatePasteModeMenuItem("PasteAsText", EditorPasteMode.TextOnly);
+            var pasteAsPhoto = CreatePasteAsPhotoMenuItem();
             var pasteAsTable = CreatePasteAsTableMenuItem();
             keepFormatting.Visibility = Visibility.Collapsed;
             pasteAsText.Visibility = Visibility.Collapsed;
+            pasteAsPhoto.Visibility = Visibility.Collapsed;
             pasteAsTable.Visibility = Visibility.Collapsed;
             var pasteIndex = defaultMenu.Items.Count;
             for (var i = 0; i < defaultMenu.Items.Count; i++)
@@ -81,7 +83,8 @@ public partial class NoteEditorWindow
             }
             defaultMenu.Items.Insert(pasteIndex, keepFormatting);
             defaultMenu.Items.Insert(pasteIndex + 1, pasteAsText);
-            defaultMenu.Items.Insert(pasteIndex + 2, pasteAsTable);
+            defaultMenu.Items.Insert(pasteIndex + 2, pasteAsPhoto);
+            defaultMenu.Items.Insert(pasteIndex + 3, pasteAsTable);
             defaultMenu.Opened += (_, _) => SyncPasteOffers(defaultMenu);
         }
     }
@@ -89,7 +92,8 @@ public partial class NoteEditorWindow
     private void SyncPasteOffers(ItemsControl? menu)
     {
         if (menu is null) return;
-        var formatted = ClipboardHasRichFormatting();
+        var formatted = ClipboardOffersTextPasteChoices();
+        var photo = ClipboardIsPhoto();
         var table = ClipboardHasTableGrid();
         foreach (var item in menu.Items)
         {
@@ -98,6 +102,7 @@ public partial class NoteEditorWindow
             element.Visibility = element.Tag switch
             {
                 "PasteKeepFormatting" or "PasteAsText" => formatted ? Visibility.Visible : Visibility.Collapsed,
+                "PasteAsPhoto" => photo ? Visibility.Visible : Visibility.Collapsed,
                 "TablePasteAsTable" => table ? Visibility.Visible : Visibility.Collapsed,
                 _ => element.Visibility
             };
@@ -128,9 +133,28 @@ public partial class NoteEditorWindow
         return item;
     }
 
-    private static bool ClipboardHasRichFormatting()
+    private MenuItem CreatePasteAsPhotoMenuItem()
     {
-        try { return Clipboard.GetDataObject() is { } data && EditorPaste.HasRichFormatting(data); }
+        var item = new MenuItem
+        {
+            Header = LocalizationService.GetString("PasteAsPhoto"),
+            Tag = "PasteAsPhoto"
+        };
+        item.Click += (_, _) => Dispatcher.InvokeAsync(
+            () => ApplicationCommands.Paste.Execute(null, ContentTextBox),
+            DispatcherPriority.Input);
+        return item;
+    }
+
+    private static bool ClipboardOffersTextPasteChoices()
+    {
+        try { return Clipboard.GetDataObject() is { } data && EditorPaste.OffersTextPasteChoices(data); }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+    }
+
+    private static bool ClipboardIsPhoto()
+    {
+        try { return Clipboard.GetDataObject() is { } data && EditorPaste.IsPhoto(data); }
         catch (System.Runtime.InteropServices.COMException) { return false; }
     }
 

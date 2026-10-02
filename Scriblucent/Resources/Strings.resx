@@ -176,6 +176,7 @@
   <data name="PasteChoiceDescription" xml:space="preserve"><value>This is what Paste does when the copied text brings its own font and style. The other choice stays in the menu for a single paste.</value></data>
   <data name="PasteKeepFormatting" xml:space="preserve"><value>Paste with formatting</value></data>
   <data name="PasteAsText" xml:space="preserve"><value>Paste as text</value></data>
+  <data name="PasteAsPhoto" xml:space="preserve"><value>Paste as photo</value></data>
   <data name="Animations" xml:space="preserve"><value>Animations</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Reduce animations</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>

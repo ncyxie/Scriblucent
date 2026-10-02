@@ -176,6 +176,7 @@
   <data name="PasteChoiceDescription" xml:space="preserve"><value>Taip į užrašą įklijuojamas nukopijuotas tekstas, kai jis turi savo šriftą ir stilių. Kitą būdą vis vien galima pasirinkti meniu, vienam kartui.</value></data>
   <data name="PasteKeepFormatting" xml:space="preserve"><value>Įklijuoti su formatavimu</value></data>
   <data name="PasteAsText" xml:space="preserve"><value>Įklijuoti kaip tekstą</value></data>
+  <data name="PasteAsPhoto" xml:space="preserve"><value>Įklijuoti kaip nuotrauką</value></data>
   <data name="Animations" xml:space="preserve"><value>Animacijos</value></data>
   <data name="ReduceAnimations" xml:space="preserve"><value>Mažinti animacijas</value></data>
   <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>
