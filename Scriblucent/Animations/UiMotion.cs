@@ -130,6 +130,8 @@ public static class UiMotion
     /// </summary>
     public static bool PrefersReducedMotion => ReducedMotionPreferences.ShouldReduceMotion;
 
+    public static bool IsAnyMotionRunning => RenderTransitionClock.IsAnyRunning;
+
     public static bool ShouldSkipDashboardRevealMotion()
     {
         if (PrefersReducedMotion)

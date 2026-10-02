@@ -4667,10 +4667,11 @@ namespace Scriblucent
                 await _floatingImages.RestoreAsync(attachments);
                 ApplyEditorEdgeSpacing();
 
-                // The wrap lanes depend on the photo geometry - apply them now, synchronously
-                // inside the suppression window, so the wrap is correct immediately and its
-                // spacer insertions stay suppressed (the idle re-applies are no-ops - see the
-                // engine's band-equality early exit).
+                // The open animation shares this thread. A full wrap settle waits on the
+                // dispatcher at render priority, so it runs after that motion, or immediately
+                // when motion is reduced.
+                if (!UiMotion.PrefersReducedMotion)
+                    await Task.Delay(UiMotion.OpenMs);
                 _wrapLayout?.Apply();
             }
             finally
@@ -4766,9 +4767,8 @@ namespace Scriblucent
             var newFontSize = ContentTextBox.FontSize;
             ClearSpellCheckDecorations();
             // Wrap insets are transient layout margins - never persist them into saved content.
-            // When the editor is closing, capture the wrap first so it can be restored verbatim
-            // after serialization (exact wrap through the exit animation, no recompute).
-            var wrapState = _allowCloseWithoutPrompt ? _wrapLayout?.CaptureWrapState() : null;
+            // Capture and restore the live spacers so autosave does not run a second settle.
+            var wrapState = _wrapLayout?.CaptureWrapState();
             _wrapLayout?.Clear();
             var newContent = SerializeEditorContent();
             var newImages = _floatingImages.BuildAttachments().ToList();
@@ -4779,15 +4779,9 @@ namespace Scriblucent
             // from the previous scan, making this effectively instant.
             _ = RunSpellCheckPassAsync();
 
-            // Reapply the wrap after the transient margins were cleared for serialization. The
-            // cleared flow is re-rendered with the wrap restored within this same UI turn, so the
-            // user never sees the unwrapped state. When the editor is closing (save-and-exit) the
-            // wrap is restored verbatim from the captured snapshot - exact, one layout, no
-            // convergence pass - so the exit animation runs over the wrapped text immediately.
-            if (!_allowCloseWithoutPrompt)
-                _wrapLayout?.Reapply();
-            else
-                _wrapLayout?.RestoreWrapState(wrapState);
+            // Put the same spacers back. One layout, no convergence pass, so the note
+            // never sits unwrapped and the exit animation is not asked to rebuild the wrap.
+            _wrapLayout?.RestoreWrapState(wrapState);
 
             var contentChanged = !string.Equals(previousContent, newContent, StringComparison.Ordinal);
             var imagesChanged = !AreImageAttachmentsEqual(document.Images, newImages);
@@ -6526,11 +6520,18 @@ namespace Scriblucent
                 {
                     using var tableWidths = _tableLayout.UsePreferredWidths(ContentTextBox.Document);
                     ClearSpellCheckDecorations();
+                    var wrapState = _wrapLayout?.CaptureWrapState();
                     _wrapLayout?.Clear();
-                    SaveWithInlineMarkers(() =>
-                        NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.Rtf));
+                    try
+                    {
+                        SaveWithInlineMarkers(() =>
+                            NoteFileService.SaveTextRange(path, GetCurrentEditorTextRange(), DataFormats.Rtf));
+                    }
+                    finally
+                    {
+                        _wrapLayout?.RestoreWrapState(wrapState);
+                    }
                     _ = RunSpellCheckPassAsync();
-                    _wrapLayout?.Reapply();
                 });
         }
 
@@ -6541,9 +6542,16 @@ namespace Scriblucent
                 ".scribnote",
                 path =>
                 {
+                    var wrapState = _wrapLayout?.CaptureWrapState();
                     _wrapLayout?.Clear();
-                    NoteFileService.SaveNotePackage(path, CreateExportNoteDocument());
-                    _wrapLayout?.Reapply();
+                    try
+                    {
+                        NoteFileService.SaveNotePackage(path, CreateExportNoteDocument());
+                    }
+                    finally
+                    {
+                        _wrapLayout?.RestoreWrapState(wrapState);
+                    }
                 });
         }
 

@@ -15,6 +15,11 @@ public sealed class RenderTransitionClock
     private TimeSpan _lastRenderingTime;
     private Action? _onAllComplete;
 
+    private bool _countsAsRunning;
+    private static int _activeCount;
+
+    public static bool IsAnyRunning => _activeCount > 0;
+
     public void Run(
         IEnumerable<Track> tracks,
         Action? onAllComplete = null,
@@ -39,6 +44,7 @@ public sealed class RenderTransitionClock
             return;
         }
 
+        SetRunning(true);
         _tracks.Clear();
         _tracks.AddRange(trackList);
 
@@ -51,6 +57,7 @@ public sealed class RenderTransitionClock
 
     public void Stop()
     {
+        SetRunning(false);
         if (_handler != null)
             CompositionTarget.Rendering -= _handler;
 
@@ -108,6 +115,15 @@ public sealed class RenderTransitionClock
             track.OnComplete?.Invoke();
 
         onAllComplete?.Invoke();
+    }
+
+    private void SetRunning(bool running)
+    {
+        if (_countsAsRunning == running)
+            return;
+
+        _countsAsRunning = running;
+        _activeCount = running ? _activeCount + 1 : Math.Max(0, _activeCount - 1);
     }
 
     private static void CompleteImmediately(IList<Track> tracks, Action? onAllComplete)

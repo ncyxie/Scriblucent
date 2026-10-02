@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Scriblucent.Animations;
 using Scriblucent.Models;
 
 namespace Scriblucent.Services;
@@ -1899,6 +1900,14 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     private void OnRecomputeDebounceTick(object? sender, EventArgs e)
     {
         _recomputeDebounce.Stop();
+        // A size change during an editor animation must not start the convergence pass.
+        // Wait until that motion finishes, then settle once.
+        if (UiMotion.IsAnyMotionRunning)
+        {
+            _recomputeDebounce.Start();
+            return;
+        }
+
         Apply();
     }
 
