@@ -1,81 +1,100 @@
 <div align="center">
-<img src="Scriblucent/Assets/brand-logo-dark.svg" width="220" alt="Scriblucent logo"/>
 
-<h1>Scriblucent</h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Scriblucent/Assets/brand-logo-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="Scriblucent/Assets/brand-logo-dark.svg">
+  <img src="Scriblucent/Assets/brand-logo-dark.svg" width="260" alt="Scriblucent">
+</picture>
 
-**Write. Recite. Get it right.**
+# Write. Recite. Get it right.
 
 Learn offline at your own pace. Take notes, build flashcards, map ideas, and test yourself, all in one private space.
+
+**[Download beta](https://github.com/ncyxie/Scriblucent/releases)** &nbsp; · &nbsp; [Explore the tools](#one-place-to-think-and-learn) &nbsp; · &nbsp; [Report an issue](https://github.com/ncyxie/Scriblucent/issues)
+
+Windows desktop · Local storage · Optional local AI
+
 </div>
 
-Scriblucent is a Windows desktop app for notes and study materials. Create and edit materials yourself, or use optional local AI to generate them from your notes. AI features require a model download; ordinary editing and study do not.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Screenshots/dashboard-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="Screenshots/dashboard-light.png">
+  <img src="Screenshots/dashboard-light.png" alt="Scriblucent dashboard with grouped study notes and calendar reminders" width="1280">
+</picture>
 
-## Features
+## One place to think and learn
 
-- **Notes:** rich text, images, linked notes, templates, version history, and autosave.
-- **Flashcards:** editable sets, study sessions, audio, and progress statistics.
-- **Mind maps:** connected ideas, multiple layouts, and node styling.
-- **Quizzes:** single-choice, multiple-choice, and true/false questions, with attempt history.
-- **Organization:** tags, groups, search, manual ordering, and bulk actions.
-- **Planning:** calendar reminders and a configurable first day of the week.
+Start with an idea. Keep your notes and study materials together, then move between them in a shared tabbed workspace.
 
-Light and dark themes are available in English and Lithuanian. Documents and settings are stored locally.
+- **Notes.** Give ideas room to grow with rich text, images, linked notes, and templates. Autosave and version history help you pick up where you left off.
+- **Flashcards.** Turn key ideas into recall practice. Build sets with text, images, and audio, review with spaced repetition, and follow your progress.
+- **Mind maps.** See how ideas connect. Branch out, choose a layout, style your nodes, and link them back to your notes.
+- **Quizzes.** Check what you know with choice, true/false, and written questions. Review attempts and return to the questions you missed.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <p><strong>Notes</strong></p>
+      <a href="Screenshots/editor-note.png"><img src="Screenshots/editor-note.png" alt="Rich-text note editor with connected tabs for notes and study materials" width="640"></a>
+    </td>
+    <td width="50%" valign="top">
+      <p><strong>Flashcards</strong></p>
+      <a href="Screenshots/editor-flashcards.png"><img src="Screenshots/editor-flashcards.png" alt="Flashcard editor showing a grid of cards for recall practice" width="640"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <p><strong>Mind maps</strong></p>
+      <a href="Screenshots/editor-mindmap.png"><img src="Screenshots/editor-mindmap.png" alt="Mind map connecting retrieval, spaced practice, and related ideas" width="640"></a>
+    </td>
+    <td width="50%" valign="top">
+      <p><strong>Quizzes</strong></p>
+      <a href="Screenshots/editor-quiz.png"><img src="Screenshots/editor-quiz.png" alt="Quiz editor with editable questions, answer choices, and explanations" width="640"></a>
+    </td>
+  </tr>
+</table>
+
+## Keep your next step in sight
+
+- **Find your flow.** Organize materials with groups and tags, search your collection, drag items into your own order, and handle selections in bulk.
+- **Make room for practice.** Schedule reminders right from your materials and see what is coming up in the dashboard calendar.
+- **Make it yours.** Switch between light and dark themes, choose English or Lithuanian, and adjust motion to your preference.
+
+<details>
+<summary><strong>See Scriblucent in motion</strong></summary>
+
+A short look at card feedback, the sidebar, and quick actions in the current app.
+
+![Scriblucent's sidebar glides open and closed, a recent card gains a soft blue tint, and the floating plus reveals quick actions](Screenshots/scriblucent-in-motion.gif)
+
+</details>
+
+## Your materials, on your computer
+
+Notes, study materials, and settings are stored locally. Write, organize, and study offline without downloading an AI model.
+
+When you want a starting point, optional local AI can generate flashcards, mind maps, and quizzes from your notes. Choose a model suited to your computer; it downloads when needed and runs locally afterward. Review generated material before studying it.
 
 ## Get started
 
-Download Scriblucent from [Releases](https://github.com/ncyxie/Scriblucent/releases). The app runs on Windows 10/11.
+1. Download the Windows build for your computer from [Releases](https://github.com/ncyxie/Scriblucent/releases).
+2. Extract the portable download and launch `Scriblucent.exe`. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0#desktop-runtime) if prompted, matching your build's x64 or ARM64 architecture.
+3. Create your first note or study set using the **+** button, or import existing materials.
 
-Create a note or study set from its dashboard. Edit materials directly, import existing files, or choose a local AI tool when generation is useful.
+Scriblucent is currently in beta. If something gets in your way, [report an issue](https://github.com/ncyxie/Scriblucent/issues) with the steps to reproduce it.
 
-### Optional local AI
+<details>
+<summary><strong>Build from source</strong></summary>
 
-Choose a model in Settings: Qwen3.5-0.8B, Qwen3.5-2B, Qwen3.5-4B, or Qwen3.5-9B. Memory requirements depend on the selected model. Model files are downloaded when needed for an AI feature, rather than on app launch.
-
-Application data is stored under `%LocalAppData%\Scriblucent\`. Downloaded models are stored in `Models` beneath that folder. After downloading a model, generation runs locally without an internet connection.
-
-Attachments are stored in `NotesMedia` and `FlashcardMedia`; installed spell-check dictionaries use `Dictionaries`. Diagnostic logs are grouped under `Logs\AI` and `Logs\Dashboard`.
-
-## Screenshots
-
-| Dark theme | Light theme |
-| --- | --- |
-| <img src="Screenshots/main-window-dark.png" alt="Dark dashboard"/> | <img src="Screenshots/main-window-light.png" alt="Light dashboard"/> |
-
-## Build and test
-
-Install the .NET 10 SDK on Windows. Run these commands from the repository root:
+On Windows, install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), then run from the repository root:
 
 ```powershell
-dotnet restore
-dotnet build Scriblucent/Scriblucent.csproj -c Release
-dotnet run --project Scriblucent
-dotnet test Scriblucent.Tests/Scriblucent.Tests.csproj -c Release --filter 'Category!=RealModel&Category!=AiBenchmark'
+dotnet restore Scriblucent/Scriblucent.csproj
+dotnet run --project Scriblucent -c Release
 ```
 
-Real-model tests and AI benchmarks are opt-in and may require downloaded models. Build and test sequentially because the application and tool projects share intermediate output.
+</details>
 
-In Debug builds, `SCRIBLUCENT_QWEN_MODEL_URL` can override the model download URL for local testing.
+---
 
-## Development
-
-Scriblucent uses WPF and MVVM. Views bind to view models; services handle persistence, scheduling, and local AI workers. Documents use local JSON storage.
-
-- Editors share `EditorWorkspaceService` and use isolated working copies. Mark a document saved only after persistence succeeds; preserve dashboard-owned grouping, pinning, and reminders when saving.
-- Collection operations act on logical items, including items outside the realized viewport. Keep selection transient and preserve native text-editing shortcuts.
-- Dashboard rendering uses viewport virtualization and bounded caches. Avoid loading document content solely to populate hidden controls or previews.
-- Use the [design-system guide](Scriblucent/Themes/README.md) for shared controls and rendering rules, and the [runtime UI checks](tools/MotionAudit/README.md) for focused verification.
-
-## Credits
-
-| First name | Last name |
-| --- | --- |
-| Mantas | Gaižutis |
-| Jaunius | Pigaga |
-| Rapolas | Turauskas |
-| Deividas | Kepenis |
-| Gustas | Valaika |
-| Mantas | Brūžė |
-
-## License
-
-Scriblucent is distributed under the [MIT License](LICENSE). See [third-party notices](THIRD-PARTY-NOTICES.md) for component licenses.
+[MIT License](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
