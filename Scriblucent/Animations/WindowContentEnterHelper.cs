@@ -6,8 +6,8 @@ using System.Windows.Threading;
 namespace Scriblucent.Animations;
 
 /// <summary>
-/// Window content rises on open and sinks on close using live rendering (no bitmap cache).
-/// Enter waits for the first content render so the motion surface is not an empty rectangle.
+/// Choreographs the client stage, actual chrome, and actions while preserving close semantics.
+/// Enter waits for layout; the stage, actual chrome, and actions use one coordinated rule.
 /// </summary>
 public static class WindowContentEnterHelper
 {
@@ -42,10 +42,17 @@ public static class WindowContentEnterHelper
         state.ElementName = elementName;
         state.BeforeFinalClose = beforeFinalClose;
 
-        ScheduleEnterWhenRendered(window, state, attempt: 0);
+        if (!state.EnterScheduled)
+        {
+            state.EnterScheduled = true;
+            state.IsEnterAnimating = !UiMotion.PrefersReducedMotion;
+            ScheduleEnterWhenRendered(window, state, attempt: 0);
+        }
 
         window.Closing -= OnWindowClosing;
         window.Closing += OnWindowClosing;
+        window.Closed -= OnWindowClosed;
+        window.Closed += OnWindowClosed;
     }
 
     public static void AllowImmediateClose(Window window)
@@ -76,7 +83,7 @@ public static class WindowContentEnterHelper
         if (state.IsExitAnimating)
             return;
 
-        if (window.FindName(state.ElementName) is not FrameworkElement root)
+        if (ResolveMotionRoot(window, state) is not { } root)
         {
             ApplyPendingDialogResult(window, state);
             return;
@@ -89,8 +96,8 @@ public static class WindowContentEnterHelper
     {
         if (UiMotion.PrefersReducedMotion)
         {
-            if (window.FindName(state.ElementName) is FrameworkElement root)
-                UiMotion.EnsureContentRevealRestState(root);
+            if (ResolveMotionRoot(window, state) is { } root)
+                root.SetCurrentValue(UIElement.OpacityProperty, 1.0);
             return;
         }
 
@@ -121,17 +128,22 @@ public static class WindowContentEnterHelper
         if (UiMotion.PrefersReducedMotion)
             return;
 
-        if (window.FindName(state.ElementName) is not FrameworkElement root)
+        if (state.IsClosed || state.IsExitAnimating || ResolveMotionRoot(window, state) is not { } root)
             return;
 
-        root.Opacity = 1;
-        UiMotion.EnsureTranslate(root).Y = UiMotion.ResolveWindowEnterLiftY(window);
+        WindowMotion.Prepare(root);
     }
 
     private static void TryPlayEnter(Window window, WindowMotionState state, int attempt)
     {
-        if (window.FindName(state.ElementName) is not FrameworkElement root)
+        if (state.IsClosed || state.IsExitAnimating)
             return;
+
+        if (ResolveMotionRoot(window, state) is not { } root)
+        {
+            CompleteEnter(window, state);
+            return;
+        }
 
         root.UpdateLayout();
 
@@ -143,21 +155,14 @@ public static class WindowContentEnterHelper
         }
 
         state.IsEnterAnimating = true;
-        ChildWindowOwnerMotion.TryBegin(window);
-
-        var durationMs = UiMotion.ResolveWindowEnterDurationMs(window);
-        var offsetY = UiMotion.ResolveWindowEnterLiftY(window);
         UiMotion.AnimateWindowContentEnter(
             root,
-            durationMs: durationMs,
-            offsetY: offsetY,
             onComplete: () => CompleteEnter(window, state));
     }
 
     private static void CompleteEnter(Window window, WindowMotionState state)
     {
         state.IsEnterAnimating = false;
-        ChildWindowOwnerMotion.TryEnd(window);
 
         if (state.AfterEnterCallbacks.Count == 0)
             return;
@@ -173,15 +178,21 @@ public static class WindowContentEnterHelper
         if (sender is not Window window || !States.TryGetValue(window, out var state))
             return;
 
-        if (state.AllowImmediateClose || UiMotion.PrefersReducedMotion || e.Cancel || state.IsExitAnimating)
+        if (state.AllowImmediateClose || UiMotion.PrefersReducedMotion || e.Cancel)
             return;
+
+        if (state.IsExitAnimating)
+        {
+            e.Cancel = true;
+            return;
+        }
 
         // DialogResult already committed (legacy callers): do not cancel — that clears the result
         // and breaks ShowDialog. Prefer CloseWithDialogResult for animated Save/OK.
         if (window.DialogResult.HasValue)
             return;
 
-        if (window.FindName(state.ElementName) is not FrameworkElement root)
+        if (ResolveMotionRoot(window, state) is not { } root)
             return;
 
         e.Cancel = true;
@@ -191,17 +202,16 @@ public static class WindowContentEnterHelper
     private static void BeginExitAnimation(Window window, WindowMotionState state, FrameworkElement root)
     {
         state.IsExitAnimating = true;
-        ChildWindowOwnerMotion.TryBegin(window);
+        state.IsEnterAnimating = false;
+        state.AfterEnterCallbacks.Clear();
 
         UiMotion.AnimateWindowContentExit(
             root,
             onComplete: () =>
             {
-                ChildWindowOwnerMotion.TryEnd(window);
                 state.BeforeFinalClose?.Invoke();
-                state.IsExitAnimating = false;
 
-                // Defer off the render clock — setting DialogResult during CompositionTarget.Rendering is unsafe.
+                // Finish after animation callbacks unwind, rather than closing during a timing tick.
                 window.Dispatcher.BeginInvoke(
                     () => FinishExit(window, state),
                     DispatcherPriority.Normal);
@@ -210,6 +220,10 @@ public static class WindowContentEnterHelper
 
     private static void FinishExit(Window window, WindowMotionState state)
     {
+        if (state.IsClosed)
+            return;
+
+        state.IsExitAnimating = false;
         state.AllowImmediateClose = true;
 
         if (state.PendingDialogResult.HasValue)
@@ -233,9 +247,34 @@ public static class WindowContentEnterHelper
             window.Close();
     }
 
+    private static FrameworkElement? ResolveMotionRoot(Window window, WindowMotionState state)
+        => state.MotionRoot = window.Content is Scriblucent.Controls.FeatureWindowShell shell
+            ? shell : window.FindName(state.ElementName) as FrameworkElement ?? window.Content as FrameworkElement;
+
+    private static void OnWindowClosed(object? sender, EventArgs e)
+    {
+        if (sender is not Window window || !States.TryGetValue(window, out var state))
+            return;
+
+        state.IsClosed = true;
+        state.IsEnterAnimating = false;
+        state.IsExitAnimating = false;
+        state.AfterEnterCallbacks.Clear();
+        if (state.MotionRoot is { } root)
+        {
+            WindowMotion.Stop(root);
+            SurfaceMotion.Stop(root);
+        }
+        window.Closing -= OnWindowClosing;
+        window.Closed -= OnWindowClosed;
+    }
+
     private sealed class WindowMotionState
     {
         public string ElementName = "ContentRoot";
+        public FrameworkElement? MotionRoot;
+        public bool EnterScheduled;
+        public bool IsClosed;
         public Action? BeforeFinalClose;
         public bool AllowImmediateClose;
         public bool IsExitAnimating;

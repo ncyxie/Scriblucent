@@ -1,4 +1,4 @@
-<Window x:Class="Scriblucent.Views.QuizModeWindow"
+<Window xmlns:motion="clr-namespace:Scriblucent.Animations" x:Class="Scriblucent.Views.QuizModeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
@@ -10,7 +10,7 @@
         Width="800"
         WindowStartupLocation="CenterOwner"
         WindowState="Maximized"
-        Background="{DynamicResource FeatureFrameBackground}"
+        Background="{DynamicResource WorkspaceBackdrop}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Ideal"
@@ -25,13 +25,15 @@
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsAnswered}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                    <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                     <Setter Property="BorderBrush" Value="{DynamicResource AccentSuccessSubtleBorder}"/>
                     <Setter Property="BorderThickness" Value="1"/>
                     <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsCurrent}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                    <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentRimBrush}"/>
                     <Setter Property="BorderThickness" Value="2"/>
                     <Setter Property="FontWeight" Value="Bold"/>
                     <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -48,7 +50,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0"
+        <Border motion:WindowMotion.Role="Chrome" Grid.Row="0"
                 Background="Transparent"
                 BorderThickness="0"
                 Padding="{StaticResource Shell.FeatureTitleRowPadding}">
@@ -67,7 +69,7 @@
         </Border>
 
         <!-- Question + navigator -->
-        <Grid Grid.Row="1" Margin="20,16">
+        <Grid Grid.Row="1" Margin="24,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -96,7 +98,7 @@
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center"
                                 Visibility="Collapsed">
-                        <Border Background="{DynamicResource SelectionBackground}"
+                        <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Neutral" Background="{DynamicResource InputSurfaceInset}"
                                 BorderThickness="0"
                                 CornerRadius="6"
                                 Padding="8,4">
@@ -112,7 +114,7 @@
                                             Foreground="{DynamicResource TextColor}"
                                             VerticalAlignment="Center"/>
                             </StackPanel>
-                        </Border>
+                        </controls:SurfaceMaterialBorder>
                     </StackPanel>
                     <Button x:Name="FlagQuestionButton"
                             Grid.Column="1"
@@ -124,7 +126,7 @@
                             ToolTip="{Binding [QuizFlagQuestionTooltip], Source={StaticResource Loc}}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
-                                <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+                                <Setter Property="FontSize" Value="{StaticResource Type.Control.Action}"/>
                                 <Setter Property="MinHeight" Value="30"/>
                             </Style>
                         </Button.Style>
@@ -163,7 +165,7 @@
                             Click="ShowHintButton_Click">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
-                                <Setter Property="FontSize" Value="{StaticResource Type.Meta}"/>
+                                <Setter Property="FontSize" Value="{StaticResource Type.Control.Action}"/>
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
@@ -172,7 +174,7 @@
                         </StackPanel>
                     </Button>
                     <!-- Level 5 status banner: soft fill (role I); no decorative box stroke. -->
-                    <Border x:Name="HintTextBorder"
+                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Tinted" x:Name="HintTextBorder"
             Background="{DynamicResource AccentWarningSubtle}"
             BorderThickness="0"
             CornerRadius="{StaticResource Radius.Control}"
@@ -191,7 +193,7 @@
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"/>
                         </StackPanel>
-                    </Border>
+                    </controls:SurfaceMaterialBorder>
                 </StackPanel>
             </StackPanel>
             </ScrollViewer>
@@ -215,12 +217,11 @@
                     <StackPanel Grid.Row="0"
                                 Margin="20,20,20,0">
                         <!-- Score Summary (stays pinned above the review list) -->
-                        <Border Background="{DynamicResource WindowBackground}"
-                                BorderThickness="0"
-                                CornerRadius="{StaticResource Radius.Card}"
+                        <Border Style="{StaticResource ContentInsetBorderStyle}"
                                 Padding="20"
                                 Margin="0,0,0,20">
                             <StackPanel HorizontalAlignment="Center">
+                                <controls:StudyResultEmblem x:Name="ResultsEmblem" HorizontalAlignment="Center" Margin="0,0,0,12"/>
                                 <TextBlock x:Name="ResultsTitleText"
                                 Text="{Binding [QuizResultsTitleGreat], Source={StaticResource Loc}}"
                                            FontSize="{StaticResource Type.Display}"
@@ -277,7 +278,7 @@
                                 <DataTemplate>
                                     <controls:DashboardTileHost RendererKey="QuizResultRow"
                                                                 Loaded="ResultsCard_Loaded">
-                                        <Border Padding="16"
+                                        <controls:SurfaceMaterialBorder Padding="16"
                                                 Margin="0,0,0,12"
                                                 CornerRadius="{StaticResource Radius.Card}"
                                                 SnapsToDevicePixels="True"
@@ -286,9 +287,11 @@
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
+                                                    <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsCorrect}" Value="True">
                                                             <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                                                            <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -359,7 +362,7 @@
                                                            FontStyle="Italic"
                                                            Visibility="{Binding HasExplanation, Converter={StaticResource BoolToVis}}"/>
                                             </StackPanel>
-                                        </Border>
+                                        </controls:SurfaceMaterialBorder>
                                     </controls:DashboardTileHost>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -443,10 +446,11 @@
         </Grid>
 
         <!-- Navigation -->
-        <Border Grid.Row="2"
+        <Border motion:WindowMotion.Role="Footer" Grid.Row="2"
+                behaviors:CommandLightBehavior.IsEnabled="True" CornerRadius="{StaticResource Radius.Card}"
                 Background="Transparent"
                 BorderThickness="0"
-                Padding="20,16">
+                Padding="24,16">
             <Grid>
                 <Grid.ColumnDefinitions>
 					<ColumnDefinition Width="Auto"/>
@@ -482,7 +486,8 @@
                         Visibility="Collapsed"
                         Click="SubmitButton_Click"/>
 
-				<Button Grid.Column="2"
+				<motion:LayoutRevealHost Grid.Column="2">
+				<Button
 						x:Name="RetryAllButton"
 						Style="{StaticResource DialogSecondaryButtonStyle}"
 						Background="{DynamicResource CardBackground}"
@@ -495,8 +500,10 @@
 						<TextBlock Text="Retry All" VerticalAlignment="Center"/>
 					</StackPanel>
 				</Button>
+				</motion:LayoutRevealHost>
 
-				<Button Grid.Column="3"
+				<motion:LayoutRevealHost Grid.Column="3">
+				<Button
 						x:Name="RetryWrongButton"
 						Style="{StaticResource DialogSecondaryButtonStyle}"
 						Background="{DynamicResource CardBackground}"
@@ -510,6 +517,7 @@
 						<TextBlock Text="Retry Wrong" VerticalAlignment="Center"/>
 					</StackPanel>
 				</Button>
+				</motion:LayoutRevealHost>
 
                 <Button Grid.Column="4"
                         x:Name="DoneButton"

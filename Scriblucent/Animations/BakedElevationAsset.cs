@@ -6,7 +6,7 @@ using System.Windows.Media.Imaging;
 namespace Scriblucent.Animations;
 
 /// <summary>
-/// Pre-rendered drop shadows for surfaces that stay on screen (fields, buttons, dialogs).
+/// Pre-rendered drop shadows for raised actions and floating surfaces. Form fields stay flat.
 /// A live <see cref="DropShadowEffect"/> re-blurs whenever a sibling scrolls. These are baked
 /// once and stretched, with the same corner, blur, depth, and opacity as the old tokens.
 /// </summary>
@@ -27,8 +27,8 @@ internal static class BakedElevationAsset
         public double SwatchSize => CornerTileSize * 2 + 48;
     }
 
-    // Radius.Control (10) + Elevation.Field.
-    public static Profile Field { get; } = new(10, 14, 2, 0.18, 30);
+    // Square white paper: a restrained, cached lift with full falloff clearance.
+    public static Profile Paper { get; } = new(0, 12, 2, 0.16, 20);
 
     // Radius.Control (10) + Elevation.Button.
     public static Profile Button { get; } = new(10, 12, 1, 0.18, 27);
@@ -88,11 +88,12 @@ internal static class BakedElevationAsset
         using (var dc = visual.RenderOpen())
         {
             var inset = profile.BlurRadius;
-            var size = profile.SwatchSize - inset * 2 - profile.ShadowDepth;
+            var width = profile.SwatchSize - inset * 2;
+            var height = width - profile.ShadowDepth;
             dc.DrawRoundedRectangle(
                 Brushes.Black,
                 null,
-                new Rect(inset, inset + profile.ShadowDepth, size, size),
+                new Rect(inset, inset + profile.ShadowDepth, width, height),
                 profile.CornerRadius,
                 profile.CornerRadius);
         }

@@ -15,7 +15,8 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         ShowInTaskbar="False">
-    <controls:OverlayDialogShell MaxCardWidth="440"
+    <controls:OverlayDialogShell x:Name="CaptionDialogShell" Focusable="True" IsTabStop="False" FocusVisualStyle="{x:Null}"
+                                 MaxCardWidth="440"
                                  CardPadding="20">
         <controls:OverlayDialogShell.Header>
             <TextBlock Text="{Binding [InsertCaption], Source={StaticResource Loc}}"
@@ -26,113 +27,114 @@
         </controls:OverlayDialogShell.Header>
 
         <controls:OverlayDialogShell.Body>
-            <StackPanel>
-                <!-- Live preview of the resulting caption (LibreOffice shows the result). -->
-                <TextBlock Text="{Binding [CaptionPreview], Source={StaticResource Loc}}"
-                           Style="{StaticResource FormOptionLabelStyle}"
-                           Margin="0,0,0,6"/>
-                <Border Background="{DynamicResource InputSurface}"
-                        CornerRadius="6"
-                        Padding="10,8"
-                        Margin="0,0,0,16">
-                    <TextBlock x:Name="PreviewTextBlock"
-                               TextWrapping="Wrap"
-                               FontStyle="Italic"
-                               Foreground="{DynamicResource TextColorSecondary}"/>
-                </Border>
+            <ScrollViewer x:Name="CaptionBodyScrollViewer" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" Padding="0">
+                <StackPanel>
+                    <!-- Live preview of the resulting caption (LibreOffice shows the result). -->
+                    <TextBlock Text="{Binding [CaptionPreview], Source={StaticResource Loc}}"
+                               Style="{StaticResource FormOptionLabelStyle}"
+                               Margin="0,0,0,6"/>
+                    <Border Style="{StaticResource ContentInsetBorderStyle}"
+                            Padding="10,8"
+                            Margin="0,0,0,16">
+                        <TextBlock x:Name="PreviewTextBlock"
+                                   TextWrapping="Wrap"
+                                   FontStyle="Italic"
+                                   Foreground="{DynamicResource TextColorSecondary}"/>
+                    </Border>
 
-                <!-- Label (category) - editable so new labels can be typed (OnlyOffice "Add label"). -->
-                <TextBlock Text="{Binding [CaptionLabel], Source={StaticResource Loc}}"
-                           Style="{StaticResource FormOptionLabelStyle}"
-                           Margin="0,0,0,6"/>
-                <Grid Margin="0,0,0,14">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <ComboBox x:Name="LabelComboBox"
-                              Style="{StaticResource EditableComboBoxStyle}"
-                              Background="{DynamicResource SidebarBackground}"
-                              IsTextSearchEnabled="False"
-                              SelectionChanged="Preview_Changed"
-                              KeyUp="Preview_KeyUp"/>
-                    <Button x:Name="DeleteLabelButton"
-                            Grid.Column="1"
-                            Content="{Binding [CaptionDeleteLabel], Source={StaticResource Loc}}"
-                            Style="{StaticResource DialogSecondaryButtonStyle}"
-                            Padding="10,6"
-                            Margin="8,0,0,0"
-                            Click="DeleteLabel_Click"/>
-                </Grid>
+                    <!-- Label (category) - editable so new labels can be typed (OnlyOffice "Add label"). -->
+                    <TextBlock Text="{Binding [CaptionLabel], Source={StaticResource Loc}}"
+                               Style="{StaticResource FormOptionLabelStyle}"
+                               Margin="{StaticResource Field.LabelMargin}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="LabelComboBox"
+                                  Style="{StaticResource InsetEditableComboBoxStyle}"
+                                  IsTextSearchEnabled="False"
+                                  SelectionChanged="Preview_Changed"
+                                  KeyUp="Preview_KeyUp"/>
+                        <Button x:Name="DeleteLabelButton"
+                                Grid.Column="1"
+                                Content="{Binding [CaptionDeleteLabel], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                Padding="10,6"
+                                Margin="8,0,0,0"
+                                Click="DeleteLabel_Click"/>
+                    </Grid>
+                    <controls:InlineValidationPresenter x:Name="LabelValidationMessage"
+                               Text="{Binding [CaptionLabelRequired], Source={StaticResource Loc}}" Margin="0,4,0,8"/>
 
-                <!-- Caption text. -->
-                <TextBlock Text="{Binding [CaptionText], Source={StaticResource Loc}}"
-                           Style="{StaticResource FormOptionLabelStyle}"
-                           Margin="0,0,0,6"/>
-                <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                        Background="{DynamicResource WindowBackground}"
-                        Padding="0"
-                        Margin="0,0,0,14">
-                    <TextBox x:Name="CaptionTextBox"
-                             Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             MaxHeight="96"
-                             TextChanged="Preview_Changed"/>
-                </Border>
+                    <!-- Caption text. -->
+                    <TextBlock Text="{Binding [CaptionText], Source={StaticResource Loc}}"
+                               Style="{StaticResource FormOptionLabelStyle}"
+                               Margin="{StaticResource Field.LabelMargin}"/>
+                    <Border x:Name="CaptionFieldShell" Style="{StaticResource ChromeMultilineFieldBorderStyle}" MinHeight="64"
+                            Margin="{StaticResource Field.RowMargin}">
+                        <TextBox x:Name="CaptionTextBox"
+                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 ClipToBounds="True"
+                                 MaxHeight="96"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 TextChanged="Preview_Changed"/>
+                    </Border>
 
-                <!-- Numbering + separator. -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                        <TextBlock Text="{Binding [CaptionNumbering], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormOptionLabelStyle}"
-                                   Margin="0,0,0,6"/>
-                        <ComboBox x:Name="NumberingComboBox"
-                                  Padding="8,6"
-                                  Background="{DynamicResource SidebarBackground}"
-                                  SelectionChanged="Preview_Changed"/>
+                    <!-- Numbering + separator. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock Text="{Binding [CaptionNumbering], Source={StaticResource Loc}}"
+                                       Style="{StaticResource FormOptionLabelStyle}"
+                                       Margin="{StaticResource Field.LabelMargin}"/>
+                            <ComboBox Style="{StaticResource InsetComboBoxStyle}" x:Name="NumberingComboBox"
+                                      SelectionChanged="Preview_Changed"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding [CaptionSeparator], Source={StaticResource Loc}}"
+                                       Style="{StaticResource FormOptionLabelStyle}"
+                                       Margin="{StaticResource Field.LabelMargin}"/>
+                            <Border Style="{StaticResource ChromeInsetFieldBorderStyle}">
+                                <TextBox x:Name="SeparatorTextBox"
+                                         Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                         Width="72"
+                                         TextChanged="Preview_Changed"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Position: above or below the photo (LibreOffice/OnlyOffice). -->
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <RadioButton x:Name="BelowRadioButton"
+                                     Style="{StaticResource SortOptionRadioButtonStyle}"
+                                     GroupName="CaptionPosition"
+                                     Content="{Binding [CaptionPositionBelow], Source={StaticResource Loc}}"
+                                     IsChecked="True"
+                                     Margin="0,0,18,0"
+                                     Checked="Preview_Changed"/>
+                        <RadioButton x:Name="AboveRadioButton"
+                                     Style="{StaticResource SortOptionRadioButtonStyle}"
+                                     GroupName="CaptionPosition"
+                                     Content="{Binding [CaptionPositionAbove], Source={StaticResource Loc}}"
+                                     Checked="Preview_Changed"/>
                     </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="{Binding [CaptionSeparator], Source={StaticResource Loc}}"
-                                   Style="{StaticResource FormOptionLabelStyle}"
-                                   Margin="0,0,0,6"/>
-                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                                Background="{DynamicResource WindowBackground}">
-                            <TextBox x:Name="SeparatorTextBox"
-                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                     Width="72"
-                                     TextChanged="Preview_Changed"/>
-                        </Border>
-                    </StackPanel>
-                </Grid>
 
-                <!-- Position: above or below the photo (LibreOffice/OnlyOffice). -->
-                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                    <RadioButton x:Name="BelowRadioButton"
-                                 Style="{StaticResource SortOptionRadioButtonStyle}"
-                                 GroupName="CaptionPosition"
-                                 Content="{Binding [CaptionPositionBelow], Source={StaticResource Loc}}"
-                                 IsChecked="True"
-                                 Margin="0,0,18,0"
-                                 Checked="Preview_Changed"/>
-                    <RadioButton x:Name="AboveRadioButton"
-                                 Style="{StaticResource SortOptionRadioButtonStyle}"
-                                 GroupName="CaptionPosition"
-                                 Content="{Binding [CaptionPositionAbove], Source={StaticResource Loc}}"
-                                 Checked="Preview_Changed"/>
+                    <!-- OnlyOffice: leave just the number. -->
+                    <CheckBox Style="{StaticResource FormCheckBoxStyle}" x:Name="ExcludeLabelCheckBox"
+                              Content="{Binding [CaptionExcludeLabel], Source={StaticResource Loc}}"
+                              Margin="0,16,0,0"
+                              Checked="Preview_Changed"
+                              Unchecked="Preview_Changed"/>
                 </StackPanel>
-
-                <!-- OnlyOffice: leave just the number. -->
-                <CheckBox x:Name="ExcludeLabelCheckBox"
-                          Content="{Binding [CaptionExcludeLabel], Source={StaticResource Loc}}"
-                          Margin="0,16,0,0"
-                          Checked="Preview_Changed"
-                          Unchecked="Preview_Changed"/>
-            </StackPanel>
+            </ScrollViewer>
         </controls:OverlayDialogShell.Body>
 
         <controls:OverlayDialogShell.Footer>

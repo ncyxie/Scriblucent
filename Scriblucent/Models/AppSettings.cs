@@ -13,7 +13,15 @@ public class AppSettings
 
     public string MeasurementUnitSystem { get; set; } = UnitSystemImperial;
 
+    // Null preserves the language's normal week layout for existing settings files.
+    public DayOfWeek? CalendarFirstDayOfWeek { get; set; }
+
+    public static DayOfWeek ResolveCalendarFirstDayOfWeek(DayOfWeek? preference)
+        => preference is { } day && Enum.IsDefined(day)
+            ? day : System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+
     public string NoteSortOptionKey { get; set; } = "last-modified-desc";
+    public Dictionary<string, HashSet<Guid>> CollapsedDashboardGroups { get; set; } = new();
 
     public bool EnableScrollbar { get; set; } = true;
 
@@ -28,6 +36,7 @@ public class AppSettings
     /// When false, Windows system animation preferences are respected.
     /// </summary>
     public bool ReduceAnimations { get; set; }
+    public Scriblucent.Animations.MotionPreference? AnimationPreference { get; set; }
     
     public int AutoSaveIntervalSeconds { get; set; } = 300;
 

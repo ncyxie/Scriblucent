@@ -49,6 +49,7 @@ public static class AppIconKindMap
         AppIconKind.ChevronUp => PackIconLucideKind.ChevronUp,
         AppIconKind.ChevronDown => PackIconLucideKind.ChevronDown,
         AppIconKind.ChevronRight => PackIconLucideKind.ChevronRight,
+        AppIconKind.ChevronLeft => PackIconLucideKind.ChevronLeft,
         AppIconKind.ArrowUp => PackIconLucideKind.ArrowUp,
         AppIconKind.ArrowDown => PackIconLucideKind.ArrowDown,
         AppIconKind.Swap => PackIconLucideKind.ArrowLeftRight,

@@ -157,8 +157,8 @@ namespace Scriblucent.Views
             var isCustom = TimeLimitComboBox.SelectedItem is ComboBoxItem item
                 && string.Equals(item.Tag?.ToString(), "custom", StringComparison.Ordinal);
 
-            CustomTimePanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
-            UiMotion.AnimateInlineReveal(TimeValidationText, false);
+            CustomTimeHost.ChangeContent(() => CustomTimePanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed);
+            TimeValidationText.Hide();
 
             if (isCustom && string.IsNullOrWhiteSpace(CustomTimeTextBox.Text))
                 CustomTimeTextBox.Text = "20";
@@ -183,13 +183,13 @@ namespace Scriblucent.Views
                 || passingScore < 0
                 || passingScore > 100)
             {
-                UiMotion.AnimateInlineReveal(ValidationText, true);
+                ValidationText.IsError = true;
                 PassingScoreTextBox.Focus();
                 PassingScoreTextBox.SelectAll();
                 return false;
             }
 
-            UiMotion.AnimateInlineReveal(ValidationText, false);
+            ValidationText.Hide();
             PassingScorePercent = passingScore;
             ShuffleQuestions = ShuffleQuestionsCheckBox.IsChecked == true;
             ShuffleOptions = ShuffleOptionsCheckBox.IsChecked == true;
@@ -203,13 +203,13 @@ namespace Scriblucent.Views
                     || customMinutes <= 0
                     || customMinutes > MaxCustomTimeLimitMinutes)
                 {
-                    UiMotion.AnimateInlineReveal(TimeValidationText, true);
+                    TimeValidationText.IsError = true;
                     CustomTimeTextBox.Focus();
                     CustomTimeTextBox.SelectAll();
                     return false;
                 }
 
-                UiMotion.AnimateInlineReveal(TimeValidationText, false);
+                TimeValidationText.Hide();
                 TimeLimitSeconds = customMinutes * 60;
             }
             else if (TimeLimitComboBox.SelectedItem is ComboBoxItem { Tag: string presetTag }

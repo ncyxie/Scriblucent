@@ -31,6 +31,7 @@ public partial class InsertHyperlinkDialog : Window
         Loaded += InsertHyperlinkDialog_Loaded;
 
         NoteResultsListBox.ItemsSource = _noteOptions;
+            UpdateSearchState();
         DisplayTextBox.Text = initialDisplayText;
         Closed += (_, _) => _searchGeneration++;
 
@@ -73,6 +74,7 @@ public partial class InsertHyperlinkDialog : Window
         if (query.Length == 0)
         {
             NoteResultsListBox.ItemsSource = _noteOptions;
+            UpdateSearchState();
             return;
         }
 
@@ -95,7 +97,18 @@ public partial class InsertHyperlinkDialog : Window
         }
 
         if (generation == _searchGeneration)
+        {
             NoteResultsListBox.ItemsSource = matches;
+            UpdateSearchState();
+        }
+    }
+
+    private void UpdateSearchState()
+    {
+        if (NoteNoResults == null) return;
+        var empty = NoteResultsListBox.Items.Count == 0;
+        NoteNoResults.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        NoteResultsListBox.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void NoteResultsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -162,13 +175,12 @@ public partial class InsertHyperlinkDialog : Window
 
     private void ShowValidationMessage(string message)
     {
-        ValidationText.Text = message;
-        ValidationText.Visibility = Visibility.Visible;
+        ValidationText.Show(message);
     }
 
     private void HideValidationMessage()
     {
-        ValidationText.Visibility = Visibility.Collapsed;
+        ValidationText.Hide();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

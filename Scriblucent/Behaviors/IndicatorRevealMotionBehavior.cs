@@ -15,13 +15,13 @@ namespace Scriblucent.Behaviors;
 /// </remarks>
 public static class IndicatorRevealMotionBehavior
 {
-    private const int EnterMs = 220;
-    private const int ExitMs = 180;
+    private const int EnterMs = 160;
+    private const int ExitMs = 120;
 
     public static int RevealAnimationMs => EnterMs;
 
     public static int DismissAnimationMs => ExitMs;
-    private const double EnterLiftY = 6;
+    private const double EnterLiftY = 4;
     private const int PendingWindowMs = 4000;
     private const int RetryDelayMs = 80;
 
@@ -584,8 +584,8 @@ public static class IndicatorRevealMotionBehavior
             element,
             new[]
             {
-                UiMotion.Track(EnterMs, UiMotion.OutCubic, 0, 1, value => element.Opacity = value),
-                UiMotion.Track(EnterMs, UiMotion.OutBack, EnterLiftY, 0, value => translate.Y = value)
+                UiMotion.Track(EnterMs, UiMotion.OutSine, 0, 1, value => element.Opacity = value),
+                UiMotion.Track(EnterMs, UiMotion.InOutSine, EnterLiftY, 0, value => translate.Y = value)
             },
             onComplete: () =>
             {

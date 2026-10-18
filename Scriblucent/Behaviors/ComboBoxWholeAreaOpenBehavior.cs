@@ -62,6 +62,10 @@ public static class ComboBoxWholeAreaOpenBehavior
         if (IsInsideOpenDropdown(source))
             return;
 
+        // Native ComboBox capture also routes outside clicks here. Leave those to native dismissal.
+        if (!new Rect(combo.RenderSize).Contains(e.GetPosition(combo)))
+            return;
+
         if (combo.IsEditable && IsInsideEditableTextBox(source, combo))
         {
             if (!combo.IsDropDownOpen)

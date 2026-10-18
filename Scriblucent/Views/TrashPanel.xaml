@@ -1,15 +1,18 @@
-﻿<UserControl x:Class="Scriblucent.Views.TrashPanel"
+﻿<UserControl x:Class="Scriblucent.Views.TrashPanel" PreviewKeyDown="TrashPanel_PreviewKeyDown"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:motion="clr-namespace:Scriblucent.Animations"
              xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
              mc:Ignorable="d"
              d:DesignHeight="560"
-             d:DesignWidth="720" xmlns:controls="clr-namespace:Scriblucent.Controls">
+             d:DesignWidth="720" xmlns:controls="clr-namespace:Scriblucent.Controls" xmlns:views="clr-namespace:Scriblucent.Views">
     <UserControl.Resources>
         <Style x:Key="TrashListBoxItemStyle" TargetType="{x:Type ListBoxItem}">
+            <!-- The inner card owns keyboard focus feedback, as well as hover and selection. -->
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
@@ -26,26 +29,10 @@
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalAlignment}"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource NoteCardSelection}"/>
-                            </Trigger>
-                            <MultiDataTrigger>
-                                <MultiDataTrigger.Conditions>
-                                    <Condition Binding="{Binding IsLogicalAllSelected, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"/>
-                                    <Condition Binding="{Binding IsExcludedFromLogicalSelection}" Value="False"/>
-                                </MultiDataTrigger.Conditions>
-                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource NoteCardSelection}"/>
-                            </MultiDataTrigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-
         <Style x:Key="TrashFilterChipStyle" TargetType="RadioButton" BasedOn="{StaticResource SortOptionRadioButtonStyle}">
             <Setter Property="Margin" Value="0,0,8,8"/>
             <Setter Property="Padding" Value="2,0,0,0"/>
@@ -95,13 +82,12 @@
                 RenderTransformOrigin="0.5,1"
                 UseLayoutRounding="True"
                 SnapsToDevicePixels="True">
-            <Grid Width="700"
-                  MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
+            <Grid x:Name="TrashSurface" Width="700" Height="620"
                   MaxWidth="720"
                   UseLayoutRounding="True"
                   SnapsToDevicePixels="True">
                 <controls:BakedElevationLayer Kind="Dialog"/>
-                <Border Background="{DynamicResource CardBackground}"
+                <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                         BorderThickness="0"
                         CornerRadius="{StaticResource Radius.Overlay}"
                         Padding="24">
@@ -115,7 +101,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
+                        <Grid Grid.Row="0" motion:ArrivalGroups.Role="Heading">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -137,16 +123,14 @@
                                     Click="CloseButton_Click"/>
                         </Grid>
 
-                        <TextBlock Grid.Row="1"
+                        <TextBlock Grid.Row="1" motion:ArrivalGroups.Role="Content"
                                    Margin="0,6,0,12"
                                    Text="{Binding [TrashRetentionNotice], Source={StaticResource Loc}}"
                                    Style="{StaticResource FormHelperTextStyle}"/>
 
-                        <Border Grid.Row="2"
+                        <Border Grid.Row="2" motion:ArrivalGroups.Role="Content"
                                 Margin="0,0,0,10"
-                                Style="{StaticResource ChromeFieldBorderStyle}"
-                                Background="{DynamicResource WindowBackground}"
-                                Padding="10,0"
+                                Style="{StaticResource ChromeInsetFieldBorderStyle}"
                                 Height="36">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -165,7 +149,7 @@
                             </Grid>
                         </Border>
 
-                        <WrapPanel x:Name="TrashFilterPanel"
+                        <WrapPanel x:Name="TrashFilterPanel" motion:ArrivalGroups.Role="Content"
                                    Grid.Row="3"
                                    Margin="0,0,0,8">
                             <RadioButton x:Name="FilterAllRadio"
@@ -197,25 +181,12 @@
                                          Tag="Quiz"/>
                         </WrapPanel>
 
-                        <Grid Grid.Row="4" MinHeight="220">
-                            <StackPanel x:Name="EmptyStateHost"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center"
-                                        Visibility="Collapsed">
-                                <icons:AppIcon Kind="Trash" Width="36" Height="36"
-                                               HorizontalAlignment="Center"
-                                               Foreground="{DynamicResource TextColorSecondary}"
-                                               Opacity="0.55"
-                                               Margin="0,0,0,10"/>
-                                <TextBlock x:Name="EmptyStateText"
-                                           Text="{Binding [TrashEmptyState], Source={StaticResource Loc}}"
-                                           Style="{StaticResource FormHelperTextStyle}"
-                                           HorizontalAlignment="Center"
-                                           TextAlignment="Center"/>
-                            </StackPanel>
+                        <Grid Grid.Row="4">
+                            <controls:ContextualStatePanel x:Name="EmptyStateHost" IllustrationKind="Trash" Visibility="Collapsed"
+                                Title="{Binding [TrashEmptyState], Source={StaticResource Loc}}"
+                                Description="{Binding [MotionStateTrashDescription], Source={StaticResource Loc}}"/>
 
-                            <ListBox x:Name="TrashedItemsListBox"
-                                     MaxHeight="480"
+                            <ListBox x:Name="TrashedItemsListBox" behaviors:ItemPresenceMotionBehavior.IsEnabled="True"
                                      Background="Transparent"
                                      BorderThickness="0"
                                      HorizontalContentAlignment="Stretch"
@@ -226,52 +197,68 @@
                                      ItemContainerStyle="{StaticResource TrashListBoxItemStyle}"
                                      SelectionMode="Extended"
                                      PreviewMouseLeftButtonDown="TrashedItemsListBox_PreviewMouseLeftButtonDown"
-                                     PreviewKeyDown="TrashedItemsListBox_PreviewKeyDown"
                                      SelectionChanged="TrashedItemsListBox_SelectionChanged">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Padding="12,10"
+                                            <controls:SurfaceMaterialBorder behaviors:StateSurfaceMotionBehavior.IsEnabled="True" behaviors:StateSurfaceMotionBehavior.SelectionThickness="2" Padding="12,10"
                                                     CornerRadius="{StaticResource Radius.Card}"
                                                     SnapsToDevicePixels="True">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+                                                        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
+                                                        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
                                                         <Setter Property="BorderBrush" Value="Transparent"/>
                                                         <Setter Property="BorderThickness" Value="2"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource FlashcardCardHoverBackground}"/>
+                                                            <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                <Setter Property="behaviors:StateSurfaceMotionBehavior.ActiveState" Value="True"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource FlashcardCardSelectedBackground}"/>
-                                                                <Setter Property="BorderBrush" Value="{DynamicResource FlashcardCardSelectedBorder}"/>
+                                                                <Setter Property="behaviors:StateSurfaceMotionBehavior.IsSelected" Value="True"/>
                                                             </DataTrigger>
                                                             <MultiDataTrigger>
                                                                 <MultiDataTrigger.Conditions>
                                                                     <Condition Binding="{Binding IsLogicalAllSelected, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"/>
                                                                     <Condition Binding="{Binding IsExcludedFromLogicalSelection}" Value="False"/>
                                                                 </MultiDataTrigger.Conditions>
-                                                                <Setter Property="Background" Value="{DynamicResource FlashcardCardSelectedBackground}"/>
-                                                                <Setter Property="BorderBrush" Value="{DynamicResource FlashcardCardSelectedBorder}"/>
+                                                                <Setter Property="behaviors:StateSurfaceMotionBehavior.IsSelected" Value="True"/>
                                                             </MultiDataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Border.Style>
+                                                <controls:SurfaceMaterialBorder.ContextMenu><ContextMenu><MenuItem Header="{Binding [MassSelectModeTitle], Source={StaticResource Loc}}" Tag="{Binding}" Click="TrashSelectMenu_Click"/></ContextMenu></controls:SurfaceMaterialBorder.ContextMenu>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <icons:AppIcon Kind="{Binding KindIcon}"
+                                                    <controls:CollectionSelectionToggle Grid.Column="0" Loaded="TrashToggle_Loaded" AutomationProperties.Name="{Binding Title}">
+                                                        <controls:CollectionSelectionToggle.Style>
+                                                            <Style TargetType="controls:CollectionSelectionToggle" BasedOn="{StaticResource CollectionSelectionCheckBoxStyle}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/><Setter Property="Margin" Value="0,0,8,0"/>
+                                                                <Setter Property="IsChecked" Value="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsTrashSelecting, RelativeSource={RelativeSource AncestorType=views:TrashPanel}}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsLogicalAllSelected, RelativeSource={RelativeSource AncestorType=views:TrashPanel}}" Value="True"><Setter Property="IsChecked" Value="True"/></DataTrigger>
+                                                                    <MultiDataTrigger><MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding IsLogicalAllSelected, RelativeSource={RelativeSource AncestorType=views:TrashPanel}}" Value="True"/>
+                                                                        <Condition Binding="{Binding IsExcludedFromLogicalSelection}" Value="True"/>
+                                                                    </MultiDataTrigger.Conditions><Setter Property="IsChecked" Value="False"/></MultiDataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </controls:CollectionSelectionToggle.Style>
+                                                    </controls:CollectionSelectionToggle>
+                                                    <icons:AppIcon Grid.Column="1" Kind="{Binding KindIcon}"
                                                                    Width="16" Height="16"
                                                                    Margin="0,0,10,0"
                                                                    VerticalAlignment="Center"
                                                                    Foreground="{DynamicResource TextColorSecondary}"/>
 
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Title}"
                                                                    Style="{StaticResource FormBodyTextStyle}"
                                                                    FontWeight="SemiBold"
@@ -289,7 +276,7 @@
                                                         </TextBlock>
                                                     </StackPanel>
 
-                                                    <Button Grid.Column="2"
+                                                    <Button Grid.Column="3"
                                                             Content="{Binding [TrashRestore], Source={StaticResource Loc}}"
                                                             Tag="{Binding}"
                                                             Style="{StaticResource DialogSecondaryButtonStyle}"
@@ -297,7 +284,7 @@
                                                             Margin="8,0,0,0"
                                                             Click="RestoreItemButton_Click"/>
 
-                                                    <Button Grid.Column="3"
+                                                    <Button Grid.Column="4"
                                                             Content="{Binding [ConfirmDelete], Source={StaticResource Loc}}"
                                                             Tag="{Binding}"
                                                             Style="{StaticResource DialogDangerButtonStyle}"
@@ -305,49 +292,28 @@
                                                             Margin="8,0,0,0"
                                                             Click="DeleteItemPermanentlyButton_Click"/>
                                                 </Grid>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+
                         </Grid>
 
-                        <Grid Grid.Row="5" Margin="0,16,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Orientation="Horizontal">
-                                <Button x:Name="SelectAllTrashButton"
-                                        Content="{Binding [SelectAll], Source={StaticResource Loc}}"
-                                        Style="{StaticResource DialogSecondaryButtonStyle}"
-                                        Padding="12,6"
-                                        Margin="0,0,8,0"
-                                        IsEnabled="False"
-                                        Click="SelectAllTrashButton_Click"/>
-                                <Button x:Name="RestoreSelectedButton"
-                                        Content="{Binding [TrashRestoreSelected], Source={StaticResource Loc}}"
-                                        Style="{StaticResource DialogSecondaryButtonStyle}"
-                                        Padding="12,6"
-                                        Margin="0,0,8,0"
-                                        IsEnabled="False"
-                                        Click="RestoreSelectedButton_Click"/>
-                                <Button x:Name="DeleteSelectedButton"
-                                        Content="{Binding [TrashDeleteSelected], Source={StaticResource Loc}}"
-                                        Style="{StaticResource DialogDangerButtonStyle}"
-                                        Padding="12,6"
-                                        Margin="0,0,8,0"
-                                        IsEnabled="False"
-                                        Click="DeleteSelectedButton_Click"/>
-                                <Button x:Name="EmptyTrashButton"
-                                        Content="{Binding [TrashEmptyAction], Source={StaticResource Loc}}"
-                                        Style="{StaticResource DialogDangerButtonStyle}"
-                                        Padding="12,6"
-                                        Click="EmptyTrashButton_Click"/>
-                            </StackPanel>
+                        <!-- Share the existing footer footprint. The island's overhang lives in
+                             its surrounding padding, preserving uniform virtualized row sizes. -->
+                        <Grid Grid.Row="5" Margin="0,12,0,0" motion:ArrivalGroups.Role="Actions">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Button x:Name="EmptyTrashButton" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,12,0" Height="36" MinHeight="36"
+                                Content="{Binding [TrashEmptyAction], Source={StaticResource Loc}}" Style="{StaticResource DialogDangerButtonStyle}" Padding="12,6" Click="EmptyTrashButton_Click"/>
+                            <Grid Grid.Column="1">
+                                <motion:LayoutRevealHost HorizontalAlignment="Right" VerticalAlignment="Center" Height="48" Margin="0,-6,0,-6">
+                                    <controls:CollectionSelectionDock x:Name="TrashSelectionDock" Visibility="Collapsed"/>
+                                </motion:LayoutRevealHost>
+                            </Grid>
                         </Grid>
+
                     </Grid>
-                </Border>
+                </controls:SurfaceMaterialBorder>
             </Grid>
         </Border>
     </Grid>

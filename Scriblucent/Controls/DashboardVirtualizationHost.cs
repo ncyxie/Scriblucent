@@ -44,6 +44,7 @@ public sealed class DashboardVirtualizationHost : Decorator
     private ScrollViewer? _pageScrollViewer;
     private double _sectionTop;
     private double _extentHeight;
+    private double _extentWidth = double.NaN;
     private double _sliceOffset;
     private double _sliceHeight;
     private int _lastItemCount = -1;
@@ -59,6 +60,8 @@ public sealed class DashboardVirtualizationHost : Decorator
     private double _lastSyncedSliceHeight = double.NaN;
     private double _lastMeasureWidth = double.NaN;
     private bool _sectionTopIsCurrent;
+    private DashboardGroupLayoutPanel? _groupViewportOwner;
+    private bool _groupViewportActive = true;
     private double _extentSnapshotBeforeMutation;
     private double _pendingExtentScrollCompensation;
     private int _smoothScrollDepth;
@@ -136,6 +139,18 @@ public sealed class DashboardVirtualizationHost : Decorator
     }
 
     private bool UsesPageVirtualization => HostMode == DashboardVirtualizationHostMode.PageVirtualized;
+    internal void SetGroupViewportOwner(DashboardGroupLayoutPanel? owner)
+    {
+        if (ReferenceEquals(_groupViewportOwner, owner)) return;
+        _groupViewportOwner = owner;
+        if (owner is null) SetGroupViewportActive(true);
+    }
+    internal void SetGroupViewportActive(bool active)
+    {
+        if (_groupViewportActive == active) return;
+        _groupViewportActive = active;
+        InvalidateSectionGeometry();
+    }
 
     private DashboardVirtualizedCardGrid? Grid => Child as DashboardVirtualizedCardGrid;
 
@@ -338,6 +353,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     internal void NotifyVisualScrollOffsetChanged(double velocityPxPerMs = 0)
     {
+        _groupViewportOwner?.RefreshViewport();
         if (!IsSmoothScrollActive || IsMotionViewportStillFrozen() || !IsScrollViewportViable())
             return;
 
@@ -575,7 +591,14 @@ public sealed class DashboardVirtualizationHost : Decorator
             return;
 
         if (sizeInfo.WidthChanged)
-            RequestViewportRefresh();
+        {
+            // The new width was already measured before this arrange notification.
+            // Refresh the post-arrange position without invalidating the same measure
+            // again on every sidebar frame. Sibling heights may have changed columns.
+            _sectionTopIsCurrent = false;
+            _sectionTop = double.NaN;
+            ScheduleViewportSync();
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -661,7 +684,9 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (!TryUpdateSectionTop())
             return false;
 
-        return !IsSectionPotentiallyVisible(_extentHeight - ExtentBottomPadding);
+        var offscreen = !IsSectionPotentiallyVisible(_extentHeight - ExtentBottomPadding);
+        if (offscreen && Grid is { } grid) ParkViewport(grid);
+        return offscreen;
     }
 
     private void OnPageScrollViewerSizeChanged(object sender, SizeChangedEventArgs e)
@@ -676,10 +701,8 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         if (e.WidthChanged)
         {
-            _lastMeasureWidth = double.NaN;
             _sectionTopIsCurrent = false;
             _sectionTop = double.NaN;
-            InvalidateMeasure();
         }
 
         if (!IsMotionViewportStillFrozen())
@@ -690,7 +713,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     internal void TryPrewarmScrollSurfaceCaches()
     {
-        if (_pageScrollViewer is null || Grid is not { } grid)
+        if (_pageScrollViewer is null || Grid is not { IsVisible: true } grid)
             return;
 
         if (grid.ResolveItemsPanel() is not Panel panel)
@@ -757,6 +780,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private void ApplyViewportScroll(bool force = false)
     {
+        _groupViewportOwner?.RefreshViewport();
         if (IsMotionViewportStillFrozen() || !IsScrollViewportViable())
             return;
 
@@ -790,7 +814,10 @@ public sealed class DashboardVirtualizationHost : Decorator
         measureHeight = ClampMeasureHeightToRemainingContent(measureHeight, sliceOffset, extentHint);
 
         if (measureHeight <= 0)
+        {
+            ParkViewport(grid);
             return;
+        }
 
         if (!force && SlicesAreEquivalent(grid, sliceOffset, measureHeight))
             return;
@@ -819,7 +846,10 @@ public sealed class DashboardVirtualizationHost : Decorator
             contentExtent);
 
         if (measureHeight <= 0)
+        {
+            ParkViewport(grid);
             return;
+        }
 
         if (!force && SlicesAreEquivalent(grid, sliceOffset, measureHeight))
             return;
@@ -829,6 +859,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private void ApplyViewportSlice(DashboardVirtualizedCardGrid grid, double sliceOffset, double measureHeight)
     {
+        if (grid.SetPageViewportActive(true)) InvalidateMeasure();
         var previousOffset = _lastSyncedSliceOffset;
         var previousHeight = _lastSyncedSliceHeight;
         // Height uses the same drift tolerance as offset (not the raw 1px SliceEquivalencePixels):
@@ -890,6 +921,13 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         if (offsetChanged || heightChanged)
             InvalidateArrange();
+    }
+
+    private void ParkViewport(DashboardVirtualizedCardGrid grid)
+    {
+        _sliceHeight = 0;
+        _lastSyncedSliceHeight = 0;
+        if (grid.SetPageViewportActive(false)) InvalidateArrange();
     }
 
     private double ResolveHostMeasureStride(DashboardVirtualizedCardGrid grid)
@@ -1036,6 +1074,12 @@ public sealed class DashboardVirtualizationHost : Decorator
         _lastSyncedSliceOffset = sliceOffset;
         _lastSyncedSliceHeight = measureHeight;
 
+        grid.SetPageViewportActive(measureHeight > 0);
+        if (measureHeight <= 0)
+        {
+            CommitMeasuredExtent(ResolveEffectiveExtent(grid, width, contentExtent));
+            return new Size(width, Math.Max(_extentHeight, 0));
+        }
         grid.ApplyPageViewport(sliceOffset, measureHeight);
         grid.Measure(new Size(width, measureHeight));
 
@@ -1085,7 +1129,7 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        if (Grid is { } grid)
+        if (_sliceHeight > 0 && Grid is { } grid)
         {
             var width = finalSize.Width;
             var height = Math.Max(_sliceHeight, 0);
@@ -1103,6 +1147,8 @@ public sealed class DashboardVirtualizationHost : Decorator
         if (width <= 0)
             return new Size(0, 0);
 
+        if (!double.IsNaN(_lastMeasureWidth) && Math.Abs(width - _lastMeasureWidth) > 0.5)
+            _extentHeight = 0;
         _lastMeasureWidth = width;
         TryUpdateSectionTop();
 
@@ -1140,6 +1186,12 @@ public sealed class DashboardVirtualizationHost : Decorator
         _lastSyncedSliceOffset = sliceOffset;
         _lastSyncedSliceHeight = measureHeight;
 
+        grid.SetPageViewportActive(measureHeight > 0);
+        if (measureHeight <= 0)
+        {
+            CommitMeasuredExtent(ResolveEffectiveExtent(grid, width, contentExtent));
+            return new Size(width, Math.Max(_extentHeight, 0));
+        }
         grid.ApplyPageViewport(sliceOffset, measureHeight);
         grid.Measure(new Size(width, measureHeight));
 
@@ -1186,6 +1238,13 @@ public sealed class DashboardVirtualizationHost : Decorator
         double measuredExtent,
         double contentExtent)
     {
+        // Zero is an intentional off-screen slice, not a missing size estimate.
+        // Promoting it to one pixel below can select the full-small-section shortcut,
+        // realizing every card again immediately after the zero-slice measure recycled
+        // them. Width animation then repeats that recycle/realize cycle every frame.
+        if (measureHeight <= 0)
+            return 0;
+
         var viewportCap = ResolveViewportMeasureCap();
         var effectiveExtent = Math.Max(measuredExtent, contentExtent);
         // Never measure the panel taller than the remaining content below sliceOffset.
@@ -1253,7 +1312,8 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private double ResolveEffectiveExtent(DashboardVirtualizedCardGrid grid, double width, double contentExtent)
     {
-        if (_extentHeight > ExtentBottomPadding)
+        if (_extentHeight > ExtentBottomPadding
+            && (contentExtent <= 0 || Math.Abs(width - _extentWidth) < 0.5))
             return Math.Max(contentExtent, _extentHeight - ExtentBottomPadding);
 
         return contentExtent;
@@ -1356,6 +1416,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         var newExtentHeight = measuredExtent + ExtentBottomPadding;
         QueueExtentScrollCompensation(newExtentHeight);
         _extentHeight = newExtentHeight;
+        _extentWidth = _lastMeasureWidth;
     }
 
     /// <summary>
@@ -1420,15 +1481,19 @@ public sealed class DashboardVirtualizationHost : Decorator
 
     private bool IsSectionPotentiallyVisible(double extentHint = 0)
     {
+        if (!_groupViewportActive) return false;
         if (_pageScrollViewer is null)
             return true;
+        if (_pageScrollViewer.ViewportHeight <= 0)
+            return false;
 
         if (double.IsNaN(_sectionTop))
             return true;
 
         var effectiveExtent = extentHint > 0 ? extentHint : _extentHeight;
-        var viewportTop = ResolveEffectiveVerticalOffset();
-        var viewportBottom = viewportTop + _pageScrollViewer.ViewportHeight;
+        var offset = ResolveEffectiveVerticalOffset();
+        var viewportTop = Math.Max(0, offset - ResolveViewportCacheAbovePixels());
+        var viewportBottom = offset + _pageScrollViewer.ViewportHeight + ResolveViewportCachePixels();
         if (_sectionTop >= viewportBottom)
             return false;
 
@@ -1464,7 +1529,7 @@ public sealed class DashboardVirtualizationHost : Decorator
         sliceOffset = 0;
         sliceHeight = 0;
 
-        if (width <= 0)
+        if (!_groupViewportActive || width <= 0)
             return;
 
         if (_pageScrollViewer is null)
@@ -1472,13 +1537,18 @@ public sealed class DashboardVirtualizationHost : Decorator
             sliceHeight = BootstrapViewportHeight;
             return;
         }
+        if (_pageScrollViewer.ViewportHeight <= 0)
+            return;
 
         if (!TryUpdateSectionTop())
             return;
 
         var effectiveExtent = extentHint > 0 ? extentHint : _extentHeight;
-        var viewportTop = ResolveEffectiveVerticalOffset();
-        var viewportBottom = viewportTop + _pageScrollViewer.ViewportHeight;
+        // Include the existing directional cache margins in the intersection itself.
+        // Nearby groups warm before entering the viewport; distant groups remain parked.
+        var offset = ResolveEffectiveVerticalOffset();
+        var viewportTop = Math.Max(0, offset - ResolveViewportCacheAbovePixels());
+        var viewportBottom = offset + _pageScrollViewer.ViewportHeight + ResolveViewportCachePixels();
 
         if (_sectionTop >= viewportBottom)
             return;
@@ -1505,20 +1575,6 @@ public sealed class DashboardVirtualizationHost : Decorator
 
         if (sliceHeight <= 0)
             return;
-
-        var cachePixels = ResolveViewportCachePixels();
-        if (effectiveExtent > 0)
-            sliceHeight = Math.Min(sliceHeight + cachePixels, Math.Max(effectiveExtent - sliceOffset, sliceHeight));
-        else
-            sliceHeight += cachePixels;
-
-        var cacheAbove = ResolveViewportCacheAbovePixels();
-        if (cacheAbove > 0 && sliceOffset > 0)
-        {
-            var extendedOffset = Math.Max(0, sliceOffset - cacheAbove);
-            sliceHeight += sliceOffset - extendedOffset;
-            sliceOffset = extendedOffset;
-        }
 
         if (sliceOffset < 1 && effectiveExtent > 0)
         {

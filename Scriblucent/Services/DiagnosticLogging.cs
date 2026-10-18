@@ -19,7 +19,7 @@ internal static class DiagnosticLogging
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Scriblucent",
-            "AiCache",
-            "diagnostics");
+            "Logs",
+            "AI");
     }
 }

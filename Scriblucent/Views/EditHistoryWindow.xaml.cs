@@ -27,6 +27,9 @@ public partial class EditHistoryWindow : Window
         }
         else
         {
+            HistoryState.IsLoading = true;
+            HistoryState.Title = LocalizationService.GetString("MotionStateLoading");
+            HistoryState.Description = "";
             var loadStarted = false;
             Loaded += async (_, _) =>
             {
@@ -50,7 +53,14 @@ public partial class EditHistoryWindow : Window
 
     private void BindVersions(List<EditHistoryListItem> items)
     {
+        var completingLoad = HistoryState.IsLoading;
+        HistoryState.IsLoading = false;
+        HistoryState.Title = LocalizationService.GetString("MotionStateEditTitle");
+        HistoryState.Description = LocalizationService.GetString("MotionStateEditDescription");
+        HistoryState.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HistoryListBox.ItemsSource = items;
+        if (completingLoad && HistoryListBox.IsLoaded)
+        { HistoryListBox.Opacity = MotionPolicy.Spatial ? .7 : 1; SurfaceMotion.Animate(HistoryListBox, 1, 120, UiMotion.OutSine, false); }
         if (items.Count > 0)
             HistoryListBox.SelectedIndex = 0;
     }

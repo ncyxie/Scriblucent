@@ -32,7 +32,7 @@
                  control). The open path (NoteCardControl.OpenContextMenu) assigns the card's
                  DataContext on each open, and the binding below is the fallback for any other
                  opener. -->
-            <ContextMenu x:Key="NoteCardContextMenu"
+            <ContextMenu x:Key="NoteCardContextMenu" behaviors:ItemReorderBehavior.MenuActions="True"
                          DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                 <MenuItem Header="{Binding [Open], Source={StaticResource Loc}}" Click="OnNoteCardMenuOpen"/>
                 <MenuItem Header="{Binding [SelectMultiple], Source={StaticResource Loc}}" Click="OnNoteCardMenuSelectMultiple"/>
@@ -56,69 +56,7 @@
                 <MenuItem Header="{Binding [Delete], Source={StaticResource Loc}}" Command="{Binding DeleteCommand}"/>
             </ContextMenu>
 
-            <Style TargetType="{x:Type CheckBox}">
-                <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-                <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
-                <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
-                <Setter Property="FontWeight" Value="Normal"/>
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="Padding" Value="4,0,0,0"/>
-                <Setter Property="VerticalAlignment" Value="Center"/>
-                <Setter Property="OverridesDefaultStyle" Value="True"/>
-                <Setter Property="behaviors:CheckBoxCheckMotionBehavior.IsEnabled" Value="True"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="CheckBox">
-                            <Grid Background="Transparent">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="18"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Border x:Name="CheckBoxBorder"
-                                        Grid.Column="0"
-                                        Width="18"
-                                        Height="18"
-                                        Background="{DynamicResource CardBackground}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="4">
-                                    <Path x:Name="CheckGlyph"
-                                          Data="M 2,5.5 L 5.5,9 L 12,2.5"
-                                          Stroke="{DynamicResource TextColor}"
-                                          StrokeThickness="1.75"
-                                          StrokeStartLineCap="Round"
-                                          StrokeEndLineCap="Round"
-                                          StrokeLineJoin="Round"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Opacity="0"
-                                          StrokeDashArray="{StaticResource CheckGlyphDashArray}"
-                                          StrokeDashOffset="{StaticResource CheckGlyphPathLength}"/>
-                                </Border>
-                                <ContentPresenter Grid.Column="1"
-                                                  Margin="6,0,0,0"
-                                                  VerticalAlignment="Center"
-                                                  RecognizesAccessKey="True"/>
-                            </Grid>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsChecked" Value="True">
-                                    <Setter TargetName="CheckBoxBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                                    <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                                </Trigger>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="CheckBoxBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                                    <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                                </Trigger>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Opacity" Value="0.6"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
+
 
             <Style x:Key="ModernScrollBarThumbStyle" TargetType="{x:Type Thumb}">
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -214,49 +152,7 @@
                 </Setter>
             </Style>
 
-            <!-- Level 1 grabber: theme fill + accent ring so the thumb reads on card/window chrome. -->
-            <ControlTemplate x:Key="ModernSliderThumbTemplate" TargetType="{x:Type Thumb}">
-                <Ellipse Width="14"
-                         Height="14"
-                         Fill="{DynamicResource SliderThumbBackground}"
-                         Stroke="{DynamicResource SliderThumbBorder}"
-                         StrokeThickness="2"
-                         Effect="{StaticResource Elevation.Thumb}"/>
-            </ControlTemplate>
-
-            <Style TargetType="{x:Type Slider}">
-                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                <Setter Property="Height" Value="24"/>
-                <Setter Property="SnapsToDevicePixels" Value="True"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="{x:Type Slider}">
-                            <Grid Margin="2,0">
-                                <Border Height="4"
-                                        CornerRadius="2"
-                                        VerticalAlignment="Center"
-                                        Background="{DynamicResource SliderTrackBackground}"/>
-                                <Track x:Name="PART_Track" Focusable="False">
-                                    <Track.DecreaseRepeatButton>
-                                        <RepeatButton Command="Slider.DecreaseLarge"
-                                                      Opacity="0"
-                                                      Focusable="False"/>
-                                    </Track.DecreaseRepeatButton>
-                                    <Track.IncreaseRepeatButton>
-                                        <RepeatButton Command="Slider.IncreaseLarge"
-                                                      Opacity="0"
-                                                      Focusable="False"/>
-                                    </Track.IncreaseRepeatButton>
-                                    <Track.Thumb>
-                                        <Thumb Template="{StaticResource ModernSliderThumbTemplate}"
-                                               VerticalAlignment="Center"/>
-                                    </Track.Thumb>
-                                </Track>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
+            <Style TargetType="{x:Type Slider}" BasedOn="{StaticResource ModernSliderStyle}"/>
 
             <Style TargetType="{x:Type ScrollViewer}">
                 <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="True"/>
@@ -309,7 +205,7 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type ContextMenu}">
-                            <Border Background="Transparent"
+                            <Border
                                     Padding="32"
                                     ClipToBounds="False">
                                 <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
@@ -319,7 +215,7 @@
                                             CornerRadius="{StaticResource Radius.Card}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Card}"
@@ -332,7 +228,7 @@
                                             <StackPanel IsItemsHost="True"
                                                         KeyboardNavigation.DirectionalNavigation="Cycle"/>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </ControlTemplate>
@@ -343,7 +239,8 @@
             <!-- Leaf + submenu MenuItem chrome. SubmenuHeader needs PART_Popup / ItemsHost
                  or nested ContextMenu items (table Insert ▸ etc.) never open or fire. -->
             <ControlTemplate x:Key="MenuItemLeafTemplate" TargetType="{x:Type MenuItem}">
-                <Border x:Name="ItemBorder"
+                <Border x:Name="ItemBorder" behaviors:StateSurfaceMotionBehavior.IsEnabled="True"
+                        behaviors:StateSurfaceMotionBehavior.ActiveState="{Binding IsHighlighted, RelativeSource={RelativeSource TemplatedParent}}"
                         Background="Transparent"
                         CornerRadius="{StaticResource Radius.Control}"
                         Padding="12,8"
@@ -398,9 +295,6 @@
                     </Grid>
                 </Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsHighlighted" Value="True">
-                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
-                    </Trigger>
                     <Trigger Property="IsChecked" Value="True">
                         <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
                         <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/>
@@ -412,7 +306,8 @@
             </ControlTemplate>
 
             <ControlTemplate x:Key="MenuItemSubmenuHeaderTemplate" TargetType="{x:Type MenuItem}">
-                <Border x:Name="ItemBorder"
+                <Border x:Name="ItemBorder" behaviors:StateSurfaceMotionBehavior.IsEnabled="True"
+                        behaviors:StateSurfaceMotionBehavior.ActiveState="{Binding IsHighlighted, RelativeSource={RelativeSource TemplatedParent}}"
                         Background="Transparent"
                         CornerRadius="{StaticResource Radius.Control}"
                         Padding="12,8"
@@ -463,9 +358,9 @@
                                HorizontalOffset="-8"
                                IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                Placement="Right"
-                               PopupAnimation="Fade"
+                               PopupAnimation="None"
                                VerticalOffset="-24">
-                            <Border Background="Transparent"
+                            <Border
                                     Padding="32"
                                     ClipToBounds="False">
                                 <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
@@ -475,7 +370,7 @@
                                             CornerRadius="{StaticResource Radius.Card}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Card}"
@@ -488,18 +383,15 @@
                                             <StackPanel IsItemsHost="True"
                                                         KeyboardNavigation.DirectionalNavigation="Cycle"/>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </Popup>
                     </Grid>
                 </Border>
                 <ControlTemplate.Triggers>
-                    <Trigger Property="IsHighlighted" Value="True">
-                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
-                    </Trigger>
                     <Trigger Property="IsSubmenuOpen" Value="True">
-                        <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
+                        <Setter TargetName="ItemBorder" Property="behaviors:StateSurfaceMotionBehavior.ActiveState" Value="True"/>
                     </Trigger>
                     <Trigger Property="IsEnabled" Value="False">
                         <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
@@ -508,10 +400,11 @@
             </ControlTemplate>
 
             <Style TargetType="{x:Type MenuItem}">
+                <Setter Property="MinHeight" Value="{StaticResource Control.Height.Menu}"/>
                 <Setter Property="OverridesDefaultStyle" Value="True"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
                 <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
-                <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
+                <Setter Property="FontSize" Value="{StaticResource Type.Control.Menu}"/>
                 <Setter Property="FontWeight" Value="Normal"/>
                 <Setter Property="Cursor" Value="Hand"/>
                 <Setter Property="Template" Value="{StaticResource MenuItemLeafTemplate}"/>
@@ -523,6 +416,35 @@
                         <Setter Property="Template" Value="{StaticResource MenuItemSubmenuHeaderTemplate}"/>
                     </Trigger>
                 </Style.Triggers>
+            </Style>
+
+            <Style x:Key="GroupColourMenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                <Setter Property="IsCheckable" Value="True"/>
+                <Setter Property="IsChecked">
+                    <Setter.Value>
+                        <MultiBinding Converter="{StaticResource GroupAccentConverter}" ConverterParameter="Selected" Mode="OneWay">
+                            <Binding Path="PlacementTarget.DataContext.BackgroundBrush" RelativeSource="{RelativeSource AncestorType=ContextMenu}"/>
+                            <Binding Path="Tag" RelativeSource="{RelativeSource Self}"/>
+                        </MultiBinding>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="HeaderTemplate">
+                    <Setter.Value>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="12" Height="12" CornerRadius="4" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <Border.Background>
+                                        <MultiBinding Converter="{StaticResource GroupAccentConverter}" ConverterParameter="Swatch">
+                                            <Binding Path="Tag" RelativeSource="{RelativeSource AncestorType=MenuItem}"/>
+                                            <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=MenuItem}"/>
+                                        </MultiBinding>
+                                    </Border.Background>
+                                </Border>
+                                <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

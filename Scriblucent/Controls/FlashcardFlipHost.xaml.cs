@@ -1,7 +1,8 @@
-using Scriblucent.Animations;
+﻿using Scriblucent.Animations;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace Scriblucent.Controls;
 
@@ -46,6 +47,7 @@ public partial class FlashcardFlipHost : UserControl
     {
         InitializeComponent();
         Loaded += (_, _) => ApplyFlippedVisual(IsFlipped);
+        Unloaded += (_, _) => { UiMotion.Cleanup(this); StopFaceTimelines(); RestoreBakedShadowPlates(); DashboardShadowSuspender.TryResume(this); _isAnimating = false; };
         SizeChanged += OnSizeChanged;
         IsVisibleChanged += (_, _) =>
         {
@@ -74,13 +76,41 @@ public partial class FlashcardFlipHost : UserControl
 
     public bool IsAnimating => _isAnimating;
 
+    public static readonly DependencyProperty DeferHiddenFaceLayoutProperty = DependencyProperty.Register(
+        nameof(DeferHiddenFaceLayout), typeof(bool), typeof(FlashcardFlipHost), new PropertyMetadata(false, (d, _) =>
+        {
+            var host = (FlashcardFlipHost)d;
+            if (host.IsInitialized && !host._isAnimating)
+            {
+                host.UpdateFaceVisibility(host.IsFlipped ? BackScale : FrontScale);
+                host.StableFlipShadow.Visibility = host.DeferHiddenFaceLayout ? Visibility.Collapsed : Visibility.Hidden;
+            }
+        }));
+    public bool DeferHiddenFaceLayout
+    {
+        get => (bool)GetValue(DeferHiddenFaceLayoutProperty);
+        set => SetValue(DeferHiddenFaceLayoutProperty, value);
+    }
+    private bool _preparingFaces;
+
     public void AnimateToggle(int durationMs, Action? onComplete = null)
     {
         if (_isAnimating)
             return;
 
-        if (!EnsureExtents())
-            return;
+        _preparingFaces = true;
+        try
+        {
+            if (!EnsureExtents()) return;
+            if (DeferHiddenFaceLayout)
+            {
+                var inactive = IsFlipped ? (FrameworkElement)FrontHost : BackFace;
+                inactive.Visibility = Visibility.Hidden;
+                var size = new Size(_lastExtentWidth, _lastExtentHeight);
+                inactive.Measure(size); inactive.Arrange(new Rect(size));
+            }
+        }
+        finally { _preparingFaces = false; }
 
         var targetFlipped = !IsFlipped;
         if (UiMotion.PrefersReducedMotion)
@@ -102,31 +132,59 @@ public partial class FlashcardFlipHost : UserControl
         HideBakedShadowPlates();
         ApplyScale(fromScale);
 
-        UiMotion.RunComposited(
-            this,
-            new[]
-            {
-                UiMotion.Track(
-                    duration,
-                    UiMotion.InOutSine,
-                    fromScale,
-                    toScale,
-                    ApplyScale)
-            },
+        BeginFaceTimelines(duration, targetFlipped);
+        SurfaceMotion.AnimateTracks(this, MotionChannel.Showcase,
+            [new(FlipScale, ScaleTransform.ScaleYProperty, toScale, true)], duration, UiMotion.InOutSine,
             () =>
             {
-                DashboardShadowSuspender.TryResume(this);
-                RestoreBakedShadowPlates();
-                ApplyScale(toScale);
-                CommitFlipState(targetFlipped);
-                _isAnimating = false;
-                onComplete?.Invoke();
+                StopFaceTimelines();
+                DashboardShadowSuspender.TryResume(this); RestoreBakedShadowPlates();
+                ApplyScale(toScale); CommitFlipState(targetFlipped);
+                _isAnimating = false; onComplete?.Invoke();
             });
     }
 
+    private void BeginFaceTimelines(int duration, bool targetFlipped)
+    {
+        AnimationClock VisibilityClock(Visibility from, Visibility to)
+        {
+            var animation = new ObjectAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(duration), FillBehavior = FillBehavior.Stop };
+            animation.KeyFrames.Add(new DiscreteObjectKeyFrame(from, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            animation.KeyFrames.Add(new DiscreteObjectKeyFrame(to, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(duration * .5))));
+            return animation.CreateClock();
+        }
+        var frontVisibilityClock = VisibilityClock(IsFlipped ? Visibility.Hidden : Visibility.Visible,
+            targetFlipped ? Visibility.Hidden : Visibility.Visible);
+        var backVisibilityClock = VisibilityClock(IsFlipped ? Visibility.Visible : Visibility.Hidden,
+            targetFlipped ? Visibility.Visible : Visibility.Hidden);
+        FrontHost.ApplyAnimationClock(UIElement.VisibilityProperty, frontVisibilityClock);
+        BackFace.ApplyAnimationClock(UIElement.VisibilityProperty, backVisibilityClock);
+        AnimationClock DepthClock(double rest, double middle)
+        {
+            var animation = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
+            animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(rest, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            animation.KeyFrames.Add(new EasingDoubleKeyFrame(middle, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(duration * .5)), UiMotion.InOutSine));
+            animation.KeyFrames.Add(new EasingDoubleKeyFrame(rest, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(duration)), UiMotion.InOutSine));
+            return animation.CreateClock();
+        }
+        FlipShade.ApplyAnimationClock(UIElement.OpacityProperty, DepthClock(0, .12));
+        var shadow = StableFlipShadow.Opacity;
+        StableFlipShadow.ApplyAnimationClock(UIElement.OpacityProperty, DepthClock(shadow, shadow * .7));
+    }
+
+    private void StopFaceTimelines()
+    {
+        FrontHost.ApplyAnimationClock(UIElement.VisibilityProperty, null);
+        BackFace.ApplyAnimationClock(UIElement.VisibilityProperty, null);
+        FlipShade.ApplyAnimationClock(UIElement.OpacityProperty, null);
+        StableFlipShadow.ApplyAnimationClock(UIElement.OpacityProperty, null);
+        FlipShade.Opacity = 0;
+    }
+
     /// <summary>
-    /// Nine-slice plates distort under ScaleY flip; hide for the animation only (live Effects
-    /// are handled by <see cref="DashboardShadowSuspender"/>).
+    /// Replace the two face shadows with one shadow inside the flip transform, so it
+    /// contracts with the face instead of exposing a full-size shaded rectangle behind it.
+    /// Live Effects are handled by <see cref="DashboardShadowSuspender"/>.
     /// </summary>
     private void HideBakedShadowPlates()
     {
@@ -135,6 +193,11 @@ public partial class FlashcardFlipHost : UserControl
         CollectBakedShadowPlates(BackFace);
         foreach (var (layer, _) in _hiddenPlates)
             layer.Opacity = 0;
+        if (_hiddenPlates.Count > 0)
+        {
+            StableFlipShadow.Opacity = _hiddenPlates[0].Opacity;
+            StableFlipShadow.Visibility = Visibility.Visible;
+        }
     }
 
     private void CollectBakedShadowPlates(DependencyObject? root)
@@ -155,6 +218,8 @@ public partial class FlashcardFlipHost : UserControl
         foreach (var (layer, opacity) in _hiddenPlates)
             layer.Opacity = opacity;
         _hiddenPlates.Clear();
+        StableFlipShadow.Visibility = DeferHiddenFaceLayout ? Visibility.Collapsed : Visibility.Hidden;
+        FlipShade.Opacity = 0;
     }
 
     private void CommitFlipState(bool flipped)
@@ -167,12 +232,18 @@ public partial class FlashcardFlipHost : UserControl
 
     private void ApplyFlippedVisual(bool flipped)
     {
+        UiMotion.Stop(this);
+        StopFaceTimelines();
+        RestoreBakedShadowPlates();
+        DashboardShadowSuspender.TryResume(this);
+        _isAnimating = false;
         if (!EnsureExtents())
             return;
 
         UiMotion.Stop(this);
         UiMotion.Clear(FlipScale, ScaleTransform.ScaleYProperty);
         ApplyScale(flipped ? BackScale : FrontScale);
+        CollectionSelectionFrame.For(this)?.RefreshFace();
     }
 
     /// <summary>
@@ -184,8 +255,12 @@ public partial class FlashcardFlipHost : UserControl
     /// </summary>
     internal void PrepareForReuse()
     {
+        UiMotion.Cleanup(this);
+        StopFaceTimelines();
+        DashboardShadowSuspender.TryResume(this);
         RestoreBakedShadowPlates();
         _isAnimating = false;
+        FlipShade.Opacity = 0;
         _suppressFlipSync = false;
         ResetExtents();
         ApplyFlippedVisual(IsFlipped);
@@ -340,6 +415,7 @@ public partial class FlashcardFlipHost : UserControl
 
     private void UpdateFaceVisibility(double scaleY)
     {
+        var inactive = DeferHiddenFaceLayout && !_isAnimating && !_preparingFaces ? Visibility.Collapsed : Visibility.Hidden;
         if (Math.Abs(scaleY) <= EdgeThreshold)
         {
             FrontHost.Visibility = Visibility.Hidden;
@@ -350,11 +426,11 @@ public partial class FlashcardFlipHost : UserControl
         if (scaleY > 0)
         {
             FrontHost.Visibility = Visibility.Visible;
-            BackFace.Visibility = Visibility.Hidden;
+            BackFace.Visibility = inactive;
             return;
         }
 
-        FrontHost.Visibility = Visibility.Hidden;
+        FrontHost.Visibility = inactive;
         BackFace.Visibility = Visibility.Visible;
     }
 

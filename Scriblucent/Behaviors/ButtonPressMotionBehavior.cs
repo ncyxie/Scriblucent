@@ -23,6 +23,9 @@ public static class ButtonPressMotionBehavior
         public MouseButtonEventHandler? MouseDownHandler;
         public MouseButtonEventHandler? MouseUpHandler;
         public MouseEventHandler? MouseLeaveHandler;
+        public KeyEventHandler? KeyDownHandler;
+        public KeyEventHandler? KeyUpHandler;
+        public KeyboardFocusChangedEventHandler? LostFocusHandler;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -114,6 +117,28 @@ public static class ButtonPressMotionBehavior
             PlayPress(element, isPressed: false);
         };
 
+        state.KeyDownHandler = (_, e) =>
+        {
+            if (element is ButtonBase && e.Key is Key.Space or Key.Enter && !e.IsRepeat && element.IsEnabled)
+            { state.IsPressed = true; PlayPress(element, true); }
+        };
+        state.KeyUpHandler = (_, e) =>
+        {
+            if (e.Key is Key.Space or Key.Enter && state.IsPressed)
+            { state.IsPressed = false; PlayPress(element, false); }
+        };
+        state.LostFocusHandler = (_, _) =>
+        {
+            if (!state.IsPressed) return;
+            state.IsPressed = false;
+            PlayPress(element, false);
+        };
+        element.Loaded -= OnLoaded;
+        element.Loaded += OnLoaded;
+        element.PreviewKeyDown += state.KeyDownHandler;
+        element.PreviewKeyUp += state.KeyUpHandler;
+        element.LostKeyboardFocus += state.LostFocusHandler;
+
         element.Unloaded += OnUnloaded;
         element.PreviewMouseLeftButtonDown += state.MouseDownHandler;
         element.PreviewMouseLeftButtonUp += state.MouseUpHandler;
@@ -125,6 +150,14 @@ public static class ButtonPressMotionBehavior
     {
         if (sender is FrameworkElement element)
             Detach(element);
+    }
+
+    private static void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element || !GetIsEnabled(element)) return;
+        if (ResolveMotionHost(element) is Scriblucent.Controls.InteractionSurface || ChromeHoverMotionBehavior.GetIsEnabled(element))
+            Detach(element);
+        else Attach(element);
     }
 
     private static void Detach(FrameworkElement element)
@@ -140,11 +173,12 @@ public static class ButtonPressMotionBehavior
         if (state.MouseLeaveHandler != null)
             element.MouseLeave -= state.MouseLeaveHandler;
 
-        UiMotion.Stop(element);
+        element.PreviewKeyDown -= state.KeyDownHandler;
+        element.PreviewKeyUp -= state.KeyUpHandler;
+        element.LostKeyboardFocus -= state.LostFocusHandler;
         var host = ResolveMotionHost(element);
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+        UiMotion.Stop(UiMotion.Channel(host, MotionChannel.Interaction));
+        var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
         translate.X = 0;
         translate.Y = 0;
         ClearPressedBackground(element);
@@ -155,24 +189,24 @@ public static class ButtonPressMotionBehavior
 
     private static void PlayPress(FrameworkElement element, bool isPressed)
     {
+        // Shared button faces and lifted chrome already own this interaction channel.
+        if (ResolveMotionHost(element) is Scriblucent.Controls.InteractionSurface || ChromeHoverMotionBehavior.GetIsEnabled(element)) return;
         ApplyPressedBackground(element, isPressed);
 
         if (UiMotion.PrefersReducedMotion)
             return;
 
         var host = ResolveMotionHost(element);
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+        var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
 
         var targetNudge = isPressed ? UiMotion.PressNudgeY : 0.0;
         var nudgeFrom = translate.Y;
 
         UiMotion.Run(
-            element,
+            host, MotionChannel.Interaction,
             new[]
             {
-                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, nudgeFrom, targetNudge, value => translate.Y = value)
+                UiMotion.Track(isPressed ? 80 : 120, UiMotion.OutCubic, nudgeFrom, targetNudge, value => translate.Y = value)
             });
     }
 

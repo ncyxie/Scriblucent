@@ -1,3 +1,4 @@
+using Scriblucent.Localization;
 using Scriblucent.Animations;
 using Scriblucent.Models;
 using Scriblucent.Services;
@@ -22,6 +23,7 @@ public partial class FlashcardStatisticsWindow : Window
         public string Label { get; init; } = string.Empty;
         public int Count { get; init; }
         public double Ratio { get; init; }
+        public string CountDescription => $"{Label}: {Count}";
         public string ChipKind { get; init; } = "Neutral";
     }
 
@@ -43,9 +45,10 @@ public partial class FlashcardStatisticsWindow : Window
     {
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
+        Scriblucent.Services.FeatureWindowBounds.Attach(this);
 
         var cards = mainViewModel.FlashcardSets.SelectMany(set => set.Document.Cards ?? new List<FlashcardItem>());
-        Initialize(cards, "All flashcard sets");
+        Initialize(cards, LocalizationService.GetString("PremiumAllFlashcardSets"));
 
         WindowContentEnterHelper.AnimateOnLoaded(this);
     }
@@ -55,6 +58,7 @@ public partial class FlashcardStatisticsWindow : Window
     {
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
+        Scriblucent.Services.FeatureWindowBounds.Attach(this);
 
         var document = documentProvider();
         Initialize(document.Cards ?? new List<FlashcardItem>(), document.Title);
@@ -73,17 +77,23 @@ public partial class FlashcardStatisticsWindow : Window
         NewCountText = snapshot.NewCount.ToString();
         LearningCountText = snapshot.LearningCount.ToString();
         MatureCountText = snapshot.MatureCount.ToString();
-        DifficultySignalTitleText = snapshot.DifficultySignalLabel;
+        DifficultySignalTitleText = LocalizationService.GetString(snapshot.DifficultySignalLabel == "Difficulty"
+            ? "PremiumDifficulty" : "PremiumEaseFactor");
 
         var maturityMax = Math.Max(snapshot.NewCount, Math.Max(snapshot.LearningCount, snapshot.MatureCount));
         MaturityRows = new List<StatBarRow>
         {
-            BuildRow("New", snapshot.NewCount, maturityMax, "New"),
-            BuildRow("Learning", snapshot.LearningCount, maturityMax, "Learning"),
-            BuildRow("Mature", snapshot.MatureCount, maturityMax, "Mature")
+            BuildRow(LocalizationService.GetString("PremiumNew"), snapshot.NewCount, maturityMax, "New"),
+            BuildRow(LocalizationService.GetString("PremiumLearning"), snapshot.LearningCount, maturityMax, "Learning"),
+            BuildRow(LocalizationService.GetString("PremiumMature"), snapshot.MatureCount, maturityMax, "Mature")
         };
 
-        ForecastRows = BuildRows(snapshot.Forecast.Select(day => (day.Label, day.Count)));
+        ForecastRows = BuildRows(snapshot.Forecast.Select((day, index) => (index switch
+        {
+            0 => LocalizationService.GetString("PremiumToday"),
+            1 => LocalizationService.GetString("PremiumTomorrow"),
+            _ => day.Date.ToString("ddd", System.Globalization.CultureInfo.CurrentCulture)
+        }, day.Count)));
         IntervalRows = BuildRows(snapshot.IntervalBuckets.Select(bucket => (bucket.Label, bucket.Count)));
         DifficultySignalRows = BuildRows(snapshot.DifficultySignalBuckets.Select(bucket => (bucket.Label, bucket.Count)));
 
@@ -112,9 +122,16 @@ public partial class FlashcardStatisticsWindow : Window
             return;
 
         var trackWidth = track.ActualWidth > 1 ? track.ActualWidth : StatBarTrackFallbackWidth;
-        var targetWidth = trackWidth * row.Ratio;
+        UiMotion.EnsureScale(fill).ScaleX = 0;
+        UiMotion.AnimateProgress(fill, trackWidth, row.Ratio);
+        track.SizeChanged -= StatBarTrack_SizeChanged;
+        track.SizeChanged += StatBarTrack_SizeChanged;
+    }
 
-        UiMotion.AnimateWidth(fill, 0, targetWidth, UiMotion.FastMs, UiMotion.OutCubic);
+    private void StatBarTrack_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is Border { Child: Border fill, DataContext: StatBarRow row } track)
+            UiMotion.AnimateProgress(fill, track.ActualWidth, row.Ratio, animate: false);
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();

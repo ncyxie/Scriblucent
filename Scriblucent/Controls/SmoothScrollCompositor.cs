@@ -784,6 +784,7 @@ internal static class SmoothScrollCompositor
 
     private static void CacheScrollShellsWalk(DependencyObject node, List<FrameworkElement> cached)
     {
+        if (node is DashboardGroupCard { IsViewportActive: false }) return;
         // WPF's virtualizing item panels recycle their children while scrolling. Caching a
         // realized row as a static shell makes WPF repaint that bitmap whenever the container
         // takes the next item, which is especially costly in very large ListBoxes (Trash).

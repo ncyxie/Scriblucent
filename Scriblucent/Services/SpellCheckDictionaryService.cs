@@ -118,7 +118,7 @@ internal static class SpellCheckDictionaryService
         => SupportedLanguages.FirstOrDefault(language => string.Equals(language.Key, key, StringComparison.OrdinalIgnoreCase));
 
     public static string GetDictionariesRootDirectoryPath()
-        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "dictionaries");
+        => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "Dictionaries");
 
     /// <summary>Each language is a single self-contained directory (dic + aff + metadata) -
     /// lets install/update be an atomic directory swap instead of juggling two independently-

@@ -28,10 +28,10 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Level 5 status glyph: fill only (role I soft); IconBorder kept for binding if needed later. -->
-                <Border Grid.Column="0"
+                <controls:SurfaceMaterialBorder Grid.Column="0"
                         Width="48"
                         Height="48"
-                        Background="{Binding IconBackground}"
+                        controls:SurfaceMaterial.Kind="Tinted" Background="{Binding IconBackground}"
                         BorderThickness="0"
                         CornerRadius="12"
                         HorizontalAlignment="Center"
@@ -42,7 +42,7 @@
                                    Foreground="{Binding IconForeground}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
-                </Border>
+                </controls:SurfaceMaterialBorder>
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding TitleText}"

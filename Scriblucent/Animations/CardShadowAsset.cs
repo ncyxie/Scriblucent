@@ -7,16 +7,14 @@ namespace Scriblucent.Animations;
 
 /// <summary>
 /// One shared, pre-rendered soft-shadow texture (baked once, frozen) reused as a nine-slice
-/// across every card. A live <see cref="DropShadowEffect"/> forces a real GPU blur pass on
-/// every dirty repaint; with many cards on screen during a scroll, that per-element blur cost
-/// is what made scrolling choppy. Baking the blur once into a small shared bitmap and
-/// slicing/stretching it costs nothing per card beyond a handful of cheap image draws. The bake
-/// composites a soft centered ambient contact with a downward key cast so tops stay readable on
-/// light shells without a live effect.
+/// across every card. The blur runs only while baking; card rendering draws the frozen
+/// slices without a live effect. Each tile applies its own opacity so the empty center
+/// does not require a full-card opacity surface or a separate bitmap cache. The bake
+/// combines centered contact with a downward cast to keep tops readable on light shells.
 /// </summary>
 internal static class CardShadowAsset
 {
-    public const double CornerTileSize = 28;
+    public const double CornerTileSize = 36;
 
     private const double ShapeCornerRadius = 14;
     private const double BlurRadius = 14;
@@ -85,6 +83,25 @@ internal static class CardShadowAsset
         var rtb = new RenderTargetBitmap(pixelSize, pixelSize, dpi, dpi, PixelFormats.Pbgra32);
         rtb.Render(visual);
         rtb.Freeze();
-        return rtb;
+
+        // The face can fade independently during group arrival. Keep its rounded interior
+        // transparent in the shared texture, rather than relying on an opaque face to cover it.
+        var faceInset = BlurRadius + 3;
+        var bounds = new Rect(0, 0, SwatchSize, SwatchSize);
+        var face = new Rect(faceInset, faceInset, SwatchSize - faceInset * 2, SwatchSize - faceInset * 2);
+        var outsideFace = new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(bounds), new RectangleGeometry(face, ShapeCornerRadius, ShapeCornerRadius));
+        outsideFace.Freeze();
+        var cutout = new DrawingVisual();
+        using (var dc = cutout.RenderOpen())
+        {
+            dc.PushClip(outsideFace);
+            dc.DrawImage(rtb, bounds);
+            dc.Pop();
+        }
+        var shadowOnly = new RenderTargetBitmap(pixelSize, pixelSize, dpi, dpi, PixelFormats.Pbgra32);
+        shadowOnly.Render(cutout);
+        shadowOnly.Freeze();
+        return shadowOnly;
     }
 }

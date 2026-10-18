@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -224,6 +224,28 @@ public class VirtualizingWrapPanel : VirtualizingPanelBase
     {
         itemSizesCache = AllowDifferentSizedItems ? Utils.NewUninitializedList<Size>(Items.Count) : [];
     }
+    private bool _viewportParked;
+    internal void SetViewportParked(bool parked)
+    {
+        if (_viewportParked == parked) return;
+        _viewportParked = parked;
+        InvalidateMeasure();
+        InvalidateArrange();
+    }
+
+    /// <summary>Release a parked page slice without changing its data, measured extent, or item sizes.</summary>
+    internal void ReleaseRealizedContainers()
+    {
+        if (InternalChildren.Count == 0 || IsKeyboardFocusWithin) return;
+        RecyclingItemContainerGenerator.RemoveAll();
+        if (InternalChildren.Count > 0) RemoveInternalChildRange(0, InternalChildren.Count);
+        startItemIndex = endItemIndex = -1;
+        bringIntoViewItemIndex = -1;
+        bringIntoViewContainer = null;
+        keptRealizedFocusedContainer = null;
+        InvalidateMeasure();
+        InvalidateArrange();
+    }
 
     #region event handlers
 
@@ -361,6 +383,10 @@ public class VirtualizingWrapPanel : VirtualizingPanelBase
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (_viewportParked)
+            return new Size(Math.Min(availableSize.Width, ExtentWidth), Math.Min(availableSize.Height, ExtentHeight));
+        using var timing = ItemsOwner is Scriblucent.Controls.FlashcardGridItemsControl
+            ? Scriblucent.Rendering.FlashcardScrollTrace.Measure(Scriblucent.Rendering.FlashcardScrollTrace.Kind.Measure, this) : default;
         VerifyItemsControl();
 
         items = Items;
@@ -880,6 +906,11 @@ public class VirtualizingWrapPanel : VirtualizingPanelBase
             ? CalculateExtend_DifferentSizedItems()
             : CalculateExtend_UniformSizedItems();
 
+        // Floating selection commands occupy paint, never viewport space. Add only
+        // a trailing scroll extent so the last row can move fully above the island.
+        double tail = Scriblucent.Controls.CollectionSelectionDock.GetClearance(this);
+        if (Orientation == Orientation.Horizontal) extent.Height += tail;
+        else extent.Width += tail;
         if (extent.Width != ExtentWidth || extent.Height != ExtentHeight)
         {
             ExtentWidth = extent.Width;
@@ -1048,6 +1079,9 @@ public class VirtualizingWrapPanel : VirtualizingPanelBase
 
     protected override Size ArrangeOverride(Size finalSize)
     {
+        if (_viewportParked) return finalSize;
+        using var timing = ItemsOwner is Scriblucent.Controls.FlashcardGridItemsControl
+            ? Scriblucent.Rendering.FlashcardScrollTrace.Measure(Scriblucent.Rendering.FlashcardScrollTrace.Kind.Arrange, this) : default;
         ArrangeBringIntoViewContainer();
         ArrangeKeptRealizedFocusedContainer();
 

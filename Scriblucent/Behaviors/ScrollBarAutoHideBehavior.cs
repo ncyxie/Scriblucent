@@ -103,11 +103,16 @@ public static class ScrollBarAutoHideBehavior
             return;
 
         state.Timer.Stop();
+        state.InvalidateScrollBars();
     }
 
     private static void ScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
         if (sender is not ScrollViewer scrollViewer || scrollViewer.GetValue(StateProperty) is not AutoHideState state)
+            return;
+
+        // ScrollChanged bubbles: a card/editor's inner viewer does not own the page bars.
+        if (!ReferenceEquals(e.OriginalSource, scrollViewer))
             return;
 
         if (e.ExtentHeightChange != 0 || e.ExtentWidthChange != 0)
@@ -128,6 +133,7 @@ public static class ScrollBarAutoHideBehavior
     {
         scrollViewer.Dispatcher.BeginInvoke(() =>
         {
+            if (!scrollViewer.IsLoaded || !ReferenceEquals(scrollViewer.GetValue(StateProperty), state)) return;
             state.RefreshScrollBars();
             ShowScrollBars(state);
         }, DispatcherPriority.Loaded);
@@ -135,7 +141,7 @@ public static class ScrollBarAutoHideBehavior
 
     private static void ShowScrollBars(AutoHideState state)
     {
-        AnimateScrollBars(state.ScrollBars, 1.0);
+        state.SetShown(true);
         state.Timer.Stop();
         state.Timer.Start();
     }
@@ -154,7 +160,7 @@ public static class ScrollBarAutoHideBehavior
             return;
         }
 
-        AnimateScrollBars(state.ScrollBars, 0);
+        state.SetShown(false);
     }
 
     private static void AnimateScrollBars(IReadOnlyList<ScrollBar> scrollBars, double targetOpacity)
@@ -162,23 +168,36 @@ public static class ScrollBarAutoHideBehavior
         foreach (var scrollBar in scrollBars)
         {
             if (scrollBar.Visibility != Visibility.Visible)
+            {
+                UiMotion.Clear(scrollBar, UIElement.OpacityProperty);
+                scrollBar.SetCurrentValue(UIElement.OpacityProperty, targetOpacity);
+                continue;
+            }
+
+            if (!NativeSurfaceMotion.IsRunning(scrollBar, MotionChannel.Presence)
+                && Math.Abs(scrollBar.Opacity - targetOpacity) < .001)
                 continue;
 
             UiMotion.Clear(scrollBar, UIElement.OpacityProperty);
-            UiMotion.Fade(scrollBar, targetOpacity, 180, UiMotion.OutQuad);
+            UiMotion.Fade(scrollBar, targetOpacity, 120, UiMotion.OutQuad);
         }
     }
 
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    private static IEnumerable<ScrollBar> FindTemplateScrollBars(DependencyObject root, ScrollViewer owner)
     {
         var childCount = VisualTreeHelper.GetChildrenCount(root);
         for (var index = 0; index < childCount; index++)
         {
             var child = VisualTreeHelper.GetChild(root, index);
-            if (child is T match)
-                yield return match;
-
-            foreach (var nested in FindVisualChildren<T>(child))
+            // Never enter the document, nested viewers, or their scrollbar templates.
+            if (child is ScrollContentPresenter || child is ScrollViewer)
+                continue;
+            if (child is ScrollBar match)
+            {
+                if (ReferenceEquals(match.TemplatedParent, owner)) yield return match;
+                continue;
+            }
+            foreach (var nested in FindTemplateScrollBars(child, owner))
                 yield return nested;
         }
     }
@@ -198,12 +217,29 @@ public static class ScrollBarAutoHideBehavior
         public ScrollViewer Owner { get; }
         public DispatcherTimer Timer { get; }
         public List<ScrollBar> ScrollBars { get; } = [];
+        private ControlTemplate? _template;
+        private bool _barsResolved;
+        private bool? _shown;
+
+        public void InvalidateScrollBars() { _barsResolved = false; _shown = null; }
 
         public void RefreshScrollBars()
         {
             Owner.ApplyTemplate();
+            if (_barsResolved && ReferenceEquals(_template, Owner.Template)) return;
             ScrollBars.Clear();
-            ScrollBars.AddRange(FindVisualChildren<ScrollBar>(Owner));
+            ScrollBars.AddRange(FindTemplateScrollBars(Owner, Owner));
+            _template = Owner.Template;
+            _barsResolved = true;
+            _shown = null;
+        }
+
+        public void SetShown(bool shown)
+        {
+            RefreshScrollBars();
+            if (_shown == shown) return;
+            _shown = shown;
+            AnimateScrollBars(ScrollBars, shown ? 1 : 0);
         }
 
         private void Timer_Tick(object? sender, EventArgs e)

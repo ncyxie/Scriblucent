@@ -1,24 +1,68 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:Scriblucent.Controls"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
-    <!-- Window and Container Colors
-         Main dashboard: WindowBackground + SidebarBackground unchanged.
-         Feature windows only (note/mind-map/quiz editors):
-           FeatureFrameBackground  outer ring (slightly deeper)
-           FeatureStageBackground  content plate under white fields
-           InputSurface / cards    pure white -->
-    <SolidColorBrush x:Key="WindowBackground" Color="#F7F7FA"/>
+    <sys:Boolean x:Key="SurfaceMaterialIsDark">False</sys:Boolean>
+    <controls:SurfaceMaterialBrush x:Key="MaterialCalendarSelectedFill" Color="#435CEC" Foreground="#FFFFFF" Kind="Marker" Dark="False"/>
+    <LinearGradientBrush x:Key="MaterialMarkerEdge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#38FFFFFF" Offset="0"/>
+        <GradientStop Color="#00FFFFFF" Offset="0.42"/>
+        <GradientStop Color="#14000000" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Shared roles: navigation/frame, working canvas, content surfaces and fields. -->
+    <SolidColorBrush x:Key="WorkspaceBackdrop" Color="#ECECF1"/>
+    <SolidColorBrush x:Key="WindowBackground" Color="#EEF0F5"/>
     <SolidColorBrush x:Key="SidebarBackground" Color="#ECECF1"/>
-    <SolidColorBrush x:Key="FeatureFrameBackground" Color="#DEDEE8"/>
-    <SolidColorBrush x:Key="FeatureStageBackground" Color="#E9E9F0"/>
-    <SolidColorBrush x:Key="CardBackground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="OverlayScrim" Color="#470C1027"/>
+    <Color x:Key="CommandSurfaceLightColor">#1C435CEC</Color>
+    <LinearGradientBrush x:Key="HoverSurfaceWash" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#13465BFF" Offset="0"/>
+        <GradientStop Color="#00465BFF" Offset="0.75"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="HoverSurfaceEdge" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#70465BFF" Offset="0"/>
+        <GradientStop Color="#00465BFF" Offset="0.8"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ControlHoverSurfaceWash" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#20435CEC" Offset="0"/>
+        <GradientStop Color="#00435CEC" Offset="0.8"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="ControlHoverSurfaceEdge" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#75435CEC" Offset="0"/>
+        <GradientStop Color="#00435CEC" Offset="0.8"/>
+    </LinearGradientBrush>
+    <RadialGradientBrush x:Key="SavedFeedbackWash" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Color="#30096B3F" Offset="0"/>
+        <GradientStop Color="#00096B3F" Offset="1"/>
+    </RadialGradientBrush>
+    <RadialGradientBrush x:Key="ShowcaseHalo" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Color="#26465BFF" Offset="0"/>
+        <GradientStop Color="#00465BFF" Offset="1"/>
+    </RadialGradientBrush>
+    <SolidColorBrush x:Key="FloatingSurfaceEdge" Color="#65FFFFFF"/>
+    <Color x:Key="Surface.Content.Color">#FFFFFFFF</Color>
+    <SolidColorBrush x:Key="CardBackground" Color="{StaticResource Surface.Content.Color}"/>
     <SolidColorBrush x:Key="InputSurface" Color="#FFFFFF"/>
+    <!-- Restore the familiar muted blue-grey foundation for every neutral action.
+         The shared Neutral material supplies its restrained lighting. -->
+    <Color x:Key="NeutralActionColor">#E4E8F2</Color>
+    <SolidColorBrush x:Key="ActionStripBackground" Color="{StaticResource NeutralActionColor}"/>
+    <SolidColorBrush x:Key="ActionDividerBrush" Color="#9AA6BC"/>
+    <!-- A segmented selector needs contrast behind its raised active plate. -->
+    <SolidColorBrush x:Key="SegmentedTrackBackground" Color="#E4E8F2"/>
+    <!-- An editable inset inside a card, distinct from the surrounding card surface. -->
+    <SolidColorBrush x:Key="InputSurfaceInset" Color="#F4F4F8"/>
+    <SolidColorBrush x:Key="ContentInsetSurface" Color="#F0F1F6"/>
+    <!-- Media canvases retain their neutral backing independently of navigation chrome. -->
+    <SolidColorBrush x:Key="MediaCanvasSurface" Color="#ECECF1"/>
     <!-- Generic hairline (checkboxes, rare non-elevated chrome). -->
     <SolidColorBrush x:Key="BorderColor" Color="#E0E0E6"/>
     <!-- Fields light: no rest stroke (thickness 0). Focus ring is an adorner (FieldFocusRingBehavior)
          so title/fields never layout-shift or optically shrink when focused. -->
     <SolidColorBrush x:Key="InputRestBorder" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="SwitchTrackHoverBackground" Color="#AEB9D0"/>
     <Thickness x:Key="Field.RestBorderThickness">0</Thickness>
     <SolidColorBrush x:Key="SidebarSeparator" Color="#B4B4C0"/>
 
@@ -48,10 +92,25 @@
 
     <!-- Semantic accents (brand blue #435CEC + derived hover / pressed / subtle) -->
     <SolidColorBrush x:Key="AccentPrimary" Color="#435CEC"/>
+    <!-- One directional accent light for focus, selection and drop targets. -->
+    <SolidColorBrush x:Key="AccentRimTop" Color="#6786F5"/>
+    <SolidColorBrush x:Key="AccentRimBody" Color="#435CEC"/>
+    <SolidColorBrush x:Key="AccentRimBottom" Color="#344AC2"/>
+    <LinearGradientBrush x:Key="AccentRimBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6786F5" Offset="0"/>
+        <GradientStop Color="#435CEC" Offset="0.42"/>
+        <GradientStop Color="#344AC2" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DropTargetWash" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#24435CEC" Offset="0"/>
+        <GradientStop Color="#0A435CEC" Offset="1"/>
+    </LinearGradientBrush>
+
     <SolidColorBrush x:Key="AccentPrimaryHover" Color="#3A4FD4"/>
     <SolidColorBrush x:Key="AccentPrimaryPressed" Color="#3142B8"/>
     <SolidColorBrush x:Key="AccentPrimaryForeground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="AccentPrimarySubtle" Color="#EEF0FE"/>
+    <SolidColorBrush x:Key="AccentPrimarySubtleForeground" Color="#2E3FA8"/>
 
     <SolidColorBrush x:Key="AccentDanger" Color="#DC2626"/>
     <SolidColorBrush x:Key="AccentDangerHover" Color="#C92222"/>
@@ -65,12 +124,14 @@
     <SolidColorBrush x:Key="AccentWarning" Color="#F59E0B"/>
     <SolidColorBrush x:Key="AccentWarningHover" Color="#D97706"/>
     <SolidColorBrush x:Key="AccentWarningPressed" Color="#B45309"/>
-    <SolidColorBrush x:Key="AccentWarningForeground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="AccentWarningForeground" Color="#0F172A"/>
     <SolidColorBrush x:Key="AccentWarningSubtle" Color="#FFF9E6"/>
     <SolidColorBrush x:Key="AccentWarningSubtleBorder" Color="#F59E0B"/>
     <SolidColorBrush x:Key="AccentWarningSubtleForeground" Color="#92400E"/>
 
     <SolidColorBrush x:Key="AccentSuccess" Color="#096B3F"/>
+    <SolidColorBrush x:Key="AccentSuccessHover" Color="#085D37"/>
+    <SolidColorBrush x:Key="AccentSuccessPressed" Color="#074E2E"/>
     <SolidColorBrush x:Key="AccentSuccessForeground" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="AccentSuccessSubtle" Color="#E8F8F0"/>
     <SolidColorBrush x:Key="AccentSuccessSubtleBorder" Color="#B7E6CC"/>
@@ -83,19 +144,27 @@
     <SolidColorBrush x:Key="TagChipForeground" Color="#4A5D80"/>
 
     <!-- Card/Note Colors — light: rest stroke off (shadow + surface); selection still uses NoteCardSelectionBorder. -->
-    <SolidColorBrush x:Key="NoteCardBackground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="NoteCardBackground" Color="{StaticResource Surface.Content.Color}"/>
     <SolidColorBrush x:Key="NoteCardBorder" Color="#00000000"/>
     <SolidColorBrush x:Key="NoteCardTitle" Color="#1C1C1C"/>
     <SolidColorBrush x:Key="NoteCardSelection" Color="#EEF0FE"/>
-    <SolidColorBrush x:Key="NoteCardSelectionBorder" Color="#435CEC"/>
+    <LinearGradientBrush x:Key="NoteCardSelectionBorder" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6786F5" Offset="0"/>
+        <GradientStop Color="#435CEC" Offset="0.42"/>
+        <GradientStop Color="#344AC2" Offset="1"/>
+    </LinearGradientBrush>
 
     <!-- Flashcard Colors -->
-    <SolidColorBrush x:Key="FlashcardCardBackground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="FlashcardCardBackground" Color="{StaticResource Surface.Content.Color}"/>
     <SolidColorBrush x:Key="FlashcardCardHoverBackground" Color="#F7F8FE"/>
     <SolidColorBrush x:Key="FlashcardCardSelectedBackground" Color="#EEF0FE"/>
     <SolidColorBrush x:Key="FlashcardCardSelectedHoverBackground" Color="#E8EBFD"/>
     <SolidColorBrush x:Key="FlashcardCardBorder" Color="#00000000"/>
-    <SolidColorBrush x:Key="FlashcardCardSelectedBorder" Color="#435CEC"/>
+    <LinearGradientBrush x:Key="FlashcardCardSelectedBorder" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#6786F5" Offset="0"/>
+        <GradientStop Color="#435CEC" Offset="0.42"/>
+        <GradientStop Color="#344AC2" Offset="1"/>
+    </LinearGradientBrush>
     <SolidColorBrush x:Key="FlashcardSideChipBackground" Color="#F5F7FB"/>
     <SolidColorBrush x:Key="FlashcardSideChipBorder" Color="#DDE4F3"/>
     <SolidColorBrush x:Key="FlashcardSideChipForeground" Color="#4B5568"/>
@@ -113,14 +182,14 @@
     <SolidColorBrush x:Key="FlashcardNewChipForeground" Color="#485365"/>
 
     <!-- Button Colors (alias IconButton family — one button surface system) -->
-    <SolidColorBrush x:Key="ButtonBackground" Color="#E4E8F2"/>
+    <SolidColorBrush x:Key="ButtonBackground" Color="{StaticResource NeutralActionColor}"/>
     <SolidColorBrush x:Key="ButtonBorder" Color="#C5CDDC"/>
     <SolidColorBrush x:Key="ButtonForeground" Color="#2B3650"/>
     <SolidColorBrush x:Key="ButtonHoverBackground" Color="#D7DEF0"/>
     <SolidColorBrush x:Key="ButtonPressedBackground" Color="#C9D3E8"/>
 
     <!-- Icon Button Colors -->
-    <SolidColorBrush x:Key="IconButtonBackground" Color="#E4E8F2"/>
+    <SolidColorBrush x:Key="IconButtonBackground" Color="{StaticResource NeutralActionColor}"/>
     <SolidColorBrush x:Key="IconButtonBorder" Color="#C5CDDC"/>
     <SolidColorBrush x:Key="IconButtonForeground" Color="#2B3650"/>
     <SolidColorBrush x:Key="IconButtonHoverBackground" Color="#D7DEF0"/>
@@ -131,9 +200,7 @@
 
     <!-- Mass Select Colors -->
     <SolidColorBrush x:Key="MassSelectBoxBackground" Color="#F5F7FB"/>
-    <SolidColorBrush x:Key="MassSelectBoxBorder" Color="#DDE4F3"/>
     <SolidColorBrush x:Key="MassSelectBoxCheckedBackground" Color="#435CEC"/>
-    <SolidColorBrush x:Key="MassSelectBoxCheckedBorder" Color="#3A4FD4"/>
     <SolidColorBrush x:Key="MassSelectBoxGlyph" Color="#FFFFFF"/>
 
     <!-- Selection/Hover Colors -->
@@ -172,10 +239,19 @@
     <SolidColorBrush x:Key="MindMapBadgeForeground" Color="#4A5D80"/>
 
     <!-- RichTextBox Colors -->
-    <SolidColorBrush x:Key="RichTextBoxBackground" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="RichTextBoxBackground" Color="{StaticResource Surface.Content.Color}"/>
     <SolidColorBrush x:Key="RichTextBoxForeground" Color="#1C1C1C"/>
     <SolidColorBrush x:Key="EditorSelectionBrush" Color="#435CEC"/>
     <SolidColorBrush x:Key="EditorFindMatchBackground" Color="#FEF3C7"/>
     <SolidColorBrush x:Key="EditorFindActiveMatchBackground" Color="#FBBF24"/>
 
+    <LinearGradientBrush x:Key="FilledControlHoverWash" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#70FFFFFF" Offset="0"/>
+        <GradientStop Color="#3AFFFFFF" Offset="0.08"/>
+        <GradientStop Color="#00FFFFFF" Offset="0.22"/>
+        <GradientStop Color="#00FFFFFF" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- Filled faces use one continuous sheen; a separate rim leaves a pale seam at the curves. -->
+    <SolidColorBrush x:Key="FilledControlHoverEdge" Color="Transparent"/>
+    <SolidColorBrush x:Key="DangerControlHoverWash" Color="#20EF5350"/>
 </ResourceDictionary>

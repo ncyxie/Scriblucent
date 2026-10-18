@@ -35,7 +35,7 @@ public class NoteDocument
 /// <summary>
 /// Floating image attachment stored with a note. Geometry is in document space (DIPs).
 /// The image bytes live as a file in the notes media directory (see <see cref="DataFilePath"/>,
-/// resolved against the store's <c>notes-media</c> folder) - keeping the Base64 out of the JSON
+/// resolved against the store's <c>NotesMedia</c> folder) - keeping the Base64 out of the JSON
 /// keeps the store small and saves fast. <see cref="Data"/> is the legacy inline Base64 form
 /// (old stores and self-contained exports/packages); new saves use the file path instead.
 /// </summary>

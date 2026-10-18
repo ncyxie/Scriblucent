@@ -9,8 +9,9 @@ public class NoteGroupViewModel : ViewModelBase
     private Brush _backgroundBrush;
     private Brush _foregroundBrush;
 
-    public NoteGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<NoteCardViewModel> notes)
+    public NoteGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<NoteCardViewModel> notes, GroupDisclosureState? disclosure = null)
     {
+        Disclosure = disclosure ?? new GroupDisclosureState();
         GroupId = groupId;
         _name = name;
         BackgroundColor = backgroundColor;
@@ -20,6 +21,7 @@ public class NoteGroupViewModel : ViewModelBase
     }
 
     public Guid GroupId { get; }
+    public GroupDisclosureState Disclosure { get; }
 
     public string Name
     {

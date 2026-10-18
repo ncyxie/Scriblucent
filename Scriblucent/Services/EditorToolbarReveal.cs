@@ -39,7 +39,7 @@ internal static class EditorToolbarReveal
         if (!double.IsFinite(state.FullWidth)) throw new InvalidOperationException("Toolbar reveal content requires a fixed width.");
         UiMotion.Stop(host);
         host.IsEnabled = visible;
-        host.IsHitTestVisible = false;
+        host.IsHitTestVisible = visible;
         if (firstUpdate || !animate || (host.Parent as UIElement)?.IsVisible != true || UiMotion.PrefersReducedMotion)
         {
             Finish(host, state);
@@ -55,9 +55,9 @@ internal static class EditorToolbarReveal
         host.ClipToBounds = true;
         UiMotion.Run(host,
             [
-                UiMotion.Track(visible ? 120 : 90, UiMotion.OutCubic, opacityFrom, visible ? 1 : 0,
+                UiMotion.Track(visible ? 160 : 100, visible ? UiMotion.OutSine : UiMotion.InSine, opacityFrom, visible ? 1 : 0,
                     opacity => content.Opacity = opacity),
-                UiMotion.Track(visible ? 120 : 90, UiMotion.OutCubic, offsetFrom, visible ? 0 : SlideDistance,
+                UiMotion.Track(visible ? 160 : 100, visible ? UiMotion.InOutSine : UiMotion.InQuad, offsetFrom, visible ? 0 : SlideDistance,
                     offset => state.Translate.X = offset)
             ], () => Finish(host, state));
     }

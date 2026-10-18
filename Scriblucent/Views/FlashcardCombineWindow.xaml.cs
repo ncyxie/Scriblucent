@@ -1,3 +1,6 @@
+using Scriblucent.Localization;
+using Scriblucent.Controls;
+using Scriblucent.Services;
 using Scriblucent;
 using Scriblucent.Animations;
 using Scriblucent.Models;
@@ -6,12 +9,10 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
 
 namespace Scriblucent.Views;
 
-public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
+public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged, ICombineWorkspaceHost
 {
     public sealed class FlashcardCombineItem : ViewModelBase
     {
@@ -26,6 +27,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         public FlashcardSetDocument Document => Model.Document;
         public string Title => Model.Title;
         public string CardCountText => Model.CardCountText;
+        public string ItemCountText => CombineWorkspacePresentation.ContentCount(true, Document.Cards?.Count ?? 0);
         public string TagsDisplay => Model.TagsDisplay;
         public bool HasTags => Model.HasTags;
 
@@ -37,6 +39,10 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
 
     }
 
+    private PickerSelectionBinding<FlashcardCombineItem>? _pickerSelection;
+    public bool? PickerAllChecked => _pickerSelection is null ? false : _pickerSelection.AllChecked;
+    public CombineWorkspacePresentation Workspace { get; } = new(true);
+    private bool _selectionViewRefreshQueued;
     private readonly MainViewModel _mainViewModel;
     private readonly BulkObservableCollection<FlashcardCombineItem> _sets = new();
     private readonly BulkObservableCollection<FlashcardCombineItem> _visibleSets = new();
@@ -44,23 +50,37 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
     private readonly BulkObservableCollection<TagFilterItemViewModel> _categoryFilters = new();
     private readonly HashSet<string> _selectedTags = new(StringComparer.OrdinalIgnoreCase);
     private string _searchText = string.Empty;
-    private string _combinedTitle = "Combined flashcards";
+    private string _combinedTitle = LocalizationService.GetString("PremiumCombinedFlashcards");
     private string _statusText = string.Empty;
     private bool _skipDuplicateCards = true;
     private bool _shuffleCards = true;
+    private System.Windows.Threading.DispatcherTimer? _searchFilterDebounceTimer;
     private int _filterGeneration;
     private readonly Dictionary<string, int> _selectedCardSignatures = new(StringComparer.OrdinalIgnoreCase);
     private int _selectedCardCount;
-    private bool _isClearingSelection;
     private bool _isLoading;
     private bool _isClosed;
 
     public FlashcardCombineWindow(MainViewModel mainViewModel)
     {
         _mainViewModel = mainViewModel;
+        Workspace.Configure(_visibleSets, _categoryFilters,
+            item => _pickerSelection?.Toggle((FlashcardCombineItem)item),
+            () => _pickerSelection?.ToggleMatching(), () => _pickerSelection?.Selection.Clear(),
+            ClearFilters,
+            CreateCombinedSet, Close);
+        Workspace.PropertyChanged += Workspace_PropertyChanged;
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
+        Scriblucent.Services.FeatureWindowBounds.Attach(this);
         DataContext = this;
+        _pickerSelection = new(this, () => _sets, () => _visibleSets, item => item.Document.Id,
+            (item, value) => item.IsSelected = value, UpdateSelectedCardCounts, items =>
+        {
+            _selectedSets.ReplaceAll(items);
+            OnPropertyChanged(nameof(SelectedCountText)); OnPropertyChanged(nameof(SelectedCardCountText)); OnPropertyChanged(nameof(HasSelectedSets));
+            OnPropertyChanged(nameof(PickerAllChecked));
+        });
 
         LoadSets();
 
@@ -75,6 +95,10 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
     private void FlashcardCombineWindow_Closed(object? sender, EventArgs e)
     {
         _isClosed = true;
+        _searchFilterDebounceTimer?.Stop();
+        Workspace.PropertyChanged -= Workspace_PropertyChanged;
+        Workspace.Dispose();
+        _pickerSelection?.Dispose();
         _filterGeneration++;
         Closed -= FlashcardCombineWindow_Closed;
         _mainViewModel.PropertyChanged -= MainViewModel_PropertyChanged;
@@ -89,7 +113,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         if (source.Length >= 10_000)
         {
             _isLoading = true;
-            StatusText = "Loading flashcard sets...";
+            StatusText = LocalizationService.GetString("PremiumLoadingSets");
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
@@ -123,9 +147,9 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
     public ObservableCollection<FlashcardCombineItem> VisibleSets => _visibleSets;
     public ObservableCollection<FlashcardCombineItem> SelectedSets => _selectedSets;
     public ObservableCollection<TagFilterItemViewModel> CategoryFilters => _categoryFilters;
-    public string FilteredCountText => string.Format(CultureInfo.CurrentCulture, "{0} sets", _visibleSets.Count);
-    public string SelectedCountText => string.Format(CultureInfo.CurrentCulture, "{0} selected", _selectedSets.Count);
-    public string SelectedCardCountText => string.Format(CultureInfo.CurrentCulture, "{0} cards in combined set", GetCombinedCardCount());
+    public string FilteredCountText => string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumSetsCount"), _visibleSets.Count);
+    public string SelectedCountText => string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumSelectedCount"), _selectedSets.Count);
+    public string SelectedCardCountText => string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumCardsCount"), GetCombinedCardCount());
     public bool HasSelectedSets => _selectedSets.Count > 0;
     public string StatusText
     {
@@ -149,9 +173,19 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
                 return;
 
             _searchText = value ?? string.Empty;
-            UpdateFilteredVisibility();
             OnPropertyChanged();
+            _searchFilterDebounceTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _searchFilterDebounceTimer.Stop();
+            _searchFilterDebounceTimer.Tick -= SearchFilterDebounceTimer_Tick;
+            _searchFilterDebounceTimer.Tick += SearchFilterDebounceTimer_Tick;
+            _searchFilterDebounceTimer.Start();
         }
+    }
+
+    private void SearchFilterDebounceTimer_Tick(object? sender, EventArgs e)
+    {
+        _searchFilterDebounceTimer?.Stop();
+        UpdateFilteredVisibility();
     }
 
     public string CombinedTitle
@@ -196,24 +230,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
 
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(FlashcardCombineItem.IsSelected)
-            && !_isClearingSelection
-            && sender is FlashcardCombineItem item)
-        {
-            if (item.IsSelected)
-            {
-                UpdateSelectedCardCounts(item, 1);
-                _selectedSets.Add(item);
-            }
-            else
-            {
-                UpdateSelectedCardCounts(item, -1);
-                _selectedSets.Remove(item);
-            }
-            OnPropertyChanged(nameof(SelectedCountText));
-            OnPropertyChanged(nameof(SelectedCardCountText));
-            OnPropertyChanged(nameof(HasSelectedSets));
-        }
+        if (e.PropertyName == nameof(FlashcardCombineItem.IsSelected) && sender is FlashcardCombineItem item) _pickerSelection?.Toggle(item);
     }
 
     private void MainViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -237,6 +254,8 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
             filters.Add(new TagFilterItemViewModel(filter.Tag, existing, SetTagSelected));
         }
         _categoryFilters.ReplaceAll(filters);
+        _selectedTags.IntersectWith(filters.Select(filter => filter.Tag));
+        RefreshWorkspaceLibrary();
     }
 
     private void SetTagSelected(string tag, bool isSelected)
@@ -253,11 +272,20 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
     private async void UpdateFilteredVisibility()
     {
         var generation = ++_filterGeneration;
+        if (Workspace.ShowSelectedOnly)
+        {
+            if (!_visibleSets.SequenceEqual(_selectedSets)) _visibleSets.ReplaceAll(_selectedSets);
+            _pickerSelection?.RefreshItems();
+            OnPropertyChanged(nameof(FilteredCountText));
+            UpdateStatusText();
+            return;
+        }
         var tags = _selectedTags.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var search = _searchText;
         if (tags.Count == 0 && string.IsNullOrWhiteSpace(search))
         {
-            _visibleSets.ReplaceAll(_sets);
+            if (!_visibleSets.SequenceEqual(_sets)) _visibleSets.ReplaceAll(_sets);
+            _pickerSelection?.RefreshItems();
             OnPropertyChanged(nameof(FilteredCountText));
             UpdateStatusText();
             return;
@@ -280,7 +308,8 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
 
         if (generation != _filterGeneration)
             return;
-        _visibleSets.ReplaceAll(visible);
+        if (!_visibleSets.SequenceEqual(visible)) _visibleSets.ReplaceAll(visible);
+        _pickerSelection?.RefreshItems();
 
         OnPropertyChanged(nameof(FilteredCountText));
         UpdateStatusText();
@@ -312,7 +341,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
             return;
 
         var visibleCount = _visibleSets.Count;
-        StatusText = string.Format(CultureInfo.CurrentCulture, "{0} of {1} sets shown", visibleCount, _sets.Count);
+        StatusText = string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumSetsShown"), visibleCount, _sets.Count);
     }
 
     private int GetCombinedCardCount()
@@ -332,77 +361,33 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void SetItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is Border { DataContext: FlashcardCombineItem item })
-            item.IsSelected = !item.IsSelected;
-    }
-
-    private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-    }
-
-    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
-    {
-        _isClearingSelection = true;
-        try
-        {
-            foreach (var set in _selectedSets)
-                set.IsSelected = false;
-        }
-        finally
-        {
-            _isClearingSelection = false;
-        }
-
-        _selectedSets.ReplaceAll([]);
-        _selectedCardSignatures.Clear();
-        _selectedCardCount = 0;
-        OnPropertyChanged(nameof(SelectedCountText));
-        OnPropertyChanged(nameof(SelectedCardCountText));
-        OnPropertyChanged(nameof(HasSelectedSets));
-    }
-
-    private void ClearFiltersButton_Click(object sender, RoutedEventArgs e)
+    private void ClearFilters()
     {
         _selectedTags.Clear();
         foreach (var filter in _categoryFilters)
             filter.IsSelected = false;
 
         SearchText = string.Empty;
+        _searchFilterDebounceTimer?.Stop();
         UpdateFilteredVisibility();
         UpdateStatusText();
     }
 
-    private void CreateCombinedButton_Click(object sender, RoutedEventArgs e)
+    private void CreateCombinedSet()
     {
         var selectedSets = _selectedSets.Select(set => set.Model).ToList();
         if (selectedSets.Count == 0)
         {
-            ModernMessageBox.Show("Select at least one flashcard set first.", "Combine flashcards", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernMessageBox.Show(LocalizationService.GetString("PremiumSelectSetFirst"), LocalizationService.GetString("PremiumCombineFlashcards"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
         var document = BuildCombinedDocument(selectedSets);
-        var mainWindow = Application.Current.MainWindow as MainWindow;
-        var editor = new FlashcardsPreviewWindow(
-            document.Cards,
-            _mainViewModel.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
-            document.AiModelDisplayName,
-            document.Title,
-            document.Tags,
-            document.SetNames,
-            document.StudySession,
-            openNoteAction: mainWindow is not null
-                ? noteId => mainWindow.OpenNoteById(_mainViewModel, noteId)
-                : null)
+        if (Application.Current.MainWindow is MainWindow main)
         {
-            Owner = this
-        };
-
-        if (editor.ShowDialog() == true)
-            _mainViewModel.AddOrUpdateFlashcardSet(editor.ToDocument());
+            main.EditorWorkspace.OpenFlashcards(document, draft: true);
+            WindowContentEnterHelper.CloseWithDialogResult(this, true);
+        }
     }
 
     private FlashcardSetDocument BuildCombinedDocument(IReadOnlyList<FlashcardSetViewModel> selectedSets)
@@ -445,7 +430,7 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
 
         return new FlashcardSetDocument
         {
-            Title = string.IsNullOrWhiteSpace(CombinedTitle) ? "Combined flashcards" : CombinedTitle.Trim(),
+            Title = string.IsNullOrWhiteSpace(CombinedTitle) ? LocalizationService.GetString("PremiumCombinedFlashcards") : CombinedTitle.Trim(),
             Tags = selectedSets.SelectMany(set => set.Document.Tags ?? []).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             SetNames = setNames,
             Cards = cards,
@@ -473,12 +458,47 @@ public partial class FlashcardCombineWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+    private void Workspace_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(CombineWorkspacePresentation.SearchText): SearchText = Workspace.SearchText; break;
+            case nameof(CombineWorkspacePresentation.Title): CombinedTitle = Workspace.Title; break;
+            case nameof(CombineWorkspacePresentation.Shuffle): ShuffleCards = Workspace.Shuffle; break;
+            case nameof(CombineWorkspacePresentation.SkipDuplicates): SkipDuplicateCards = Workspace.SkipDuplicates; break;
+            case nameof(CombineWorkspacePresentation.ShowSelectedOnly): _searchFilterDebounceTimer?.Stop(); UpdateFilteredVisibility(); break;
+        }
+    }
+    private void RefreshWorkspaceLibrary() => Workspace.UpdateLibrary(_sets.Count, _visibleSets.Count,
+        _categoryFilters.Count > 0, _isLoading, _selectedTags.Count);
+    private void RefreshWorkspaceSelection()
+    {
+        Workspace.UpdateSelection(_selectedSets.Count, GetCombinedCardCount(), _selectedCardCount);
+        if (!Workspace.ShowSelectedOnly || _selectionViewRefreshQueued || _visibleSets.SequenceEqual(_selectedSets)) return;
+        // Refresh matching IDs after the current selection transaction finishes.
+        _selectionViewRefreshQueued = true;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.DataBind, () =>
+        {
+            _selectionViewRefreshQueued = false;
+            if (!_isClosed && Workspace.ShowSelectedOnly) UpdateFilteredVisibility();
+        });
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        switch (propertyName)
+        {
+            case nameof(SearchText): Workspace.SearchText = SearchText; break;
+            case nameof(CombinedTitle): Workspace.Title = CombinedTitle; break;
+            case nameof(ShuffleCards): Workspace.Shuffle = ShuffleCards; break;
+            case nameof(SkipDuplicateCards): Workspace.SkipDuplicates = SkipDuplicateCards; RefreshWorkspaceSelection(); break;
+            case nameof(SelectedCountText):
+            case nameof(SelectedCardCountText): RefreshWorkspaceSelection(); break;
+            case nameof(FilteredCountText):
+            case nameof(StatusText): RefreshWorkspaceLibrary(); break;
+        }
     }
 }

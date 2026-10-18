@@ -1,252 +1,118 @@
-﻿<Window x:Class="Scriblucent.Views.QuizAttemptHistoryWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="clr-namespace:Scriblucent.Controls"
-        Title="Quiz History"
-        Height="600"
-        Width="820"
-        MinHeight="420"
-        MinWidth="620"
-        WindowStartupLocation="CenterOwner"
-        TextOptions.TextFormattingMode="Ideal"
-        TextOptions.TextRenderingMode="ClearType"
-        Background="{DynamicResource FeatureFrameBackground}" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:controls="clr-namespace:Scriblucent.Controls" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors" x:Class="Scriblucent.Views.QuizAttemptHistoryWindow" Title="{Binding [QuizHistory], Source={StaticResource Loc}}" Height="600" Width="820" MinHeight="420" MinWidth="620" WindowStartupLocation="CenterOwner" TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType" Background="{DynamicResource WorkspaceBackdrop}">
     <Grid x:Name="ContentRoot">
-    <controls:FeatureWindowShell>
-        <controls:FeatureWindowShell.Header>
-            <Border Style="{StaticResource ChromePanelBorderStyle}"
-                    CornerRadius="0"
-                    Padding="{StaticResource Shell.FeatureTitleRowPadding}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
+        <controls:FeatureWindowShell>
+            <controls:FeatureWindowShell.Header>
+                <Border Style="{StaticResource WorkspaceHeadingStyle}">
                     <StackPanel>
-                        <TextBlock Text="Quiz history"
-                                   FontSize="{StaticResource Type.DialogTitle}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <TextBlock Text="{Binding SummaryText}"
-                                   Margin="0,5,0,0"
-                                   FontSize="{StaticResource Type.Caption}"
-                                   Foreground="{DynamicResource TextColorSecondary}"/>
+                        <TextBlock Text="{Binding [QuizHistory], Source={StaticResource Loc}}" FontSize="{StaticResource Type.DialogTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                        <TextBlock Text="{Binding SummaryText}" Margin="0,5,0,0" FontSize="{StaticResource Type.Control.Helper}" Foreground="{DynamicResource TextColorSecondary}"/>
+                        <WrapPanel Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}" UseLayoutRounding="True" SnapsToDevicePixels="True" Margin="0,14,0,0">
+                            <controls:SurfaceMaterialBorder Style="{StaticResource MetricTileStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding AverageScoreText}" Style="{StaticResource MetricCompactValueStyle}" Foreground="{DynamicResource TextColor}"/>
+                                    <TextBlock Text="{Binding [WorkspaceHistoryAverage], Source={StaticResource Loc}}" Style="{StaticResource MetricLabelStyle}"/>
+                                </StackPanel>
+                            </controls:SurfaceMaterialBorder>
+                            <controls:SurfaceMaterialBorder Style="{StaticResource MetricTileStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding BestScoreText}" Style="{StaticResource MetricCompactValueStyle}" Foreground="{DynamicResource TextColor}"/>
+                                    <TextBlock Text="{Binding [WorkspaceHistoryBest], Source={StaticResource Loc}}" Style="{StaticResource MetricLabelStyle}"/>
+                                </StackPanel>
+                            </controls:SurfaceMaterialBorder>
+                            <controls:SurfaceMaterialBorder Style="{StaticResource MetricTileStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding PassRateText}" Style="{StaticResource MetricCompactValueStyle}" Foreground="{DynamicResource TextColor}"/>
+                                    <TextBlock Text="{Binding [WorkspaceHistoryPassRate], Source={StaticResource Loc}}" Style="{StaticResource MetricLabelStyle}"/>
+                                </StackPanel>
+                            </controls:SurfaceMaterialBorder>
+                        </WrapPanel>
                     </StackPanel>
-
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                VerticalAlignment="Center"
-                                UseLayoutRounding="True"
-                                SnapsToDevicePixels="True"
-                                Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
-                        <Border Style="{StaticResource HistorySummaryChipStyle}"
-                                Margin="10,0,0,0"
-                                Background="{DynamicResource SelectionBackground}">
-                            <StackPanel>
-                                <TextBlock Text="Average"
-                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
-                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                <TextBlock Text="{Binding AverageScoreText}"
-                                           Style="{StaticResource HistorySummaryChipValueStyle}"
-                                           Foreground="{DynamicResource TextColor}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource HistorySummaryChipStyle}"
-                                Margin="8,0,0,0"
-                                Background="{DynamicResource SelectionBackground}">
-                            <StackPanel>
-                                <TextBlock Text="Best"
-                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
-                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                <TextBlock Text="{Binding BestScoreText}"
-                                           Style="{StaticResource HistorySummaryChipValueStyle}"
-                                           Foreground="{DynamicResource TextColor}"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource HistorySummaryChipStyle}"
-                                Margin="8,0,0,0"
-                                Background="{DynamicResource SelectionBackground}">
-                            <StackPanel>
-                                <TextBlock Text="Pass rate"
-                                           Style="{StaticResource HistorySummaryChipLabelStyle}"
-                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                <TextBlock Text="{Binding PassRateText}"
-                                           Style="{StaticResource HistorySummaryChipValueStyle}"
-                                           Foreground="{DynamicResource TextColor}"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Grid>
-            </Border>
-        </controls:FeatureWindowShell.Header>
-
-        <controls:FeatureWindowShell.Body>
-            <Grid Margin="20,16,20,8">
-                <ItemsControl ItemsSource="{Binding Attempts}"
-                              UseLayoutRounding="True"
-                              SnapsToDevicePixels="True"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling"
-                              VirtualizingPanel.ScrollUnit="Pixel"
-                              ScrollViewer.CanContentScroll="True"
-                              Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
+                </Border>
+            </controls:FeatureWindowShell.Header>
+            <controls:FeatureWindowShell.Body>
+                <Grid Margin="24,4,24,0">
+                    <ItemsControl ItemsSource="{Binding Attempts}" behaviors:ItemPresenceMotionBehavior.IsEnabled="True" behaviors:LoadContinuityBehavior.IsLoading="{Binding IsLoading}" UseLayoutRounding="True" SnapsToDevicePixels="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True" Visibility="{Binding HasAttempts, Converter={StaticResource BoolToVis}}">
                         <ItemsControl.Template>
                             <ControlTemplate TargetType="{x:Type ItemsControl}">
-                                <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
-                                              VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Disabled"
-                                              Background="Transparent"
-                                              ClipToBounds="True"
-                                              UseLayoutRounding="True"
-                                              SnapsToDevicePixels="True"
-                                              behaviors:MiddleClickScrollBehavior.IsEnabled="True"
-                                              behaviors:RoundedClipBehavior.IsEnabled="True"
-                                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
+                                <ScrollViewer CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="Transparent" ClipToBounds="True" UseLayoutRounding="True" SnapsToDevicePixels="True" behaviors:MiddleClickScrollBehavior.IsEnabled="True" behaviors:RoundedClipBehavior.IsEnabled="True" behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}">
                                     <ItemsPresenter/>
                                 </ScrollViewer>
                             </ControlTemplate>
                         </ItemsControl.Template>
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <VirtualizingStackPanel IsItemsHost="True"
-                                                        UseLayoutRounding="True"
-                                                        SnapsToDevicePixels="True"/>
+                                <VirtualizingStackPanel IsItemsHost="True" UseLayoutRounding="True" SnapsToDevicePixels="True"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <controls:DashboardTileHost RendererKey="AttemptHistoryRow">
-                                <Border Margin="0,0,0,10"
-                                        Padding="16,14"
-                                        CornerRadius="10"
-                                        Background="{DynamicResource CardBackground}"
-                                        SnapsToDevicePixels="True"
-                                        UseLayoutRounding="True">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="Transparent"/>
-                                            <Setter Property="BorderThickness" Value="2"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Passed}" Value="True">
-                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentSuccess}"/>
-                                                    <Setter Property="BorderThickness" Value="2"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Passed}" Value="False">
-                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentDanger}"/>
-                                                    <Setter Property="BorderThickness" Value="2"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <Grid UseLayoutRounding="True"
-                                          SnapsToDevicePixels="True">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="{Binding QuizTitle}"
-                                                       Height="22"
-                                                       FontSize="{StaticResource Type.SectionTitle}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextColor}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding QuizTitle}"/>
-                                            <StackPanel Orientation="Horizontal"
-                                                        Margin="0,6,0,0">
-                                                <TextBlock Text="{Binding DateDisplay}"
-                                                           FontSize="{StaticResource Type.Caption}"
-                                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                                <TextBlock Text="  -  "
-                                                           FontSize="{StaticResource Type.Caption}"
-                                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                                <TextBlock Text="{Binding ScoreDisplay}"
-                                                           FontSize="{StaticResource Type.Caption}"
-                                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                                <TextBlock Text="  -  "
-                                                           FontSize="{StaticResource Type.Caption}"
-                                                           Foreground="{DynamicResource TextColorSecondary}"/>
-                                                <TextBlock Text="{Binding TimeDisplay}"
-                                                           FontSize="{StaticResource Type.Caption}"
-                                                           Foreground="{DynamicResource TextColorSecondary}"/>
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" behaviors:StateSurfaceMotionBehavior.IsEnabled="True" Margin="0,0,0,10" Padding="16,14" CornerRadius="{StaticResource Radius.Card}" Background="{DynamicResource CardBackground}" SnapsToDevicePixels="True" UseLayoutRounding="True" BorderThickness="0" BorderBrush="Transparent">
+                                        <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding QuizTitle}" Height="22" FontSize="{StaticResource Type.SectionTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" TextTrimming="CharacterEllipsis" ToolTip="{Binding QuizTitle}"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Height="18">
+                                                    <TextBlock Text="{Binding DateDisplay}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColorSecondary}"/>
+                                                    <TextBlock Text="  ·  " FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColorSecondary}"/>
+                                                    <TextBlock Text="{Binding ScoreDisplay}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColorSecondary}"/>
+                                                    <TextBlock Text="  ·  " FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColorSecondary}"/>
+                                                    <TextBlock Text="{Binding TimeDisplay}" FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColorSecondary}"/>
+                                                </StackPanel>
                                             </StackPanel>
-                                        </StackPanel>
-                                        <Border Grid.Column="1">
-                                            <Border.Style>
-                                                <Style TargetType="Border" BasedOn="{StaticResource HistoryStatusChipStyle}">
-                                                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Passed}" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Passed}" Value="False">
-                                                            <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <TextBlock>
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource HistoryStatusChipTextStyle}">
+                                            <controls:SurfaceMaterialBorder Grid.Column="1" Height="30">
+                                                <Border.Style>
+                                                    <Style TargetType="Border" BasedOn="{StaticResource HistoryStatusChipStyle}">
+                                                        <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                                                        <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Passed}" Value="True">
-                                                                <Setter Property="Text" Value="PASS"/>
-                                                                <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
+                                                                <Setter Property="Background" Value="{DynamicResource AccentSuccessSubtle}"/>
+                                                                <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding Passed}" Value="False">
-                                                                <Setter Property="Text" Value="FAIL"/>
-                                                                <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
+                                                                <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
+                                                                <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </Border>
-                                    </Grid>
-                                </Border>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding StatusText}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource HistoryStatusChipTextStyle}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Passed}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Passed}" Value="False">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </controls:SurfaceMaterialBorder>
+                                        </Grid>
+                                    </controls:SurfaceMaterialBorder>
                                 </controls:DashboardTileHost>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Text="No quiz attempts yet"
-                           FontSize="{StaticResource Type.BlockTitle}"
-                           FontStyle="Italic"
-                           Foreground="{DynamicResource TextColorSecondary}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVis}}"/>
-                <TextBlock Text="Loading quiz history..."
-                           FontSize="{StaticResource Type.BlockTitle}"
-                           Foreground="{DynamicResource TextColorSecondary}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
-            </Grid>
-        </controls:FeatureWindowShell.Body>
-
-        <controls:FeatureWindowShell.Footer>
-            <Border Style="{StaticResource ChromePanelBorderStyle}"
-                    CornerRadius="0"
-                    Padding="20,12">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="{Binding ClearButtonText}"
-                            Padding="14,8"
-                            Margin="0,0,10,0"
-                            IsEnabled="{Binding HasAttempts}"
-                            Style="{StaticResource DialogSecondaryButtonStyle}"
-                            Click="ClearAllButton_Click"/>
-                    <Button Content="Close"
-                            Padding="14,8"
-                            Style="{StaticResource DialogSecondaryButtonStyle}"
-                            Click="CloseButton_Click"/>
-                </StackPanel>
-            </Border>
-        </controls:FeatureWindowShell.Footer>
-    </controls:FeatureWindowShell>
+                    </ItemsControl>
+                    <controls:ContextualStatePanel IllustrationKind="QuizHistory" Title="{Binding [MotionStateQuizTitle], Source={StaticResource Loc}}" Description="{Binding [MotionStateQuizDescription], Source={StaticResource Loc}}" Visibility="{Binding ShowEmpty, Converter={StaticResource BoolToVis}}"/>
+                    <controls:ContextualStatePanel IllustrationKind="QuizHistory" IsLoading="True" Title="{Binding [MotionStateLoading], Source={StaticResource Loc}}" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+            </controls:FeatureWindowShell.Body>
+            <controls:FeatureWindowShell.Footer>
+                <Border Style="{StaticResource WorkspaceFooterStyle}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="{Binding ClearButtonText}" Padding="14,8" Margin="0,0,10,0" IsEnabled="{Binding HasAttempts}" Style="{StaticResource DialogSecondaryButtonStyle}" Click="ClearAllButton_Click"/>
+                        <Button Content="{Binding [Close], Source={StaticResource Loc}}" Padding="14,8" Style="{StaticResource DialogSecondaryButtonStyle}" Click="CloseButton_Click"/>
+                    </StackPanel>
+                </Border>
+            </controls:FeatureWindowShell.Footer>
+        </controls:FeatureWindowShell>
     </Grid>
 </Window>
-
-
-

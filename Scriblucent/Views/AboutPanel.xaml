@@ -28,7 +28,7 @@
         </Style>
 
         <Style x:Key="AboutHandleChipStyle" TargetType="Border">
-            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Padding" Value="8,3"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -37,59 +37,34 @@
 
         <Style x:Key="AboutHandleChipMaintainerStyle" TargetType="Border" BasedOn="{StaticResource AboutHandleChipStyle}">
             <Setter Property="Background" Value="{DynamicResource AccentPrimarySubtle}"/>
+            <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
         <Style x:Key="AboutHandleChipContributorStyle" TargetType="Border" BasedOn="{StaticResource AboutHandleChipStyle}">
             <Setter Property="Background" Value="{DynamicResource TagChipBackground}"/>
+            <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
 
         <Style x:Key="AboutHandleTextMaintainerStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Control.Badge}"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentPrimary}"/>
             <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style x:Key="AboutHandleTextContributorStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="{StaticResource Type.Chip}"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Control.Badge}"/>
             <Setter Property="Foreground" Value="{DynamicResource TagChipForeground}"/>
             <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <Style x:Key="AboutPersonButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="8,7"/>
+        <Style x:Key="AboutPersonButtonStyle" TargetType="Button" BasedOn="{StaticResource LinkRowButtonStyle}">
             <Setter Property="Margin" Value="0,0,0,2"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Row"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Chip}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Stretch"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentPrimarySubtle}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Row" Property="Opacity" Value="0.88"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
     </UserControl.Resources>
 
@@ -114,25 +89,21 @@
                 UseLayoutRounding="True"
                 SnapsToDevicePixels="True">
             <!--
-              No MaxHeight on this grid: CardShadowLayer's star row would expand to the cap.
-              Shadow is sized to PanelCard; body is a plain StackPanel (no ScrollViewer).
+              The floating shadow stays outside the card clip and does not contribute layout size.
+              Dialog elevation stretches around PanelCard; only the body scrolls on shorter owners.
             -->
             <Grid Width="Auto"
                   MaxWidth="480"
                   VerticalAlignment="Top"
                   ClipToBounds="False">
-                <controls:CardShadowLayer
-                    Width="{Binding ActualWidth, ElementName=PanelCard}"
-                    Height="{Binding ActualHeight, ElementName=PanelCard}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top"/>
+                <controls:BakedElevationLayer Kind="Dialog"/>
 
                 <!--
                   BorderThickness=0 so the stage paints edge-to-edge under the rounded clip.
                   Level 2 documented exception: stroke overlay avoids the classic 1px banner inset seam
                   under RoundedClip (not a general floating-surface rest hairline).
                 -->
-                <Border x:Name="PanelCard"
+                <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" x:Name="PanelCard"
                         MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
                         VerticalAlignment="Top"
                         Background="{DynamicResource CardBackground}"
@@ -143,6 +114,7 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
@@ -153,16 +125,27 @@
                                 Background="{DynamicResource AboutStageBase}"
                                 ClipToBounds="True">
                             <Grid>
-                                <Ellipse Width="420" Height="320"
+                                <Ellipse x:Name="MeshNear" Width="420" Height="320"
                                          Margin="-140,-160,0,0"
                                          HorizontalAlignment="Left" VerticalAlignment="Top"
                                          Fill="{DynamicResource AboutStageMeshA}"
                                          IsHitTestVisible="False"/>
-                                <Ellipse Width="380" Height="300"
+                                <Ellipse x:Name="MeshFar" Width="380" Height="300"
                                          Margin="0,-120,-130,0"
                                          HorizontalAlignment="Right" VerticalAlignment="Top"
                                          Fill="{DynamicResource AboutStageMeshB}"
                                          IsHitTestVisible="False"/>
+
+                                <Rectangle x:Name="BrandLight" Width="150" Height="220" Opacity="0"
+                                           HorizontalAlignment="Left" IsHitTestVisible="False">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#28FFFFFF" Offset="0.5"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
 
                                 <!-- Soft veil + bottom fade so mesh never reads as hard circles at the seam -->
                                 <Rectangle IsHitTestVisible="False">
@@ -223,8 +206,13 @@
                             </Grid>
                         </Border>
 
-                        <StackPanel Grid.Row="1"
-                                    Margin="22,0,20,20">
+                        <ScrollViewer x:Name="AboutContentScroll" Grid.Row="1"
+                                      Margin="22,0,20,0"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      CanContentScroll="False"
+                                      behaviors:SmoothScrollBehavior.IsEnabled="True">
+                        <StackPanel>
                                 <TextBlock Text="{Binding [AboutTagline], Source={StaticResource Loc}}"
                                            FontSize="{StaticResource Type.SectionTitle}"
                                            FontWeight="SemiBold"
@@ -266,9 +254,9 @@
                                                        Foreground="{DynamicResource TextColor}"
                                                        VerticalAlignment="Center"
                                                        FontFamily="{StaticResource FontFamily.UI}"/>
-                                            <Border Style="{StaticResource AboutHandleChipMaintainerStyle}">
+                                            <controls:SurfaceMaterialBorder Style="{StaticResource AboutHandleChipMaintainerStyle}">
                                                 <TextBlock Text="@ncyxie" Style="{StaticResource AboutHandleTextMaintainerStyle}"/>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </StackPanel>
                                         <icons:AppIcon Grid.Column="1"
                                                        Kind="Github"
@@ -295,9 +283,9 @@
                                                        Foreground="{DynamicResource TextColor}"
                                                        VerticalAlignment="Center"
                                                        FontFamily="{StaticResource FontFamily.UI}"/>
-                                            <Border Style="{StaticResource AboutHandleChipMaintainerStyle}">
+                                            <controls:SurfaceMaterialBorder Style="{StaticResource AboutHandleChipMaintainerStyle}">
                                                 <TextBlock Text="@JauniusP" Style="{StaticResource AboutHandleTextMaintainerStyle}"/>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </StackPanel>
                                         <icons:AppIcon Grid.Column="1"
                                                        Kind="Github"
@@ -326,9 +314,9 @@
                                                        Foreground="{DynamicResource TextColor}"
                                                        VerticalAlignment="Center"
                                                        FontFamily="{StaticResource FontFamily.UI}"/>
-                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                            <controls:SurfaceMaterialBorder Style="{StaticResource AboutHandleChipContributorStyle}">
                                                 <TextBlock Text="@gustas215" Style="{StaticResource AboutHandleTextContributorStyle}"/>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </StackPanel>
                                         <icons:AppIcon Grid.Column="1"
                                                        Kind="Github"
@@ -354,9 +342,9 @@
                                                        Foreground="{DynamicResource TextColor}"
                                                        VerticalAlignment="Center"
                                                        FontFamily="{StaticResource FontFamily.UI}"/>
-                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                            <controls:SurfaceMaterialBorder Style="{StaticResource AboutHandleChipContributorStyle}">
                                                 <TextBlock Text="@deikep" Style="{StaticResource AboutHandleTextContributorStyle}"/>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </StackPanel>
                                         <icons:AppIcon Grid.Column="1"
                                                        Kind="Github"
@@ -382,9 +370,9 @@
                                                        Foreground="{DynamicResource TextColor}"
                                                        VerticalAlignment="Center"
                                                        FontFamily="{StaticResource FontFamily.UI}"/>
-                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                            <controls:SurfaceMaterialBorder Style="{StaticResource AboutHandleChipContributorStyle}">
                                                 <TextBlock Text="@Mantelio626" Style="{StaticResource AboutHandleTextContributorStyle}"/>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </StackPanel>
                                         <icons:AppIcon Grid.Column="1"
                                                        Kind="Github"
@@ -410,9 +398,9 @@
                                                        Foreground="{DynamicResource TextColor}"
                                                        VerticalAlignment="Center"
                                                        FontFamily="{StaticResource FontFamily.UI}"/>
-                                            <Border Style="{StaticResource AboutHandleChipContributorStyle}">
+                                            <controls:SurfaceMaterialBorder Style="{StaticResource AboutHandleChipContributorStyle}">
                                                 <TextBlock Text="@Rapol05" Style="{StaticResource AboutHandleTextContributorStyle}"/>
-                                            </Border>
+                                            </controls:SurfaceMaterialBorder>
                                         </StackPanel>
                                         <icons:AppIcon Grid.Column="1"
                                                        Kind="Github"
@@ -431,16 +419,19 @@
                                            Margin="0,16,0,0"
                                            FontFamily="{StaticResource FontFamily.UI}"/>
 
-                                <Button Content="{Binding [Close], Source={StaticResource Loc}}"
-                                        Style="{StaticResource DialogSecondaryButtonStyle}"
-                                        HorizontalAlignment="Center"
-                                        Padding="28,8"
-                                        Margin="0,14,0,0"
-                                        Click="CloseButton_Click"/>
                         </StackPanel>
+                        </ScrollViewer>
+
+                        <Button x:Name="AboutCloseButton" Grid.Row="2"
+                                Content="{Binding [Close], Source={StaticResource Loc}}"
+                                Style="{StaticResource DialogSecondaryButtonStyle}"
+                                HorizontalAlignment="Center"
+                                Padding="28,8"
+                                Margin="0,14,0,28"
+                                Click="CloseButton_Click"/>
 
                         <!-- Stroke overlay: draws the outline without insetting content -->
-                        <Border Grid.RowSpan="2"
+                        <Border Grid.RowSpan="3"
                                 BorderBrush="{DynamicResource BorderColor}"
                                 BorderThickness="1"
                                 CornerRadius="{StaticResource Radius.Overlay}"
@@ -448,7 +439,7 @@
                                 IsHitTestVisible="False"
                                 SnapsToDevicePixels="True"/>
                     </Grid>
-                </Border>
+                </controls:SurfaceMaterialBorder>
             </Grid>
         </Border>
     </Grid>

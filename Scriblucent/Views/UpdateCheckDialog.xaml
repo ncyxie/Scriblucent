@@ -28,7 +28,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Level 5 status glyph: fill only (role I soft). -->
-                <Border Grid.Column="0"
+                <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Tinted" Grid.Column="0"
                         Width="48"
                         Height="48"
                         Background="{DynamicResource FlashcardKnownChipBackground}"
@@ -42,7 +42,7 @@
                                    Foreground="{DynamicResource FlashcardKnownChipForeground}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
-                </Border>
+                </controls:SurfaceMaterialBorder>
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding TitleText}"
@@ -65,9 +65,8 @@
                            Margin="64,0,0,18"
                            LineHeight="20"/>
 
-                <Border Background="{DynamicResource SidebarBackground}"
+                <Border Style="{StaticResource ContentInsetBorderStyle}"
                         BorderThickness="0"
-                        CornerRadius="10"
                         Padding="14,12"
                         Margin="64,0,0,16">
                     <StackPanel>
@@ -87,19 +86,19 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="{DynamicResource WindowBackground}"
+                <Border Style="{StaticResource ContentInsetBorderStyle}"
                         BorderThickness="0"
-                        CornerRadius="10"
+                        CornerRadius="{StaticResource Radius.Card}"
                         Padding="12"
                         Margin="64,0,0,18"
                         Visibility="{Binding ReleaseNotesVisibility}">
                     <ScrollViewer MaxHeight="96" VerticalScrollBarVisibility="Auto">
                         <TextBlock Text="{Binding ReleaseNotesText}"
-                                   FontSize="{StaticResource Type.Caption}"
+                                   FontSize="{StaticResource Type.Body}"
                                    Foreground="{DynamicResource TextColor}"
                                    Opacity="0.82"
                                    TextWrapping="Wrap"
-                                   LineHeight="18"/>
+                                   LineHeight="20"/>
                     </ScrollViewer>
                 </Border>
             </StackPanel>

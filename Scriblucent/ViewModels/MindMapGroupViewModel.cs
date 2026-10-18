@@ -9,8 +9,9 @@ public class MindMapGroupViewModel : ViewModelBase
     private Brush _backgroundBrush;
     private Brush _foregroundBrush;
 
-    public MindMapGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<MindMapViewModel> maps)
+    public MindMapGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<MindMapViewModel> maps, GroupDisclosureState? disclosure = null)
     {
+        Disclosure = disclosure ?? new GroupDisclosureState();
         GroupId = groupId;
         _name = name;
         BackgroundColor = backgroundColor;
@@ -20,6 +21,7 @@ public class MindMapGroupViewModel : ViewModelBase
     }
 
     public Guid GroupId { get; }
+    public GroupDisclosureState Disclosure { get; }
 
     public string Name
     {

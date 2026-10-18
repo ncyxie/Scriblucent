@@ -1,5 +1,4 @@
 using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,7 +10,6 @@ using System.Windows.Threading;
 using Scriblucent.Animations;
 using Scriblucent.Behaviors;
 using Scriblucent.Services;
-using Scriblucent.ViewModels;
 using WpfToolkit.Controls;
 
 namespace Scriblucent.Controls;
@@ -28,6 +26,40 @@ public enum DashboardCardGridLayout
 /// </summary>
 public class DashboardVirtualizedCardGrid : ItemsControl
 {
+    private bool _pageViewportActive = true;
+    private bool _parkedReleaseQueued;
+    static DashboardVirtualizedCardGrid()
+    {
+        // Preserve the caller's visibility value/binding while parking an off-screen
+        // page slice. Hidden also removes its descendants from motion/cache sweeps.
+        VisibilityProperty.OverrideMetadata(typeof(DashboardVirtualizedCardGrid),
+            new FrameworkPropertyMetadata(Visibility.Visible, null, (target, value) =>
+                !((DashboardVirtualizedCardGrid)target)._pageViewportActive && (Visibility)value == Visibility.Visible
+                    ? Visibility.Hidden : value));
+    }
+
+    internal bool SetPageViewportActive(bool active)
+    {
+        if (ResolveItemsPanel() is VirtualizingWrapPanel panel) panel.SetViewportParked(!active);
+        if (!active) QueueParkedRelease();
+        if (_pageViewportActive == active) return false;
+        _pageViewportActive = active;
+        CoerceValue(VisibilityProperty);
+        InvalidateMeasure();
+        return true;
+    }
+    private void QueueParkedRelease()
+    {
+        if (_parkedReleaseQueued || ResolveItemsPanel() is not Panel { Children.Count: > 0 }) return;
+        _parkedReleaseQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _parkedReleaseQueued = false;
+            if (_pageViewportActive || !IsLoaded || IsKeyboardFocusWithin || _addMotionLayoutActive
+                || DashboardMotionEngine.ShouldDeferVirtualizationRefresh(ResolveHostingMotionScope())) return;
+            if (ResolveItemsPanel() is VirtualizingWrapPanel panel) panel.ReleaseRealizedContainers();
+        }, DispatcherPriority.Background);
+    }
     internal const int LargeListItemThreshold = 200;
     private const double VirtualizationCacheBeforePixels = 360;
     private const double VirtualizationCacheAfterPixels = 540;
@@ -52,10 +84,9 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     private double _pageViewportHeight;
     private int _lastMeasuredItemCount = -1;
     private double _lastPanelExtentHeight = double.NaN;
-    private MainViewModel? _mainViewModel;
-    private bool _isSyncingMassSelectChrome;
     private bool _addMotionLayoutActive;
     private bool _interactiveSweepDeferred;
+    private bool _interactiveSweepScheduled;
     private VirtualizationMode _savedVirtualizationMode = VirtualizationMode.Recycling;
     private DashboardMotionScope? _cachedMotionScope;
     private bool _motionScopeResolved;
@@ -90,7 +121,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         Loaded += OnLoaded;
         Unloaded += (_, _) =>
         {
-            DetachMainViewModel();
             _motionScopeResolved = false;
             _cachedMotionScope = null;
         };
@@ -115,6 +145,9 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (!_pageViewportActive)
+            return new Size(double.IsFinite(availableSize.Width) ? availableSize.Width : 0, 0);
+
         EnsureItemsPanelMaterialized(availableSize);
 
         var width = double.IsPositiveInfinity(availableSize.Width) ? ActualWidth : availableSize.Width;
@@ -183,6 +216,9 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
         return result;
     }
+
+    protected override Size ArrangeOverride(Size arrangeBounds)
+        => _pageViewportActive ? base.ArrangeOverride(arrangeBounds) : arrangeBounds;
 
     private Size RemeasureForRealization(double width, double height)
     {
@@ -291,6 +327,7 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         _addMotionLayoutActive = false;
         VirtualizingPanel.SetVirtualizationMode(this, _savedVirtualizationMode);
         InvalidateMeasure();
+        if (!_pageViewportActive) QueueParkedRelease();
     }
 
     private void EnsureItemsPanelMaterialized(Size availableSize)
@@ -345,7 +382,7 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     internal double GetPanelExtentHeight()
         => ResolvePanelExtentHeight();
 
-    internal void ResetVirtualizationLayoutCache()
+    internal virtual void ResetVirtualizationLayoutCache()
     {
         if (ResolveItemsPanel() is VirtualizingWrapPanel wrapPanel)
             wrapPanel.ClearItemSizeCache();
@@ -479,11 +516,20 @@ public class DashboardVirtualizedCardGrid : ItemsControl
             return;
         }
 
+        QueueInteractiveSweep();
+    }
+
+    private void QueueInteractiveSweep()
+    {
+        if (_interactiveSweepScheduled) return;
+        _interactiveSweepScheduled = true;
         Dispatcher.BeginInvoke(() =>
         {
+            _interactiveSweepScheduled = false;
+            if (!IsLoaded || !_pageViewportActive) return;
+            if (DashboardScrollRenderGate.IsSmoothScrollRendering(this))
+            { _interactiveSweepDeferred = true; return; }
             EnsureRealizedCardsInteractive();
-            if (Window.GetWindow(this)?.DataContext is MainViewModel { IsMassSelectMode: true })
-                SyncMassSelectChrome();
         }, DispatcherPriority.Loaded);
     }
 
@@ -494,9 +540,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
         _interactiveSweepDeferred = false;
         EnsureRealizedCardsInteractive();
-
-        if (IsMassSelectModeActive())
-            SyncMassSelectChrome();
     }
 
     private DashboardMotionScope? ResolveHostingMotionScope()
@@ -522,7 +565,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        AttachMainViewModel();
 
         if (ResolveItemsPanel() is VirtualizingWrapPanel wrapPanel)
         {
@@ -540,8 +582,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         }
 
         EnsureRealizedCardsInteractive();
-        if (IsMassSelectModeActive())
-            SyncMassSelectChrome();
     }
 
     protected override void PrepareContainerForItemOverride(DependencyObject element, object item)
@@ -562,8 +602,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     {
         base.PrepareContainerForItemOverride(element, item);
         DashboardScrollRenderGate.TryStripContainerShadow(element);
-        MassSelectHighlightBehavior.PrepareContainer(element);
-        DashboardMassSelectCheckBoxBehavior.SyncContainer(element);
         IndicatorRevealMotionBehavior.SyncContainer(element);
         if (!DashboardScrollRenderGate.IsSmoothScrollRendering(element))
         {
@@ -578,8 +616,6 @@ public class DashboardVirtualizedCardGrid : ItemsControl
     protected override void ClearContainerForItemOverride(DependencyObject element, object item)
     {
         ResetContainerMotion(element);
-        MassSelectHighlightBehavior.ResetContainer(element);
-        DashboardMassSelectCheckBoxBehavior.HideAllInContainer(element);
         IndicatorRevealMotionBehavior.ResetContainer(element);
 
         // A note card's exit animation (DashboardMotionEngine.PlayCardExit) can leave transient
@@ -591,81 +627,15 @@ public class DashboardVirtualizedCardGrid : ItemsControl
         base.ClearContainerForItemOverride(element, item);
     }
 
-    private void AttachMainViewModel()
-    {
-        if (Window.GetWindow(this)?.DataContext is not MainViewModel mainViewModel)
-            return;
-
-        if (ReferenceEquals(_mainViewModel, mainViewModel))
-            return;
-
-        DetachMainViewModel();
-        _mainViewModel = mainViewModel;
-        _mainViewModel.PropertyChanged += OnMainViewModelPropertyChanged;
-    }
-
-    private void DetachMainViewModel()
-    {
-        if (_mainViewModel is null)
-            return;
-
-        _mainViewModel.PropertyChanged -= OnMainViewModelPropertyChanged;
-        _mainViewModel = null;
-    }
-
-    private void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(MainViewModel.IsMassSelectMode))
-            SyncMassSelectChrome();
-    }
-
-    internal void SyncMassSelectChrome()
-    {
-        if (_isSyncingMassSelectChrome || !IsMassSelectModeActive())
-            return;
-
-        _isSyncingMassSelectChrome = true;
-        try
-        {
-            SyncMassSelectChromeForRealizedContainers();
-        }
-        finally
-        {
-            _isSyncingMassSelectChrome = false;
-        }
-    }
-
-    private void SyncMassSelectChromeForRealizedContainers()
-    {
-        if (ResolveItemsPanel() is not { } panel)
-            return;
-
-        for (var i = 0; i < panel.Children.Count; i++)
-        {
-            if (panel.Children[i] is DependencyObject container)
-                SyncMassSelectContainer(container);
-        }
-    }
-
-    internal void SyncMassSelectContainer(DependencyObject container)
-    {
-        MassSelectHighlightBehavior.SyncContainer(container);
-        DashboardMassSelectCheckBoxBehavior.SyncContainer(container);
-    }
-
-    private bool IsMassSelectModeActive()
-        => _mainViewModel?.IsMassSelectMode == true
-           || Window.GetWindow(this)?.DataContext is MainViewModel { IsMassSelectMode: true };
-
     private void OnItemContainerGeneratorStatusChanged(object? sender, EventArgs e)
     {
         if (ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
             return;
 
-        EnsureRealizedCardsInteractive();
-
-        if (Window.GetWindow(this)?.DataContext is MainViewModel { IsMassSelectMode: true })
-            SyncMassSelectChrome();
+        // The wrap panel generates one container at a time. Scanning every card on
+        // each ContainersGenerated notification made a viewport fill quadratic.
+        // Per-container preparation stays immediate; repair the completed tree once.
+        QueueInteractiveSweep();
     }
 
     private void NotifyHostMutationRefresh()

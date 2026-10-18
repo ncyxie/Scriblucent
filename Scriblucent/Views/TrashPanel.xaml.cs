@@ -1,5 +1,6 @@
-using Scriblucent;
+﻿using Scriblucent;
 using Scriblucent.Animations;
+using Scriblucent.Controls;
 using Scriblucent.Localization;
 using Scriblucent.ViewModels;
 using System;
@@ -37,20 +38,30 @@ public partial class TrashPanel : UserControl
     public TrashPanel()
     {
         InitializeComponent();
+        InitializeTrashSelection();
         _overlayAnimator = OverlayPanelAnimator.Bind(this, OverlayDim, PanelMotionHost, BackdropSnapshot, ScrimHost);
+        OverlayRoot.SizeChanged += (_, _) => UpdatePanelBounds();
         LocalizationProvider.Instance.PropertyChanged += LocalizationProvider_PropertyChanged;
         Unloaded += (_, _) => LocalizationProvider.Instance.PropertyChanged -= LocalizationProvider_PropertyChanged;
+    }
+
+    private void UpdatePanelBounds()
+    {
+        if (OverlayRoot.ActualWidth <= 0 || OverlayRoot.ActualHeight <= 0) return;
+        TrashSurface.Width = Math.Min(700, Math.Max(1, OverlayRoot.ActualWidth - 40));
+        TrashSurface.Height = Math.Min(620, Math.Max(1, OverlayRoot.ActualHeight - 40));
     }
 
     public void ShowAnimated()
     {
         _overlayAnimator.Show(
             () => _overlayAnimator.RunAfterFirstRender(PopulatePanelContent, DispatcherPriority.ApplicationIdle),
-            () => OverlayBackdropCapture.TryCaptureForDimAnimation(Window.GetWindow(this)));
+            backdropOwner: Window.GetWindow(this));
     }
 
     public void HideAnimated()
     {
+        EndTrashSelection();
         _overlayAnimator.Hide();
     }
 
@@ -58,6 +69,7 @@ public partial class TrashPanel : UserControl
     {
         if (Visibility == Visibility.Visible)
             UpdateFilterChipLabels();
+        UpdateSelectionActions();
     }
 
     private void PopulatePanelContent()
@@ -120,10 +132,13 @@ public partial class TrashPanel : UserControl
         var isEmpty = filtered.Count == 0;
         EmptyStateHost.Visibility = isEmpty ? Visibility.Visible : Visibility.Collapsed;
         TrashedItemsListBox.Visibility = isEmpty ? Visibility.Collapsed : Visibility.Visible;
-        EmptyStateText.Text = LocalizationService.GetString(
+        EmptyStateHost.Title = LocalizationService.GetString(
             _activeFilter is null && string.IsNullOrWhiteSpace(_searchQuery)
                 ? "TrashEmptyState"
                 : "TrashEmptyStateFiltered");
+        var unfiltered = _activeFilter is null && string.IsNullOrWhiteSpace(_searchQuery);
+        EmptyStateHost.IllustrationKind = unfiltered ? Scriblucent.Controls.StateIllustrationKind.Trash : Scriblucent.Controls.StateIllustrationKind.Search;
+        EmptyStateHost.Description = LocalizationService.GetString(unfiltered ? "MotionStateTrashDescription" : "MotionStateSearchDescription");
 
         EmptyTrashButton.IsEnabled = GetEmptyableCount() > 0;
         UpdateSelectionActions();
@@ -180,7 +195,7 @@ public partial class TrashPanel : UserControl
 
     private void TrashedItemsListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (!IsLogicalAllSelected || e.OriginalSource is not DependencyObject source)
+        if ((!IsLogicalAllSelected && !IsTrashSelecting && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) || e.OriginalSource is not DependencyObject source)
             return;
 
         var container = ItemsControl.ContainerFromElement(TrashedItemsListBox, source) as ListBoxItem;
@@ -195,7 +210,12 @@ public partial class TrashPanel : UserControl
                 return;
         }
 
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (!IsLogicalAllSelected)
+        {
+            if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) { ToggleTrashItem(item); container.Focus(); e.Handled = true; }
+            return;
+        }
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) == 0)
         {
             item.IsExcludedFromLogicalSelection = !_logicalSelectionExclusions.Remove(item);
             if (item.IsExcludedFromLogicalSelection)
@@ -222,28 +242,27 @@ public partial class TrashPanel : UserControl
 
     private void UpdateSelectionActions()
     {
-        var count = TrashedItemsListBox.Items.Count;
-        var selected = IsLogicalAllSelected
-            ? count - _logicalSelectionExclusions.Count : TrashedItemsListBox.SelectedItems.Count;
-        RestoreSelectedButton.IsEnabled = selected > 0;
-        DeleteSelectedButton.IsEnabled = selected > 0;
-        SelectAllTrashButton.IsEnabled = count > 0 && selected < count;
+        if (SelectedTrashCount > 0) IsTrashSelecting = true;
+        _trashSelection?.Notify();
     }
 
-    private void SelectAllTrashButton_Click(object sender, RoutedEventArgs e)
-        => SelectAllTrashItems();
-
-    private void TrashedItemsListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void TrashPanel_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.A || (Keyboard.Modifiers & ModifierKeys.Control) == 0)
-            return;
-
-        e.Handled = true;
-        SelectAllTrashItems();
+        for (var current = e.OriginalSource as DependencyObject; current is not null; current = EditorSelectionInput.Parent(current))
+            if (current is TextBoxBase or PasswordBox or ComboBox) return;
+        if (e.Key == Key.Escape && IsTrashSelecting)
+        { EndTrashSelection(); e.Handled = true; }
+        else if (e.Key == Key.Space && e.OriginalSource is ListBoxItem { DataContext: TrashItemViewModel item })
+        { ToggleTrashItem(item); e.Handled = true; }
+        else if (e.Key == Key.Delete && SelectedTrashCount > 0)
+        { DeleteSelectedButton_Click(this, e); e.Handled = true; }
+        else if (e.Key == Key.A && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        { SelectAllTrashItems(); e.Handled = true; }
     }
 
     private void SelectAllTrashItems()
     {
+        IsTrashSelecting = true;
         if (TrashedItemsListBox.Items.Count < 10_000)
         {
             TrashedItemsListBox.SelectAll();

@@ -19,15 +19,20 @@ namespace Scriblucent.Animations;
 public sealed class DashboardMotionEngine
 {
     private const int EnterBurstWindowMs = 500;
-    private const int MaxBurstAddsBeforeSkip = 5;
+    private const int MaxFullArrivalBurstAdds = 5;
     private const int MaxLayoutWaitAttempts = 12;
+    private const double AddEnterScale = .975;
+    private const double AddEnterLift = 8;
+    private const int AddGapLeadMs = 36;
 
     private static readonly Dictionary<DashboardMotionScope, DashboardMotionEngine> ActiveByScope = new();
     private static readonly ConditionalWeakTable<FrameworkElement, object> CardExitMotionKeys = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, TranslateTransform> ReflowTranslations = new();
 
     private readonly Dispatcher _dispatcher;
     private readonly DashboardMotionScope _scope;
     private readonly object _reflowBatchKey = new();
+    private int _reflowGeneration;
 
     private FrameworkElement? _dashboardRoot;
     private FrameworkElement? _ungroupedSection;
@@ -39,10 +44,14 @@ public sealed class DashboardMotionEngine
     private readonly Dictionary<Guid, FrameworkElement> _reflowTargetByItemId = new();
     private readonly Dictionary<Guid, int> _indexSnapshots = new();
     private readonly HashSet<FrameworkElement> _activeReflowTargets = new();
+    private readonly Dictionary<FrameworkElement, double> _reflowOpacityTargets = new();
+    private readonly Dictionary<Guid, Vector> _interruptedReflowOffsets = new();
+    private readonly Dictionary<Guid, double> _interruptedReflowOpacities = new();
 
     private readonly HashSet<Guid> _enteringItemIds = new();
     private long _lastAddTimestampMs;
     private int _rapidAddCount;
+    private bool _compactAddBurst;
     private bool _deleteBatchCommitted;
     private DispatcherTimer? _deleteBatchSafetyTimer;
     private bool _moveBatchCommitted;
@@ -53,16 +62,8 @@ public sealed class DashboardMotionEngine
     private readonly HashSet<Guid> _deferredEnterIds = new();
     private readonly HashSet<Guid> _playingEnterIds = new();
 
-    // An item can be marked "playing" by a completely untracked, un-watchdogged replay attempt -
-    // OnItemContainerRealized or FinishReflow's deferred-retry continuation both call
-    // TryPlayEnterForItem with onComplete = null when a container wasn't found on the item's
-    // first (tracked) attempt. If that replay's RenderTransitionClock gets Stop()'d before
-    // completing (same drop-on-cancel mechanism as _pendingEnterCompletions), nothing ever
-    // removes the id from _playingEnterIds, and TryPlayEnterForItem's first guard then silently
-    // skips this item's animation forever - it just appears wherever the interrupted animation
-    // visually left it. This timestamp bounds how long "playing" is trusted before it's treated
-    // as stale and eligible for replay/snap-to-final, mirroring the MaxMotionViewportFreezeMs
-    // idiom in DashboardVirtualizationHost.
+    // Deferred arrivals can lose their completion when a container unloads.
+    // Bound how long the playing flag is trusted so canceled arrivals can recover.
     private readonly Dictionary<Guid, long> _playingEnterStartedAtMs = new();
     private readonly HashSet<Guid> _instantEnterIds = new();
     private int _layoutAnimationDepth;
@@ -72,31 +73,17 @@ public sealed class DashboardMotionEngine
     private readonly List<Action> _batchMutationAfterMotion = new();
     private Action? _onReflowComplete;
 
-    // Keyed by item id so a card that leaves the tree mid-animation (its RenderTransitionClock
-    // gets Stop()'d by NoteCardControl.OnUnloaded -> CardSurfaceMotionBehavior.Cleanup ->
-    // UiMotion.Cleanup, which silently drops the completion callback - RenderTransitionClock.Stop
-    // clears _onAllComplete without invoking it) can still have ITS specific AnimateReflow pass's
-    // completion retired from outside that pass's own closure. Without this, one dropped callback
-    // means that pass's remainingEnters-equivalent count never reaches zero, FinishReflow() never
-    // runs, and every DashboardVirtualizationHost in the scope stays frozen (see
-    // FreezeVirtualizationViewports/UnfreezeVirtualizationViewports) for the rest of the process's
-    // life - the dashboard stops responding to scroll and a small scroll makes cards vanish.
+    // Cancellation drops completion callbacks. Keep per-item retirement available
+    // outside the pass so unloaded cards cannot hold the layout gate open.
     private readonly Dictionary<Guid, Action> _pendingEnterCompletions = new();
     private DispatcherTimer? _reflowSafetyTimer;
 
-    // Watchdog escape hatch for a pass stuck on the REFLOW side, not just the enter side -
-    // UiMotion.Run keys one clock per key, so a closely-overlapping second reflow pass on the
-    // same _reflowBatchKey silently drops the first pass's sibling-reflow completion callback,
-    // meaning reflowComplete can never become true for that pass. The existing retire-based
-    // watchdog only ever forces enterComplete, so it cannot rescue this case on its own. Set by
-    // AnimateReflow at the start of each pass, invoked by ForceFinishStuckEnters after the
-    // retire loop, cleared once FinishReflow actually runs for that pass.
+    // The safety timer must settle both sibling movement and arrivals if either
+    // completion was canceled. Generation checks prevent an older pass finishing a newer one.
     private Action? _forceFinishPass;
 
-    // Per-pass caches so resolving thousands of entering items' layout roots doesn't cost a
-    // fresh O(m) scan (plus a full synchronous layout pass - see FindEnterLayoutRoot) per item.
-    // Built lazily on first use within a pass, invalidated wherever the tree is already
-    // known-fresh or the item collection changed - see InvalidatePassLookups callers.
+    // Build lookups once per pass to avoid repeated collection scans and layout.
+    // Invalidate them when the tracked items or realized tree change.
     private Dictionary<Guid, (DashboardVirtualizedCardGrid Grid, object Item)>? _enterItemLookup;
     private Dictionary<Guid, int>? _displayIndexLookup;
     private List<DashboardVirtualizedCardGrid>? _passGrids;
@@ -289,7 +276,8 @@ public sealed class DashboardMotionEngine
                 || !engine.IsAuthorizedEnterLayoutRoot(layoutRoot, itemId))
                 continue;
 
-            if (motionSurface.Opacity is > 0.02 and < 0.98)
+            if (NativeSurfaceMotion.IsRunning(motionSurface, MotionChannel.Presence)
+                || motionSurface.Opacity is > 0.02 and < 0.98)
                 return true;
 
             engine.PrepareEnterHoldSlot(layoutRoot, motionSurface);
@@ -309,7 +297,7 @@ public sealed class DashboardMotionEngine
         ClearLayoutAnimationOverrides(layoutRoot);
         layoutRoot.Visibility = Visibility.Visible;
         layoutRoot.IsHitTestVisible = false;
-        ResetLayoutReflowTransform(layoutRoot);
+        if (!_activeReflowTargets.Contains(layoutRoot)) ResetLayoutReflowTransform(layoutRoot);
         SetMotionSurfaceEnterStart(motionSurface);
     }
 
@@ -317,9 +305,9 @@ public sealed class DashboardMotionEngine
     {
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(motionSurface);
         translate.X = 0;
-        translate.Y = -UiMotion.CardEnterLiftY;
-        scale.ScaleX = UiMotion.EnterScale;
-        scale.ScaleY = UiMotion.EnterScale;
+        translate.Y = AddEnterLift;
+        scale.ScaleX = AddEnterScale;
+        scale.ScaleY = AddEnterScale;
         motionSurface.Opacity = 0;
     }
 
@@ -345,6 +333,20 @@ public sealed class DashboardMotionEngine
 
     public void CapturePositions(bool ungroupedOnly = false, bool freezeViewport = true)
     {
+        // Mutations queued before the same layout pass share its original snapshot.
+        if (_reflowScheduled) return;
+        // An earlier card entrance may finish after the next mutation has started.
+        // It must not clear the new pass's snapshots, transforms or virtualization gate.
+        _reflowGeneration++;
+        _interruptedReflowOffsets.Clear();
+        _interruptedReflowOpacities.Clear();
+        foreach (var target in _activeReflowTargets)
+            if (DashboardMotionCardCatalog.TryGetItemId(target, out var id)
+                && ReflowTranslations.TryGetValue(target, out var offset))
+                _interruptedReflowOffsets[id] = new Vector(offset.X, offset.Y);
+        foreach (var surface in _reflowOpacityTargets.Keys)
+            if (DashboardMotionCardCatalog.TryGetItemId(surface, out var id))
+                _interruptedReflowOpacities[id] = surface.Opacity;
         CancelActiveReflowTransforms();
 
         _positionSnapshots.Clear();
@@ -371,7 +373,12 @@ public sealed class DashboardMotionEngine
             var reflowTarget = ResolveReflowTarget(layoutRoot);
             _layoutRootByItemId[itemId] = layoutRoot;
             _reflowTargetByItemId[itemId] = reflowTarget;
-            _positionSnapshots[itemId] = reflowTarget.TransformToAncestor(panel).Transform(new Point(0, 0));
+            var position = reflowTarget.TransformToAncestor(panel).Transform(new Point(0, 0));
+            // The container supplies the arranged slot; only the independent layout
+            // offset belongs to reflow. Presence lift/scale must not enter this snapshot.
+            if (_interruptedReflowOffsets.TryGetValue(itemId, out var visibleOffset))
+                position += visibleOffset;
+            _positionSnapshots[itemId] = position;
             _panelByItemId[itemId] = panel;
         }
     }
@@ -431,8 +438,41 @@ public sealed class DashboardMotionEngine
     public void PreparePendingEnter(Guid itemId, bool grouped = false)
     {
         _ = grouped;
-        RegisterItemAdded(itemId);
+        if (!_batchMutationInFlight && _relocatingItemIds.Count == 0)
+            SettlePreviousAddEntrances(itemId);
+        RegisterItemAdded();
         _enteringItemIds.Add(itemId);
+        InvalidatePassLookups();
+    }
+
+    private void SettlePreviousAddEntrances(Guid nextItemId)
+    {
+        var previousIds = _enteringItemIds.Where(id => id != nextItemId).ToHashSet();
+        if (previousIds.Count == 0) return;
+
+        var realized = _dashboardRoot is null ? Enumerable.Empty<FrameworkElement>()
+            : DashboardMotionCardCatalog.EnumerateLayoutRoots(_dashboardRoot, _scope);
+        var roots = _layoutRootByItemId.Values.Concat(realized).Distinct().ToArray();
+        // A live arrival can finish on its presence channel while its layout glide
+        // is retargeted. Recover only arrivals whose clocks have been abandoned.
+        foreach (var root in roots)
+            if (DashboardMotionCardCatalog.TryGetItemId(root, out var id)
+                && NativeSurfaceMotion.IsRunning(DashboardMotionCardCatalog.ResolveMotionSurface(root, _scope), MotionChannel.Presence))
+                previousIds.Remove(id);
+        foreach (var id in previousIds)
+        {
+            _enteringItemIds.Remove(id);
+            _scheduledEnterIds.Remove(id);
+            _deferredEnterIds.Remove(id);
+            _instantEnterIds.Remove(id);
+            ClearPlayingEnter(id);
+        }
+        foreach (var root in roots)
+            if (DashboardMotionCardCatalog.TryGetItemId(root, out var id) && previousIds.Contains(id))
+                FinalizeEnteredCard(root, DashboardMotionCardCatalog.ResolveMotionSurface(root, _scope));
+
+        foreach (var id in previousIds)
+            if (_pendingEnterCompletions.Remove(id, out var retire)) retire();
     }
 
     public void ScheduleReflowAfterLayout(Guid? fadeInItemId = null, bool instantEnter = false, Action? afterMotion = null)
@@ -711,12 +751,8 @@ public sealed class DashboardMotionEngine
     }
 
     /// <summary>
-    /// Bounds how long an add/duplicate reflow pass can stay waiting on card-enter completions.
-    /// Mirrors ArmDeleteBatchSafety. This is the last line of defense: even if a card's enter
-    /// animation gets cancelled without notice (see the comment on _pendingEnterCompletions) and
-    /// SweepOrphanedEnterCompletions doesn't get a chance to run again, this guarantees the pass
-    /// - and therefore UnfreezeVirtualizationViewports - completes within a bounded time instead
-    /// of leaving every host in the scope frozen for the rest of the process's life.
+    /// Releases the layout gate if an add/duplicate pass loses its completion.
+    /// The timeout includes arrival, sibling movement and stagger durations.
     /// </summary>
     private void ArmReflowSafety()
     {
@@ -732,13 +768,7 @@ public sealed class DashboardMotionEngine
 
     private void MaybeDisarmReflowSafety()
     {
-        // Keep the timer alive while a pass still needs the reflow-side escape hatch
-        // (_forceFinishPass), even if every enter completion has already retired. Disarming
-        // here when only reflowComplete is still false is exactly the overlapping-duplicate
-        // failure mode that hatch exists for: UiMotion drops the sibling-reflow callback, every
-        // enter retires normally, this method used to kill the timer, and every host in the
-        // scope stayed frozen until the 3s viewport-freeze timeout - visible as large blank
-        // gaps in groups/ungrouped until something finally scrolled/remeasured.
+        // Keep recovery armed until both arrivals and sibling movement have settled.
         if (_pendingEnterCompletions.Count > 0 || _forceFinishPass is not null)
             return;
 
@@ -751,27 +781,16 @@ public sealed class DashboardMotionEngine
         _reflowSafetyTimer?.Stop();
         _reflowSafetyTimer = null;
 
+        // Retiring the last entry can clear the pass. Commit visible poses first.
+        var forceFinishPass = _forceFinishPass;
+        _forceFinishPass = null;
+        forceFinishPass?.Invoke();
+
         if (_pendingEnterCompletions.Count > 0)
         {
             ScrollPerfDiag.Log($"reflowSafetyForceFinish\tscope={_scope}\tstuckCount={_pendingEnterCompletions.Count}\tentering={_enteringItemIds.Count}\tplaying={_playingEnterIds.Count}");
-            foreach (var (itemId, retire) in _pendingEnterCompletions.ToList())
-            {
-                _ = itemId;
+            foreach (var retire in _pendingEnterCompletions.Values.ToList())
                 retire();
-            }
-        }
-
-        // The retire loop above only ever forces enterComplete for entries still in
-        // _pendingEnterCompletions - it does nothing if that dict is already empty (every enter
-        // retired normally) but reflowComplete is the side still stuck (see the comment on
-        // _forceFinishPass). Always give the current pass, if any, a chance to force through
-        // regardless of which side the retire loop did or didn't touch.
-        var forceFinishPass = _forceFinishPass;
-        _forceFinishPass = null;
-        if (forceFinishPass is not null)
-        {
-            ScrollPerfDiag.Log($"reflowSafetyForceFinishPass\tscope={_scope}\tentering={_enteringItemIds.Count}");
-            forceFinishPass();
         }
     }
 
@@ -792,13 +811,21 @@ public sealed class DashboardMotionEngine
         ScheduleReflowWork(() => AnimateReflow(Array.Empty<Guid>()));
     }
 
-    private void RegisterItemAdded(Guid itemId)
+    private void RegisterItemAdded()
     {
         var now = Environment.TickCount64;
         if (now - _lastAddTimestampMs < EnterBurstWindowMs)
             _rapidAddCount++;
         else
+        {
             _rapidAddCount = 1;
+            _compactAddBurst = false;
+        }
+
+        // Compact arrival styling stays latched until input pauses.
+        // This never suppresses or shortens sibling movement.
+        if (_rapidAddCount > 1 && _interruptedReflowOffsets.Count > 0)
+            _compactAddBurst = true;
 
         _lastAddTimestampMs = now;
     }
@@ -815,18 +842,23 @@ public sealed class DashboardMotionEngine
 
         _dispatcher.BeginInvoke(() =>
         {
+            // An interrupted arrival can retire the originally queued id.
+            var currentWaitId = _scheduledEnterIds.Count == 1 ? _scheduledEnterIds.First() : (Guid?)null;
+            // Prepare the current batch once rather than waiting for a superseded
+            // or off-screen container from an earlier click.
             if (_enteringItemIds.Count > 0)
-                PrepareAddMotionLayout(waitForItemId);
+                PrepareAddMotionLayout(currentWaitId);
 
-            if (waitForItemId.HasValue
-                && FindEnterLayoutRoot(waitForItemId.Value) is not { IsLoaded: true })
+            if (currentWaitId.HasValue
+                && !_instantEnterIds.Contains(currentWaitId.Value)
+                && _scheduledEnterIds.Count <= 1
+                && FindEnterLayoutRoot(currentWaitId.Value) is not { IsLoaded: true })
             {
                 if (attempt < MaxLayoutWaitAttempts)
-                    ScheduleAfterLayoutReady(work, waitForItemId, attempt + 1);
+                    ScheduleAfterLayoutReady(work, currentWaitId, attempt + 1);
                 else
                 {
-                    if (waitForItemId.HasValue)
-                        AbandonUnrealizedEnter(waitForItemId.Value);
+                    AbandonUnrealizedEnter(currentWaitId.Value);
 
                     work();
                 }
@@ -874,10 +906,8 @@ public sealed class DashboardMotionEngine
                 return;
             }
 
-            // The previous "playing" attempt never called back to remove this id - almost
-            // certainly a replay started from OnItemContainerRealized/FinishReflow's deferred
-            // retry (untracked, no watchdog) whose clock got Stop()'d mid-animation. Treat it as
-            // abandoned and let this call start a real replay instead of skipping forever.
+            // A canceled deferred arrival may leave its playing flag behind.
+            // Retire the stale attempt before replaying it.
             ScrollPerfDiag.Log($"enterPlayStaleReplay\tscope={_scope}\titemId={itemId}");
             ClearPlayingEnter(itemId);
         }
@@ -898,7 +928,7 @@ public sealed class DashboardMotionEngine
 
         var motionSurface = DashboardMotionCardCatalog.ResolveMotionSurface(entering, _scope);
         var scrollViewer = _scrollViewer ?? DashboardMotionViewport.FindScrollViewer(_dashboardRoot);
-        if (_instantEnterIds.Contains(itemId) || IsInBurstAddWindow())
+        if (_instantEnterIds.Contains(itemId))
         {
             CompleteEnteredCard(entering, motionSurface, itemId);
             _instantEnterIds.Remove(itemId);
@@ -912,11 +942,12 @@ public sealed class DashboardMotionEngine
             _instantEnterIds.Remove(itemId);
             ClearPlayingEnter(itemId);
             onComplete?.Invoke();
-        }, startDelayMs);
+        }, startDelayMs, compact: UseCompactAddArrival());
     }
 
     private void AnimateReflow(IReadOnlyList<Guid> enterItemIds)
     {
+        var generation = _reflowGeneration;
         if (_dashboardRoot is null)
         {
             FinishReflow();
@@ -965,7 +996,10 @@ public sealed class DashboardMotionEngine
 
         if (enterItemIds.Count == 0)
         {
-            AnimateSiblingReflow(enteringIdSet, FinishReflow);
+            AnimateSiblingReflow(enteringIdSet, () =>
+            {
+                if (generation == _reflowGeneration) FinishReflow();
+            });
             return;
         }
 
@@ -975,7 +1009,7 @@ public sealed class DashboardMotionEngine
 
         void TryCompleteAddMotion()
         {
-            if (!reflowComplete || !enterComplete || passFinished)
+            if (generation != _reflowGeneration || !reflowComplete || !enterComplete || passFinished)
                 return;
 
             passFinished = true;
@@ -1003,22 +1037,14 @@ public sealed class DashboardMotionEngine
             TryCompleteAddMotion();
         }
 
-        // Registered per-id so SweepOrphanedEnterCompletions (called from a LATER AnimateReflow
-        // pass, or from the reflow safety-timer watchdog) can retire a specific stuck id and
-        // correctly drive THIS pass's completion, even though remainingEnters/TryCompleteAddMotion
-        // are local to this call and not otherwise reachable from outside it.
+        // Let orphan recovery retire arrivals through this pass's completion guard.
         foreach (var enterItemId in enterItemIds)
             _pendingEnterCompletions[enterItemId] = () => RetireEnter(enterItemId);
 
         ArmReflowSafety();
 
-        // Escape hatch for a pass stuck on the REFLOW side, not just the enter side (see the
-        // comment on the _forceFinishPass field): UiMotion.Run keys one clock per key, so a
-        // closely-overlapping second pass on the same _reflowBatchKey can silently drop THIS
-        // pass's sibling-reflow completion, leaving reflowComplete stuck false forever even
-        // after every enter-completion above has retired normally. Routed through
-        // TryCompleteAddMotion (not FinishReflow directly) so the passFinished guard prevents a
-        // late-arriving genuine completion from calling FinishReflow a second time.
+        // Settle both sides through the same guard, so a late native completion
+        // cannot finish the pass twice or release a newer pass's layout gate.
         _forceFinishPass = () =>
         {
             foreach (var itemId in enterItemIds)
@@ -1039,9 +1065,8 @@ public sealed class DashboardMotionEngine
     }
 
     /// <summary>
-    /// Retires any pending enter-completion whose card is no longer findable in the tree - the
-    /// symptom of a dropped RenderTransitionClock completion (see the comment on
-    /// _pendingEnterCompletions). Safe to call whenever the tree/layout is known-fresh.
+    /// Retires pending completions for cards that left the realized tree.
+    /// Call only after refreshing layout, so realization is not mistaken for removal.
     /// </summary>
     private void SweepOrphanedEnterCompletions()
     {
@@ -1068,27 +1093,18 @@ public sealed class DashboardMotionEngine
         if (enterItemIds.All(_relocatingItemIds.Contains))
             return enterItemIds;
 
-        if (forcedInstant.Count > 0)
-        {
-            var deferredAnimated = new List<Guid>();
-            foreach (var itemId in enterItemIds)
-            {
-                if (forcedInstant.Contains(itemId))
-                    _instantEnterIds.Add(itemId);
-                else
-                    deferredAnimated.Add(itemId);
-            }
-
-            return deferredAnimated;
-        }
-
         var scrollViewer = _scrollViewer ?? DashboardMotionViewport.FindScrollViewer(_dashboardRoot);
         var contentOffsetY = ResolveSectionRelativeViewportTop();
         var metrics = ResolvePrimaryGridMetrics();
         var animated = new List<Guid>(Math.Min(enterItemIds.Count, UiMotion.MaxBulkAnimatedEnters));
 
+        // Instant/off-screen entries still share the same visible-card budget.
+        // One instant entry must never make the rest of a burst bypass that budget.
         foreach (var itemId in enterItemIds)
         {
+            if (forcedInstant.Contains(itemId))
+                continue;
+
             if (FindEnterLayoutRoot(itemId) is { } layoutRoot
                 && DashboardMotionViewport.IntersectsViewport(layoutRoot, scrollViewer))
             {
@@ -1102,6 +1118,9 @@ public sealed class DashboardMotionEngine
         {
             foreach (var itemId in enterItemIds)
             {
+                if (forcedInstant.Contains(itemId))
+                    continue;
+
                 if (!TryResolveDisplayIndex(itemId, out var index))
                     continue;
 
@@ -1157,6 +1176,8 @@ public sealed class DashboardMotionEngine
             return;
         }
 
+        // Never discard ownership of transforms before returning them to their slots.
+        CancelActiveReflowTransforms();
         ClearMotionCaches();
         _instantEnterIds.Clear();
         _relocatingItemIds.Clear();
@@ -1220,39 +1241,21 @@ public sealed class DashboardMotionEngine
             }
 
             var motionSurface = DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope);
-            if (motionSurface.Opacity >= 0.95 && layoutRoot.IsHitTestVisible)
-            {
-                _enteringItemIds.Remove(itemId);
-                _deferredEnterIds.Remove(itemId);
-                ClearPlayingEnter(itemId);
+            // Opacity finishes before the spatial tracks. Being opaque is not proof
+            // of a completed pose; dropping the id here leaves interrupted offsets
+            // unowned forever. Trust a live clock, otherwise commit the full rest pose.
+            if (NativeSurfaceMotion.IsRunning(motionSurface, MotionChannel.Presence)
+                && !IsStalePlayingEnter(itemId))
                 continue;
-            }
 
-            // A stale "playing" id can be stuck at ANY intermediate opacity/scale/position, not
-            // just near-invisible - snap it to final state unconditionally rather than requiring
-            // Opacity < 0.05 the way the non-stale branch below does.
-            if (IsStalePlayingEnter(itemId))
-            {
-                ScrollPerfDiag.Log($"enterStuckSnap\tscope={_scope}\titemId={itemId}\topacity={motionSurface.Opacity:F2}\tsource=orphanSweep");
-                ClearPlayingEnter(itemId);
-                CompleteEnteredCard(layoutRoot, motionSurface, itemId);
-                continue;
-            }
-
-            // Widened from a plain "Opacity < 0.05" check: a card whose animation got dropped
-            // mid-flight (not just never-started) can be stuck at ANY intermediate opacity, or
-            // fully opaque but never re-enabled for hit-testing (PlayCardEnter's completion sets
-            // both together - see PrepareEnterHoldSlot/CompleteEnteredCard). Snap either.
-            if (!_playingEnterIds.Contains(itemId) && (motionSurface.Opacity < 0.95 || !layoutRoot.IsHitTestVisible))
-                CompleteEnteredCard(layoutRoot, motionSurface, itemId);
+            ClearPlayingEnter(itemId);
+            _deferredEnterIds.Remove(itemId);
+            CompleteEnteredCard(layoutRoot, motionSurface, itemId);
         }
     }
 
     /// <summary>
-    /// Force-resolves one still-entering item to its final visible state, bypassing the normal
-    /// animation entirely. Used by the reflow-safety watchdog's <see cref="_forceFinishPass"/>
-    /// escape hatch, where waiting any longer for the real animation/reflow handshake to
-    /// complete is no longer an option.
+    /// Commits an arrival's visible rest pose when the safety timer expires.
     /// </summary>
     private void SnapEnterToFinal(Guid itemId)
     {
@@ -1282,8 +1285,9 @@ public sealed class DashboardMotionEngine
         var scrollViewer = _scrollViewer ?? DashboardMotionViewport.FindScrollViewer(_dashboardRoot);
         var isAddReflow = enteringIdSet is { Count: > 0 };
         var reflowMs = isAddReflow ? UiMotion.NoteAddReflowMs : UiMotion.ReflowMs;
-        var reflowEasing = UiMotion.OutCubic;
-        var candidates = new List<(FrameworkElement LayoutRoot, double DeltaX, double DeltaY, int SortOrder)>();
+        // Make room ahead of the arriving card instead of accelerating behind it.
+        var reflowEasing = isAddReflow ? UiMotion.OutCubic : UiMotion.InOutCubic;
+        var candidates = new List<(FrameworkElement LayoutRoot, double DeltaX, double DeltaY, int SortOrder, bool Wrap)>();
 
         CancelActiveReflowTransforms();
 
@@ -1303,6 +1307,9 @@ public sealed class DashboardMotionEngine
                 if (!TryResolveContainerItemId(grid, child, out var itemId))
                     continue;
 
+                // Previous arrivals can glide into their next slot while their
+                // independent presence clock continues. Only this pass's new cards
+                // already start at their destination and need no sibling reflow.
                 if (enteringIdSet is not null && enteringIdSet.Contains(itemId))
                     continue;
 
@@ -1317,11 +1324,33 @@ public sealed class DashboardMotionEngine
                         out var deltaY))
                     continue;
 
-                if (!DashboardMotionViewport.IntersectsViewport(layoutRoot, scrollViewer))
+                if (!DashboardMotionViewport.IntersectsViewport(layoutRoot, scrollViewer, includeTransparent: isAddReflow))
                     continue;
 
                 var sortOrder = _indexSnapshots.TryGetValue(itemId, out var oldIndex) ? oldIndex : int.MaxValue;
-                candidates.Add((layoutRoot, deltaX, deltaY, sortOrder));
+                var wrap = isAddReflow && IsAddRowWrap(itemId, currentIndices, gridMetrics);
+                candidates.Add((layoutRoot, deltaX, deltaY, sortOrder, wrap));
+            }
+
+            if (isAddReflow && !gridMetrics.IsListLayout)
+            {
+                // Feed an inserted card behind the same row's moving siblings.
+                // Starting every arrival at x=0 compresses the first slots under
+                // repeated retargeting, even when each sibling's pose is continuous.
+                foreach (var child in panel.Children.OfType<FrameworkElement>())
+                {
+                    if (FindLayoutRootInContainer(child, _scope) is not { } arriving
+                        || !TryResolveContainerItemId(grid, child, out var id)
+                        || enteringIdSet is null || !enteringIdSet.Contains(id)
+                        || !currentIndices.TryGetValue(id, out var slot)
+                        || slot % gridMetrics.PerRow != 0)
+                        continue;
+                    var nextId = currentIndices.FirstOrDefault(entry => entry.Value == slot + 1).Key;
+                    var next = candidates.FirstOrDefault(candidate =>
+                        DashboardMotionCardCatalog.TryGetItemId(candidate.LayoutRoot, out var candidateId) && candidateId == nextId);
+                    if (next.LayoutRoot is not null && !next.Wrap && next.DeltaX < -.5)
+                        candidates.Add((arriving, next.DeltaX, 0, -1, false));
+                }
             }
         }
 
@@ -1333,19 +1362,26 @@ public sealed class DashboardMotionEngine
 
         candidates.Sort(static (left, right) => left.SortOrder.CompareTo(right.SortOrder));
 
-        var useStagger = candidates.Count <= UiMotion.ReflowStaggerMaxItems;
+        // Keep adjacent cards moving together during insertions; stagger belongs to
+        // entrances, where it cannot compress the spacing between existing cards.
+        var useStagger = !isAddReflow && candidates.Count <= UiMotion.ReflowStaggerMaxItems;
         var tracks = new List<RenderTransitionClock.Track>(candidates.Count * 2);
         var animatedRoots = new List<FrameworkElement>(candidates.Count);
 
         for (var index = 0; index < candidates.Count; index++)
         {
-            var (layoutRoot, deltaX, deltaY, _) = candidates[index];
+            var (layoutRoot, deltaX, deltaY, _, wrap) = candidates[index];
             var staggerMs = useStagger
                 ? Math.Min(index * UiMotion.ReflowStaggerMs, UiMotion.ReflowStaggerCapMs)
                 : 0;
 
-            UiMotion.Stop(layoutRoot);
-            var (_, translate) = UiMotion.EnsureScaleTranslateGroup(layoutRoot);
+            var translate = ReflowTranslations.GetValue(layoutRoot, static element =>
+            {
+                // Reserve the ordinary transform for presence/hover before adding
+                // the independent layout transform. Reflow cannot cancel an entrance.
+                UiMotion.EnsureScaleTranslateGroup(element);
+                return UiMotion.ChannelTranslate(element, MotionChannel.Layout);
+            });
             translate.X = deltaX;
             translate.Y = deltaY;
             animatedRoots.Add(layoutRoot);
@@ -1353,6 +1389,22 @@ public sealed class DashboardMotionEngine
 
             tracks.Add(UiMotion.Track(reflowMs, reflowEasing, deltaX, 0, value => translate.X = value, startDelayMs: staggerMs));
             tracks.Add(UiMotion.Track(reflowMs, reflowEasing, deltaY, 0, value => translate.Y = value, startDelayMs: staggerMs));
+            // Fade the container, leaving the card's presence clock independent.
+            // An arrival can itself cross a row during a burst.
+            var surface = ResolveReflowTarget(layoutRoot);
+            var interruptedOpacity = DashboardMotionCardCatalog.TryGetItemId(layoutRoot, out var itemId)
+                && _interruptedReflowOpacities.TryGetValue(itemId, out var previousOpacity) ? previousOpacity : surface.Opacity;
+            if (wrap || interruptedOpacity < surface.Opacity - .001)
+            {
+                // The old row's last card resolves into the next row only after
+                // that row has opened its first slot. No opaque overlap there.
+                var opacity = surface.Opacity;
+                var from = wrap ? 0 : interruptedOpacity;
+                _reflowOpacityTargets[surface] = opacity;
+                surface.SetCurrentValue(UIElement.OpacityProperty, from);
+                tracks.Add(UiMotion.Track(220, UiMotion.InOutSine, from, opacity,
+                    value => surface.SetCurrentValue(UIElement.OpacityProperty, value), startDelayMs: wrap ? AddGapLeadMs : 0));
+            }
         }
 
         foreach (var layoutRoot in animatedRoots)
@@ -1369,6 +1421,7 @@ public sealed class DashboardMotionEngine
                     ResetLayoutReflowTransform(layoutRoot);
                 }
 
+                RestoreReflowOpacities();
                 _activeReflowTargets.Clear();
                 onComplete?.Invoke();
             });
@@ -1411,7 +1464,12 @@ public sealed class DashboardMotionEngine
     {
         foreach (var enterItemId in enterItemIds)
         {
-            if (FindEnterLayoutRoot(enterItemId) is not { } layoutRoot)
+            // Layout synchronization can realize and immediately complete a burst
+            // entrance. Do not put that finished card back into its hidden start pose.
+            if (!_enteringItemIds.Contains(enterItemId))
+                continue;
+            if (FindEnterLayoutRoot(enterItemId) is not { } layoutRoot
+                || !_enteringItemIds.Contains(enterItemId) || _playingEnterIds.Contains(enterItemId))
                 continue;
 
             var motionSurface = DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope);
@@ -1550,11 +1608,17 @@ public sealed class DashboardMotionEngine
 
     private void AbandonUnrealizedEnter(Guid itemId)
     {
+        // A container can exist before Loaded is delivered. Release its prepared
+        // entrance pose now, rather than leaving it held after retiring the id.
+        if (FindLayoutRootById(itemId) is { } layoutRoot)
+            CompleteEnteredCard(layoutRoot, DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope), itemId);
         _enteringItemIds.Remove(itemId);
         _deferredEnterIds.Remove(itemId);
         ClearPlayingEnter(itemId);
         _instantEnterIds.Remove(itemId);
-        _scheduledEnterIds.Remove(itemId);
+        // The card is still being inserted even if virtualization did not realize it.
+        // Keep that intent for the reflow pass so it uses insertion motion, rather
+        // than falling back to a full positional reorder across row boundaries.
 
         if (_pendingEnterCompletions.Remove(itemId, out var retire))
             retire();
@@ -1598,18 +1662,28 @@ public sealed class DashboardMotionEngine
             return false;
         }
 
-        return TryComputeAddReflowDelta(itemId, currentIndices, enteringIdSet, metrics, out deltaX, out deltaY);
+        if (IsAddRowWrap(itemId, currentIndices, metrics))
+            return TryComputeAddReflowDelta(itemId, currentIndices, metrics, out deltaX, out deltaY);
+
+        if (TryComputePositionReflowDelta(itemId, layoutRoot, out deltaX, out deltaY))
+            return true;
+
+        return TryComputeAddReflowDelta(itemId, currentIndices, metrics, out deltaX, out deltaY);
     }
 
+    private bool IsAddRowWrap(Guid itemId, Dictionary<Guid, int> currentIndices,
+        DashboardMotionViewport.GridReflowMetrics metrics) =>
+        !metrics.IsListLayout && _indexSnapshots.TryGetValue(itemId, out var oldIndex)
+        && currentIndices.TryGetValue(itemId, out var newIndex)
+        && oldIndex / Math.Max(1, metrics.PerRow) != newIndex / Math.Max(1, metrics.PerRow);
+
     /// <summary>
-    /// Sort-agnostic add reflow from insert position only.
-    /// At/after insert: snapshot index shift, else synthetic i → i+1 (head/middle).
-    /// Before insert on tail append: synthetic i+1 → i (oldest / last-modified asc).
+    /// Animate only siblings whose actual slot changed. Appending a card must not
+    /// make stationary siblings travel from invented successor slots.
     /// </summary>
     private bool TryComputeAddReflowDelta(
         Guid itemId,
         Dictionary<Guid, int> currentIndices,
-        HashSet<Guid> enteringIdSet,
         DashboardMotionViewport.GridReflowMetrics metrics,
         out double deltaX,
         out double deltaY)
@@ -1617,43 +1691,19 @@ public sealed class DashboardMotionEngine
         deltaX = 0;
         deltaY = 0;
 
-        if (!_indexSnapshots.ContainsKey(itemId)
-            || !currentIndices.TryGetValue(itemId, out var siblingIndex)
-            || !TryResolveEnterIndex(enteringIdSet, currentIndices, out var enterIndex))
+        if (!TryComputeIndexReflowDelta(itemId, currentIndices, metrics, out deltaX, out deltaY))
             return false;
 
-        var isTailInsert = enterIndex == currentIndices.Values.Max();
-
-        if (siblingIndex >= enterIndex)
+        if (!metrics.IsListLayout && Math.Abs(deltaY) > .5)
         {
-            if (TryComputeIndexReflowDelta(itemId, currentIndices, metrics, out deltaX, out deltaY))
-                return true;
-
-            return TryComputeIndexReflowDelta(siblingIndex, siblingIndex + 1, metrics, out deltaX, out deltaY);
+            // Wrapping crosses a row boundary, not every card between its two columns.
+            // Settle into the destination locally instead of sweeping diagonally over siblings.
+            deltaX = 0;
+            deltaY = Math.Sign(deltaY) * UiMotion.CardEnterLiftY;
         }
-
-        if (!isTailInsert)
-            return false;
-
-        return TryComputeIndexReflowDelta(siblingIndex + 1, siblingIndex, metrics, out deltaX, out deltaY);
+        return true;
     }
 
-    private static bool TryResolveEnterIndex(
-        HashSet<Guid> enteringIdSet,
-        Dictionary<Guid, int> currentIndices,
-        out int enterIndex)
-    {
-        enterIndex = -1;
-        foreach (var enterId in enteringIdSet)
-        {
-            if (!currentIndices.TryGetValue(enterId, out var index))
-                continue;
-
-            enterIndex = Math.Max(enterIndex, index);
-        }
-
-        return enterIndex >= 0;
-    }
 
     private bool TryComputePositionReflowDelta(
         Guid itemId,
@@ -1690,86 +1740,6 @@ public sealed class DashboardMotionEngine
         }
     }
 
-    /// <summary>
-    /// End-insert adds keep sibling indices unchanged, so index/position FLIP can miss visible cards.
-    /// Mirror head-insert reflow by sliding each sibling from its successor's slot (oldest-created / append).
-    /// </summary>
-    private bool TryComputeEndInsertCascadeReflowDelta(
-        Guid itemId,
-        FrameworkElement layoutRoot,
-        Dictionary<Guid, int> currentIndices,
-        HashSet<Guid> enteringIdSet,
-        out double deltaX,
-        out double deltaY)
-    {
-        deltaX = 0;
-        deltaY = 0;
-
-        if (!currentIndices.TryGetValue(itemId, out var siblingIndex))
-            return false;
-
-        var enterIndex = -1;
-        foreach (var enterId in enteringIdSet)
-        {
-            if (!currentIndices.TryGetValue(enterId, out var index))
-                continue;
-
-            if (index > enterIndex)
-                enterIndex = index;
-        }
-
-        if (enterIndex < 0 || siblingIndex >= enterIndex)
-            return false;
-
-        var maxIndex = -1;
-        foreach (var index in currentIndices.Values)
-            maxIndex = Math.Max(maxIndex, index);
-
-        if (enterIndex != maxIndex)
-            return false;
-
-        if (_indexSnapshots.TryGetValue(itemId, out var oldIndex)
-            && currentIndices.TryGetValue(itemId, out var newIndex)
-            && oldIndex != newIndex)
-            return false;
-
-        var successorIndex = siblingIndex + 1;
-        Guid successorId = Guid.Empty;
-        foreach (var entry in currentIndices)
-        {
-            if (entry.Value != successorIndex)
-                continue;
-
-            successorId = entry.Key;
-            break;
-        }
-
-        if (successorId == Guid.Empty)
-            return false;
-
-        var successorLayoutRoot = FindLayoutRootById(successorId)
-            ?? (enteringIdSet.Contains(successorId) ? FindEnterLayoutRoot(successorId) : null);
-        if (successorLayoutRoot is null)
-            return false;
-
-        if (FindItemsPanel(layoutRoot) is not { } panel)
-            return false;
-
-        try
-        {
-            var siblingTarget = ResolveReflowTarget(layoutRoot);
-            var successorTarget = ResolveReflowTarget(successorLayoutRoot);
-            var siblingPosition = siblingTarget.TransformToAncestor(panel).Transform(new Point(0, 0));
-            var successorPosition = successorTarget.TransformToAncestor(panel).Transform(new Point(0, 0));
-            deltaX = successorPosition.X - siblingPosition.X;
-            deltaY = successorPosition.Y - siblingPosition.Y;
-            return Math.Abs(deltaX) > 0.5 || Math.Abs(deltaY) > 0.5;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
 
     private bool TryComputeIndexReflowDelta(
         Guid itemId,
@@ -1922,7 +1892,7 @@ public sealed class DashboardMotionEngine
 
     private static FrameworkElement ResolveReflowTarget(FrameworkElement layoutRoot)
     {
-        if (layoutRoot.Parent is FrameworkElement parent && parent is not Panel)
+        if ((VisualTreeHelper.GetParent(layoutRoot) ?? layoutRoot.Parent) is FrameworkElement parent && parent is not Panel)
             return parent;
 
         return layoutRoot;
@@ -1930,39 +1900,39 @@ public sealed class DashboardMotionEngine
 
     private static void ResetLayoutReflowTransform(FrameworkElement reflowTarget)
     {
-        var (_, translate) = UiMotion.EnsureScaleTranslateGroup(reflowTarget);
+        if (!ReflowTranslations.TryGetValue(reflowTarget, out var translate)) return;
         translate.X = 0;
         translate.Y = 0;
     }
 
     private static bool HasActiveReflowTransform(FrameworkElement reflowTarget)
     {
-        if (reflowTarget.RenderTransform is not TransformGroup group)
-            return false;
-
-        var translate = group.Children.OfType<TranslateTransform>().FirstOrDefault();
-        return translate is not null
+        return ReflowTranslations.TryGetValue(reflowTarget, out var translate)
             && (Math.Abs(translate.X) > 0.5 || Math.Abs(translate.Y) > 0.5);
     }
 
     private void CancelActiveReflowTransforms()
     {
+        UiMotion.Stop(_reflowBatchKey);
+        RestoreReflowOpacities();
         if (_activeReflowTargets.Count == 0)
-        {
-            UiMotion.Stop(_reflowBatchKey);
             return;
-        }
 
         var staleTargets = _activeReflowTargets.ToList();
-        UiMotion.Stop(_reflowBatchKey);
         _activeReflowTargets.Clear();
 
         foreach (var layoutRoot in staleTargets)
         {
-            UiMotion.Stop(layoutRoot);
             UiMotion.EndMotionPrep(layoutRoot);
             ResetLayoutReflowTransform(layoutRoot);
         }
+    }
+
+    private void RestoreReflowOpacities()
+    {
+        foreach (var (surface, opacity) in _reflowOpacityTargets)
+            surface.SetCurrentValue(UIElement.OpacityProperty, opacity);
+        _reflowOpacityTargets.Clear();
     }
 
     private void StabilizeMotionLayout(DependencyObject searchRoot)
@@ -1977,17 +1947,18 @@ public sealed class DashboardMotionEngine
             if (!HasActiveReflowTransform(layoutRoot))
                 continue;
 
-            UiMotion.Stop(layoutRoot);
             ResetLayoutReflowTransform(layoutRoot);
         }
     }
 
-    private bool IsInBurstAddWindow()
-        => _rapidAddCount > MaxBurstAddsBeforeSkip
+    private bool UseCompactAddArrival()
+        => (_rapidAddCount > MaxFullArrivalBurstAdds || _compactAddBurst)
             && Environment.TickCount64 - _lastAddTimestampMs < EnterBurstWindowMs;
 
     private void ClearMotionCaches()
     {
+        _interruptedReflowOffsets.Clear();
+        _interruptedReflowOpacities.Clear();
         _positionSnapshots.Clear();
         _panelByItemId.Clear();
         _layoutRootByItemId.Clear();
@@ -1998,10 +1969,7 @@ public sealed class DashboardMotionEngine
     }
 
     /// <summary>
-    /// Drops the per-pass entering-item lookup built by <see cref="EnterItemLookup"/>/
-    /// <see cref="DisplayIndexLookup"/> - cheap, since both rebuild lazily on next use. Call
-    /// wherever the tracked item set changed or the tree is already known-fresh, so a stale
-    /// lookup never causes a newly-tracked item to resolve to nothing (or an old container).
+    /// Drops per-pass lookups after item or realization changes. They rebuild lazily.
     /// </summary>
     private void InvalidatePassLookups()
     {
@@ -2111,29 +2079,28 @@ public sealed class DashboardMotionEngine
         FrameworkElement motionSurface,
         Guid itemId,
         Action? onComplete = null,
-        int startDelayMs = 0)
+        int startDelayMs = 0,
+        bool compact = false)
     {
         PrepareEnterHoldSlot(layoutRoot, motionSurface);
 
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(motionSurface);
-        var enterMs = UiMotion.NoteAddEnterMs;
-        UiMotion.RunComposited(
-            motionSurface,
-            new[]
-            {
-                UiMotion.Track(enterMs, UiMotion.OutCubic, 0, 1, value => motionSurface.Opacity = value, startDelayMs: startDelayMs),
-                UiMotion.Track(enterMs, UiMotion.OutCubic, UiMotion.EnterScale, 1, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                }, startDelayMs: startDelayMs),
-                UiMotion.Track(enterMs, UiMotion.OutCubic, -UiMotion.CardEnterLiftY, 0, value => translate.Y = value, startDelayMs: startDelayMs)
-            },
-            () =>
-            {
-                CompleteEnteredCard(layoutRoot, motionSurface, itemId);
-                onComplete?.Invoke();
-            });
+        var enterMs = compact ? 190 : UiMotion.NoteAddEnterMs;
+        var leadMs = !compact && _activeReflowTargets.Count > 0 ? AddGapLeadMs : 0;
+        UiMotion.Stop(motionSurface);
+        motionSurface.Opacity = 0;
+        translate.Y = compact ? 0 : AddEnterLift;
+        scale.ScaleX = scale.ScaleY = compact ? .988 : AddEnterScale;
+        var face = layoutRoot is NoteCardControl noteCard
+            ? noteCard.FindName("CardBorder") as FrameworkElement : motionSurface;
+        if (face is not null) SurfaceLight.PulseArrival(face, compact, leadMs);
+        SurfaceMotion.AnimateTracks(motionSurface, MotionChannel.Presence,
+            [new(motionSurface, UIElement.OpacityProperty, 1, Profile: new(UiMotion.InOutSine, compact ? 150 : 220)),
+             new(translate, TranslateTransform.YProperty, 0, true, Profile: new(UiMotion.OutCubic)),
+             new(scale, ScaleTransform.ScaleXProperty, 1, true, Profile: new(UiMotion.OutCubic)),
+             new(scale, ScaleTransform.ScaleYProperty, 1, true, Profile: new(UiMotion.OutCubic))], enterMs, UiMotion.InOutSine,
+            () => { CompleteEnteredCard(layoutRoot, motionSurface, itemId); onComplete?.Invoke(); },
+            cache: true, startDelayMs: leadMs + Math.Min(startDelayMs, 96));
     }
 
     private void CompleteEnteredCard(
@@ -2141,12 +2108,18 @@ public sealed class DashboardMotionEngine
         FrameworkElement motionSurface,
         Guid itemId)
     {
-        FinalizeEnteredCard(layoutRoot, motionSurface);
+        // A delayed completion must not reset the next item using this container.
+        if (DashboardMotionCardCatalog.TryGetItemId(layoutRoot, out var currentId) && currentId == itemId)
+            FinalizeEnteredCard(layoutRoot, motionSurface);
         _enteringItemIds.Remove(itemId);
     }
 
     private void FinalizeEnteredCard(FrameworkElement layoutRoot, FrameworkElement motionSurface)
     {
+        TranslateTransform? reflow = null;
+        if (_activeReflowTargets.Contains(layoutRoot))
+            ReflowTranslations.TryGetValue(layoutRoot, out reflow);
+        var visibleOffset = reflow is null ? new Vector() : new Vector(reflow.X, reflow.Y);
         UiMotion.Cleanup(motionSurface);
         UiMotion.Cleanup(layoutRoot);
 
@@ -2161,7 +2134,12 @@ public sealed class DashboardMotionEngine
         translate.X = 0;
         translate.Y = 0;
 
-        ResetLayoutReflowTransform(layoutRoot);
+        if (reflow is not null)
+        {
+            reflow.X = visibleOffset.X;
+            reflow.Y = visibleOffset.Y;
+        }
+        else ResetLayoutReflowTransform(layoutRoot);
 
         layoutRoot.Dispatcher.BeginInvoke(
             () => Behaviors.CardSurfaceMotionBehavior.SyncPointerState(layoutRoot),
@@ -2217,7 +2195,7 @@ public sealed class DashboardMotionEngine
                     scale.ScaleX = value;
                     scale.ScaleY = value;
                 }),
-                UiMotion.Track(UiMotion.NoteDeleteMs, UiMotion.InCubic, 0, -UiMotion.CardEnterLiftY * 0.75, value => translate.Y = value)
+                UiMotion.Track(UiMotion.NoteDeleteMs, UiMotion.InCubic, 0, UiMotion.CardEnterLiftY * 0.75, value => translate.Y = value)
             },
             Complete);
     }
@@ -2271,7 +2249,7 @@ public sealed class DashboardMotionEngine
 
     private static Panel? FindItemsPanel(FrameworkElement layoutRoot)
     {
-        var current = layoutRoot.Parent as DependencyObject;
+        var current = VisualTreeHelper.GetParent(layoutRoot) ?? layoutRoot.Parent;
         while (current != null)
         {
             if (current is Panel panel)
@@ -2324,7 +2302,8 @@ public sealed class DashboardMotionEngine
         if (ActiveByScope.TryGetValue(_scope, out var active) && active == this)
             ActiveByScope.Remove(_scope);
 
-        UiMotion.Stop(_reflowBatchKey);
+        _reflowGeneration++;
+        CancelActiveReflowTransforms();
         _layoutAnimationDepth = 0;
         EndAddMotionLayoutOnGrids();
         UnfreezeVirtualizationViewports();

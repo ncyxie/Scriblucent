@@ -11,6 +11,13 @@ public sealed class CalendarScheduledItemViewModel
     public string ScheduleNote { get; init; } = string.Empty;
     public required string Title { get; init; }
 
+    public Scriblucent.Models.NoteScheduleEntry? SourceEntry { get; init; }
+    public bool IsDeleted => Note?.Document.IsDeleted ?? FlashcardSet?.Document.IsDeleted ?? MindMap?.Document.IsDeleted ?? Quiz?.Document.IsDeleted ?? true;
+    public Guid OwnerId => Note?.Document.Id ?? FlashcardSet?.Document.Id ?? MindMap?.Document.Id ?? Quiz?.Document.Id ?? Guid.Empty;
+    public string TypeText => Scriblucent.Localization.LocalizationService.GetString(ItemType switch
+    { ScheduledItemType.Note => "NotesDashboard", ScheduledItemType.Flashcard => "FlashcardsDashboard", ScheduledItemType.MindMap => "MindMapsDashboard", _ => "QuizzesDashboard" });
+    public string OwnerDescription => TypeText + " \u00b7 " + (Note?.Document.LastModified ?? FlashcardSet?.Document.LastModified ?? MindMap?.Document.LastModified ?? Quiz?.Document.LastModified ?? ScheduledAt).ToString("g");
+    public bool HasDescription => !string.IsNullOrWhiteSpace(ScheduleNote);
     public string TimeText => ScheduledAt.ToString("HH:mm");
 
     public AppIconKind TypeIconKind => ItemType switch

@@ -1,4 +1,4 @@
-using Scriblucent;
+﻿using Scriblucent;
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
@@ -63,6 +63,8 @@ namespace Scriblucent.Views
             "Georgia", "Trebuchet MS", "Cambria", "Garamond", "Consolas", "Courier New"
         ];
         private static List<string>? _templateFontNames;
+        private static Task<List<string>>? _templateFontNamesTask;
+        private bool _isLoadingTemplateFonts;
         private bool _isDownloadingAiModel;
         private bool _isCheckingForUpdates;
         private string _lastSelectedFlashcardModelKey = "Qwen3.5-0.8B";
@@ -92,15 +94,14 @@ namespace Scriblucent.Views
             if (Visibility != Visibility.Visible || _overlayAnimator.IsClosing)
                 return;
 
-            // Wait until theme brushes and layout settle, then recapture at 1:1 DIP size.
+            // Wait for theme brushes and layout, then request a fresh bounded snapshot.
             Dispatcher.BeginInvoke(() =>
             {
                 if (Visibility != Visibility.Visible || _overlayAnimator.IsClosing)
                     return;
 
                 Window.GetWindow(this)?.UpdateLayout();
-                _overlayAnimator.RefreshBackdrop(
-                    () => OverlayBackdropCapture.TryCaptureBehindOverlays(Window.GetWindow(this)));
+                _overlayAnimator.RefreshBackdrop();
             }, DispatcherPriority.ApplicationIdle);
         }
 
@@ -126,7 +127,7 @@ namespace Scriblucent.Views
         {
             _overlayAnimator.Show(
                 () => _overlayAnimator.RunAfterFirstRender(PopulatePanelContent, DispatcherPriority.ApplicationIdle),
-                () => OverlayBackdropCapture.TryCaptureForDimAnimation(Window.GetWindow(this)));
+                backdropOwner: Window.GetWindow(this));
         }
 
         private void PopulatePanelContent()
@@ -136,63 +137,79 @@ namespace Scriblucent.Views
             var recommendedModelKey = BundledModelHostService.GetRecommendedFlashcardModelKey(machineMemoryBytes);
             var flashcardModelBox = FindName("FlashcardModelBox") as ComboBox;
 
+            var wasApplying = _isApplyingSettings;
             _isApplyingSettings = true;
-            EnableScrollbarCheckBox.IsChecked = settings.EnableScrollbar;
-            EnableVerticalScrollbarCheckBox.IsChecked = settings.EnableVerticalScrollbar;
-            EnableHorizontalScrollbarCheckBox.IsChecked = settings.EnableHorizontalScrollbar;
-            EnableAutoSaveCheckBox.IsChecked = settings.EnableAutoSave;
-            AutoFormatListsCheckBox.IsChecked = settings.AutoFormatLists;
+            try
+            {
+                ApplyScrollbarPreferences(settings.EnableScrollbar, settings.EnableVerticalScrollbar, settings.EnableHorizontalScrollbar);
+                EnableAutoSaveCheckBox.IsChecked = settings.EnableAutoSave;
+                AutoFormatListsCheckBox.IsChecked = settings.AutoFormatLists;
 
-            UpdateAutoSaveIntervalControls(settings.AutoSaveIntervalSeconds);
+                UpdateAutoSaveIntervalControls(settings.AutoSaveIntervalSeconds);
 
-            UpdateAutoSaveCheckboxAvailability();
-            LoadManagedAiTools(settings);
-            RefreshFlashcardModelOptions(machineMemoryBytes, settings);
-            RefreshManagedAiToolDownloadState();
-            if (flashcardModelBox is not null)
-                SelectComboBoxItemByTag(flashcardModelBox, settings.FlashcardModelKey, recommendedModelKey);
-            _lastSelectedFlashcardModelKey = GetSelectedFlashcardModelKey() ?? recommendedModelKey;
-            UpdateFlashcardModelWarning(_lastSelectedFlashcardModelKey, machineMemoryBytes);
-            SelectComboBoxItemByTag(
-                StudyCoverageBox,
-                settings.StudyCoverage.ToString(),
-                StudyCoverageMode.Auto.ToString());
-
-            SelectComboBoxItemByTag(
-                MeasurementUnitSystemBox,
-                AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem),
-                AppSettings.UnitSystemImperial);
-            SelectComboBoxItemByTag(
-                FlashcardSchedulingAlgorithmBox,
-                settings.FlashcardSchedulingAlgorithm == SpacedRepetitionAlgorithm.Fsrs6 ? "Fsrs6" : "Sm2",
-                "Sm2");
-            FlashcardAudioVolumeSlider.Value = Math.Clamp(
-                settings.FlashcardAudioVolumePercent,
-                AppSettings.MinFlashcardAudioVolumePercent,
-                AppSettings.MaxFlashcardAudioVolumePercent);
-            UpdateFlashcardAudioVolumeText((int)FlashcardAudioVolumeSlider.Value);
-            UpdateRecentItemsLimitControls(settings.RecentItemsLimit);
-            if (ReduceAnimationsCheckBox is not null)
-                ReduceAnimationsCheckBox.IsChecked = settings.ReduceAnimations;
-            if (EnableSpellCheckCheckBox is not null)
-                EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
-            PopulateDefaultNoteTemplate(settings);
-            if (DefaultPasteModeBox is not null)
+                UpdateAutoSaveCheckboxAvailability();
+                LoadManagedAiTools(settings);
+                RefreshFlashcardModelOptions(machineMemoryBytes, settings);
+                RefreshManagedAiToolDownloadState();
+                if (flashcardModelBox is not null)
+                    SelectComboBoxItemByTag(flashcardModelBox, settings.FlashcardModelKey, recommendedModelKey);
+                _lastSelectedFlashcardModelKey = GetSelectedFlashcardModelKey() ?? recommendedModelKey;
+                UpdateFlashcardModelWarning(_lastSelectedFlashcardModelKey, machineMemoryBytes);
                 SelectComboBoxItemByTag(
-                    DefaultPasteModeBox,
-                    settings.DefaultPasteMode == EditorPasteMode.TextOnly ? "TextOnly" : "KeepFormatting",
-                    "KeepFormatting");
-            if (UseGpuAccelerationCheckBox is not null)
-                UseGpuAccelerationCheckBox.IsChecked = settings.UseGpuAcceleration;
-            if (EnableAiFeaturesCheckBox is not null)
-                EnableAiFeaturesCheckBox.IsChecked = settings.EnableAiFeatures;
-            if (EnableDiagnosticLoggingCheckBox is not null)
-                EnableDiagnosticLoggingCheckBox.IsChecked = settings.EnableDiagnosticLogging;
-            if (EnableAiContentDiagnosticsCheckBox is not null)
-                EnableAiContentDiagnosticsCheckBox.IsChecked = settings.EnableAiContentDiagnostics;
-            LoadManagedSpellCheckLanguages(settings);
-            ApplyAiFeaturesVisibility(animate: false);
-            _isApplyingSettings = false;
+                    StudyCoverageBox,
+                    settings.StudyCoverage.ToString(),
+                    StudyCoverageMode.Auto.ToString());
+
+                SelectComboBoxItemByTag(
+                    MeasurementUnitSystemBox,
+                    AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem),
+                    AppSettings.UnitSystemImperial);
+                SelectComboBoxItemByTag(
+                    FlashcardSchedulingAlgorithmBox,
+                    settings.FlashcardSchedulingAlgorithm == SpacedRepetitionAlgorithm.Fsrs6 ? "Fsrs6" : "Sm2",
+                    "Sm2");
+                FlashcardAudioVolumeSlider.Value = Math.Clamp(
+                    settings.FlashcardAudioVolumePercent,
+                    AppSettings.MinFlashcardAudioVolumePercent,
+                    AppSettings.MaxFlashcardAudioVolumePercent);
+                UpdateFlashcardAudioVolumeText((int)FlashcardAudioVolumeSlider.Value);
+                UpdateRecentItemsLimitControls(settings.RecentItemsLimit);
+                if (MotionPreferenceComboBox is not null)
+                    MotionPreferenceComboBox.SelectedIndex = (int)(settings.AnimationPreference ??
+                        (settings.ReduceAnimations ? MotionPreference.Reduced : MotionPreference.Automatic));
+                if (EnableSpellCheckCheckBox is not null)
+                    EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
+                PopulateDefaultNoteTemplate(settings);
+                if (DefaultPasteModeBox is not null)
+                    SelectComboBoxItemByTag(
+                        DefaultPasteModeBox,
+                        settings.DefaultPasteMode == EditorPasteMode.TextOnly ? "TextOnly" : "KeepFormatting",
+                        "KeepFormatting");
+                if (UseGpuAccelerationCheckBox is not null)
+                    UseGpuAccelerationCheckBox.IsChecked = settings.UseGpuAcceleration;
+                if (EnableAiFeaturesCheckBox is not null)
+                    EnableAiFeaturesCheckBox.IsChecked = settings.EnableAiFeatures;
+                if (EnableDiagnosticLoggingCheckBox is not null)
+                    EnableDiagnosticLoggingCheckBox.IsChecked = settings.EnableDiagnosticLogging;
+                if (EnableAiContentDiagnosticsCheckBox is not null)
+                    EnableAiContentDiagnosticsCheckBox.IsChecked = settings.EnableAiContentDiagnostics;
+                LoadManagedSpellCheckLanguages(settings);
+                ApplyAiFeaturesVisibility(animate: false);
+            }
+            finally
+            {
+                _isApplyingSettings = wasApplying;
+            }
+            _ = PopulateTemplateFontNamesAsync();
+        }
+
+        internal void ApplyScrollbarPreferences(bool enabled, bool vertical, bool horizontal)
+        {
+            // These three controls are bound to MainViewModel. SetValue/IsChecked assignments
+            // replace those bindings and leave a visually working switch disconnected from settings.
+            EnableScrollbarCheckBox.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty, enabled);
+            EnableVerticalScrollbarCheckBox.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty, vertical);
+            EnableHorizontalScrollbarCheckBox.SetCurrentValue(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty, horizontal);
         }
 
         private void LoadManagedAiTools(AppSettings settings)
@@ -322,7 +339,7 @@ namespace Scriblucent.Views
                     case NoteEditorWindow editorWindow:
                         editorWindow.RefreshSpellCheckLanguages();
                         break;
-                    case NoteEditorTabsWindow tabsWindow:
+                    case EditorWorkspaceWindow tabsWindow:
                         tabsWindow.RefreshSpellCheckLanguages();
                         break;
                 }
@@ -584,13 +601,13 @@ namespace Scriblucent.Views
             var badgeText = new TextBlock
             {
                 Text = text,
-                FontSize = 10,
+                FontSize = TypeScale.Px(TypeScale.Badge, 11),
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center
             };
             badgeText.SetResourceReference(TextBlock.ForegroundProperty, "AccentPrimaryForeground");
 
-            var badge = new Border
+            var badge = new Scriblucent.Controls.SurfaceMaterialBorder
             {
                 Margin = new Thickness(8, 0, 0, 0),
                 Padding = new Thickness(6, 1, 6, 1),
@@ -599,6 +616,8 @@ namespace Scriblucent.Views
                 Child = badgeText
             };
             badge.SetResourceReference(Border.BackgroundProperty, "AccentPrimary");
+            Scriblucent.Controls.SurfaceMaterial.SetKind(badge, Scriblucent.Controls.SurfaceMaterialKind.Marker);
+            Scriblucent.Controls.SurfaceMaterial.SetForeground(badge, badgeText.Foreground);
             return badge;
         }
 
@@ -624,7 +643,7 @@ namespace Scriblucent.Views
             var isCompatible = BundledModelHostService.IsFlashcardModelCompatibleWithMemory(selectedKey, machineMemoryBytes);
             if (isCompatible)
             {
-                UiMotion.AnimateInlineReveal(
+                UiMotion.AnimateLayoutReveal(
                     warningTextBlock,
                     false,
                     () => warningTextBlock.Text = string.Empty);
@@ -634,7 +653,7 @@ namespace Scriblucent.Views
             warningTextBlock.Text = string.Format(
                 LocalizationService.GetString("FlashcardModelWarningText"),
                 BundledModelHostService.GetFlashcardModelDisplayName(selectedKey));
-            UiMotion.AnimateInlineReveal(warningTextBlock, true);
+            UiMotion.AnimateLayoutReveal(warningTextBlock, true);
         }
 
         private static string? GetComboItemTag(object? item)
@@ -928,36 +947,33 @@ namespace Scriblucent.Views
             if (item is null)
                 return;
 
-            item.IsEnabled = checkBox.IsChecked == true;
+            var enabled = checkBox.IsChecked == true;
+            // A refreshed row replays Checked when its binding is applied. Only an
+            // actual user change should persist and rebuild the list again.
+            if (item.IsEnabled == enabled)
+                return;
+
+            item.IsEnabled = enabled;
             PersistManagedAiTools();
         }
 
-        private void MoveAiToolUp_Click(object sender, RoutedEventArgs e)
+        internal ItemReorderAdapter CreateAiToolReorderAdapter() => new(this, "ai-tools",
+            item => item is ManagedAiToolItem tool && _managedAiTools.Contains(tool) ? [item] : [],
+            (moving, anchor) => moving.Count == 1 && moving[0] is ManagedAiToolItem tool && anchor is ManagedAiToolItem target
+                && _managedAiTools.Contains(tool) && _managedAiTools.Contains(target) && !ReferenceEquals(tool, target),
+            TryReorderAiTools);
+
+        private bool TryReorderAiTools(IReadOnlyList<object> moving, object anchor, bool after)
         {
-            if (AiToolsListBox.SelectedItem is not ManagedAiToolItem selected)
-                return;
-
-            var currentIndex = _managedAiTools.IndexOf(selected);
-            if (currentIndex <= 0)
-                return;
-
-            _managedAiTools.Move(currentIndex, currentIndex - 1);
+            if (moving.Count != 1 || moving[0] is not ManagedAiToolItem selected || anchor is not ManagedAiToolItem target
+                || !_managedAiTools.Contains(selected) || !_managedAiTools.Contains(target) || ReferenceEquals(selected, target)) return false;
+            var ordered = ItemOrdering.Move(_managedAiTools, new HashSet<ManagedAiToolItem> { selected }, target, after);
+            int currentIndex = _managedAiTools.IndexOf(selected), newIndex = ordered.IndexOf(selected);
+            if (currentIndex == newIndex) return false;
+            _managedAiTools.Move(currentIndex, newIndex);
             AiToolsListBox.SelectedItem = selected;
             PersistManagedAiTools();
-        }
-
-        private void MoveAiToolDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (AiToolsListBox.SelectedItem is not ManagedAiToolItem selected)
-                return;
-
-            var currentIndex = _managedAiTools.IndexOf(selected);
-            if (currentIndex < 0 || currentIndex >= _managedAiTools.Count - 1)
-                return;
-
-            _managedAiTools.Move(currentIndex, currentIndex + 1);
-            AiToolsListBox.SelectedItem = selected;
-            PersistManagedAiTools();
+            return true;
         }
 
         private void DeleteSelectedAiTool_Click(object sender, RoutedEventArgs e)
@@ -1282,7 +1298,7 @@ namespace Scriblucent.Views
 
             if (isValid)
             {
-                UiMotion.AnimateInlineReveal(RecentItemsLimitWarningText, false, () => RecentItemsLimitWarningText.Text = string.Empty);
+                UiMotion.AnimateLayoutReveal(RecentItemsLimitWarningText, false, () => RecentItemsLimitWarningText.Text = string.Empty);
                 return;
             }
 
@@ -1290,7 +1306,7 @@ namespace Scriblucent.Views
                 LocalizationService.GetString("RecentItemsLimitRangeWarning"),
                 AppSettings.MinRecentItemsLimit,
                 AppSettings.MaxRecentItemsLimit);
-            UiMotion.AnimateInlineReveal(RecentItemsLimitWarningText, true);
+            UiMotion.AnimateLayoutReveal(RecentItemsLimitWarningText, true);
         }
 
         private void RecentItemsLimitTextBox_LostFocus(object sender, RoutedEventArgs e)
@@ -1354,20 +1370,17 @@ namespace Scriblucent.Views
             UpdateRecentItemsLimitWarning(true);
         }
 
-        private void ReduceAnimationsCheckBox_Changed(object sender, RoutedEventArgs e)
+        private void MotionPreferenceComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_isApplyingSettings || ReduceAnimationsCheckBox is null)
+            if (_isApplyingSettings || MotionPreferenceComboBox.SelectedIndex < 0)
                 return;
 
-            ApplyReduceAnimations(ReduceAnimationsCheckBox.IsChecked == true);
-        }
-
-        private static void ApplyReduceAnimations(bool reduceAnimations)
-        {
+            var preference = (MotionPreference)MotionPreferenceComboBox.SelectedIndex;
             var settings = AppSettingsService.Load();
-            settings.ReduceAnimations = reduceAnimations;
+            settings.AnimationPreference = preference;
+            settings.ReduceAnimations = preference != MotionPreference.Automatic;
             AppSettingsService.Save(settings);
-            ReducedMotionPreferences.Configure(reduceAnimations);
+            ReducedMotionPreferences.Configure(preference);
             ReducedMotionPreferences.Refresh();
         }
 
@@ -1432,18 +1445,12 @@ namespace Scriblucent.Views
             var enabled = AiFeatureGate.IsEnabled;
             if (AiToolsDetailPanel is not null)
             {
-                if (animate)
-                    UiMotion.AnimateInlineReveal(AiToolsDetailPanel, enabled);
-                else
-                    AiToolsDetailPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(AiToolsDetailPanel, enabled, animate: animate);
             }
 
             if (AiContentDiagnosticsPanel is not null)
             {
-                if (animate)
-                    UiMotion.AnimateInlineReveal(AiContentDiagnosticsPanel, enabled);
-                else
-                    AiContentDiagnosticsPanel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(AiContentDiagnosticsPanel, enabled, animate: animate);
             }
 
             UpdateRemoveDownloadedModelsButton();
@@ -1507,7 +1514,7 @@ namespace Scriblucent.Views
                     case NoteEditorWindow editorWindow:
                         editorWindow.ApplySpellCheckPreference(enabled);
                         break;
-                    case NoteEditorTabsWindow tabsWindow:
+                    case EditorWorkspaceWindow tabsWindow:
                         tabsWindow.ApplySpellCheckPreference(enabled);
                         break;
                 }
@@ -1567,7 +1574,9 @@ namespace Scriblucent.Views
             {
                 if (DefaultNoteFontFamilyBox.Items.Count == 0)
                 {
-                    foreach (var fontName in TemplateFontNames())
+                    // Useful choices are immediate; discovering every installed font can be
+                    // slow on a cold system and must not block all input when Settings opens.
+                    foreach (var fontName in PreferredTemplateFonts)
                         DefaultNoteFontFamilyBox.Items.Add(new ComboBoxItem { Content = fontName });
                 }
 
@@ -1632,6 +1641,37 @@ namespace Scriblucent.Views
             AppSettingsService.Save(settings);
             if (Application.Current?.MainWindow?.DataContext is MainViewModel mainViewModel)
                 mainViewModel.InvalidatePreferredTypographyCache();
+        }
+
+        private async Task PopulateTemplateFontNamesAsync()
+        {
+            if (_isLoadingTemplateFonts || DefaultNoteFontFamilyBox is null) return;
+            _isLoadingTemplateFonts = true;
+            try
+            {
+                _templateFontNamesTask ??= Task.Run(TemplateFontNames);
+                var names = await _templateFontNamesTask;
+                if (!IsLoaded || !IsVisible || _overlayAnimator.IsClosing) return;
+                var present = DefaultNoteFontFamilyBox.Items.OfType<ComboBoxItem>()
+                    .Select(item => item.Content?.ToString() ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var batch in names.Where(name => !present.Contains(name)).Chunk(24))
+                {
+                    if (!IsLoaded || !IsVisible || _overlayAnimator.IsClosing) break;
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        if (!IsLoaded || !IsVisible || _overlayAnimator.IsClosing) return;
+                        foreach (var name in batch)
+                            if (present.Add(name)) DefaultNoteFontFamilyBox.Items.Add(new ComboBoxItem { Content = name });
+                    }, DispatcherPriority.Background);
+                }
+            }
+            catch (Exception error)
+            {
+                // The preferred and saved font choices remain usable if discovery is unavailable.
+                Debug.WriteLine($"Settings font discovery: {error.Message}");
+                if (_templateFontNamesTask?.IsFaulted == true) _templateFontNamesTask = null;
+            }
+            finally { _isLoadingTemplateFonts = false; }
         }
 
         private static List<string> TemplateFontNames()
@@ -1713,7 +1753,7 @@ namespace Scriblucent.Views
                     case NoteEditorWindow editorWindow:
                         editorWindow.ApplyMeasurementUnitSystemPreference(unitSystem);
                         break;
-                    case NoteEditorTabsWindow tabsWindow:
+                    case EditorWorkspaceWindow tabsWindow:
                         tabsWindow.ApplyMeasurementUnitSystemPreference(unitSystem);
                         break;
                 }

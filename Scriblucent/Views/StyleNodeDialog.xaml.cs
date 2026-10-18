@@ -312,23 +312,10 @@ namespace Scriblucent.Views
         }
 
         private void HighlightButtonAsSelected(Button button)
-        {
-            button.Background = FindResource("SelectionBackground") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(232, 240, 254));
-            button.BorderBrush = FindResource("AccentPrimary") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(74, 110, 224));
-            button.BorderThickness = new Thickness(2);
-        }
+            => Scriblucent.Behaviors.StateSurfaceMotionBehavior.SetIsSelected(button, true);
 
         private void ClearButtonHighlight(Button button)
-        {
-            var defaultBackground = FindResource("CardBackground") as Brush ?? Brushes.Transparent;
-            var defaultBorder = FindResource("BorderColor") as Brush ?? Brushes.Gray;
-
-            button.Background = defaultBackground;
-            button.BorderBrush = defaultBorder;
-            button.BorderThickness = new Thickness(1);
-        }
+            => Scriblucent.Behaviors.StateSurfaceMotionBehavior.SetIsSelected(button, false);
 
         private void ClearIconButtonHighlighting()
         {

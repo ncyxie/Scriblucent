@@ -1,4 +1,4 @@
-
+﻿
 <UserControl x:Class="Scriblucent.Controls.NoteCardControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -28,6 +28,8 @@
              MouseEnter="OnMouseEnter" MouseLeave="OnMouseLeave">
     <UserControl.Resources>
         <Style x:Key="NoteDashboardListingMenuButtonStyle" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
+            <Setter Property="controls:SurfaceMaterial.Kind" Value="None"/>
             <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
             <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="MenuButtonBorder"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -44,21 +46,17 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="MenuButtonBorder"
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}" HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}" HoverBackground="{DynamicResource IconButtonHoverBackground}" PressedBackground="{DynamicResource IconButtonPressedBackground}" x:Name="MenuButtonBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
                                 CornerRadius="{StaticResource Radius.Control}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
-                        </Border>
+                        </controls:InteractionSurface>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="MenuButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="MenuButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                            </Trigger>
+
+
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -76,21 +74,23 @@
     <UserControl.RenderTransform>
         <ScaleTransform x:Name="CardScale" ScaleX="1" ScaleY="1"/>
     </UserControl.RenderTransform>
-    <Grid>
+    <Border Background="Transparent">
+    <controls:CollectionSelectionFrame ItemId="{Binding Document.Id}" SelectionLabel="{Binding Title}" FaceName="CardBorder" SelectionInset="0,13,13,0">
+    <Grid x:Name="HoverMotionSurface">
         <Image x:Name="BitmapLayer"
                Stretch="Fill"
                Visibility="Collapsed"
                IsHitTestVisible="False"
                SnapsToDevicePixels="True"/>
         <controls:CardShadowLayer x:Name="CardShadow"/>
-        <Border x:Name="CardBorder"
-            behaviors:MassSelectHighlightBehavior.IsEnabled="True"
+        <controls:SurfaceMaterialBorder x:Name="CardBorder"
             behaviors:RoundedClipBehavior.IsEnabled="True"
             CornerRadius="{StaticResource Radius.Card}"
             Padding="14">
-        <!-- Level 4 D: CardShadowLayer sibling + NoteCardBorder R(theme); mass-select A via behavior. -->
+        <!-- The shared selection frame paints its contour outside live and cached card content. -->
         <Border.Style>
             <Style TargetType="Border">
+                <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
                 <Setter Property="Background" Value="{DynamicResource NoteCardBackground}"/>
                 <Setter Property="BorderBrush" Value="{DynamicResource NoteCardBorder}"/>
                 <Setter Property="BorderThickness" Value="1"/>
@@ -111,14 +111,13 @@
                     Panel.ZIndex="45"
                     Visibility="Collapsed"
                     IsHitTestVisible="False"/>
-            <Border x:Name="DropGlow"
+            <controls:DropTargetSurface x:Name="DropGlow" Surface="{Binding ElementName=CardBorder}"
                     Background="Transparent"
-                    BorderBrush="{DynamicResource AccentPrimary}"
+                    BorderBrush="{DynamicResource AccentRimBrush}"
                     BorderThickness="0"
                     CornerRadius="{StaticResource Radius.Card}"
                     Opacity="0"
                     Grid.RowSpan="3"
-                    Margin="-14"
                     Panel.ZIndex="50"
                     IsHitTestVisible="False"/>
             <Grid Grid.Row="0">
@@ -127,17 +126,16 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0"
-                            Orientation="Horizontal"
-                            Margin="0,0,8,4">
-                    <icons:AppIcon Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource NoteCardTitle}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
-                    <icons:AppIcon Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="14" Height="14" Foreground="{DynamicResource NoteCardTitle}" Margin="0,0,6,0" ToolTip="{Binding Document.ScheduledAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"/>
-                    <TextBlock Text="{Binding Title}"
+                <Grid Grid.Column="0" Margin="0,0,8,4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <icons:AppIcon Grid.Column="0" Kind="Pin" Style="{StaticResource DashboardPinIconStyle}" Width="14" Height="14" Foreground="{DynamicResource NoteCardTitle}" Margin="0,0,6,0" ToolTip="{Binding [Pin], Source={StaticResource Loc}}"/>
+                    <icons:AppIcon Grid.Column="1" Kind="Schedule" Style="{StaticResource DashboardScheduleIconStyle}" Width="14" Height="14" Foreground="{DynamicResource NoteCardTitle}" Margin="0,0,6,0" ToolTip="{Binding Document.ScheduledAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"/>
+                    <TextBlock Grid.Column="2" Text="{Binding Title}"
                                FontSize="{StaticResource Type.CardTitle}" FontWeight="SemiBold"
                                Foreground="{DynamicResource NoteCardTitle}"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
-                </StackPanel>
+                </Grid>
 
                 <Button x:Name="MenuButton"
                         Grid.Column="1"
@@ -149,13 +147,7 @@
                         Click="OnMenuButtonClick">
                 </Button>
 
-                <CheckBox Grid.Column="1"
-                          HorizontalAlignment="Right"
-                          VerticalAlignment="Top"
-                          Margin="0,0,2,0"
-                          Style="{StaticResource DashboardMassSelectCheckBoxStyle}"
-                          Panel.ZIndex="6"
-                          />
+
             </Grid>
             <TextBlock x:Name="ContentPreview"
                        Grid.Row="1"
@@ -163,12 +155,14 @@
                        MaxHeight="100"
                        TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource TextColor}"/>
-            <Border Grid.Row="2"
+            <controls:SurfaceMaterialBorder Grid.Row="2"
                     Style="{StaticResource DashboardTagChipStyle}">
                 <TextBlock Text="{Binding TagsDisplay}"
                            Style="{StaticResource DashboardTagTextStyle}"/>
-            </Border>
+            </controls:SurfaceMaterialBorder>
         </Grid>
-        </Border>
+        </controls:SurfaceMaterialBorder>
     </Grid>
+    </controls:CollectionSelectionFrame>
+    </Border>
 </UserControl>

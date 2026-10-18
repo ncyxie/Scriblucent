@@ -1,22 +1,46 @@
-<UserControl x:Class="Scriblucent.Views.NoteSchedulePanel"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:models="clr-namespace:Scriblucent.Models"
-             xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
-        xmlns:controls="clr-namespace:Scriblucent.Controls"
-             xmlns:icons="clr-namespace:Scriblucent.Icons"
-             Visibility="Collapsed"
-             IsHitTestVisible="False">
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:models="clr-namespace:Scriblucent.Models" xmlns:motion="clr-namespace:Scriblucent.Animations" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors" xmlns:controls="clr-namespace:Scriblucent.Controls" xmlns:icons="clr-namespace:Scriblucent.Icons" xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework" x:Class="Scriblucent.Views.NoteSchedulePanel" Visibility="Collapsed" IsHitTestVisible="False">
     <UserControl.Resources>
-<Style x:Key="ScheduleDatePickerStyle" TargetType="DatePicker">
+        <Style x:Key="ScheduleDatePickerStyle" TargetType="DatePicker">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Padding" Value="{StaticResource Field.ContentPadding}"/>
             <Setter Property="CalendarStyle" Value="{DynamicResource ScheduleCalendarStyle}"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Control.Form}"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DatePicker">
+                        <Border x:Name="DatePickerFace" CornerRadius="10" Background="{DynamicResource InputSurface}" BorderBrush="{DynamicResource InputRestBorder}" BorderThickness="{DynamicResource Field.RestBorderThickness}">
+                            <Grid x:Name="PART_Root" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="32"/>
+                                </Grid.ColumnDefinitions>
+                                <primitives:DatePickerTextBox x:Name="PART_TextBox" Margin="10,0,4,0" VerticalContentAlignment="Center" FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" Foreground="{TemplateBinding Foreground}"/>
+                                <Button x:Name="PART_Button" Grid.Column="1" Style="{StaticResource ToolbarIconButtonStyle}" Width="28" Height="28" MinWidth="28" MinHeight="28" Padding="0" VerticalAlignment="Center" Margin="0,0,4,0" Content="{icons:Icon Kind=Schedule, Size=16}" ToolTip="{Binding [Calendar], Source={StaticResource Loc}}" AutomationProperties.Name="{Binding [Calendar], Source={StaticResource Loc}}"/>
+                                <Popup x:Name="PART_Popup" Placement="Bottom" PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}" StaysOpen="False" AllowsTransparency="True"/>
+                                <controls:AccentRim x:Name="DateFocusRim" Grid.ColumnSpan="2" IsHitTestVisible="False" Surface="{Binding ElementName=DatePickerFace}" IsActive="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource TemplatedParent}}" Brush="{DynamicResource AccentRimBrush}" Thickness="2"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="DateFocusRim" Property="IsActive" Value="True"/>
+                            </Trigger>
+                            <Trigger Property="Validation.HasError" Value="True">
+                                <Setter TargetName="DateFocusRim" Property="Brush" Value="{DynamicResource AccentDanger}"/>
+                                <Setter TargetName="DateFocusRim" Property="IsActive" Value="True"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-
         <Style TargetType="DatePickerTextBox">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -25,327 +49,153 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="DatePickerTextBox">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Padding="0"
-                                SnapsToDevicePixels="True">
-                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource Radius.Control}" Padding="0" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Border x:Name="PART_ContentElement">
+                                    <ScrollViewer x:Name="PART_ContentHost"/>
+                                </Border>
+                                <ContentControl x:Name="PART_Watermark" IsHitTestVisible="False" Focusable="False" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            </Grid>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-
         <Style x:Key="ScheduleCalendarDayButtonStyle" TargetType="CalendarDayButton" BasedOn="{StaticResource CalendarDayButtonStyle}">
-            <Setter Property="Margin" Value="1"/>
+            <Setter Property="Margin" Value="0"/>
         </Style>
-
         <Style x:Key="ScheduleCalendarItemStyle" TargetType="CalendarItem" BasedOn="{StaticResource CalendarItemStyle}">
             <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
             <!-- Outer popup calendar owns Elevation.Popup/Dialog chrome; item has no box stroke (template BorderThickness=0). -->
             <Setter Property="BorderBrush" Value="Transparent"/>
         </Style>
-
         <Style x:Key="ScheduleCalendarStyle" TargetType="Calendar" BasedOn="{StaticResource PopupCalendarControlStyle}">
             <Setter Property="CalendarDayButtonStyle" Value="{StaticResource ScheduleCalendarDayButtonStyle}"/>
             <Setter Property="CalendarItemStyle" Value="{StaticResource ScheduleCalendarItemStyle}"/>
         </Style>
-
         <!-- Nested group: surface contrast only (no box stroke). -->
-        <Style x:Key="ScheduleSectionCardStyle" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="14"/>
+        <Style x:Key="ScheduleSectionCardStyle" TargetType="Border" BasedOn="{StaticResource ContentInsetBorderStyle}">
             <Setter Property="Padding" Value="12"/>
         </Style>
-
-        <Style x:Key="ScheduleEditableComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource EditableComboBoxStyle}">
-            <Setter Property="Height" Value="34"/>
-        </Style>
-
-        <Style x:Key="ScheduleRoundedTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Setter Property="Padding" Value="10,0"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Style.Triggers>
-                <Trigger Property="AcceptsReturn" Value="True">
-                    <Setter Property="VerticalContentAlignment" Value="Top"/>
-                    <Setter Property="Padding" Value="10,8"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <Style x:Key="ScheduleComboBoxStyle" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-            <Setter Property="Height" Value="34"/>
-        </Style>
-
         <Style x:Key="ScheduleRemoveButtonStyle" TargetType="Button" BasedOn="{StaticResource OverlayCloseIconButtonStyle}">
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="Foreground" Value="{DynamicResource AccentDanger}"/>
         </Style>
+        <Style x:Key="ScheduleReminderEditButtonStyle" TargetType="Button" BasedOn="{StaticResource CalendarHeaderButtonStyle}">
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                <controls:InteractionSurface x:Name="HeaderButtonBorder" Role="Compact"
+                    controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}"
+                    controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}"
+                    HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                    HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                    Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="0"
+                    HoverBackground="{DynamicResource IconButtonHoverBackground}"
+                    PressedBackground="{DynamicResource IconButtonPressedBackground}"
+                    CornerRadius="{StaticResource Radius.Chip}" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/>
+                </controls:InteractionSurface>
+                <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
     </UserControl.Resources>
-
     <Grid x:Name="OverlayRoot">
-        <Grid x:Name="ScrimHost"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-                <Image x:Name="BackdropSnapshot"
-                       Stretch="Fill"
-                       Visibility="Collapsed"
-                       IsHitTestVisible="False"/>
-                <Rectangle x:Name="OverlayDim"
-                           Fill="{DynamicResource OverlayScrim}"
-                           MouseDown="OverlayDim_MouseDown"/>
+        <Grid x:Name="ScrimHost" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Image x:Name="BackdropSnapshot" Stretch="Fill" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Rectangle x:Name="OverlayDim" Fill="{DynamicResource OverlayScrim}" MouseDown="OverlayDim_MouseDown"/>
         </Grid>
-        <Border x:Name="PanelMotionHost"
-                Margin="20"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                RenderTransformOrigin="0.5,1"
-                UseLayoutRounding="True"
-                SnapsToDevicePixels="True">
-            <Grid Width="Auto"
-                  MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}"
-                  MaxWidth="780"
-                  UseLayoutRounding="True"
-                  SnapsToDevicePixels="True">
+        <Border x:Name="PanelMotionHost" Margin="20" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,1" UseLayoutRounding="True" SnapsToDevicePixels="True">
+            <Grid Width="Auto" MaxHeight="{Binding ActualHeight, ElementName=OverlayRoot}" MaxWidth="780" UseLayoutRounding="True" SnapsToDevicePixels="True">
                 <controls:BakedElevationLayer Kind="Dialog"/>
-                <Border x:Name="PanelCard"
-                        Background="{DynamicResource CardBackground}"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource Radius.Overlay}">
-            <Grid Margin="20,18,20,18">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock x:Name="ScheduleTitleText"
-                                   Text="{Binding [CalendarAssignTitle], Source={StaticResource Loc}}"
-                                   FontSize="{StaticResource Type.DialogTitle}"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource TextColor}"/>
-                        <TextBlock x:Name="ScheduleSubtitleText"
-                                   FontSize="{StaticResource Type.Meta}"
-                                   Foreground="{DynamicResource TextColorSecondary}"
-                                   Margin="1,5,0,0"
-                                   Visibility="Collapsed"/>
-                    </StackPanel>
-                    <Button Grid.Column="1"
-                            Style="{StaticResource OverlayCloseIconButtonStyle}"
-                            Content="{icons:Icon Close}"
-                            Click="CloseButton_Click"/>
-                </Grid>
-
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.2*"/>
-                        <ColumnDefinition Width="14"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <Border Grid.Column="0" Style="{StaticResource ScheduleSectionCardStyle}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Text="{Binding [CalendarExistingSchedules], Source={StaticResource Loc}}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColor}"
-                                       Margin="0,0,0,8"/>
-                                <ItemsControl x:Name="ScheduleItemsControl"
-                                              Grid.Row="1"
-                                              MaxHeight="330"
-                                              Style="{StaticResource CalendarScheduledListStyle}"
-                                              ItemsSource="{Binding ScheduleItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:NoteScheduleEntry}">
-                                            <!-- Match dashboard event cards: surface lift + calendar hover (no intermittent clipped shadow). -->
-                                            <Border BorderThickness="0"
-                                                    CornerRadius="10"
-                                                    Padding="11"
-                                                    Margin="0,0,0,8"
-                                                    Cursor="Hand"
-                                                    behaviors:ButtonPressMotionBehavior.IsEnabled="True"
-                                                    behaviors:ButtonPressMotionBehavior.PressedBackground="{DynamicResource CalendarPressedBackground}">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
-                                                        <Style.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource CalendarHoverBackground}"/>
-                                                            </Trigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <StackPanel>
-                                                        <Border Background="{DynamicResource SelectionBackground}"
-                                                                BorderThickness="0"
-                                                                CornerRadius="{StaticResource Radius.Control}"
-                                                                Padding="8,2"
-                                                                HorizontalAlignment="Left">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <icons:AppIcon Kind="Schedule" Width="12" Height="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                                                <TextBlock Text="{Binding ScheduledAt, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
-                                                                           FontWeight="SemiBold"
-                                                                           FontSize="{StaticResource Type.Chip}"
-                                                                           Foreground="{DynamicResource TextColor}"/>
+                <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" x:Name="PanelCard" Background="{DynamicResource CardBackground}" BorderThickness="0" CornerRadius="{StaticResource Radius.Overlay}">
+                    <Grid Margin="20,18,20,18">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,12" motion:ArrivalGroups.Role="Heading">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock x:Name="ScheduleTitleText" Text="{Binding [CalendarAssignTitle], Source={StaticResource Loc}}" FontSize="{StaticResource Type.DialogTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock x:Name="ScheduleSubtitleText" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource TextColorSecondary}" Margin="1,5,0,0" Visibility="Collapsed"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource OverlayCloseIconButtonStyle}" Content="{icons:Icon Close}" Click="CloseButton_Click"/>
+                        </Grid>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4" MaxHeight="440">
+                            <StackPanel>
+                                        <StackPanel x:Name="OwnerPickerSection" Visibility="Collapsed" Margin="0,0,0,16">
+                                            <TextBlock Text="{Binding [CalendarChooseItem], Source={StaticResource Loc}}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" Margin="{StaticResource Field.LabelMargin}"/>
+                                            <Grid Margin="0,0,0,8">
+                                                <TextBox x:Name="OwnerSearchTextBox" TextChanged="OwnerSearch_TextChanged" MinHeight="36" ToolTip="{Binding [CalendarSearchItems], Source={StaticResource Loc}}" AutomationProperties.Name="{Binding [CalendarSearchItems], Source={StaticResource Loc}}"/>
+                                                <TextBlock Text="{Binding [CalendarSearchItems], Source={StaticResource Loc}}" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center" IsHitTestVisible="False" TextTrimming="CharacterEllipsis" FontSize="{Binding FontSize, ElementName=OwnerSearchTextBox}" FontFamily="{Binding FontFamily, ElementName=OwnerSearchTextBox}">
+                                                    <TextBlock.Margin><MultiBinding Converter="{StaticResource FieldContentInset}"><Binding ElementName="OwnerSearchTextBox" Path="Padding"/><Binding ElementName="OwnerSearchTextBox" Path="BorderThickness"/></MultiBinding></TextBlock.Margin>
+                                                    <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=OwnerSearchTextBox}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                                                </TextBlock>
+                                            </Grid>
+                                            <ComboBox behaviors:ClosedDropdownLabelBehavior.DisplayMemberPath="Title" x:Name="OwnerPicker" ItemsSource="{Binding OwnerChoices, RelativeSource={RelativeSource AncestorType=UserControl}}" SelectionChanged="OwnerPicker_SelectionChanged" MinHeight="36" MaxDropDownHeight="260" AutomationProperties.Name="{Binding [CalendarChooseItem], Source={StaticResource Loc}}">
+                                                <ComboBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><icons:AppIcon Kind="{Binding TypeIconKind}" Width="16" Height="16" Margin="0,0,8,0"/><StackPanel><TextBlock Text="{Binding Title}" FontSize="14" TextWrapping="Wrap"/><TextBlock Text="{Binding OwnerDescription}" FontSize="13" Foreground="{DynamicResource TextColorSecondary}"/></StackPanel></StackPanel></DataTemplate></ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </StackPanel>
+                            <controls:ResponsiveSectionPanel Breakpoint="600" Gap="16">
+                                <controls:SurfaceMaterialBorder Style="{StaticResource ScheduleSectionCardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding [CalendarExistingSchedules], Source={StaticResource Loc}}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                            <Button Grid.Column="1" Content="{icons:Icon Kind=Plus, Size=16}" Style="{StaticResource ToolbarIconButtonStyle}" Click="NewReminder_Click" ToolTip="{Binding [CalendarNewReminder], Source={StaticResource Loc}}" AutomationProperties.Name="{Binding [CalendarNewReminder], Source={StaticResource Loc}}" Margin="8,0,0,0"/>
+                                        </Grid>
+                                        <ItemsControl x:Name="ScheduleItemsControl" MaxHeight="320" Style="{StaticResource CalendarScheduledListStyle}" ItemsSource="{Binding ScheduleItems, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <ItemsControl.ItemTemplate><DataTemplate DataType="{x:Type models:NoteScheduleEntry}">
+                                                <controls:SurfaceMaterialBorder Style="{StaticResource CalendarScheduledItemCardStyle}" Padding="10" behaviors:ButtonPressMotionBehavior.IsEnabled="False" behaviors:CommandLightBehavior.IsScope="True">
+                                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="32"/></Grid.ColumnDefinitions>
+                                                        <Button Tag="{Binding}" Click="EditReminder_Click" Style="{StaticResource ScheduleReminderEditButtonStyle}" ToolTip="{Binding [CalendarEditSchedule], Source={StaticResource Loc}}">
+                                                            <StackPanel HorizontalAlignment="Left">
+                                                                <TextBlock Text="{Binding ScheduledAt, StringFormat='{}{0:ddd, dd MMM &#183; HH:mm}'}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                                                <TextBlock Text="{Binding Note}" FontSize="13" TextWrapping="Wrap" MaxHeight="36" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextColorSecondary}" Margin="0,4,8,0"/>
                                                             </StackPanel>
-                                                        </Border>
-                                                        <TextBlock Text="{Binding Note}"
-                                                                   Margin="0,4,8,8"
-                                                                   Foreground="{DynamicResource TextColorSecondary}"
-                                                                   TextWrapping="Wrap"
-                                                                   Height="34"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   ToolTip="{Binding Note}"/>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1"
-                                                            Content="{icons:Icon Delete}"
-                                                            Style="{StaticResource ScheduleRemoveButtonStyle}"
-                                                            Margin="8,0,0,0"
-                                                            VerticalAlignment="Top"
-                                                            ToolTip="{Binding [CalendarRemoveSchedule], Source={StaticResource Loc}}"
-                                                            Tag="{Binding}"
-                                                            Click="RemoveScheduleButton_Click"/>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            <TextBlock Grid.Row="1"
-                                       Text="{Binding [CalendarNoSchedulesForDay], Source={StaticResource Loc}}"
-                                       Foreground="{DynamicResource TextColorSecondary}"
-                                       FontStyle="Italic"
-                                       Margin="4,10,4,0"
-                                       Visibility="Collapsed">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ScheduleItems.Count, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="0">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                    </Border>
-
-                    <Border Grid.Column="2" Style="{StaticResource ScheduleSectionCardStyle}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Grid.Row="0"
-                                       Text="{Binding [CalendarAddSchedule], Source={StaticResource Loc}}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextColor}"
-                                       Margin="0,0,0,8"/>
-
-                            <Grid Grid.Row="1" Margin="0,0,0,10">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="8"/>
-                                    <ColumnDefinition Width="74"/>
-                                    <ColumnDefinition Width="8"/>
-                                    <ColumnDefinition Width="74"/>
-                                </Grid.ColumnDefinitions>
-                                <Border Grid.Row="0"
-                                        Grid.Column="0"
-                                        Background="{DynamicResource CardBackground}"
-                                        BorderThickness="0"
-                                        CornerRadius="10"
-                                        Padding="1"
-                                        Height="36">
-                                    <DatePicker x:Name="ScheduleDatePicker" Style="{StaticResource ScheduleDatePickerStyle}"/>
-                                </Border>
-                                <ComboBox x:Name="HourComboBox" Grid.Row="0" Grid.Column="2" Style="{StaticResource ScheduleComboBoxStyle}"/>
-                                <ComboBox x:Name="MinuteComboBox"
-                                          Grid.Row="0"
-                                          Grid.Column="4"
-                                          Style="{StaticResource ScheduleComboBoxStyle}"/>
-                                <TextBlock Grid.Row="1"
-                                           Grid.Column="2"
-                                           Text="{Binding [CalendarHourShort], Source={StaticResource Loc}}"
-                                           FontSize="{StaticResource Type.Chip}"
-                                           Foreground="{DynamicResource TextColorSecondary}"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,4,8,8"/>
-                                <TextBlock Grid.Row="1"
-                                           Grid.Column="4"
-                                           Text="{Binding [CalendarMinuteShort], Source={StaticResource Loc}}"
-                                           FontSize="{StaticResource Type.Chip}"
-                                           Foreground="{DynamicResource TextColorSecondary}"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,4,8,8"/>
-                            </Grid>
-
-                            <TextBlock Grid.Row="2"
-                                       Text="{Binding [CalendarNote], Source={StaticResource Loc}}"
-                                       Foreground="{DynamicResource TextColor}"
-                                       Margin="0,0,0,6"/>
-
-                            <TextBox x:Name="ScheduleNoteTextBox"
-                                     Grid.Row="3"
-                                     Style="{StaticResource ScheduleRoundedTextBoxStyle}"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto"
-                                     MaxLength="500"
-                                     MinHeight="132"/>
-
-                            <Button Grid.Row="4"
-                                    Content="{Binding [CalendarAddSchedule], Source={StaticResource Loc}}"
-                                    Style="{StaticResource DialogPrimaryButtonStyle}"
-                                    HorizontalAlignment="Right"
-                                    Margin="0,10,0,0"
-                                    Click="AddScheduleButton_Click"/>
-                        </Grid>
-                    </Border>
-                </Grid>
-
-                <StackPanel Grid.Row="2"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            Margin="0,14,0,0">
-                    <Button Content="{Binding [CalendarClearSchedule], Source={StaticResource Loc}}"
-                            Style="{StaticResource DialogSecondaryButtonStyle}"
-                            Margin="0,0,8,0"
-                            Click="ClearButton_Click"/>
-                    <Button Content="{Binding [Cancel], Source={StaticResource Loc}}"
-                            Style="{StaticResource DialogSecondaryButtonStyle}"
-                            Margin="0,0,8,0"
-                            Click="CloseButton_Click"/>
-                    <Button Content="{Binding [Save], Source={StaticResource Loc}}"
-                            Style="{StaticResource DialogPrimaryButtonStyle}"
-                            Click="SaveButton_Click"/>
-                </StackPanel>
-            </Grid>
-            </Border>
+                                                        </Button>
+                                                        <Button Grid.Column="1" Content="{icons:Icon Delete}" Style="{StaticResource ScheduleRemoveButtonStyle}" ToolTip="{Binding [CalendarRemoveSchedule], Source={StaticResource Loc}}" Tag="{Binding}" Click="RemoveScheduleButton_Click" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </controls:SurfaceMaterialBorder>
+                                            </DataTemplate></ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="{Binding [CalendarNoReminders], Source={StaticResource Loc}}" FontSize="13" Foreground="{DynamicResource TextColorSecondary}" Margin="0,12,0,0" TextWrapping="Wrap">
+                                            <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding ScheduleItems.Count, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </controls:SurfaceMaterialBorder>
+                                <controls:SurfaceMaterialBorder Style="{StaticResource ScheduleSectionCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock x:Name="ComposerHeading" Text="{Binding [CalendarNewReminder], Source={StaticResource Loc}}" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" Margin="0,0,0,12"/>
+                                        <TextBlock Text="{Binding [CalendarDay], Source={StaticResource Loc}}" FontSize="13" Foreground="{DynamicResource TextColorSecondary}" Margin="0,0,0,6"/>
+                                        <DatePicker x:Name="ScheduleDatePicker" Style="{StaticResource ScheduleDatePickerStyle}" Margin="0,0,0,12"/>
+                                        <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <StackPanel><TextBlock Text="{Binding [CalendarHourShort], Source={StaticResource Loc}}" FontSize="13" Foreground="{DynamicResource TextColorSecondary}" Margin="{StaticResource Field.LabelMargin}"/><ComboBox x:Name="HourComboBox" AutomationProperties.Name="{Binding [CalendarHourShort], Source={StaticResource Loc}}"/></StackPanel>
+                                            <StackPanel Grid.Column="2"><TextBlock Text="{Binding [CalendarMinuteShort], Source={StaticResource Loc}}" FontSize="13" Foreground="{DynamicResource TextColorSecondary}" Margin="{StaticResource Field.LabelMargin}"/><ComboBox x:Name="MinuteComboBox" AutomationProperties.Name="{Binding [CalendarMinuteShort], Source={StaticResource Loc}}"/></StackPanel>
+                                        </Grid>
+                                        <TextBlock Text="{Binding [CalendarNote], Source={StaticResource Loc}}" FontSize="14" Foreground="{DynamicResource TextColor}" Margin="{StaticResource Field.LabelMargin}"/>
+                                        <TextBox x:Name="ScheduleNoteTextBox" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" MaxLength="500" MinHeight="80" MaxHeight="132"/>
+                                        <controls:InlineValidationPresenter x:Name="ReminderValidation" Margin="0,8,0,0"/>
+                                        <Button x:Name="StageReminderButton" Content="{Binding [CalendarAddSchedule], Source={StaticResource Loc}}" Style="{StaticResource DialogSecondaryButtonStyle}" HorizontalAlignment="Right" Margin="0,8,0,0" Click="AddScheduleButton_Click"/>
+                                    </StackPanel>
+                                </controls:SurfaceMaterialBorder>
+                            </controls:ResponsiveSectionPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <StackPanel Grid.Row="2" motion:ArrivalGroups.Role="Actions" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0"
+                                    behaviors:CommandLightBehavior.IsScope="True">
+                            <Button Content="{Binding [CalendarClearDraft], Source={StaticResource Loc}}" Style="{StaticResource DialogSecondaryButtonStyle}" Margin="0,0,8,0" Click="ClearButton_Click"/>
+                            <Button Content="{Binding [Cancel], Source={StaticResource Loc}}" Style="{StaticResource DialogSecondaryButtonStyle}" Margin="0,0,8,0" Click="CloseButton_Click"/>
+                            <Button Content="{Binding [Save], Source={StaticResource Loc}}" Style="{StaticResource DialogPrimaryButtonStyle}" Click="SaveButton_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </controls:SurfaceMaterialBorder>
             </Grid>
         </Border>
     </Grid>

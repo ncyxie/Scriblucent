@@ -8,14 +8,13 @@
         WindowStartupLocation="CenterOwner"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
-        Background="{DynamicResource FeatureFrameBackground}">
+        Background="{DynamicResource WorkspaceBackdrop}">
     <Grid x:Name="ContentRoot">
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Header>
-            <Border Style="{StaticResource ChromePanelBorderStyle}"
-                    CornerRadius="0"
-                    Padding="16,16,16,12">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Border Style="{StaticResource WorkspaceHeadingStyle}">
+                <DockPanel LastChildFill="True">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
                     <Button Style="{StaticResource DialogPrimaryButtonStyle}"
                             MinWidth="100"
                             Padding="16,8"
@@ -32,14 +31,19 @@
                             Padding="16,8"
                             Click="CloseButton_Click"/>
                 </StackPanel>
+                <StackPanel Margin="0,0,20,0">
+                    <TextBlock Text="{Binding [PrintPreviewTitle], Source={StaticResource Loc}}" FontSize="{StaticResource Type.DialogTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                    <TextBlock x:Name="HeaderDocumentTitle" FontSize="{StaticResource Type.Control.Toolbar}" Foreground="{DynamicResource TextColorSecondary}" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+                </StackPanel>
+                </DockPanel>
             </Border>
         </controls:FeatureWindowShell.Header>
 
         <controls:FeatureWindowShell.Body>
             <ScrollViewer VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Auto"
-                          Padding="20"
-                          Background="{DynamicResource SelectionBackground}">
+                          Padding="24,24,24,28"
+                          Background="{DynamicResource WindowBackground}">
                 <!-- Level 6 floating page: baked CardShadowLayer (no rest hairline). -->
                 <Grid x:Name="PreviewPage"
                       Width="794" Height="1123"
@@ -47,7 +51,7 @@
                       UseLayoutRounding="True"
                       SnapsToDevicePixels="True"
                       ClipToBounds="False">
-                    <controls:CardShadowLayer/>
+                    <controls:BakedElevationLayer Kind="Paper"/>
                     <Border Background="White"
                             BorderThickness="0"
                             Padding="60">
@@ -55,7 +59,7 @@
                         <TextBlock x:Name="PreviewTitle"
                                    FontSize="{StaticResource Type.DialogTitle}"
                                    FontWeight="Bold"
-                                   Foreground="{DynamicResource TextColor}"
+                                   Foreground="#20242B"
                                    Margin="0,0,0,20"
                                    TextWrapping="Wrap"/>
 

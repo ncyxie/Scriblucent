@@ -88,12 +88,16 @@ public partial class EmptyDashboardPanel : UserControl
 
     private void ApplyIconKind()
     {
-        if (GlyphIcon is null || GlyphChip is null)
-            return;
+        if (GlyphChip is null) return;
+        GlyphChip.Children.Clear();
+        if (IconKind != AppIconKind.None) GlyphChip.Children.Add(new EmptyDashboardIllustration(IconKind));
+        GlyphChip.Visibility = IconKind == AppIconKind.None ? Visibility.Collapsed : Visibility.Visible;
+    }
 
-        var kind = IconKind;
-        GlyphIcon.Kind = kind;
-        GlyphChip.Visibility = kind == AppIconKind.None ? Visibility.Collapsed : Visibility.Visible;
+    internal void PlayIllustration()
+    {
+        if (GlyphChip.Children.OfType<EmptyDashboardIllustration>().FirstOrDefault() is { } illustration)
+            illustration.Play();
     }
 
     private void PrimaryButton_Click(object sender, RoutedEventArgs e)

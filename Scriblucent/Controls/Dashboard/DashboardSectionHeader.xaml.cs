@@ -19,14 +19,14 @@ public partial class DashboardSectionHeader : UserControl
             nameof(MoveUpToolTip),
             typeof(object),
             typeof(DashboardSectionHeader),
-            new PropertyMetadata(null, (d, e) => ((DashboardSectionHeader)d).MoveUpButton.ToolTip = e.NewValue));
+            new PropertyMetadata(null, (d, e) => ((DashboardSectionHeader)d).PositionButton.UpLabel = e.NewValue));
 
     public static readonly DependencyProperty MoveDownToolTipProperty =
         DependencyProperty.Register(
             nameof(MoveDownToolTip),
             typeof(object),
             typeof(DashboardSectionHeader),
-            new PropertyMetadata(null, (d, e) => ((DashboardSectionHeader)d).MoveDownButton.ToolTip = e.NewValue));
+            new PropertyMetadata(null, (d, e) => ((DashboardSectionHeader)d).PositionButton.DownLabel = e.NewValue));
 
     public static readonly DependencyProperty ToggleToolTipProperty =
         DependencyProperty.Register(
@@ -42,12 +42,12 @@ public partial class DashboardSectionHeader : UserControl
             typeof(DashboardSectionHeader),
             new PropertyMetadata(true, OnIsExpandedChanged));
 
-    public static readonly DependencyProperty ShowMoveButtonsProperty =
+    public static readonly DependencyProperty ShowPositionButtonsProperty =
         DependencyProperty.Register(
-            nameof(ShowMoveButtons),
+            nameof(ShowPositionButtons),
             typeof(bool),
             typeof(DashboardSectionHeader),
-            new PropertyMetadata(true, OnShowMoveButtonsChanged));
+            new PropertyMetadata(true, OnShowPositionButtonsChanged));
 
     public static readonly DependencyProperty TrailingContentProperty =
         DependencyProperty.Register(
@@ -110,10 +110,10 @@ public partial class DashboardSectionHeader : UserControl
         set => SetValue(IsExpandedProperty, value);
     }
 
-    public bool ShowMoveButtons
+    public bool ShowPositionButtons
     {
-        get => (bool)GetValue(ShowMoveButtonsProperty);
-        set => SetValue(ShowMoveButtonsProperty, value);
+        get => (bool)GetValue(ShowPositionButtonsProperty);
+        set => SetValue(ShowPositionButtonsProperty, value);
     }
 
     public object? TrailingContent
@@ -170,24 +170,23 @@ public partial class DashboardSectionHeader : UserControl
             SectionChevronMotionBehavior.SetIsExpanded(header.ToggleButton, (bool)e.NewValue);
     }
 
-    private static void OnShowMoveButtonsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnShowPositionButtonsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not DashboardSectionHeader header)
             return;
 
         var visibility = (bool)e.NewValue ? Visibility.Visible : Visibility.Collapsed;
-        header.MoveUpButton.Visibility = visibility;
-        header.MoveDownButton.Visibility = visibility;
+        header.PositionButton.Visibility = visibility;
     }
 
-    private void MoveUpButton_Click(object sender, RoutedEventArgs e)
+    private void MoveUpMenu_Click(object sender, RoutedEventArgs e)
     {
         if (MoveUpCommand?.CanExecute(null) == true)
             MoveUpCommand.Execute(null);
         RaiseEvent(new RoutedEventArgs(MoveUpEvent, this));
     }
 
-    private void MoveDownButton_Click(object sender, RoutedEventArgs e)
+    private void MoveDownMenu_Click(object sender, RoutedEventArgs e)
     {
         if (MoveDownCommand?.CanExecute(null) == true)
             MoveDownCommand.Execute(null);

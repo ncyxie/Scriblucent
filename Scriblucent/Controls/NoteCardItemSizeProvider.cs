@@ -69,14 +69,14 @@ public sealed class NoteCardItemSizeProvider : IItemSizeProvider
 
     private static int EstimateLineCount(string? text, int charsPerLine, int maxLines)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        // Replacing newline characters does not change length. Trim the original
+        // span so a column-count change cannot allocate full preview copies for
+        // every estimated card in the library.
+        var length = text.AsSpan().Trim().Length;
+        if (length == 0)
             return 0;
 
-        var normalized = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        if (normalized.Length == 0)
-            return 0;
-
-        var lines = (int)Math.Ceiling(normalized.Length / (double)charsPerLine);
+        var lines = (int)Math.Ceiling(length / (double)charsPerLine);
         return Math.Clamp(lines, 1, maxLines);
     }
 }

@@ -1,6 +1,7 @@
 <Window x:Class="Scriblucent.Views.StyleNodeDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
         Title="{Binding [MindMapStyleOrganizeTitle], Source={StaticResource Loc}}"
@@ -18,6 +19,8 @@
         ShowInTaskbar="False">
     <Window.Resources>
         <Style x:Key="StyleNodeColorSwatchButtonStyle" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
+            <Setter Property="behaviors:CommandLightBehavior.Role" Value="Value"/>
             <Setter Property="Width" Value="32"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -26,16 +29,11 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="SwatchBorder"
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="Transparent" HighlightEdge="{DynamicResource AccentPrimary}" x:Name="SwatchBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Control}"/>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SwatchBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -43,14 +41,16 @@
 
         <Style x:Key="StyleNodeClearButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
             <Setter Property="Width" Value="28"/>
-            <Setter Property="Height" Value="28"/>
+            <Setter Property="Height" Value="28"/><Setter Property="MinHeight" Value="28"/>
             <Setter Property="MinWidth" Value="28"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="6,0,0,0"/>
-            <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Control.Helper}"/>
         </Style>
 
         <Style x:Key="StyleNodeIconButtonStyle" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
+            <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
             <Setter Property="Width" Value="44"/>
             <Setter Property="Height" Value="44"/>
             <Setter Property="Margin" Value="3"/>
@@ -61,18 +61,16 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="IconButtonBorder"
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}" HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}" HoverBackground="{DynamicResource IconButtonHoverBackground}" PressedBackground="{DynamicResource IconButtonPressedBackground}" x:Name="IconButtonBorder" behaviors:StateSurfaceMotionBehavior.IsEnabled="True" behaviors:StateSurfaceMotionBehavior.IsSelected="{Binding (behaviors:StateSurfaceMotionBehavior.IsSelected), RelativeSource={RelativeSource TemplatedParent}}" behaviors:StateSurfaceMotionBehavior.SelectionThickness="2"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="10">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
-                        </Border>
+                        </controls:InteractionSurface>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="IconButtonBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                            </Trigger>
+
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -82,8 +80,8 @@
     </Window.Resources>
 
     <controls:OverlayDialogShell
-                                 MaxCardWidth="440"
-                                 CardPadding="28">
+                                 MaxCardWidth="480"
+                                 CardPadding="24">
         <controls:OverlayDialogShell.Header>
             <TextBlock Text="{Binding [MindMapStyleOrganizeTitle], Source={StaticResource Loc}}"
                        FontSize="{StaticResource Type.DialogTitle}"
@@ -93,13 +91,7 @@
         </controls:OverlayDialogShell.Header>
 
         <controls:OverlayDialogShell.Body>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" MaxHeight="260"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <ScrollViewer Grid.Row="0"
+                <ScrollViewer
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
@@ -110,7 +102,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding [NodeBackgroundColor], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Meta}"
+                                       FontSize="{StaticResource Type.Control.Form}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -132,7 +124,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding [NodeBorderColor], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Meta}"
+                                       FontSize="{StaticResource Type.Control.Form}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -154,7 +146,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding [NodeBorderThickness], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Meta}"
+                                       FontSize="{StaticResource Type.Control.Form}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -168,7 +160,7 @@
                                 <TextBlock x:Name="BorderThicknessText"
                                            Text="1"
                                            VerticalAlignment="Center"
-                                           FontSize="{StaticResource Type.Caption}"
+                                           FontSize="{StaticResource Type.Control.Helper}"
                                            Foreground="{DynamicResource TextColorSecondary}"
                                            MinWidth="20"/>
                             </StackPanel>
@@ -181,12 +173,11 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding [NodeShape], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Meta}"
+                                       FontSize="{StaticResource Type.Control.Form}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
-                            <ComboBox x:Name="ShapeComboBox"
+                            <ComboBox behaviors:DropdownChoiceWidthBehavior.IsEnabled="True" x:Name="ShapeComboBox" Style="{StaticResource ChromeComboBoxStyle}"
                                       Grid.Column="1"
-                                      Width="180"
                                       SelectedValuePath="Tag"
                                       SelectionChanged="ShapeComboBox_SelectionChanged">
                                 <ComboBoxItem Content="{Binding [ShapeRounded], Source={StaticResource Loc}}" Tag="Rounded"/>
@@ -203,7 +194,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding [NodeIcon], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Meta}"
+                                       FontSize="{StaticResource Type.Control.Form}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextColor}"/>
                             <Button Grid.Column="1"
@@ -221,7 +212,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="{Binding [NodeIconBadgeColor], Source={StaticResource Loc}}"
                                        VerticalAlignment="Center"
-                                       FontSize="{StaticResource Type.Caption}"
+                                       FontSize="{StaticResource Type.Control.Helper}"
                                        Foreground="{DynamicResource TextColorSecondary}"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
                                 <Button x:Name="IconBadgeColorButton"
@@ -235,29 +226,17 @@
                             </StackPanel>
                         </Grid>
 
-                        <Border Margin="0,0,0,4"
-                                Padding="12"
-                                Background="{DynamicResource WindowBackground}"
-                                BorderThickness="0"
-                                CornerRadius="10"
-                                MaxHeight="200">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled">
-                                <WrapPanel x:Name="IconGrid" Orientation="Horizontal"/>
-                            </ScrollViewer>
+                        <Border Style="{StaticResource ContentInsetBorderStyle}" Margin="0,0,0,4"
+                                Padding="12">
+                            <WrapPanel x:Name="IconGrid" Orientation="Horizontal"/>
                         </Border>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- Outside the scroll viewport so Elevation.Field can fall into CardPadding
-                     (same pattern as EditFlashcardDialog — full width, no inset shrink). -->
-                <StackPanel Grid.Row="1" Margin="0,16,0,0">
+                <StackPanel Margin="0,20,0,0">
                     <TextBlock Text="{Binding [NodeNote], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.Meta}"
+                               FontSize="{StaticResource Type.Control.Form}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"
-                               Margin="0,0,0,8"/>
-                    <TextBox x:Name="NoteTextBox"
+                               Margin="{StaticResource Field.LabelMargin}"/>
+                    <TextBox x:Name="NoteTextBox" Style="{StaticResource InsetFieldTextBoxStyle}"
                              Height="80"
                              MaxHeight="80"
                              HorizontalAlignment="Stretch"
@@ -269,17 +248,18 @@
                              TextChanged="NoteTextBox_TextChanged"/>
 
                     <TextBlock Text="{Binding [MindMapNodeLink], Source={StaticResource Loc}}"
-                               FontSize="{StaticResource Type.Meta}"
+                               FontSize="{StaticResource Type.Control.Form}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColor}"
-                               Margin="0,16,0,8"/>
+                               Margin="{StaticResource Field.SectionLabelMargin}"/>
                     <ComboBox x:Name="LinkedNoteComboBox"
                               HorizontalAlignment="Stretch"
                               Style="{StaticResource ChromeComboBoxStyle}"
                               SelectedValuePath="Tag"
-                              SelectionChanged="LinkedNoteComboBox_SelectionChanged"/>
+                              SelectionChanged="LinkedNoteComboBox_SelectionChanged" ToolTip="{Binding SelectedItem.Content, RelativeSource={RelativeSource Self}}"/>
                 </StackPanel>
-            </Grid>
+                    </StackPanel>
+                </ScrollViewer>
         </controls:OverlayDialogShell.Body>
 
         <controls:OverlayDialogShell.Footer>

@@ -13,16 +13,10 @@ public partial class QuizzesDashboardPage : UserControl
 
     private MainWindow? Host => Window.GetWindow(this) as MainWindow;
 
-    private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
-        => Host?.CalendarScheduleGearButton_Click(sender, e);
-    private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => Host?.CalendarScheduledItemCard_MouseLeftButtonUp(sender, e);
     private void CreateQuizButton_Click(object sender, RoutedEventArgs e)
         => Host?.CreateQuizButton_Click(sender, e);
     private void ImportButton_Click(object sender, RoutedEventArgs e)
         => Host?.ImportQuizButton_Click(sender, e);
-    private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
-        => Host?.DashboardCalendar_SelectedDatesChanged(sender, e);
     private void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)
         => Host?.DashboardGroupBorder_PreviewDragLeave(sender, e);
     private void DashboardGroupBorder_PreviewDragOver(object sender, DragEventArgs e)
@@ -77,10 +71,6 @@ public partial class QuizzesDashboardPage : UserControl
         => Host?.MoveDashboardContentDownButton_Click(sender, e);
     private void MoveDashboardContentUpButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveDashboardContentUpButton_Click(sender, e);
-    private void MoveDashboardGroupDownButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveDashboardGroupDownButton_Click(sender, e);
-    private void MoveDashboardGroupUpButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveDashboardGroupUpButton_Click(sender, e);
     private void MoveQuizDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveQuizDashboardGroupsDownButton_Click(sender, e);
     private void MoveQuizDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
@@ -89,14 +79,8 @@ public partial class QuizzesDashboardPage : UserControl
         => Host?.MoveQuizDashboardUngroupedDownButton_Click(sender, e);
     private void MoveQuizDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveQuizDashboardUngroupedUpButton_Click(sender, e);
-    private void OpenAttemptHistoryMenuItem_Click(object sender, RoutedEventArgs e)
-        => Host?.OpenAttemptHistoryMenuItem_Click(sender, e);
-    private void OpenQuizLibraryMenuItem_Click(object sender, RoutedEventArgs e)
-        => Host?.OpenQuizLibraryMenuItem_Click(sender, e);
     private void OpenQuizMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.OpenQuizMenuItem_Click(sender, e);
-    private void QuizDashboardActionsButton_Click(object sender, RoutedEventArgs e)
-        => Host?.QuizDashboardActionsButton_Click(sender, e);
     private void QuizInfoMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.QuizInfoMenuItem_Click(sender, e);
     private void RecentQuizButton_Click(object sender, RoutedEventArgs e)

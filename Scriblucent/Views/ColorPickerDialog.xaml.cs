@@ -80,6 +80,7 @@ public partial class ColorPickerDialog : Window
                 Background = new SolidColorBrush(captured),
                 ToolTip = ToHex(captured)
             };
+            System.Windows.Automation.AutomationProperties.SetName(button, ToHex(captured));
             button.Click += (_, _) =>
             {
                 SetFromRgb(captured, syncHex: true);

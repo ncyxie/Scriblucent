@@ -68,12 +68,12 @@ internal static class Program
         try
         {
             var full = Path.GetFullPath(modelPath);
-            var cacheRoot = Path.GetFullPath(Path.Combine(
+            var modelsRoot = Path.GetFullPath(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Scriblucent", "AiCache", "models"));
+                "Scriblucent", "Models"));
             var assetsRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "Assets", "Models"));
 
-            return IsWithinRoot(full, cacheRoot)
+            return IsWithinRoot(full, modelsRoot)
                 || IsWithinRoot(full, assetsRoot);
         }
         catch

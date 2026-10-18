@@ -18,6 +18,7 @@ public partial class App : Application
     {
         Scriblucent.Services.StartupProbe.Mark("onStartup");
         PopupScrollDragBehavior.Register();
+        SmoothCaretBehavior.Register();
 
         // Multi-Core JIT: records which methods get JIT'd this run, then on every later run
         // background-JITs those same methods on idle cores while startup proceeds — so by the
@@ -75,8 +76,10 @@ public partial class App : Application
         // Best-effort cleanup of old diagnostic and crash logs
         Task.Run(() => DiagnosticCleanup.CleanupOldLogs());
 
-        ReducedMotionPreferences.Configure(settings.ReduceAnimations);
+        ReducedMotionPreferences.Configure(settings.AnimationPreference ?? (settings.ReduceAnimations
+            ? MotionPreference.Reduced : MotionPreference.Automatic));
         ReducedMotionPreferences.Refresh();
+        Scriblucent.Rendering.SkiaBackdropBlur.BeginWarmup();
         LocalizationService.SetCulture(settings.Language);
         ThemeManager.SetTheme(settings.Theme);
         ThemeManager.FreezeCurrentThemeDictionary();
@@ -146,7 +149,7 @@ public partial class App : Application
         if (ResolveCard(sender) is { } note
             && Application.Current.MainWindow is MainWindow { DataContext: MainViewModel mainVm })
         {
-            mainVm.EnterMassSelect(note);
+            mainVm.DashboardSelection.Begin(note.Document.Id);
         }
     }
 

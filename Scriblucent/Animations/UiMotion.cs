@@ -11,60 +11,60 @@ using System.Windows.Media.Effects;
 namespace Scriblucent.Animations;
 
 /// <summary>
-/// Single entry point for in-app UI motion. All property animations should run through
-/// <see cref="Run"/> so updates are driven by <see cref="RenderTransitionClock"/> and stay
-/// aligned with the display refresh. Do not use WPF <c>DoubleAnimation</c> / storyboards.
+/// Single entry point for in-app UI motion. Layout and interaction transitions use
+/// <see cref="Run"/> and the display-aligned <see cref="RenderTransitionClock"/>.
+/// Floating surfaces and popups use WPF clocks to avoid per-frame managed writes.
 /// </summary>
 public static class UiMotion
 {
     public const int OpenMs = 220;
-    public const int CloseMs = 200;
-    public const int DeleteMs = 130;
-    public const int NoteDeleteMs = 260;
-    public const int NoteAddReflowMs = 280;
-    public const int NoteAddEnterMs = 260;
-    public const int NoteAddEnterDelayMs = 55;
+    public const int CloseMs = 140;
+    public const int DeleteMs = 120;
+    public const int NoteDeleteMs = 120;
+    public const int NoteAddReflowMs = 220;
+    public const int NoteAddEnterMs = 280;
+    public const int NoteAddEnterDelayMs = 24;
     public const int NoteAddMs = NoteAddEnterMs;
     public const double NoteEnterScale = 0.94;
-    public const int EnterOpacityMs = 250;
-    public const int EnterScaleMs = 320;
-    public const int HoverInMs = 180;
-    public const int HoverOutMs = 200;
-    public const int FastMs = 170;
+    public const int EnterOpacityMs = 280;
+    public const int EnterScaleMs = 280;
+    public const int HoverInMs = 160;
+    public const int HoverOutMs = 180;
+    public const int FastMs = 120;
     public const int FlashcardFlipMinMs = 120;
     public const int QuickMs = 150;
-    public const int ReflowMs = 270;
-    public const int ReflowStaggerMs = 10;
-    public const int ReflowStaggerCapMs = 60;
-    public const int ReflowStaggerMaxItems = 10;
+    public const int ReflowMs = 220;
+    public const int ReflowStaggerMs = 24;
+    public const int ReflowStaggerCapMs = 96;
+    public const int ReflowStaggerMaxItems = 8;
     public const int BulkAddLayoutHideThreshold = 2;
     public const int MaxBulkAnimatedEnters = 8;
     public const int MaxBulkAnimatedExits = 8;
-    public const int NavFadeOutMs = 120;
-    public const int SectionMs = 280;
-    public const int SidebarMs = 300;
-    public const int SidebarResizeMs = 380;
-    public const int SearchMs = 300;
-    public const int DashboardMs = 420;
-    public const int DashboardCrossFadeOutMs = 300;
-    public const int DashboardCrossFadeInMs = 380;
-    public const int DashboardCrossFadeInDelayMs = 64;
+    public const int NavFadeOutMs = 70;
+    public const int SectionMs = 220;
+    public const int SidebarMs = 220;
+    public const int SidebarResizeMs = 260;
+    public const int SearchMs = 120;
+    public const int DashboardMs = 180;
+    public const int DashboardCrossFadeOutMs = 180;
+    public const int DashboardCrossFadeInMs = 180;
+    public const int DashboardCrossFadeInDelayMs = 0;
     public const double SubtleLiftY = 6;
     public const double ContentLiftY = 8;
-    public const double PanelLiftY = 12;
-    public const double WindowLiftY = 28;
-    public const int WindowMotionMs = 280;
-    public const int WindowCloseMs = 340;
-    public const double CardEnterLiftY = 16;
-    public const double NavShiftX = 22;
-    public const double StudyNavShiftX = 26;
-    public const double CrossFadeShiftX = 18;
+    public const double PanelLiftY = 14;
+    public const double WindowInitialOpacity = 0.45;
+    public const int WindowMotionMs = 300;
+    public const int WindowCloseMs = 140;
+    public const double CardEnterLiftY = 14;
+    public const double NavShiftX = 18;
+    public const double StudyNavShiftX = 18;
+    public const double CrossFadeShiftX = 0;
     public const double CardHoverLiftY = -5.0;
     public const double ChipHoverLiftY = -2.0;
-    public const double PressNudgeY = 1.5;
-    public const double EnterScale = 0.78;
-    public const double ExitScale = 0.66;
-    public const double CollapsedScale = 0.92;
+    public const double PressNudgeY = 1.0;
+    public const double EnterScale = 0.94;
+    public const double ExitScale = 0.96;
+    public const double CollapsedScale = 0.98;
     public const double ShadowBlurRest = 8;
     public const double ShadowBlurHover = 14;
     public const double ShadowOpacityRest = 0.08;
@@ -82,13 +82,37 @@ public static class UiMotion
     private static readonly IEasingFunction EaseOutBack = Freeze(new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.25 });
 
     private static readonly ConditionalWeakTable<object, RenderTransitionClock> Clocks = new();
+    private static readonly ConditionalWeakTable<object, Dictionary<MotionChannel, object>> ChannelKeys = new();
+    private sealed record ChannelOwner(WeakReference<UIElement> Element, MotionChannel Channel);
+    private static readonly ConditionalWeakTable<object, ChannelOwner> ChannelOwners = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<MotionChannel, TranslateTransform>> ChannelTransforms = new();
     private static readonly ConditionalWeakTable<FrameworkElement, MotionPrepState> MotionPrepStates = new();
     private static readonly ConditionalWeakTable<object, PopupMotionMarker> PopupMotionAttached = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, InlineStatusTimer> InlineStatusTimers = new();
+
+    private sealed class InlineStatusTimer
+    {
+        internal readonly DispatcherTimer Timer = new();
+        internal RoutedEventHandler? Unloaded;
+    }
 
     private sealed class PopupMotionMarker;
 
     static UiMotion()
     {
+        // Settle clocks before clearing held hover/press offsets on live accessibility changes.
+        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(RenderTransitionClock).TypeHandle);
+        MotionPolicy.Changed += () =>
+        {
+            if (MotionPolicy.Spatial) return;
+            foreach (var entry in ChannelTransforms)
+                if (entry.Value.TryGetValue(MotionChannel.Interaction, out var translate))
+                {
+                    if (entry.Key.Dispatcher.CheckAccess()) translate.X = translate.Y = 0;
+                    else if (entry.Key.Dispatcher.Thread.IsAlive && !entry.Key.Dispatcher.HasShutdownStarted)
+                        entry.Key.Dispatcher.BeginInvoke(() => translate.X = translate.Y = 0);
+                }
+        };
         EventManager.RegisterClassHandler(
             typeof(FrameworkElement),
             FrameworkElement.ContextMenuOpeningEvent,
@@ -110,6 +134,8 @@ public static class UiMotion
         public CacheMode? PreviousCacheMode;
         public Effect? SavedEffect;
         public int Depth;
+        public double ReservedPixels;
+        public RoutedEventHandler? Unloaded;
     }
 
     public static IEasingFunction OutCubic => EaseOutCubic;
@@ -131,10 +157,11 @@ public static class UiMotion
     public static bool PrefersReducedMotion => ReducedMotionPreferences.ShouldReduceMotion;
 
     public static bool IsAnyMotionRunning => RenderTransitionClock.IsAnyRunning;
+    public static bool SuppressChildEntrances { get; set; }
 
     public static bool ShouldSkipDashboardRevealMotion()
     {
-        if (PrefersReducedMotion)
+        if (PrefersReducedMotion || SuppressChildEntrances)
             return true;
 
         return Application.Current?.MainWindow?.DataContext is ViewModels.MainViewModel { IsDashboardRevealMotionEnabled: false };
@@ -142,19 +169,62 @@ public static class UiMotion
 
     public static void Stop(object key)
     {
+        if (key is UIElement element) SurfaceMotion.Stop(element);
+        else if (ChannelOwners.TryGetValue(key, out var owner) && owner.Element.TryGetTarget(out var target))
+            SurfaceMotion.Stop(target, owner.Channel);
         if (Clocks.TryGetValue(key, out var clock))
             clock.Stop();
     }
 
+    public static object Channel(object key, MotionChannel channel)
+    {
+        var channels = ChannelKeys.GetValue(key, _ => new());
+        if (!channels.TryGetValue(channel, out var value))
+        {
+            channels[channel] = value = new object();
+            if (key is UIElement element) ChannelOwners.Add(value, new(new(element), channel));
+        }
+        return value;
+    }
+
+    public static TranslateTransform ChannelTranslate(FrameworkElement element, MotionChannel channel)
+    {
+        var transforms = ChannelTransforms.GetValue(element, _ => new());
+        if (transforms.TryGetValue(channel, out var existing)) return existing;
+        var group = element.RenderTransform as TransformGroup;
+        if (group is null || group.IsFrozen)
+        {
+            var original = element.RenderTransform;
+            group = new TransformGroup();
+            if (original is not null && original != Transform.Identity)
+                group.Children.Add(original.IsFrozen ? original.Clone() : original);
+            element.RenderTransform = group;
+        }
+        var translate = new TranslateTransform();
+        group.Children.Add(translate);
+        transforms[channel] = translate;
+        return translate;
+    }
+
+    public static void Run(object key, MotionChannel channel, IEnumerable<RenderTransitionClock.Track> tracks, Action? onComplete = null)
+        => Run(Channel(key, channel), tracks, onComplete);
+
     public static void Cleanup(FrameworkElement element)
     {
+        WindowMotion.Stop(element);
         Stop(element);
+        SurfaceMotion.Stop(element);
+        if (ChannelKeys.TryGetValue(element, out var channels))
+            foreach (var key in channels.Values) Stop(key);
+        if (ChannelTransforms.TryGetValue(element, out var transforms))
+            foreach (var translate in transforms.Values) translate.X = translate.Y = 0;
         EndMotionPrep(element);
     }
 
     public static void Run(object key, IEnumerable<RenderTransitionClock.Track> tracks, Action? onComplete = null)
     {
         var clock = Clocks.GetValue(key, _ => new RenderTransitionClock());
+        MotionPolicy.ObserveActiveWindow();
         clock.Run(tracks, onComplete);
     }
 
@@ -164,7 +234,11 @@ public static class UiMotion
         if (state.Depth == 0)
         {
             state.PreviousCacheMode = element.CacheMode;
-            element.CacheMode = DpiAwareBitmapCache.Create(element, enableClearType: true);
+            state.ReservedPixels = MotionCacheBudget.TryReserve(element);
+            if (state.ReservedPixels > 0)
+                element.CacheMode = DpiAwareBitmapCache.Create(element, enableClearType: false);
+            state.Unloaded = (_, _) => { state.Depth = 1; EndMotionPrep(element); };
+            element.Unloaded += state.Unloaded;
 
             if (suppressEffect && element.Effect is not null)
             {
@@ -186,6 +260,10 @@ public static class UiMotion
             return;
 
         element.CacheMode = state.PreviousCacheMode;
+        element.Unloaded -= state.Unloaded;
+        state.Unloaded = null;
+        MotionCacheBudget.Release(state.ReservedPixels);
+        state.ReservedPixels = 0;
         if (state.SavedEffect is Effect savedEffect)
         {
             // If a scroll gesture is still under way, restoring here would stomp the scroll
@@ -222,15 +300,10 @@ public static class UiMotion
             return;
         }
 
+        Stop(element);
         BeginMotionPrep(element, suppressEffect);
-        Run(
-            element,
-            tracks,
-            () =>
-            {
-                EndMotionPrep(element);
-                onComplete?.Invoke();
-            });
+        Clocks.GetValue(element, _ => new RenderTransitionClock()).Run(
+            tracks, onComplete, onStopped: () => EndMotionPrep(element));
     }
 
     public static RenderTransitionClock.Track Track(
@@ -269,20 +342,9 @@ public static class UiMotion
         Action? onComplete = null,
         int startDelayMs = 0)
     {
-        var from = element.Opacity;
-        Run(
-            element,
-            new[]
-            {
-                Track(
-                    durationMs,
-                    easing ?? (to >= from ? EaseOutCubic : EaseInCubic),
-                    from,
-                    to,
-                    value => element.Opacity = value,
-                    onComplete,
-                    startDelayMs)
-            });
+        SurfaceMotion.Animate(element, Math.Clamp(to, 0, 1), durationMs,
+            easing ?? (to >= element.Opacity ? EaseOutCubic : EaseInQuad),
+            false, onComplete, startDelayMs: startDelayMs);
     }
 
     public static void AnimateGridLength(
@@ -357,29 +419,12 @@ public static class UiMotion
     }
 
     public static void AnimateThickness(
-        Border border,
-        Thickness from,
-        Thickness to,
-        int durationMs,
-        IEasingFunction? easing = null)
+        Border border, Thickness from, Thickness to, int durationMs, IEasingFunction? easing = null)
     {
-        Clear(border, Border.BorderThicknessProperty);
-        Run(
-            border,
-            new[]
-            {
-                new RenderTransitionClock.Track(
-                    durationMs,
-                    easing ?? EaseOutQuad,
-                    eased =>
-                    {
-                        border.BorderThickness = new Thickness(
-                            Lerp(from.Left, to.Left, eased),
-                            Lerp(from.Top, to.Top, eased),
-                            Lerp(from.Right, to.Right, eased),
-                            Lerp(from.Bottom, to.Bottom, eased));
-                    })
-            });
+        var thickness = Math.Max(to.Left, Math.Max(to.Right, Math.Max(to.Top, to.Bottom)));
+        var normal = Math.Max(border.BorderThickness.Left, Math.Max(border.BorderThickness.Right,
+            Math.Max(border.BorderThickness.Top, border.BorderThickness.Bottom)));
+        AccentMotion.Set(border, thickness > normal, border.BorderBrush, border.CornerRadius.TopLeft, thickness);
     }
 
     public static void AnimateTranslateY(
@@ -446,6 +491,20 @@ public static class UiMotion
             });
     }
 
+    public static void AnimateProgress(FrameworkElement fill, double trackWidth, double ratio, bool animate = true)
+    {
+        fill.Width = Math.Max(0, trackWidth);
+        fill.RenderTransformOrigin = new Point(0, .5);
+        var scale = EnsureScale(fill);
+        scale.ScaleY = 1;
+        var target = Math.Clamp(ratio, 0, 1);
+        if (!animate || !MotionPolicy.Spatial) { Stop(Channel(fill, MotionChannel.Layout)); scale.ScaleX = target; return; }
+        Run(fill, MotionChannel.Layout, new[]
+        {
+            Track(180, OutCubic, scale.ScaleX, target, v => scale.ScaleX = v)
+        });
+    }
+
     public static void AnimateShadowOpacity(
         DropShadowEffect shadow,
         object key,
@@ -463,240 +522,17 @@ public static class UiMotion
             });
     }
 
-    private const string SectionMotionCacheSurfaceName = "CalendarSectionBodySurface";
-
-    public static void AnimateClipReveal(
-        FrameworkElement section,
-        bool expand,
-        int durationMs = SectionMs,
-        double slideOffset = 8,
-        Action? onComplete = null)
-    {
-        Stop(section);
-        Clear(section, UIElement.OpacityProperty);
-        Clear(section, FrameworkElement.MaxHeightProperty);
-        section.RenderTransformOrigin = new Point(0.5, 0);
-        var translate = EnsureTranslate(section);
-        Clear(translate, TranslateTransform.YProperty);
-
-        if (expand)
-        {
-            if (PrefersReducedMotion)
-            {
-                section.Visibility = Visibility.Visible;
-                section.Opacity = 1;
-                translate.Y = 0;
-                section.Clip = null;
-                section.ClearValue(FrameworkElement.HeightProperty);
-                section.MaxHeight = double.PositiveInfinity;
-                section.ClipToBounds = false;
-                onComplete?.Invoke();
-                return;
-            }
-
-            section.Visibility = Visibility.Visible;
-            section.ClipToBounds = true;
-            var (targetHeight, clipWidth) = MeasureExpandedSectionExtent(section);
-
-            section.Height = targetHeight;
-            section.MaxHeight = targetHeight;
-            var clip = new RectangleGeometry(new Rect(0, 0, clipWidth, 0));
-            section.Clip = clip;
-            section.Opacity = 0;
-            translate.Y = -slideOffset;
-
-            BeginClipMotionCache(section);
-
-            Run(
-                section,
-                new[]
-                {
-                    Track(durationMs, OutCubic, 0, targetHeight, value => clip.Rect = new Rect(0, 0, clipWidth, value)),
-                    Track(durationMs, OutCubic, -slideOffset, 0, value => translate.Y = value),
-                    Track(OpenMs, OutSine, 0, 1, value => section.Opacity = value)
-                },
-                () =>
-                {
-                    EndClipMotionCache(section);
-                    section.Clip = null;
-                    section.ClipToBounds = false;
-                    section.Dispatcher.BeginInvoke(() =>
-                    {
-                        section.ClearValue(FrameworkElement.HeightProperty);
-                        section.MaxHeight = double.PositiveInfinity;
-                        onComplete?.Invoke();
-                    }, DispatcherPriority.Loaded);
-                });
-            return;
-        }
-
-        var startHeight = section.ActualHeight;
-        if (startHeight <= 0)
-        {
-            SetSectionCollapsedState(section, translate, slideOffset);
-            onComplete?.Invoke();
-            return;
-        }
-
-        var collapseWidth = section.ActualWidth > 0 ? section.ActualWidth : 1;
-        section.Height = startHeight;
-        section.MaxHeight = startHeight;
-        section.ClipToBounds = true;
-        var collapseClip = new RectangleGeometry(new Rect(0, 0, collapseWidth, startHeight));
-        section.Clip = collapseClip;
-
-        var opacityStart = section.Opacity;
-        var translateStart = translate.Y;
-
-        BeginClipMotionCache(section);
-
-        Run(
-            section,
-            new[]
-            {
-                Track(durationMs, InOutSine, startHeight, 0, value => collapseClip.Rect = new Rect(0, 0, collapseWidth, value)),
-                Track(durationMs, InOutSine, translateStart, -slideOffset, value => translate.Y = value),
-                Track(HoverInMs, InSine, opacityStart, 0, value => section.Opacity = value)
-            },
-            () =>
-            {
-                EndClipMotionCache(section);
-                SetSectionCollapsedState(section, translate, slideOffset);
-                onComplete?.Invoke();
-            });
-    }
-
-    private static void BeginClipMotionCache(FrameworkElement section)
-    {
-        if (section.FindName(SectionMotionCacheSurfaceName) is not FrameworkElement cacheSurface)
-            return;
-
-        cacheSurface.UpdateLayout();
-        cacheSurface.CacheMode = DpiAwareBitmapCache.Create(cacheSurface, enableClearType: true);
-    }
-
-    private static void EndClipMotionCache(FrameworkElement section)
-    {
-        if (section.FindName(SectionMotionCacheSurfaceName) is FrameworkElement cacheSurface)
-            cacheSurface.CacheMode = null;
-    }
-
-    public static void ExpandHorizontalPanel(
-        FrameworkElement panel,
-        bool show,
-        double expandedWidth,
-        int durationMs = SearchMs,
-        Action? onComplete = null)
-    {
-        Stop(panel);
-        Clear(panel, UIElement.OpacityProperty);
-        Clear(panel, FrameworkElement.WidthProperty);
-        panel.RenderTransformOrigin = new Point(1, 0.5);
-        var scale = EnsureScale(panel);
-
-        if (show)
-        {
-            panel.Visibility = Visibility.Visible;
-            panel.Width = expandedWidth;
-            panel.Opacity = 0;
-            scale.ScaleX = 0.01;
-            scale.ScaleY = 1;
-        }
-        else if (panel.Visibility != Visibility.Visible)
-        {
-            onComplete?.Invoke();
-            return;
-        }
-
-        var opacityFrom = panel.Opacity;
-        var scaleFrom = scale.ScaleX;
-        var easing = show ? EaseOutCubic : EaseInCubic;
-
-        Run(
-            panel,
-            new[]
-            {
-                Track(durationMs, easing, opacityFrom, show ? 1.0 : 0.0, value => panel.Opacity = value),
-                Track(durationMs, easing, scaleFrom, show ? 1.0 : 0.01, value => scale.ScaleX = value)
-            },
-            () =>
-            {
-                if (!show)
-                {
-                    panel.Visibility = Visibility.Collapsed;
-                    panel.IsHitTestVisible = false;
-                    panel.Width = 0;
-                    panel.Opacity = 0;
-                    scale.ScaleX = 0.01;
-                }
-
-                onComplete?.Invoke();
-            });
-    }
+    /// <summary>Reveals stationary content by expanding its clipped layout slot.</summary>
+    public static void AnimateLayoutReveal(FrameworkElement content, bool show,
+        Action? onComplete = null, Orientation axis = Orientation.Vertical,
+        bool animate = true, RowDefinition? row = null, bool soften = false, int? durationMs = null)
+        => LayoutRevealMotion.SetVisible(content, show, axis, animate, onComplete, row, soften, durationMs);
 
     public static void AnimateSidebarChrome(
-        FrameworkElement sidebarChrome,
-        ColumnDefinition column,
-        double fromWidth,
-        double targetWidth,
-        int durationMs = SidebarResizeMs,
-        Action? onComplete = null)
+        FrameworkElement sidebarChrome, ColumnDefinition column, double fromWidth,
+        double targetWidth, int durationMs = SidebarResizeMs, Action? onComplete = null)
     {
-        Stop(SidebarChromeAnimationKey);
-        Stop(sidebarChrome);
-        Clear(sidebarChrome, UIElement.OpacityProperty);
-        sidebarChrome.RenderTransformOrigin = new Point(0, 0.5);
-        var translate = EnsureTranslate(sidebarChrome);
-        Clear(translate, TranslateTransform.XProperty);
-        sidebarChrome.Clip = null;
-
-        if (PrefersReducedMotion || Math.Abs(fromWidth - targetWidth) < 0.5)
-        {
-            column.Width = new GridLength(targetWidth, GridUnitType.Pixel);
-            sidebarChrome.ClearValue(FrameworkElement.WidthProperty);
-            sidebarChrome.ClearValue(FrameworkElement.HorizontalAlignmentProperty);
-            translate.X = 0;
-            sidebarChrome.Opacity = 1;
-            SetSidebarAnimationZOrder(sidebarChrome, elevated: false);
-            onComplete?.Invoke();
-            return;
-        }
-
-        var expanding = targetWidth > fromWidth;
-        var motionMs = durationMs;
-        var translateStart = expanding ? -3.0 : 2.0;
-        var opacityStart = expanding ? 0.96 : sidebarChrome.Opacity;
-
-        SetSidebarAnimationZOrder(sidebarChrome, elevated: true);
-        translate.X = translateStart;
-        sidebarChrome.Opacity = opacityStart;
-
-        column.Width = new GridLength(fromWidth, GridUnitType.Pixel);
-        sidebarChrome.ClearValue(FrameworkElement.WidthProperty);
-        sidebarChrome.ClearValue(FrameworkElement.HorizontalAlignmentProperty);
-
-        var tracks = new List<RenderTransitionClock.Track>
-        {
-            Track(motionMs, InOutCubic, fromWidth, targetWidth, value =>
-                column.Width = new GridLength(value, GridUnitType.Pixel)),
-            Track(motionMs, InOutCubic, translateStart, 0, value => translate.X = value),
-            Track(motionMs, OutCubic, opacityStart, 1, value => sidebarChrome.Opacity = value)
-        };
-
-        Run(
-            SidebarChromeAnimationKey,
-            tracks,
-            () =>
-            {
-                column.Width = new GridLength(targetWidth, GridUnitType.Pixel);
-                sidebarChrome.Clip = null;
-                sidebarChrome.ClearValue(FrameworkElement.WidthProperty);
-                sidebarChrome.ClearValue(FrameworkElement.HorizontalAlignmentProperty);
-                translate.X = 0;
-                sidebarChrome.Opacity = 1;
-                SetSidebarAnimationZOrder(sidebarChrome, elevated: false);
-                onComplete?.Invoke();
-            });
+        SidebarResizeMotion.Animate(sidebarChrome, column, fromWidth, targetWidth, durationMs, onComplete);
     }
 
     private static void SetSidebarAnimationZOrder(FrameworkElement sidebarChrome, bool elevated)
@@ -709,297 +545,49 @@ public static class UiMotion
 
     private static readonly object SidebarChromeAnimationKey = new();
 
-    private static (double Height, double Width) MeasureExpandedSectionExtent(FrameworkElement section)
+    public static void CrossFadePanels(
+        FrameworkElement outgoing, FrameworkElement incoming, int direction,
+        int durationMs = MotionTokens.Navigation, Action? onComplete = null)
     {
-        section.ClearValue(FrameworkElement.HeightProperty);
-        section.MaxHeight = double.PositiveInfinity;
-
-        var availableWidth = section.ActualWidth;
-        if (availableWidth <= 0 && section.Parent is FrameworkElement parent && parent.ActualWidth > 0)
-            availableWidth = parent.ActualWidth;
-        if (availableWidth <= 0)
-            availableWidth = double.PositiveInfinity;
-
-        section.Measure(new Size(availableWidth, double.PositiveInfinity));
-        var desiredHeight = section.DesiredSize.Height;
-        var desiredWidth = section.DesiredSize.Width;
-
-        if (!double.IsInfinity(availableWidth) && availableWidth > 0)
+        SurfaceMotion.Stop(outgoing);
+        SurfaceMotion.Stop(incoming);
+        ResetDashboardPanelMotion(outgoing);
+        ResetDashboardPanelMotion(incoming);
+        outgoing.Visibility = incoming.Visibility = Visibility.Visible;
+        incoming.Opacity = 0;
+        if (MotionPolicy.Quality == MotionQuality.Off)
         {
-            section.Arrange(new Rect(0, 0, availableWidth, Math.Max(desiredHeight, 1)));
-            section.UpdateLayout();
-        }
-
-        var height = section.ActualHeight > 0 ? section.ActualHeight : desiredHeight;
-        var width = section.ActualWidth > 0 ? section.ActualWidth : desiredWidth;
-        return (Math.Max(1, height), Math.Max(1, width));
-    }
-
-    private static void SetSectionCollapsedState(FrameworkElement section, TranslateTransform translate, double slideOffset)
-    {
-        section.Visibility = Visibility.Collapsed;
-        section.Opacity = 0;
-        section.MaxHeight = 0;
-        section.ClearValue(FrameworkElement.HeightProperty);
-        section.Clip = null;
-        translate.Y = -slideOffset;
-    }
-
-    public static void SlideFadePanel(
-        FrameworkElement element,
-        bool show,
-        int durationMs = OpenMs,
-        double offsetY = PanelLiftY,
-        Action? onComplete = null)
-    {
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var translate = EnsureTranslate(element);
-
-        if (show)
-        {
-            element.Visibility = Visibility.Visible;
-            element.Opacity = 0;
-            translate.Y = -offsetY;
-        }
-        else if (element.Visibility != Visibility.Visible)
-        {
+            outgoing.Visibility = Visibility.Collapsed;
+            incoming.Opacity = 1;
             onComplete?.Invoke();
             return;
         }
-
-        var opacityFrom = element.Opacity;
-        var opacityTo = show ? 1.0 : 0.0;
-        var yFrom = translate.Y;
-        var yTo = show ? 0.0 : -offsetY;
-        var easing = show ? EaseOutCubic : EaseInCubic;
-
-        Run(
-            element,
-            new[]
-            {
-                Track(durationMs, easing, opacityFrom, opacityTo, value => element.Opacity = value),
-                Track(durationMs, easing, yFrom, yTo, value => translate.Y = value)
-            },
-            () =>
-            {
-                if (!show)
-                {
-                    element.Visibility = Visibility.Collapsed;
-                    element.Opacity = 0;
-                    translate.Y = -offsetY;
-                }
-
-                onComplete?.Invoke();
-            });
-    }
-
-    public static void CrossFadePanels(
-        FrameworkElement outgoing,
-        FrameworkElement incoming,
-        int direction,
-        int durationMs = EnterScaleMs,
-        Action? onComplete = null)
-    {
-        if (PrefersReducedMotion)
+        SurfaceMotion.Animate(outgoing, 0, durationMs, InQuad, false, cache: true);
+        SurfaceMotion.Animate(incoming, 1, durationMs, OutSine, false, () =>
         {
             outgoing.Visibility = Visibility.Collapsed;
             outgoing.Opacity = 1;
-            ResetTranslate(outgoing);
-            incoming.Visibility = Visibility.Visible;
-            incoming.Opacity = 1;
-            ResetTranslate(incoming);
             onComplete?.Invoke();
-            return;
-        }
-
-        var offset = CrossFadeShiftX;
-        var outShift = direction > 0 ? -offset : direction < 0 ? offset : 0;
-        var inStart = direction > 0 ? offset : direction < 0 ? -offset : 0;
-
-        Stop(outgoing);
-        Stop(incoming);
-        Clear(outgoing, UIElement.OpacityProperty);
-        Clear(incoming, UIElement.OpacityProperty);
-
-        outgoing.Visibility = Visibility.Visible;
-        incoming.Visibility = Visibility.Visible;
-        outgoing.Opacity = 1;
-        incoming.Opacity = 0;
-
-        var outTranslate = EnsureTranslate(outgoing);
-        var inTranslate = EnsureTranslate(incoming);
-        Clear(outTranslate, TranslateTransform.XProperty);
-        Clear(inTranslate, TranslateTransform.XProperty);
-        outTranslate.X = 0;
-        inTranslate.X = inStart;
-
-        Run(
-            outgoing,
-            new[]
-            {
-                Track(durationMs, InCubic, 1, 0, value => outgoing.Opacity = value),
-                Track(durationMs, InCubic, 0, outShift, value => outTranslate.X = value)
-            });
-
-        Run(
-            incoming,
-            new[]
-            {
-                Track(durationMs, OutCubic, 0, 1, value => incoming.Opacity = value),
-                Track(durationMs, OutCubic, inStart, 0, value => inTranslate.X = value)
-            },
-            () =>
-            {
-                outgoing.Visibility = Visibility.Collapsed;
-                outgoing.Opacity = 1;
-                ResetTranslate(outgoing);
-                onComplete?.Invoke();
-            });
+        }, cache: true);
     }
 
     /// <summary>
     /// Cross-fades large dashboard views using bitmap caches so both panels do not re-render every frame.
     /// </summary>
     public static void CrossFadePanelsComposited(
-        FrameworkElement outgoing,
-        FrameworkElement incoming,
-        int direction,
-        int durationMs,
-        Action? onComplete = null)
+        FrameworkElement outgoing, FrameworkElement incoming, int direction,
+        int durationMs, Action? onComplete = null)
     {
-        if (PrefersReducedMotion)
-        {
-            CrossFadePanels(outgoing, incoming, direction, durationMs, onComplete);
-            return;
-        }
-
-        BeginMotionPrep(outgoing);
-        BeginMotionPrep(incoming);
-
-        var offset = CrossFadeShiftX;
-        var outShift = direction > 0 ? -offset : direction < 0 ? offset : 0;
-        var inStart = direction > 0 ? offset : direction < 0 ? -offset : 0;
-
-        Stop(outgoing);
-        Stop(incoming);
-        Clear(outgoing, UIElement.OpacityProperty);
-        Clear(incoming, UIElement.OpacityProperty);
-
-        outgoing.Visibility = Visibility.Visible;
-        incoming.Visibility = Visibility.Visible;
-        outgoing.Opacity = 1;
-        incoming.Opacity = 0;
-
-        var outTranslate = EnsureTranslate(outgoing);
-        var inTranslate = EnsureTranslate(incoming);
-        Clear(outTranslate, TranslateTransform.XProperty);
-        Clear(inTranslate, TranslateTransform.XProperty);
-        outTranslate.X = 0;
-        inTranslate.X = inStart;
-
-        void Complete()
-        {
-            outgoing.Visibility = Visibility.Collapsed;
-            outgoing.Opacity = 1;
-            incoming.Opacity = 1;
-            ResetTranslate(outgoing);
-            ResetTranslate(incoming);
-            EndMotionPrep(outgoing);
-            EndMotionPrep(incoming);
-            onComplete?.Invoke();
-        }
-
-        Run(
-            outgoing,
-            new[]
-            {
-                Track(durationMs, InCubic, 1, 0, value => outgoing.Opacity = value),
-                Track(durationMs, InCubic, 0, outShift, value => outTranslate.X = value)
-            });
-
-        Run(
-            incoming,
-            new[]
-            {
-                Track(durationMs, OutCubic, 0, 1, value => incoming.Opacity = value),
-                Track(durationMs, OutCubic, inStart, 0, value => inTranslate.X = value)
-            },
-            Complete);
+        CrossFadePanels(outgoing, incoming, direction, durationMs, onComplete);
     }
 
     /// <summary>
     /// Opacity cross-dissolve for dashboard tab switches — no horizontal slide (avoids presentation-style motion).
     /// </summary>
     public static void CrossFadeDashboardPanelsComposited(
-        FrameworkElement outgoing,
-        FrameworkElement incoming,
-        Action? onComplete = null)
+        FrameworkElement outgoing, FrameworkElement incoming, Action? onComplete = null)
     {
-        if (PrefersReducedMotion)
-        {
-            outgoing.Visibility = Visibility.Collapsed;
-            ResetDashboardPanelMotion(outgoing);
-            incoming.Visibility = Visibility.Visible;
-            ResetDashboardPanelMotion(incoming);
-            onComplete?.Invoke();
-            return;
-        }
-
-        BeginMotionPrep(outgoing);
-        BeginMotionPrep(incoming);
-
-        Stop(outgoing);
-        Stop(incoming);
-        Clear(outgoing, UIElement.OpacityProperty);
-        Clear(incoming, UIElement.OpacityProperty);
-
-        outgoing.Visibility = Visibility.Visible;
-        incoming.Visibility = Visibility.Visible;
-        outgoing.Opacity = 1;
-        incoming.Opacity = 0;
-
-        ResetDashboardPanelMotion(outgoing);
-        ResetDashboardPanelMotion(incoming);
-
-        void Complete()
-        {
-            outgoing.Visibility = Visibility.Collapsed;
-            outgoing.Opacity = 1;
-            incoming.Opacity = 1;
-            ResetDashboardPanelMotion(outgoing);
-            ResetDashboardPanelMotion(incoming);
-
-            void FinishCompositor()
-            {
-                EndMotionPrep(outgoing);
-                EndMotionPrep(incoming);
-                onComplete?.Invoke();
-            }
-
-            incoming.Dispatcher.BeginInvoke(FinishCompositor, DispatcherPriority.Loaded);
-        }
-
-        Run(
-            outgoing,
-            new[]
-            {
-                Track(DashboardCrossFadeOutMs, InSine, 1, 0, value => outgoing.Opacity = value)
-            });
-
-        Run(
-            incoming,
-            new[]
-            {
-                Track(
-                    DashboardCrossFadeInMs,
-                    OutSine,
-                    0,
-                    1,
-                    value => incoming.Opacity = value,
-                    onComplete: Complete,
-                    startDelayMs: DashboardCrossFadeInDelayMs)
-            });
+        CrossFadePanels(outgoing, incoming, 0, MotionTokens.Navigation, onComplete);
     }
 
     private static void ResetDashboardPanelMotion(FrameworkElement element)
@@ -1035,19 +623,17 @@ public static class UiMotion
         }
     }
 
-    public const int StaggerEnterStepMs = 140;
-    public const double StaggerEnterScale = 0.9;
-    public const int EmptyDashboardPanelMs = 280;
-    public const int EmptyDashboardStaggerStepMs = 70;
-    public const double EmptyDashboardEnterLiftY = 10;
-    public const double EmptyDashboardEnterScale = 0.96;
-    public const int ContentHostEnterMs = 380;
-    public const double ContentHostEnterLiftY = 12;
-    public const int GroupEnterMs = 380;
-    public const int GroupExitMs = 300;
-    public const double GroupEnterLiftY = 12;
-    public const double GroupEnterScale = 0.94;
-    public const double GroupExitScale = 0.9;
+    public const int StaggerEnterStepMs = 24;
+    public const double StaggerEnterScale = 0.94;
+    public const int EmptyDashboardPanelMs = 480;
+    public const int EmptyDashboardStaggerStepMs = 40;
+    public const double EmptyDashboardEnterLiftY = 20;
+    public const double EmptyDashboardEnterScale = 0.88;
+    public const int ContentHostEnterMs = 220;
+    public const double ContentHostEnterLiftY = 8;
+    public const int GroupEnterMs = 220;
+    public const int GroupExitMs = 120;
+    public const double GroupEnterLiftY = 6;
 
     public static void AnimateStaggeredContentEnter(
         IReadOnlyList<FrameworkElement> elements,
@@ -1083,7 +669,8 @@ public static class UiMotion
         for (var index = 0; index < elements.Count; index++)
         {
             var element = elements[index];
-            var delayMs = index * staggerMs;
+            if (index >= MotionTokens.MaxItems) { SnapStaggeredEnterRest(elements[index]); MarkOneComplete(); continue; }
+            var delayMs = Math.Min(index * staggerMs, MotionTokens.MaxStagger);
             element.RenderTransformOrigin = new Point(0.5, 0.5);
             Stop(element);
             Clear(element, UIElement.OpacityProperty);
@@ -1096,55 +683,47 @@ public static class UiMotion
             scale.ScaleX = enterScale;
             scale.ScaleY = enterScale;
 
-            Run(
-                element,
-                new[]
-                {
-                    Track(durationMs, OutCubic, 0, 1, value => element.Opacity = value, startDelayMs: delayMs),
-                    Track(durationMs, OutBack, offsetY, 0, value => translate.Y = value, startDelayMs: delayMs),
-                    Track(
-                        durationMs,
-                        OutBack,
-                        enterScale,
-                        1,
-                        value =>
-                        {
-                            scale.ScaleX = value;
-                            scale.ScaleY = value;
-                        },
-                        onComplete: MarkOneComplete,
-                        startDelayMs: delayMs)
-                });
+            SurfaceMotion.AnimateTracks(element, MotionChannel.Presence,
+                [new(element, UIElement.OpacityProperty, 1, Profile: MotionProfiles.Readable),
+                 new(translate, TranslateTransform.YProperty, 0, true, Profile: MotionProfiles.Arrival),
+                 new(scale, ScaleTransform.ScaleXProperty, 1, true, 1.008, 1, MotionProfiles.Arrival),
+                 new(scale, ScaleTransform.ScaleYProperty, 1, true, 1.008, 1, MotionProfiles.Arrival)],
+                durationMs, InOutSine, MarkOneComplete, cache: true, startDelayMs: delayMs);
         }
     }
 
     public static void AnimateEmptyDashboardEnter(FrameworkElement panel, Action? onComplete = null)
     {
         var container = ResolveEmptyDashboardMotionRoot(panel);
-        if (container is null)
-        {
-            AnimateContentEnter(panel, EmptyDashboardPanelMs, EmptyDashboardEnterLiftY, onComplete);
-            return;
-        }
-
+        if (container is null) { AnimateContentEnter(panel, 240, 14, onComplete); return; }
         var elements = CollectEmptyDashboardMotionChildren(container);
-        if (elements.Count == 0)
+        if (elements.Count == 0) { onComplete?.Invoke(); return; }
+        Stop(panel); panel.Opacity = 1; ResetTranslate(panel);
+        var remaining = elements.Count;
+        for (var i = 0; i < elements.Count; i++)
         {
-            onComplete?.Invoke();
-            return;
+            var element = elements[i]; Stop(element);
+            element.RenderTransformOrigin = new Point(.5, .5);
+            var (scale, translate) = EnsureScaleTranslateGroup(element);
+            var graphic = i == 0;
+            scale.ScaleX = scale.ScaleY = MotionPolicy.Spatial && graphic ? .88 : 1;
+            element.Opacity = 0;
+            translate.Y = MotionPolicy.Spatial ? graphic ? 20 : 8 : 0;
+            var tracks = new List<NativeMotionTrack>
+            {
+                new(element, UIElement.OpacityProperty, 1, Profile: MotionProfiles.Readable),
+                new(translate, TranslateTransform.YProperty, 0, true, Profile: MotionProfiles.Arrival)
+            };
+            if (graphic)
+            {
+                tracks.Add(new(scale, ScaleTransform.ScaleXProperty, 1, true, 1.025, .997, MotionProfiles.Showcase));
+                tracks.Add(new(scale, ScaleTransform.ScaleYProperty, 1, true, 1.025, .997, MotionProfiles.Showcase));
+            }
+            SurfaceMotion.AnimateTracks(element, MotionChannel.Showcase, tracks,
+                graphic ? 480 : 240, InOutSine, () => { if (--remaining == 0) onComplete?.Invoke(); },
+                cache: graphic, startDelayMs: Math.Min(80, i * 40));
         }
-
-        Stop(panel);
-        panel.Opacity = 1;
-        ResetTranslate(panel);
-
-        AnimateStaggeredContentEnter(
-            elements,
-            durationMs: EmptyDashboardPanelMs,
-            offsetY: EmptyDashboardEnterLiftY,
-            staggerMs: EmptyDashboardStaggerStepMs,
-            onComplete: onComplete,
-            enterScale: EmptyDashboardEnterScale);
+        if (panel is Scriblucent.Controls.Dashboard.EmptyDashboardPanel empty) empty.PlayIllustration();
     }
 
     private static Panel? ResolveEmptyDashboardMotionRoot(FrameworkElement panel)
@@ -1220,10 +799,10 @@ public static class UiMotion
             element,
             new[]
             {
-                Track(ContentHostEnterMs, OutCubic, 0, 1, value => element.Opacity = value, startDelayMs: startDelayMs),
+                Track(ContentHostEnterMs, OutSine, 0, 1, value => element.Opacity = value, startDelayMs: startDelayMs),
                 Track(
                     ContentHostEnterMs,
-                    OutCubic,
+                    InOutSine,
                     ContentHostEnterLiftY,
                     0,
                     value => translate.Y = value,
@@ -1240,158 +819,36 @@ public static class UiMotion
     }
 
     public static void AnimateContentEnter(
-        FrameworkElement element,
-        int durationMs = SectionMs,
-        double offsetY = PanelLiftY,
+        FrameworkElement element, int durationMs = SectionMs, double offsetY = PanelLiftY,
         Action? onComplete = null)
     {
-        if (PrefersReducedMotion)
-        {
-            element.Opacity = 1;
-            ResetTranslate(element);
-            onComplete?.Invoke();
-            return;
-        }
-
         Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var translate = EnsureTranslate(element);
-        Clear(translate, TranslateTransform.YProperty);
-
+        var (_, translate) = EnsureScaleTranslateGroup(element);
         element.Opacity = 0;
-        translate.Y = offsetY;
-
-        Run(
-            element,
-            new[]
-            {
-                Track(durationMs, OutCubic, 0, 1, value => element.Opacity = value),
-                Track(durationMs, OutCubic, offsetY, 0, value => translate.Y = value)
-            },
-            onComplete);
+        translate.Y = MotionPolicy.Spatial ? offsetY : 0;
+        SurfaceMotion.Arrive(element, durationMs, onComplete, translate);
     }
 
     public static void AnimateContentExit(
-        FrameworkElement element,
-        int durationMs = CloseMs,
-        double offsetY = PanelLiftY,
+        FrameworkElement element, int durationMs = CloseMs, double offsetY = PanelLiftY,
         Action? onComplete = null)
     {
-        if (PrefersReducedMotion)
-        {
-            element.Opacity = 0;
-            ResetTranslate(element);
-            onComplete?.Invoke();
-            return;
-        }
-
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var translate = EnsureTranslate(element);
-        Clear(translate, TranslateTransform.YProperty);
-
-        var opacityStart = element.Opacity;
-        if (opacityStart <= 0)
-            opacityStart = 1;
-
-        var offsetStart = translate.Y;
-
-        Run(
-            element,
-            new[]
-            {
-                Track(durationMs, InCubic, opacityStart, 0, value => element.Opacity = value),
-                Track(durationMs, InCubic, offsetStart, offsetY, value => translate.Y = value)
-            },
-            onComplete);
-    }
-
-    public static int ResolveWindowEnterDurationMs(Window? window)
-    {
-        if (PrefersReducedMotion)
-            return 0;
-
-        if (window?.Owner is { WindowState: WindowState.Maximized })
-            return Math.Min(WindowMotionMs, 200);
-
-        return WindowMotionMs;
-    }
-
-    public static double ResolveWindowEnterLiftY(Window? window)
-    {
-        if (window?.Owner is { WindowState: WindowState.Maximized })
-            return Math.Min(WindowLiftY, 18);
-
-        return WindowLiftY;
+        var (_, translate) = EnsureScaleTranslateGroup(element);
+        SurfaceMotion.Animate(element, 0, durationMs, InQuad, false, onComplete,
+            translate, MotionPolicy.Spatial ? offsetY : 0);
     }
 
     /// <summary>
-    /// Window open motion: live translate (no bitmap cache) so real content stays visible during rise-up.
+    /// Move the complete client stage and its baked shadow as one object, with short
+    /// local reveals for real chrome and actions. Large editors avoid group opacity.
     /// </summary>
     public static void AnimateWindowContentEnter(
-        FrameworkElement element,
-        int durationMs = WindowMotionMs,
-        double offsetY = WindowLiftY,
-        Action? onComplete = null)
-    {
-        if (PrefersReducedMotion)
-        {
-            element.Opacity = 1;
-            ResetTranslate(element);
-            onComplete?.Invoke();
-            return;
-        }
+        FrameworkElement element, int durationMs = 300, Action? onComplete = null)
+        => WindowMotion.Enter(element, onComplete);
 
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var translate = EnsureTranslate(element);
-        Clear(translate, TranslateTransform.YProperty);
-
-        element.Opacity = 1;
-        translate.Y = offsetY;
-
-        Run(
-            element,
-            new[]
-            {
-                Track(durationMs, OutCubic, offsetY, 0, value => translate.Y = value)
-            },
-            onComplete);
-    }
-
-    /// <summary>
-    /// Window close motion: live sink-down (no bitmap cache) so tabs/text stay visible.
-    /// </summary>
     public static void AnimateWindowContentExit(
-        FrameworkElement element,
-        int durationMs = WindowCloseMs,
-        double offsetY = WindowLiftY,
-        Action? onComplete = null)
-    {
-        if (PrefersReducedMotion)
-        {
-            element.Opacity = 1;
-            ResetTranslate(element);
-            onComplete?.Invoke();
-            return;
-        }
-
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var translate = EnsureTranslate(element);
-        Clear(translate, TranslateTransform.YProperty);
-
-        element.Opacity = 1;
-        translate.Y = 0;
-
-        Run(
-            element,
-            new[]
-            {
-                Track(durationMs, InCubic, 0, offsetY, value => translate.Y = value)
-            },
-            onComplete);
-    }
+        FrameworkElement element, int durationMs = 140, Action? onComplete = null)
+        => WindowMotion.Exit(element, onComplete);
 
     private const int PopupOpenMs = 180;
 
@@ -1477,57 +934,33 @@ public static class UiMotion
         }
     }
 
-    public static void AnimatePopupOpen(FrameworkElement root, int durationMs = PopupOpenMs)
+    public static void AnimatePopupOpen(FrameworkElement root, int durationMs = PopupOpenMs, FrameworkElement? anchor = null)
     {
         try
         {
             var surface = ResolvePopupMotionSurface(root);
             root.Opacity = 1;
-
-            if (PrefersReducedMotion || durationMs <= 0)
-            {
-                surface.Opacity = 1;
-                return;
-            }
-
             StopPopupOpacityAnimation(surface);
             surface.Opacity = 0;
-            BeginMotionPrep(surface, suppressEffect: false);
-
-            var animation = new DoubleAnimation
+            surface.RenderTransformOrigin = new Point(.5, 0);
+            if (anchor is not null && surface.ActualWidth > 0 && surface.ActualHeight > 0)
             {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(durationMs),
-                EasingFunction = OutCubic,
-                FillBehavior = FillBehavior.Stop
-            };
-
-            EventHandler? completed = null;
-            completed = (_, _) =>
-            {
-                animation.Completed -= completed;
-                try
-                {
-                    surface.BeginAnimation(UIElement.OpacityProperty, null);
-                    surface.Opacity = 1;
-                }
-                catch
-                {
-                    // ignore
-                }
-                finally
-                {
-                    EndMotionPrep(surface);
-                }
-            };
-            animation.Completed += completed;
-            surface.BeginAnimation(UIElement.OpacityProperty, animation);
+                var anchorPoint = anchor.PointToScreen(new Point(anchor.ActualWidth * .5, anchor.ActualHeight * .5));
+                var top = surface.PointToScreen(new Point()); var dpi = VisualTreeHelper.GetDpi(surface);
+                surface.RenderTransformOrigin = new Point(Math.Clamp((anchorPoint.X - top.X) / (surface.ActualWidth * dpi.DpiScaleX), 0, 1),
+                    Math.Clamp((anchorPoint.Y - top.Y) / (surface.ActualHeight * dpi.DpiScaleY), 0, 1));
+            }
+            var (scale, translate) = EnsureScaleTranslateGroup(surface);
+            scale.ScaleX = scale.ScaleY = MotionPolicy.Spatial ? .96 : 1;
+            translate.Y = MotionPolicy.Spatial ? 6 : 0;
+            SurfaceMotion.AnimateTracks(surface, MotionChannel.Presence,
+                [new(surface, UIElement.OpacityProperty, 1, Profile: MotionProfiles.PopupFade),
+                 new(translate, TranslateTransform.YProperty, 0, true, Profile: MotionProfiles.Arrival),
+                 new(scale, ScaleTransform.ScaleXProperty, 1, true, Profile: MotionProfiles.Arrival),
+                 new(scale, ScaleTransform.ScaleYProperty, 1, true, Profile: MotionProfiles.Arrival)],
+                durationMs, InOutSine, cache: true);
         }
-        catch
-        {
-            try { ResolvePopupMotionSurface(root).Opacity = 1; } catch { /* ignore */ }
-        }
+        catch { try { ResolvePopupMotionSurface(root).Opacity = 1; } catch { } }
     }
 
     /// <summary>
@@ -1547,7 +980,7 @@ public static class UiMotion
                     if (hostPopup is { IsOpen: false })
                         return;
 
-                    AnimatePopupOpen(root, durationMs);
+                    AnimatePopupOpen(root, durationMs, hostPopup?.PlacementTarget as FrameworkElement ?? (root as ContextMenu)?.PlacementTarget as FrameworkElement);
                 }
                 catch
                 {
@@ -1595,6 +1028,7 @@ public static class UiMotion
         if (menu is null || placementTarget is null)
             return;
 
+        Scriblucent.Behaviors.ItemReorderBehavior.PrepareContextMenu(menu, placementTarget);
         AttachContextMenuOpenAnimation(menu);
         menu.PlacementTarget = placementTarget;
         menu.Placement = placement;
@@ -1639,6 +1073,7 @@ public static class UiMotion
         // Skip ComboBox PART_Popup here — DropDownOpened owns that path so we never double-animate.
         if (popup.TemplatedParent is ComboBox)
             return;
+        popup.PopupAnimation = PopupAnimation.None;
 
         popup.Opened += OnStandalonePopupOpened;
         popup.Closed += OnStandalonePopupClosed;
@@ -1666,6 +1101,7 @@ public static class UiMotion
             return;
 
         comboBox.ApplyTemplate();
+        if (comboBox.Template?.FindName("PART_Popup", comboBox) is Popup popup) popup.PopupAnimation = PopupAnimation.None;
         comboBox.DropDownOpened += OnComboBoxDropDownOpened;
         comboBox.DropDownClosed += OnComboBoxDropDownClosed;
     }
@@ -1803,6 +1239,7 @@ public static class UiMotion
         if (sender is not FrameworkElement element || element.ContextMenu is not ContextMenu menu)
             return;
 
+        Scriblucent.Behaviors.ItemReorderBehavior.PrepareContextMenu(menu, element);
         AttachContextMenuOpenAnimation(menu);
     }
 
@@ -1815,102 +1252,62 @@ public static class UiMotion
         return true;
     }
 
-    public static void AnimateInlineReveal(
-        FrameworkElement element,
-        bool show,
-        Action? onComplete = null)
-    {
-        if (PrefersReducedMotion)
-        {
-            if (show)
-                element.Visibility = Visibility.Visible;
-            else
-                element.Visibility = Visibility.Collapsed;
-
-            element.Opacity = 1;
-            ResetTranslate(element);
-            onComplete?.Invoke();
-            return;
-        }
-
-        if (show)
-        {
-            if (element.Visibility == Visibility.Visible && element.Opacity > 0.95)
-            {
-                onComplete?.Invoke();
-                return;
-            }
-
-            SlideFadePanel(element, true, QuickMs, SubtleLiftY, onComplete);
-            return;
-        }
-
-        if (element.Visibility != Visibility.Visible)
-        {
-            onComplete?.Invoke();
-            return;
-        }
-
-        SlideFadePanel(element, false, NavFadeOutMs, SubtleLiftY, onComplete);
-    }
-
     /// <summary>
     /// Briefly shows <paramref name="message"/> on a title-adjacent status TextBlock
-    /// (same slot as the Edited indicator), then fades out and invokes <paramref name="onFinished"/>.
+    /// (same slot as the Edited indicator), then collapses it and invokes <paramref name="onFinished"/>.
     /// </summary>
-    public static void FlashInlineStatus(
-        TextBlock element,
-        string message,
-        Action? onFinished = null,
-        int holdMs = 1150,
-        int fadeMs = 800)
+
+    public static void FlashInlineStatus(TextBlock element, string message,
+        Action? onFinished = null, int holdMs = 1150)
     {
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
         element.Text = message;
-
-        if (PrefersReducedMotion)
-        {
-            element.Visibility = Visibility.Visible;
-            element.Opacity = 1;
-            ResetTranslate(element);
-
-            var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(holdMs) };
-            delay.Tick += (_, _) =>
-            {
-                delay.Stop();
-                element.Visibility = Visibility.Collapsed;
-                onFinished?.Invoke();
-            };
-            delay.Start();
-            return;
-        }
-
-        element.Visibility = Visibility.Visible;
-        element.Opacity = 0;
-        ResetTranslate(element);
-        Fade(element, 1, OpenMs, OutQuad);
-
-        Run(
-            element,
-            new[]
-            {
-                Track(
-                    fadeMs,
-                    OutQuad,
-                    1,
-                    0,
-                    value => element.Opacity = value,
-                    () =>
-                    {
-                        element.Visibility = Visibility.Collapsed;
-                        element.Opacity = 1;
-                        ResetTranslate(element);
-                        onFinished?.Invoke();
-                    },
-                    startDelayMs: holdMs)
-            });
+        FlashInlineStatusCore(element, message, onFinished, holdMs);
     }
+
+    internal static void FlashInlineStatus(Scriblucent.Controls.EditorTitleStatus element, string message,
+        Action? onFinished = null, int holdMs = 1150)
+    {
+        element.Text = message;
+        FlashInlineStatusCore(element, message, onFinished, holdMs);
+    }
+
+    private static void FlashInlineStatusCore(FrameworkElement element, string message, Action? onFinished, int holdMs)
+    {
+        CancelInlineStatusFlash(element);
+        InlineStatusMotion.SetVisible(element, true, null, true, message);
+        var state = new InlineStatusTimer();
+        void Complete(bool animate)
+        {
+            state.Timer.Stop();
+            element.Unloaded -= state.Unloaded;
+            InlineStatusTimers.Remove(element);
+            InlineStatusMotion.SetVisible(element, false, onFinished, animate, message);
+        }
+        state.Unloaded = (_, _) => Complete(false);
+        element.Unloaded += state.Unloaded;
+        state.Timer.Interval = TimeSpan.FromMilliseconds(holdMs);
+        state.Timer.Tick += (_, _) => Complete(true);
+        InlineStatusTimers.Add(element, state);
+        state.Timer.Start();
+    }
+
+    internal static void CancelInlineStatusFlash(FrameworkElement element)
+    {
+        if (InlineStatusTimers.TryGetValue(element, out var previous))
+        {
+            previous.Timer.Stop();
+            element.Unloaded -= previous.Unloaded;
+            InlineStatusTimers.Remove(element);
+        }
+    }
+
+    /// <summary>Title status fits its message and releases its space after fading out.</summary>
+    public static void SetInlineStatusVisible(TextBlock element, bool visible, Action? onComplete = null, bool animate = true)
+        => InlineStatusMotion.SetVisible(element, visible, onComplete, animate, element.Text);
+
+    internal static void SetInlineStatusVisible(Scriblucent.Controls.EditorTitleStatus element, bool visible,
+        Action? onComplete = null, bool animate = true)
+        => InlineStatusMotion.SetVisible(element, visible, onComplete, animate, element.Text);
 
     public static void PulseOpacity(
         UIElement element,
@@ -1928,142 +1325,38 @@ public static class UiMotion
             new[]
             {
                 Track(durationMs / 2, InOutSine, from, to, value => element.Opacity = value),
-                Track(durationMs / 2, InOutSine, to, from, value => element.Opacity = value)
-            });
-    }
-
-    public static void ScaleFadePanel(
-        FrameworkElement element,
-        bool show,
-        int durationMs = FastMs,
-        double collapsedScale = CollapsedScale,
-        Action? onComplete = null)
-    {
-        Stop(element);
-        Clear(element, UIElement.OpacityProperty);
-        var scale = EnsureScale(element, collapsedScale);
-
-        if (show)
-        {
-            element.Visibility = Visibility.Visible;
-            element.Opacity = 0;
-            scale.ScaleX = collapsedScale;
-            scale.ScaleY = collapsedScale;
-        }
-        else if (element.Visibility != Visibility.Visible)
-        {
-            onComplete?.Invoke();
-            return;
-        }
-
-        var opacityFrom = element.Opacity;
-        var scaleFrom = scale.ScaleX;
-        var easing = EaseOutCubic;
-
-        Run(
-            element,
-            new[]
-            {
-                Track(durationMs, easing, opacityFrom, show ? 1.0 : 0.0, value => element.Opacity = value),
-                Track(durationMs, easing, scaleFrom, show ? 1.0 : collapsedScale, value =>
-                {
-                    scale.ScaleX = value;
-                    scale.ScaleY = value;
-                })
-            },
-            () =>
-            {
-                if (!show)
-                {
-                    element.Visibility = Visibility.Collapsed;
-                    element.Opacity = 0;
-                    scale.ScaleX = collapsedScale;
-                    scale.ScaleY = collapsedScale;
-                }
-
-                onComplete?.Invoke();
+                Track(durationMs / 2, InOutSine, to, from, value => element.Opacity = value, startDelayMs: durationMs / 2)
             });
     }
 
     public static TranslateTransform EnsureTranslate(FrameworkElement element)
-    {
-        if (element.RenderTransform is TranslateTransform translate && !translate.IsFrozen)
-            return translate;
-
-        var x = 0.0;
-        var y = 0.0;
-        if (element.RenderTransform is TranslateTransform frozenTranslate)
-        {
-            x = frozenTranslate.X;
-            y = frozenTranslate.Y;
-        }
-
-        translate = new TranslateTransform(x, y);
-        element.RenderTransform = translate;
-        return translate;
-    }
+        => EnsureTransform(element, () => new TranslateTransform());
 
     public static ScaleTransform EnsureScale(FrameworkElement element, double defaultScale = 1)
+        => EnsureTransform(element, () => new ScaleTransform(defaultScale, defaultScale));
+
+    private static T EnsureTransform<T>(FrameworkElement element, Func<T> create) where T : Transform
     {
-        if (element.RenderTransform is ScaleTransform scale && !scale.IsFrozen)
-            return scale;
-
-        var scaleX = defaultScale;
-        var scaleY = defaultScale;
-        if (element.RenderTransform is ScaleTransform frozenScale)
+        if (element.RenderTransform is T standalone && !standalone.IsFrozen) return standalone;
+        if (element.RenderTransform is TransformGroup { IsFrozen: false } existing)
         {
-            scaleX = frozenScale.ScaleX;
-            scaleY = frozenScale.ScaleY;
+            if (existing.Children.OfType<T>().FirstOrDefault(t => !t.IsFrozen) is { } child) return child;
+            var added = create(); existing.Children.Add(added); return added;
         }
-
-        scale = new ScaleTransform(scaleX, scaleY);
-        element.RenderTransform = scale;
-        return scale;
+        var previous = element.RenderTransform;
+        var group = new TransformGroup();
+        if (previous is not null && !previous.Value.IsIdentity)
+            group.Children.Add(previous.IsFrozen ? previous.CloneCurrentValue() : previous);
+        var result = create(); group.Children.Add(result); element.RenderTransform = group;
+        return result;
     }
 
     public static (ScaleTransform Scale, TranslateTransform Translate) EnsureScaleTranslateGroup(FrameworkElement element)
     {
-        if (element.RenderTransform is TransformGroup group && !group.IsFrozen)
-        {
-            var existingScale = group.Children.OfType<ScaleTransform>().FirstOrDefault();
-            var existingTranslate = group.Children.OfType<TranslateTransform>().FirstOrDefault();
-            if (existingScale is not null && !existingScale.IsFrozen
-                && existingTranslate is not null && !existingTranslate.IsFrozen)
-                return (existingScale, existingTranslate);
-        }
-
-        var scaleX = 1.0;
-        var scaleY = 1.0;
-        var translateX = 0.0;
-        var translateY = 0.0;
-
-        if (element.RenderTransform is TransformGroup existingGroup)
-        {
-            if (existingGroup.Children.OfType<ScaleTransform>().FirstOrDefault() is ScaleTransform existingScale)
-            {
-                scaleX = existingScale.ScaleX;
-                scaleY = existingScale.ScaleY;
-            }
-
-            if (existingGroup.Children.OfType<TranslateTransform>().FirstOrDefault() is TranslateTransform existingTranslate)
-            {
-                translateX = existingTranslate.X;
-                translateY = existingTranslate.Y;
-            }
-        }
-        else if (element.RenderTransform is ScaleTransform loneScale)
-        {
-            scaleX = loneScale.ScaleX;
-            scaleY = loneScale.ScaleY;
-        }
-
-        var scale = new ScaleTransform(scaleX, scaleY);
-        var translate = new TranslateTransform(translateX, translateY);
-        var created = new TransformGroup();
-        created.Children.Add(scale);
-        created.Children.Add(translate);
-        element.RenderTransformOrigin = new Point(0.5, 0.5);
-        element.RenderTransform = created;
+        if (element.ReadLocalValue(UIElement.RenderTransformOriginProperty) == DependencyProperty.UnsetValue)
+            element.RenderTransformOrigin = new Point(.5, .5);
+        var scale = EnsureScale(element);
+        var translate = EnsureTranslate(element);
         return (scale, translate);
     }
 

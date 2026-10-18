@@ -1,4 +1,4 @@
-using Scriblucent.Localization;
+﻿using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
 using Scriblucent;
@@ -89,6 +89,8 @@ public class NoteCardViewModel : ViewModelBase
     }
 
     public NoteDocument Document { get; }
+
+    internal void NotifyTitleChanged() => OnPropertyChanged(nameof(Title));
 
     public string Title => Document.Title;
 

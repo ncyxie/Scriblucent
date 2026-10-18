@@ -1,4 +1,5 @@
-﻿using SkiaSharp;
+using SkiaSharp;
+using Scriblucent.Controls;
 using Scriblucent.Localization;
 using Scriblucent.ViewModels;
 using Scriblucent.Views;
@@ -41,8 +42,6 @@ internal static class SkiaTileRenderers
     public const string KeyQuizResultRow = "QuizResultRow";
     public const string KeyStudyHistoryRow = "StudyHistoryRow";
     public const string KeyAttemptHistoryRow = "AttemptHistoryRow";
-    public const string KeyCombineSelectedRow = "CombineSelectedRow";
-    public const string KeyQuizLibrarySelectedRow = "QuizLibrarySelectedRow";
     public const string KeyFlashcardGridCard = "FlashcardGridCard";
 
     private static string FormatDate(DateTime dt) => dt.ToString("dd MMM, HH:mm", System.Globalization.CultureInfo.CurrentCulture);
@@ -127,7 +126,10 @@ internal static class SkiaTileRenderers
             CardWidthDip = 320,
             CardHeightDip = 184,
             PaddingDip = 16,
-            Scale = 0.88f,
+            Scale = 1f,
+            TitleSize = 16f,
+            DetailSize = 14f,
+            BadgeSize = 12f,
             Title = vm => ((FlashcardSetViewModel)vm).Title,
             CountLine = vm => ((FlashcardSetViewModel)vm).CardCountText,
             SecondaryCountLine = vm => ((FlashcardSetViewModel)vm).SetCountText,
@@ -150,6 +152,9 @@ internal static class SkiaTileRenderers
             CardHeightDip = 174,
             PaddingDip = 16,
             Scale = 1f,
+            TitleSize = 16f,
+            DetailSize = 14f,
+            BadgeSize = 12f,
             Title = vm => ((QuizViewModel)vm).Title,
             CountLine = vm => ((QuizViewModel)vm).QuestionCountText,
             SecondaryCountLine = null,
@@ -172,6 +177,9 @@ internal static class SkiaTileRenderers
             CardHeightDip = 204,
             PaddingDip = 16,
             Scale = 1f,
+            TitleSize = 16f,
+            DetailSize = 14f,
+            BadgeSize = 12f,
             Title = vm => ((MindMapViewModel)vm).Title,
             CountLine = vm => ((MindMapViewModel)vm).NodeCountText,
             SecondaryCountLine = null,
@@ -241,7 +249,7 @@ internal static class SkiaTileRenderers
             Title = vm => ((CalendarScheduledItemViewModel)vm).Title,
             Lines =
             [
-                (vm => ((CalendarScheduledItemViewModel)vm).ScheduleNote, 12.5f, false),
+                (vm => ((CalendarScheduledItemViewModel)vm).ScheduleNote, 13f, false),
             ],
             IsVisible = _ => true,
             Chip = null,
@@ -290,17 +298,19 @@ internal static class SkiaTileRenderers
         new FluidRowSpec
         {
             Key = KeyQuizLibraryRow,
+            SelectedSurface = vm => ((QuizLibraryItemViewModel)vm).IsSelected,
+            SelectionThicknessDip = 2,
             CardBackgroundKey = "CardBackground",
             CardBorderKey = "NoteCardBorder",
-            RadiusDip = 14,
+            RadiusDip = 10,
             PaddingDip = 12,
             MarginBottomDip = 8,
             TitleSize = 14f,
             Title = vm => ((QuizLibraryItemViewModel)vm).Title,
             Lines =
             [
-                (vm => ((QuizLibraryItemViewModel)vm).QuestionCountText, 12f, false),
-                (vm => ((QuizLibraryItemViewModel)vm).TagsDisplay, 12f, false),
+                (vm => ((QuizLibraryItemViewModel)vm).ItemCountText, 13f, false),
+                (vm => ((QuizLibraryItemViewModel)vm).TagsDisplay, 13f, false),
             ],
             IsVisible = vm => ((QuizLibraryItemViewModel)vm).IsVisible,
             Chip = null,
@@ -312,25 +322,26 @@ internal static class SkiaTileRenderers
             Question = null,
             Options = null,
             ResultText = null,
-            BorderColorKey = "NoteCardBorder",
-            BorderThicknessDip = 1,
+            BorderColorKey = "Transparent",
+            BorderThicknessDip = 0,
         });
 
     private static readonly SkiaTileRenderer CombineRow = new FluidRowRenderer(
         new FluidRowSpec
         {
             Key = KeyCombineRow,
+            SelectedSurface = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).IsSelected,
             CardBackgroundKey = "CardBackground",
             CardBorderKey = "NoteCardBorder",
-            RadiusDip = 14,
+            RadiusDip = 10,
             PaddingDip = 12,
             MarginBottomDip = 8,
             TitleSize = 14f,
             Title = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).Title,
             Lines =
             [
-                (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).CardCountText, 12f, false),
-                (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).TagsDisplay, 12f, false),
+                (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).ItemCountText, 13f, false),
+                (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).TagsDisplay, 13f, false),
             ],
             IsVisible = _ => true,
             Chip = null,
@@ -342,19 +353,21 @@ internal static class SkiaTileRenderers
             Question = null,
             Options = null,
             ResultText = null,
-            BorderColorKey = "NoteCardBorder",
-            BorderThicknessDip = 1,
+            BorderColorKey = "Transparent",
+            BorderThicknessDip = 0,
         });
 
     private static readonly SkiaTileRenderer QuizQuestion = new FluidRowRenderer(
         new FluidRowSpec
         {
             Key = KeyQuizQuestion,
+            SelectedSurface = vm => ((QuizPreviewWindow.QuizPreviewQuestion)vm).IsFocused,
+            TintSelectedSurface = false,
             CardBackgroundKey = "CardBackground",
             CardBorderKey = "Transparent",
             RadiusDip = 14,
             PaddingDip = 16,
-            MarginBottomDip = 12,
+            MarginBottomDip = 0,
             TitleSize = 16f,
             Title = vm => ((QuizPreviewWindow.QuizPreviewQuestion)vm).Question,
             Lines = [],
@@ -378,16 +391,17 @@ internal static class SkiaTileRenderers
         new FluidRowSpec
         {
             Key = KeyStudyHistoryRow,
+            HistoryLayout = true,
             CardBackgroundKey = "CardBackground",
             CardBorderKey = "Transparent",
-            RadiusDip = 10,
+            RadiusDip = 14,
             PaddingDip = 16,
             MarginBottomDip = 10,
             TitleSize = 15f,
             Title = vm => ((FlashcardStudyHistoryWindow.StudyDisplayItem)vm).Title,
             Lines =
             [
-                (vm => ((FlashcardStudyHistoryWindow.StudyDisplayItem)vm).Details, 12f, false),
+                (vm => ((FlashcardStudyHistoryWindow.StudyDisplayItem)vm).Details, 13f, false),
             ],
             IsVisible = _ => true,
             Chip = vm => (((FlashcardStudyHistoryWindow.StudyDisplayItem)vm).StatusText, StudyStatusBgKey(((FlashcardStudyHistoryWindow.StudyDisplayItem)vm).StatusKind), StudyStatusFgKey(((FlashcardStudyHistoryWindow.StudyDisplayItem)vm).StatusKind)),
@@ -407,78 +421,21 @@ internal static class SkiaTileRenderers
         new FluidRowSpec
         {
             Key = KeyAttemptHistoryRow,
+            HistoryLayout = true,
             CardBackgroundKey = "CardBackground",
             CardBorderKey = "Transparent",
-            RadiusDip = 10,
+            RadiusDip = 14,
             PaddingDip = 16,
             MarginBottomDip = 10,
             TitleSize = 15f,
             Title = vm => ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).QuizTitle,
             Lines =
             [
-                (vm => string.Join("  -  ", ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).DateDisplay, ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).ScoreDisplay, ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).TimeDisplay), 12f, false),
+                (vm => string.Join("  ·  ", ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).DateDisplay, ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).ScoreDisplay, ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).TimeDisplay), 13f, false),
             ],
             IsVisible = _ => true,
-            Chip = vm => (((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).Passed ? "PASS" : "FAIL", ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).Passed ? "AccentSuccessSubtle" : "AccentDangerSubtle", ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).Passed ? "AccentSuccessSubtleForeground" : "AccentDangerSubtleForeground"),
+            Chip = vm => (((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).StatusText, ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).Passed ? "AccentSuccessSubtle" : "AccentDangerSubtle", ((QuizAttemptHistoryWindow.AttemptDisplayItem)vm).Passed ? "AccentSuccessSubtleForeground" : "AccentDangerSubtleForeground"),
             Checkbox = null,
-            LeftGlyph = null,
-            RightText = null,
-            RightTextSemiBold = false,
-            ShowActionPills = false,
-            Question = null,
-            Options = null,
-            ResultText = null,
-            BorderColorKey = "Transparent",
-            BorderThicknessDip = 0,
-        });
-
-    private static readonly SkiaTileRenderer CombineSelectedRow = new FluidRowRenderer(
-        new FluidRowSpec
-        {
-            Key = KeyCombineSelectedRow,
-            CardBackgroundKey = "HoverBackground",
-            CardBorderKey = "Transparent",
-            RadiusDip = 10,
-            PaddingDip = 10,
-            MarginBottomDip = 8,
-            TitleSize = 13f,
-            Title = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).Title,
-            Lines =
-            [
-                (vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).CardCountText, 12f, false),
-            ],
-            IsVisible = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).IsSelected,
-            Chip = null,
-            Checkbox = vm => ((FlashcardCombineWindow.FlashcardCombineItem)vm).IsSelected,
-            LeftGlyph = null,
-            RightText = null,
-            RightTextSemiBold = false,
-            ShowActionPills = false,
-            Question = null,
-            Options = null,
-            ResultText = null,
-            BorderColorKey = "Transparent",
-            BorderThicknessDip = 0,
-        });
-
-    private static readonly SkiaTileRenderer QuizLibrarySelectedRow = new FluidRowRenderer(
-        new FluidRowSpec
-        {
-            Key = KeyQuizLibrarySelectedRow,
-            CardBackgroundKey = "HoverBackground",
-            CardBorderKey = "Transparent",
-            RadiusDip = 10,
-            PaddingDip = 10,
-            MarginBottomDip = 8,
-            TitleSize = 13f,
-            Title = vm => ((QuizLibraryItemViewModel)vm).Title,
-            Lines =
-            [
-                (vm => ((QuizLibraryItemViewModel)vm).QuestionCountText, 12f, false),
-            ],
-            IsVisible = vm => ((QuizLibraryItemViewModel)vm).IsSelected,
-            Chip = null,
-            Checkbox = vm => ((QuizLibraryItemViewModel)vm).IsSelected,
             LeftGlyph = null,
             RightText = null,
             RightTextSemiBold = false,
@@ -506,6 +463,7 @@ internal static class SkiaTileRenderers
 
     public static SkiaTileRenderer? ForKey(string key) => key switch
     {
+        KeyFlashcardGridCard => FlashcardGridCard,
         KeyNotes => Notes,
         KeyFlashcardSet => FlashcardSet,
         KeyFlashcardSetUngrouped => FlashcardSetUngrouped,
@@ -525,8 +483,6 @@ internal static class SkiaTileRenderers
         KeyQuizResultRow => QuizResultRow,
         KeyStudyHistoryRow => StudyHistoryRow,
         KeyAttemptHistoryRow => AttemptHistoryRow,
-        KeyCombineSelectedRow => CombineSelectedRow,
-        KeyQuizLibrarySelectedRow => QuizLibrarySelectedRow,
         _ => null,
     };
 }
@@ -566,20 +522,18 @@ internal sealed class NotesTileRenderer : SkiaTileRenderer
         var doc = vm.Document;
         // Document fields and the generation counter only. Content parses a FlowDocument and
         // must not run on the scroll path that asks for this signature.
-        return $"{ThemeManager.CurrentTheme}|{doc.Title}|{doc.LastModified.Ticks}|{vm.ContentGeneration}|{vm.TagsDisplay}|{doc.IsPinned}|{vm.HasSchedule}";
+        return $"{ThemeManager.CurrentTheme}|surface-v2|{doc.Title}|{doc.LastModified.Ticks}|{vm.ContentGeneration}|{vm.TagsDisplay}|{doc.IsPinned}|{vm.HasSchedule}";
     }
 
     private CardRenderColors ResolveColors()
     {
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        var theme = (ThemeManager.CurrentTheme ?? string.Empty) + "|surface-v2|" + SurfaceMaterialRaster.ResourceDark;
         if (_colorsKey == theme)
             return _colors;
 
         System.Windows.Media.Color Get(string key, System.Windows.Media.Color fallback)
         {
-            if (System.Windows.Application.Current?.TryFindResource(key) is System.Windows.Media.SolidColorBrush brush)
-                return brush.Color;
-            return fallback;
+            return DashboardSelectionPaint.ResolveColor(key, fallback);
         }
 
         var background = Get("NoteCardBackground", System.Windows.Media.Colors.White);
@@ -595,7 +549,7 @@ internal sealed class NotesTileRenderer : SkiaTileRenderer
             ToSkia(title),
             ToSkia(text),
             ToSkia(tagBackground),
-            ToSkia(tagText));
+            ToSkia(tagText), Dark: SurfaceMaterialRaster.ResourceDark);
         _colorsKey = theme;
         return _colors;
     }
@@ -607,6 +561,9 @@ internal sealed class NotesTileRenderer : SkiaTileRenderer
 /// <summary>Shared layout spec for the flashcard-set / quiz / mind-map listing cards.</summary>
 internal sealed class ListingCardSpec
 {
+    public float TitleSize = 14.5f;
+    public float DetailSize = 12f;
+    public float BadgeSize = 11f;
     public required string Key;
     public required float BitmapWidthDip;
     public required float BitmapHeightDip;
@@ -658,7 +615,8 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         using (var background = new SKPaint { Color = colors.CardBackground, IsAntialias = true })
         {
             var radius = 14f * scale;
-            canvas.DrawRoundRect(cardRect, radius, radius, background);
+            SurfaceMaterialRaster.Draw(canvas, cardRect, radius, radius, background, colors.Dark, scale,
+                SurfaceMaterialKind.Raised, frameInset: scale);
         }
 
         if (colors.Border.Alpha > 0)
@@ -668,11 +626,15 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
                 Color = colors.Border,
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = 1f * scale,
+                StrokeWidth = scale,
             };
-            var radius = 14f * scale;
-            canvas.DrawRoundRect(cardRect, radius, radius, border);
+            var radius = 14.5f * scale;
+            var rim = cardRect;
+            rim.Inflate(-border.StrokeWidth / 2, -border.StrokeWidth / 2);
+            canvas.DrawRoundRect(rim, Math.Max(0, radius - border.StrokeWidth / 2), Math.Max(0, radius - border.StrokeWidth / 2), border);
         }
+        SurfaceMaterialRaster.LightRaisedFrame(canvas, cardRect, 14, colors.Border, colors.Dark, scale);
+
 
         var fontManager = SKFontManager.Default;
         Func<SKTypeface, SkiaSharp.HarfBuzz.SKShaper> shaperFactory = SkiaCardRenderer.GetShaper;
@@ -692,7 +654,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
 
         var titleMaxWidth = _spec.CardWidthDip * scale - padding * 2 - (ai ? 30f * scale : 0) - (pinned ? 16f * scale : 0) - (scheduled ? 15f * scale : 0) - 20f * scale;
 
-        var titleLayout = SkiaTextLayout.Layout(title, titleMaxWidth, titleTypeface, 14.5f * scale, 1, fontManager, shaperFactory);
+        var titleLayout = SkiaTextLayout.Layout(title, titleMaxWidth, titleTypeface, _spec.TitleSize * scale, 1, fontManager, shaperFactory);
         var titleX = x;
         if (ai)
         {
@@ -729,7 +691,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
 
         // Count line (+ optional secondary count + due chip + next-review).
         var countText = _spec.CountLine(viewModel);
-        var countFontSize = _spec.Scale < 1f ? 13f : 12f;
+        var countFontSize = _spec.DetailSize;
         var countLayout = SkiaTextLayout.Layout(countText, _spec.CardWidthDip * scale - padding * 2, bodyTypeface, countFontSize * scale, 1, fontManager, shaperFactory);
         SkiaCardRenderer.PaintLayout(canvas, countLayout, x, y, colors.TextSecondary, scale);
         var countEndX = x + countLayout.MaxIntrinsicWidth;
@@ -746,17 +708,17 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         {
             var chipText = _spec.DueChipText(viewModel);
             using var chipBg = new SKPaint { Color = colors.DueChipBackground, IsAntialias = true };
-            using var chipFont = new SKFont(bodyTypeface, 11f * scale);
+            using var chipFont = new SKFont(bodyTypeface, _spec.BadgeSize * scale);
             var chipWidth = chipFont.MeasureText(chipText);
-            var chipRect = SKRect.Create(countEndX + 6f * scale, y - 1f * scale, chipWidth + 12f * scale, 16f * scale);
-            canvas.DrawRoundRect(chipRect, 8f * scale, 8f * scale, chipBg);
-            var chipLayout = SkiaTextLayout.Layout(chipText, chipWidth + 12f * scale, bodyTypeface, 11f * scale, 1, fontManager, shaperFactory);
+            var chipRect = SKRect.Create(countEndX + 6f * scale, y - 1f * scale, chipWidth + 12f * scale, (_spec.BadgeSize + 5f) * scale);
+            SurfaceMaterialRaster.Draw(canvas, chipRect, 8f * scale, 8f * scale, chipBg, colors.Dark, scale, SurfaceMaterialKind.Tinted);
+            var chipLayout = SkiaTextLayout.Layout(chipText, chipWidth + 12f * scale, bodyTypeface, _spec.BadgeSize * scale, 1, fontManager, shaperFactory);
             SkiaCardRenderer.PaintLayout(canvas, chipLayout, chipRect.Left + 6f * scale, y - 1f * scale, colors.DueChipForeground, scale);
         }
         else if (_spec.ShowNextReview(viewModel))
         {
             var next = _spec.DueChipText(viewModel);
-            var nextLayout = SkiaTextLayout.Layout(next, _spec.CardWidthDip * scale - padding * 2 - countLayout.MaxIntrinsicWidth, bodyTypeface, 12f * scale, 1, fontManager, shaperFactory);
+            var nextLayout = SkiaTextLayout.Layout(next, _spec.CardWidthDip * scale - padding * 2 - countLayout.MaxIntrinsicWidth, bodyTypeface, _spec.DetailSize * scale, 1, fontManager, shaperFactory);
             SkiaCardRenderer.PaintLayout(canvas, nextLayout, countEndX + 6f * scale, y, colors.TextSecondary, scale);
         }
 
@@ -770,7 +732,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
             using var tagFont = new SKFont(bodyTypeface, 11f * scale);
             var tagWidth = tagFont.MeasureText(tags);
             var tagRect = SKRect.Create(x, y, tagWidth + 16f * scale, 22f * scale);
-            canvas.DrawRoundRect(tagRect, 11f * scale, 11f * scale, tagBg);
+            SurfaceMaterialRaster.Draw(canvas, tagRect, 11f * scale, 11f * scale, tagBg, colors.Dark, scale, SurfaceMaterialKind.Tinted);
             var tagLayout = SkiaTextLayout.Layout(tags, tagWidth + 16f * scale, bodyTypeface, 11f * scale, 1, fontManager, shaperFactory);
             SkiaCardRenderer.PaintLayout(canvas, tagLayout, tagRect.Left + 8f * scale, y + 3f * scale, colors.TagForeground, scale);
         }
@@ -806,7 +768,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
         var scheduled = _spec.HasSchedule(viewModel);
         var ai = _spec.IsAi(viewModel);
         var due = _spec.HasDueChip(viewModel);
-        return $"{ThemeManager.CurrentTheme}|{_spec.Title(viewModel)}|{_spec.CountLine(viewModel)}|{_spec.Tags(viewModel)}|{pinned}|{scheduled}|{ai}|{due}";
+        return $"{ThemeManager.CurrentTheme}|surface-v2|{_spec.Title(viewModel)}|{_spec.CountLine(viewModel)}|{_spec.Tags(viewModel)}|{pinned}|{scheduled}|{ai}|{due}";
     }
 
     private static void DrawPinGlyph(SKCanvas canvas, float x, float y, float size, SKColor color)
@@ -862,19 +824,18 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
 
     private ListingCardColors ResolveColors()
     {
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        var theme = (ThemeManager.CurrentTheme ?? string.Empty) + "|surface-v2|" + SurfaceMaterialRaster.ResourceDark;
         if (_colorsByTheme.TryGetValue(theme, out var cached))
             return cached;
 
         System.Windows.Media.Color Get(string key, System.Windows.Media.Color fallback)
         {
-            if (System.Windows.Application.Current?.TryFindResource(key) is System.Windows.Media.SolidColorBrush brush)
-                return brush.Color;
-            return fallback;
+            return DashboardSelectionPaint.ResolveColor(key, fallback);
         }
 
         var colors = new ListingCardColors
         {
+            Dark = SurfaceMaterialRaster.ResourceDark,
             CardBackground = ToSkia(Get("CardBackground", System.Windows.Media.Colors.White)),
             Border = ToSkia(Get("NoteCardBorder", System.Windows.Media.Colors.Transparent)),
             Text = ToSkia(Get("TextColor", System.Windows.Media.Color.FromRgb(28, 28, 28))),
@@ -896,6 +857,7 @@ internal sealed class ListingTileRenderer : SkiaTileRenderer
 
 internal sealed class ListingCardColors
 {
+    public bool Dark { get; init; }
     public required SKColor CardBackground;
     public required SKColor Border;
     public required SKColor Text;
@@ -926,6 +888,8 @@ internal sealed class RecentCardRenderer : SkiaTileRenderer
     private const float MinContentWidthDip = 118f;
     private const float MaxContentWidthDip = 176f;
     private const float CardPaddingDip = 11f;
+    private const float CardVerticalPaddingDip = 8f;
+    private const float CardVerticalMarginDip = 5f;
 
     private readonly RecentCardSpec _spec;
     private readonly Dictionary<string, RecentCardColors> _colorsByTheme = new();
@@ -948,21 +912,31 @@ internal sealed class RecentCardRenderer : SkiaTileRenderer
         var titleLayout = SkiaTextLayout.Layout(title, MaxContentWidthDip * dpi, titleTypeface, _spec.TitleSize * dpi, 1, fontManager, shaperFactory);
         var contentWidth = Math.Clamp((float)Math.Ceiling(titleLayout.MaxIntrinsicWidth), MinContentWidthDip, MaxContentWidthDip);
         var cardWidth = contentWidth + CardPaddingDip * 2;
-        var innerHeight = CardPaddingDip + titleLayout.Height + 3f * dpi + 16f * dpi + CardPaddingDip;
+        var secondary = _spec.Secondary?.Invoke(viewModel);
+        var secondaryLayout = string.IsNullOrEmpty(secondary)
+            ? null
+            : SkiaTextLayout.Layout(secondary, contentWidth * dpi, bodyTypeface, 13f * dpi, 1, fontManager, shaperFactory);
+        var date = _spec.Date(viewModel);
+        var dateLayout = SkiaTextLayout.Layout(date, contentWidth * dpi, bodyTypeface, 13f * dpi, 1, fontManager, shaperFactory);
+        var innerHeight = CardVerticalPaddingDip
+            + titleLayout.Height + 3f * dpi
+            + (secondaryLayout is null ? 0 : secondaryLayout.Height + 2f * dpi)
+            + dateLayout.Height
+            + CardVerticalPaddingDip;
         var cardHeight = innerHeight;
         var bitmapWidth = (int)Math.Ceiling((cardWidth + 7f) * dpi);
-        var bitmapHeight = (int)Math.Ceiling(cardHeight * dpi);
-        heightDip = cardHeight;
+        var bitmapHeight = (int)Math.Ceiling((cardHeight + CardVerticalMarginDip * 2) * dpi);
+        heightDip = cardHeight + CardVerticalMarginDip * 2;
 
         var bitmap = new SKBitmap(bitmapWidth, bitmapHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
         canvas.Clear(SKColors.Transparent);
 
-        var cardRect = SKRect.Create(0, 0, cardWidth * dpi, cardHeight * dpi);
+        var cardRect = SKRect.Create(0, CardVerticalMarginDip * dpi, cardWidth * dpi, cardHeight * dpi);
         using (var background = new SKPaint { Color = colors.CardBackground, IsAntialias = true })
         {
             var radius = 10f * dpi;
-            canvas.DrawRoundRect(cardRect, radius, radius, background);
+            SurfaceMaterialRaster.Draw(canvas, cardRect, radius, radius, background, colors.Dark, dpi, SurfaceMaterialKind.Raised, frameInset: dpi);
         }
 
         if (colors.Border.Alpha > 0)
@@ -977,22 +951,20 @@ internal sealed class RecentCardRenderer : SkiaTileRenderer
             var radius = 10f * dpi;
             canvas.DrawRoundRect(cardRect, radius, radius, border);
         }
+        SurfaceMaterialRaster.LightRaisedFrame(canvas, cardRect, 10, colors.Border, colors.Dark, dpi);
+
 
         var x = CardPaddingDip * dpi;
-        var y = CardPaddingDip * dpi;
+        var y = (CardVerticalMarginDip + CardVerticalPaddingDip) * dpi;
         SkiaCardRenderer.PaintLayout(canvas, titleLayout, x, y, colors.Text, dpi);
         y += titleLayout.Height + 3f * dpi;
 
-        if (_spec.Secondary is { } secondaryGetter)
+        if (secondaryLayout is not null)
         {
-            var secondary = secondaryGetter(viewModel);
-            var secondaryLayout = SkiaTextLayout.Layout(secondary, contentWidth * dpi, bodyTypeface, 13f * dpi, 1, fontManager, shaperFactory);
             SkiaCardRenderer.PaintLayout(canvas, secondaryLayout, x, y, colors.TextSecondary, dpi);
-            y += secondaryLayout.Height + 3f * dpi;
+            y += secondaryLayout.Height + 2f * dpi;
         }
 
-        var date = _spec.Date(viewModel);
-        var dateLayout = SkiaTextLayout.Layout(date, contentWidth * dpi, bodyTypeface, 13f * dpi, 1, fontManager, shaperFactory);
         SkiaCardRenderer.PaintLayout(canvas, dateLayout, x, y, _spec.DateSecondaryColor ? colors.TextSecondary : colors.Text, dpi);
 
         return bitmap;
@@ -1019,7 +991,7 @@ internal sealed class RecentCardRenderer : SkiaTileRenderer
     }
 
     public override string BuildSignature(object viewModel)
-        => $"{ThemeManager.CurrentTheme}|{_spec.Title(viewModel)}|{_spec.Secondary?.Invoke(viewModel)}|{_spec.Date(viewModel)}";
+        => $"{ThemeManager.CurrentTheme}|surface-v2|{_spec.Title(viewModel)}|{_spec.Secondary?.Invoke(viewModel)}|{_spec.Date(viewModel)}";
 
     private string ResolveFontFamily()
     {
@@ -1038,19 +1010,18 @@ internal sealed class RecentCardRenderer : SkiaTileRenderer
 
     private RecentCardColors ResolveColors()
     {
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        var theme = (ThemeManager.CurrentTheme ?? string.Empty) + "|surface-v2|" + SurfaceMaterialRaster.ResourceDark;
         if (_colorsByTheme.TryGetValue(theme, out var cached))
             return cached;
 
         System.Windows.Media.Color Get(string key, System.Windows.Media.Color fallback)
         {
-            if (System.Windows.Application.Current?.TryFindResource(key) is System.Windows.Media.SolidColorBrush brush)
-                return brush.Color;
-            return fallback;
+            return DashboardSelectionPaint.ResolveColor(key, fallback);
         }
 
         var colors = new RecentCardColors
         {
+            Dark = SurfaceMaterialRaster.ResourceDark,
             CardBackground = ToSkia(Get("CardBackground", System.Windows.Media.Colors.White)),
             Border = ToSkia(Get("NoteCardBorder", System.Windows.Media.Colors.Transparent)),
             Text = ToSkia(Get("TextColor", System.Windows.Media.Color.FromRgb(28, 28, 28))),
@@ -1067,6 +1038,7 @@ internal sealed class RecentCardRenderer : SkiaTileRenderer
 
 internal sealed class RecentCardColors
 {
+    public bool Dark { get; init; }
     public required SKColor CardBackground;
     public required SKColor Border;
     public required SKColor Text;
@@ -1130,7 +1102,7 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
 
         var cardRect = SKRect.Create(0, 0, width, rowHeightDip);
         using (var background = new SKPaint { Color = colors.CardBackground, IsAntialias = true })
-            canvas.DrawRoundRect(cardRect, RadiusDip * dpi, RadiusDip * dpi, background);
+            SurfaceMaterialRaster.Draw(canvas, cardRect, RadiusDip * dpi, RadiusDip * dpi, background, colors.Dark, dpi, SurfaceMaterialKind.Tinted);
 
         var x = PaddingDip * dpi;
         var y = PaddingDip * dpi;
@@ -1200,7 +1172,7 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
     public override string BuildSignature(object viewModel)
     {
         var item = (Views.QuizModeWindow.QuizResultItem)viewModel;
-        return $"{ThemeManager.CurrentTheme}|{item.IsCorrect}|{item.HeaderText}|{item.UserAnswerText}|{item.CorrectAnswerText}|{item.Explanation}";
+        return $"{ThemeManager.CurrentTheme}|surface-v2|{item.IsCorrect}|{item.HeaderText}|{item.UserAnswerText}|{item.CorrectAnswerText}|{item.Explanation}";
     }
 
     private string ResolveFontFamily()
@@ -1220,7 +1192,7 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
 
     private QuizResultColors ResolveColors(bool isCorrect)
     {
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        var theme = (ThemeManager.CurrentTheme ?? string.Empty) + "|surface-v2|" + SurfaceMaterialRaster.ResourceDark;
         var key = $"{theme}|{isCorrect}";
         if (_colorsByTheme.TryGetValue(key, out var cached))
             return cached;
@@ -1234,6 +1206,7 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
         var foregroundKey = isCorrect ? "AccentSuccessSubtleForeground" : "AccentDangerSubtleForeground";
         var colors = new QuizResultColors
         {
+            Dark = SurfaceMaterialRaster.ResourceDark,
             CardBackground = ToSkia(Get(backgroundKey, System.Windows.Media.Color.FromRgb(isCorrect ? (byte)230 : (byte)250, isCorrect ? (byte)246 : (byte)228, isCorrect ? (byte)235 : (byte)227))),
             AccentForeground = ToSkia(Get(foregroundKey, System.Windows.Media.Colors.Black)),
             SuccessForeground = ToSkia(Get("AccentSuccessSubtleForeground", System.Windows.Media.Color.FromRgb(0, 128, 70))),
@@ -1250,6 +1223,7 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
 
     private sealed class QuizResultColors
     {
+    public bool Dark { get; init; }
         public required SKColor CardBackground;
         public required SKColor AccentForeground;
         public required SKColor SuccessForeground;
@@ -1258,287 +1232,27 @@ internal sealed class QuizResultCardRenderer : SkiaTileRenderer
     }
 }
 
-/// <summary>Tile renderer for the flashcard browse-grid flip cards (question/answer faces).
-/// Fixed 316x224 footprint matching the live FlashcardGridCardStyle; audio/edit/move buttons
-/// are interactive chrome and deliberately omitted, like every other dashboard tile.</summary>
+/// <summary>Replays the browse-grid card's frozen native paint, including its buttons,
+/// question/answer face, selection and current typography.</summary>
 internal sealed class FlashcardGridCardRenderer : SkiaTileRenderer
 {
-    private const float CardWidthDip = 316f;
-    private const float CardHeightDip = 224f;
-    private const float RadiusDip = 14f;
-    private const float ChipRadiusDip = 8f;
-    private const float PaddingDip = 16f;
-    private const float HeaderHeightDip = 24f;
-    private const float HeaderGapDip = 14f;
-    private const float BodyGapDip = 12f;
-    private const float ImageWellHeightDip = 76f;
-    private const float ImageWellGapDip = 6f;
-    private const float StarSizeDip = 13f;
-
-    private readonly Dictionary<string, FlashcardGridColors> _colorsByTheme = new();
-
-    public override SKBitmap Render(object viewModel, double dpiScale, float widthDip, out double heightDip)
-    {
-        var item = (Views.FlashcardsPreviewWindow.FlashcardPreviewItem)viewModel;
-        var dpi = (float)dpiScale;
-        var colors = ResolveColors();
-        var isFlipped = item.IsFlipped;
-
-        var bitmapWidth = (int)Math.Ceiling(CardWidthDip * dpi);
-        var bitmapHeight = (int)Math.Ceiling(CardHeightDip * dpi);
-        var bitmap = new SKBitmap(bitmapWidth, bitmapHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
-        using var canvas = new SKCanvas(bitmap);
-        canvas.Clear(SKColors.Transparent);
-
-        var fontManager = SKFontManager.Default;
-        Func<SKTypeface, SkiaSharp.HarfBuzz.SKShaper> shaperFactory = SkiaCardRenderer.GetShaper;
-        var chipTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 600);
-        var bodyTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 600);
-
-        var cardRect = SKRect.Create(0, 0, CardWidthDip * dpi, CardHeightDip * dpi);
-        var selected = item.IsSelected;
-
-        using (var background = new SKPaint
-        {
-            Color = selected ? colors.SelectedBackground : colors.CardBackground,
-            IsAntialias = true,
-        })
-            canvas.DrawRoundRect(cardRect, RadiusDip * dpi, RadiusDip * dpi, background);
-
-        using (var borderPaint = new SKPaint
-        {
-            Color = selected ? colors.SelectedBorder : colors.CardBorder,
-            IsAntialias = true,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = (selected ? 2f : 1f) * dpi,
-        })
-        {
-            var inset = borderPaint.StrokeWidth / 2f;
-            canvas.DrawRoundRect(
-                new SKRect(inset, inset, CardWidthDip * dpi - inset, CardHeightDip * dpi - inset),
-                RadiusDip * dpi,
-                RadiusDip * dpi,
-                borderPaint);
-        }
-
-        var bodyText = isFlipped ? item.Answer : item.Question;
-        var bodyImage = isFlipped ? item.AnswerImageSource : item.QuestionImageSource;
-        var imageFileName = isFlipped ? item.AnswerImageFileName : item.QuestionImageFileName;
-
-        var innerWidth = CardWidthDip - PaddingDip * 2;
-        var bodyTop = PaddingDip + HeaderHeightDip + HeaderGapDip;
-        var bodyBottom = CardHeightDip - PaddingDip - BodyGapDip - 21f;
-        var bodyHeight = bodyBottom - bodyTop;
-        var hasImage = bodyImage is System.Windows.Media.Imaging.BitmapSource;
-
-        // Header row: side chip + star.
-        var chipText = LocalizationService.GetString(isFlipped ? "FlashcardSideAnswer" : "FlashcardSideQuestion");
-        var chipLayout = SkiaTextLayout.Layout(chipText, 132f * dpi, chipTypeface, 11f * dpi, 1, fontManager, shaperFactory);
-        var chipWidth = 8f * dpi * 2 + chipLayout.MaxIntrinsicWidth;
-        var chipHeight = 6f * dpi + chipLayout.Height;
-        var chipY = (HeaderHeightDip - chipHeight / dpi) / 2f * dpi;
-        using (var chipPaint = new SKPaint { Color = colors.SideChipBackground, IsAntialias = true })
-            canvas.DrawRoundRect(SKRect.Create(PaddingDip * dpi, chipY, chipWidth, chipHeight), ChipRadiusDip * dpi, ChipRadiusDip * dpi, chipPaint);
-        SkiaCardRenderer.PaintLayout(canvas, chipLayout, (PaddingDip + 8f) * dpi, chipY + 3f * dpi, colors.SideChipForeground, dpi);
-
-        DrawStar(
-            canvas,
-            new SKPoint((CardWidthDip - PaddingDip - StarSizeDip / 2f) * dpi, (PaddingDip + HeaderHeightDip / 2f) * dpi),
-            StarSizeDip / 2f * dpi,
-            item.IsStarred ? colors.StarGold : colors.TextSecondary,
-            dpi);
-
-        // Body: optional image well, then the question/answer text centered in the remainder.
-        float textTop = bodyTop * dpi;
-        float textRegionHeight = bodyHeight * dpi;
-        if (hasImage && bodyImage is System.Windows.Media.Imaging.BitmapSource bitmapSource)
-        {
-            using var imagePaint = new SKPaint { Color = colors.ImageWell, IsAntialias = true };
-            canvas.DrawRoundRect(
-                SKRect.Create(PaddingDip * dpi, bodyTop * dpi, innerWidth * dpi, ImageWellHeightDip * dpi),
-                10f * dpi,
-                10f * dpi,
-                imagePaint);
-
-            using var skImage = SkiaBitmapUtil.FromSource(bitmapSource);
-            var scale = Math.Min(innerWidth / (float)skImage.Width, ImageWellHeightDip / (float)skImage.Height);
-            var drawWidth = skImage.Width * scale * dpi;
-            var drawHeight = skImage.Height * scale * dpi;
-            var dest = SKRect.Create(
-                (PaddingDip + (innerWidth - skImage.Width * scale) / 2f) * dpi,
-                (bodyTop + (ImageWellHeightDip - skImage.Height * scale) / 2f) * dpi,
-                drawWidth,
-                drawHeight);
-            canvas.DrawBitmap(
-                skImage,
-                new SKRect(0, 0, skImage.Width, skImage.Height),
-                dest,
-                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
-
-            textTop = (bodyTop + ImageWellHeightDip + ImageWellGapDip) * dpi;
-            textRegionHeight = (bodyBottom - bodyTop - ImageWellHeightDip - ImageWellGapDip) * dpi;
-        }
-
-        if (!string.IsNullOrWhiteSpace(bodyText))
-        {
-            var maxLines = hasImage ? 2 : 4;
-            var textLayout = SkiaTextLayout.Layout(bodyText, innerWidth * dpi, bodyTypeface, 16f * dpi, maxLines, fontManager, shaperFactory);
-            var textHeight = textLayout.Height;
-            var textY = textTop + Math.Max(0f, (textRegionHeight - textHeight) / 2f);
-            SkiaCardRenderer.PaintLayout(canvas, textLayout, PaddingDip * dpi, textY, colors.Text, dpi);
-        }
-
-        // Status row: category chip + one maturity chip (New / Learning / Mature).
-        var statusY = (CardHeightDip - PaddingDip - 21f) * dpi;
-        var statusX = PaddingDip * dpi;
-        if (item.HasCategory)
-        {
-            var categoryLayout = SkiaTextLayout.Layout(item.Category, 176f * dpi, chipTypeface, 11f * dpi, 1, fontManager, shaperFactory);
-            var categoryWidth = 8f * dpi * 2 + categoryLayout.MaxIntrinsicWidth;
-            using var chipPaint = new SKPaint { Color = colors.CategoryChipBackground, IsAntialias = true };
-            canvas.DrawRoundRect(SKRect.Create(statusX, statusY, categoryWidth, 21f * dpi), ChipRadiusDip * dpi, ChipRadiusDip * dpi, chipPaint);
-            SkiaCardRenderer.PaintLayout(canvas, categoryLayout, statusX + 8f * dpi, statusY + 3f * dpi, colors.CategoryChipForeground, dpi);
-            statusX += categoryWidth + 8f * dpi;
-        }
-
-        (string Text, SKColor Background, SKColor Foreground)? maturity = item.IsMaturityNew
-            ? (LocalizationService.GetString("FlashcardStatusNew"), colors.NewChipBackground, colors.NewChipForeground)
-            : item.IsMaturityLearning
-                ? (LocalizationService.GetString("FlashcardStatusLearning"), colors.LearningChipBackground, colors.LearningChipForeground)
-                : item.IsMaturityMature
-                    ? (LocalizationService.GetString("FlashcardStatusMature"), colors.MatureChipBackground, colors.MatureChipForeground)
-                    : null;
-
-        if (maturity is { } chip)
-        {
-            var maturityLayout = SkiaTextLayout.Layout(chip.Text, 132f * dpi, chipTypeface, 11f * dpi, 1, fontManager, shaperFactory);
-            var maturityWidth = 8f * dpi * 2 + maturityLayout.MaxIntrinsicWidth;
-            using var chipPaint = new SKPaint { Color = chip.Background, IsAntialias = true };
-            canvas.DrawRoundRect(SKRect.Create(statusX, statusY, maturityWidth, 21f * dpi), ChipRadiusDip * dpi, ChipRadiusDip * dpi, chipPaint);
-            SkiaCardRenderer.PaintLayout(canvas, maturityLayout, statusX + 8f * dpi, statusY + 3f * dpi, chip.Foreground, dpi);
-        }
-
-        heightDip = CardHeightDip;
-        return bitmap;
-    }
+    // The live card supplies its immutable paint instructions. Keeping a separate
+    // hand-written skin here previously omitted buttons and diverged from typography.
+    public override SKBitmap Render(object input, double dpiScale, float widthDip, out double heightDip)
+        => ((FrozenCardDrawing)input).Render(dpiScale, out heightDip);
 
     public override SKBitmap RenderPlaceholder(double dpiScale)
     {
-        var dpi = (float)dpiScale;
-        var colors = ResolveColors();
-        var bitmap = new SKBitmap(
-            (int)Math.Ceiling(CardWidthDip * dpi),
-            (int)Math.Ceiling(CardHeightDip * dpi),
-            SKColorType.Bgra8888,
-            SKAlphaType.Premul);
-        using var canvas = new SKCanvas(bitmap);
-        canvas.Clear(SKColors.Transparent);
-        using var paint = new SKPaint { Color = colors.CardBackground, IsAntialias = true };
-        canvas.DrawRoundRect(SKRect.Create(0, 0, CardWidthDip * dpi, CardHeightDip * dpi), RadiusDip * dpi, RadiusDip * dpi, paint);
-        return bitmap;
+        var bitmap = new SKBitmap((int)Math.Ceiling(316 * dpiScale), (int)Math.Ceiling(224 * dpiScale), SKColorType.Bgra8888, SKAlphaType.Premul);
+        bitmap.Erase(SKColors.Transparent); return bitmap;
     }
 
     public override string BuildSignature(object viewModel)
     {
         var item = (Views.FlashcardsPreviewWindow.FlashcardPreviewItem)viewModel;
-        return $"{ThemeManager.CurrentTheme}|{item.IsFlipped}|{item.Question}|{item.Answer}|{item.Category}|" +
+        return $"{ThemeManager.CurrentTheme}|{System.Globalization.CultureInfo.CurrentUICulture.Name}|native-paint-v1|{item.IsFlipped}|{item.Question.Length}:{item.Question}|{item.Answer.Length}:{item.Answer}|{item.Category.Length}:{item.Category}|" +
                $"{item.IsStarred}|{item.IsSelected}|{item.IsMaturityNew}|{item.IsMaturityLearning}|{item.IsMaturityMature}|" +
-               $"{item.QuestionImageFileName}|{item.AnswerImageFileName}";
-    }
-
-    private static void DrawStar(SKCanvas canvas, SKPoint center, float outerRadius, SKColor color, float dpi)
-    {
-        using var path = new SKPathBuilder();
-        const int points = 5;
-        for (var i = 0; i < points * 2; i++)
-        {
-            var radius = i % 2 == 0 ? outerRadius : outerRadius * 0.45f;
-            var angle = Math.PI / 2 + i * Math.PI / points;
-            var x = center.X + (float)Math.Cos(angle) * radius;
-            var y = center.Y - (float)Math.Sin(angle) * radius;
-            if (i == 0) path.MoveTo(x, y);
-            else path.LineTo(x, y);
-        }
-        path.Close();
-        using var paint = new SKPaint { Color = color, IsAntialias = true, Style = SKPaintStyle.Fill };
-        canvas.DrawPath(path.Detach(), paint);
-    }
-
-    private string ResolveFontFamily()
-    {
-        try
-        {
-            var app = System.Windows.Application.Current;
-            var family = app?.Resources["FontFamily.UI"] as System.Windows.Media.FontFamily;
-            var source = family?.Source ?? "Segoe UI Variable Text";
-            return source.Split(',')[0].Trim();
-        }
-        catch
-        {
-            return "Segoe UI";
-        }
-    }
-
-    private FlashcardGridColors ResolveColors()
-    {
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
-        if (_colorsByTheme.TryGetValue(theme, out var cached))
-            return cached;
-
-        System.Windows.Media.Color Get(string resKey, System.Windows.Media.Color fallback)
-            => System.Windows.Application.Current?.TryFindResource(resKey) is System.Windows.Media.SolidColorBrush brush
-                ? brush.Color
-                : fallback;
-
-        var colors = new FlashcardGridColors
-        {
-            CardBackground = ToSkia(Get("FlashcardCardBackground", System.Windows.Media.Color.FromRgb(255, 255, 255))),
-            CardBorder = ToSkia(Get("FlashcardCardBorder", System.Windows.Media.Color.FromRgb(226, 229, 235))),
-            SelectedBackground = ToSkia(Get("FlashcardCardSelectedBackground", System.Windows.Media.Color.FromRgb(235, 240, 255))),
-            SelectedBorder = ToSkia(Get("FlashcardCardSelectedBorder", System.Windows.Media.Color.FromRgb(88, 108, 200))),
-            SideChipBackground = ToSkia(Get("FlashcardSideChipBackground", System.Windows.Media.Color.FromRgb(240, 242, 247))),
-            SideChipForeground = ToSkia(Get("FlashcardSideChipForeground", System.Windows.Media.Color.FromRgb(74, 84, 104))),
-            CategoryChipBackground = ToSkia(Get("FlashcardCategoryChipBackground", System.Windows.Media.Color.FromRgb(237, 239, 255))),
-            CategoryChipForeground = ToSkia(Get("FlashcardCategoryChipForeground", System.Windows.Media.Color.FromRgb(88, 98, 200))),
-            NewChipBackground = ToSkia(Get("FlashcardNewChipBackground", System.Windows.Media.Color.FromRgb(240, 242, 247))),
-            NewChipForeground = ToSkia(Get("FlashcardNewChipForeground", System.Windows.Media.Color.FromRgb(74, 84, 104))),
-            LearningChipBackground = ToSkia(Get("FlashcardUnknownChipBackground", System.Windows.Media.Color.FromRgb(255, 243, 224))),
-            LearningChipForeground = ToSkia(Get("FlashcardUnknownChipForeground", System.Windows.Media.Color.FromRgb(176, 98, 22))),
-            MatureChipBackground = ToSkia(Get("FlashcardKnownChipBackground", System.Windows.Media.Color.FromRgb(229, 246, 235))),
-            MatureChipForeground = ToSkia(Get("FlashcardKnownChipForeground", System.Windows.Media.Color.FromRgb(20, 128, 70))),
-            Text = ToSkia(Get("TextColor", System.Windows.Media.Color.FromRgb(28, 28, 28))),
-            TextSecondary = ToSkia(Get("TextColorSecondary", System.Windows.Media.Color.FromRgb(96, 100, 110))),
-            ImageWell = ToSkia(Get("SidebarBackground", System.Windows.Media.Color.FromRgb(238, 240, 245))),
-            StarGold = ToSkia(Get("AccentWarning", System.Windows.Media.Color.FromRgb(220, 165, 40))),
-        };
-
-        _colorsByTheme[theme] = colors;
-        return colors;
-    }
-
-    private static SKColor ToSkia(System.Windows.Media.Color c)
-        => new(c.R, c.G, c.B, c.A);
-
-    private sealed class FlashcardGridColors
-    {
-        public required SKColor CardBackground;
-        public required SKColor CardBorder;
-        public required SKColor SelectedBackground;
-        public required SKColor SelectedBorder;
-        public required SKColor SideChipBackground;
-        public required SKColor SideChipForeground;
-        public required SKColor CategoryChipBackground;
-        public required SKColor CategoryChipForeground;
-        public required SKColor NewChipBackground;
-        public required SKColor NewChipForeground;
-        public required SKColor LearningChipBackground;
-        public required SKColor LearningChipForeground;
-        public required SKColor MatureChipBackground;
-        public required SKColor MatureChipForeground;
-        public required SKColor Text;
-        public required SKColor TextSecondary;
-        public required SKColor ImageWell;
-        public required SKColor StarGold;
+               $"{item.QuestionImageFileName}|{item.AnswerImageFileName}|{item.HasQuestionAudio}|{item.HasAnswerAudio}|{item.IsQuestionAudioPlaying}|{item.IsAnswerAudioPlaying}";
     }
 }
 
@@ -1557,6 +1271,11 @@ internal sealed class FluidRowSpec
     public required Func<object, bool> IsVisible;
     public required Func<object, (string Text, string BgKey, string FgKey)?>? Chip;
     public required Func<object, bool>? Checkbox;
+    public Func<object, bool>? SelectedSurface;
+    public float SelectionThicknessDip = 2;
+    public bool TintSelectedSurface = true;
+    // The history live template has a 22 DIP title, 6 DIP gap, 18 DIP metadata and 14 DIP vertical padding.
+    public bool HistoryLayout;
     public required Func<object, string>? LeftGlyph;
     public required Func<object, string>? RightText;
     public required bool RightTextSemiBold;
@@ -1596,18 +1315,25 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
         var bodyTypeface = SkiaCardRenderer.GetTypeface(ResolveFontFamily(), 400);
 
         var innerWidth = width - _spec.PaddingDip * 2 * dpi;
-        var y = _spec.PaddingDip * dpi;
+        var verticalPadding = (_spec.HistoryLayout ? 14f : _spec.PaddingDip) * dpi;
+        var y = verticalPadding;
+        var historyChip = _spec.HistoryLayout ? _spec.Chip?.Invoke(viewModel) : null;
+        var historyChipLayout = historyChip is { } status
+            ? SkiaTextLayout.Layout(status.Text, 200f * dpi, SkiaCardRenderer.GetTypeface(ResolveFontFamily(), StatusChipMetrics.FontWeightValue),
+                (float)StatusChipMetrics.FontSize * dpi, 1, fontManager, shaperFactory) : null;
+        if (historyChipLayout is not null) innerWidth -= historyChipLayout.MaxIntrinsicWidth + (float)(StatusChipMetrics.HorizontalPadding * 2 + StatusChipMetrics.Gap) * dpi;
+        innerWidth = Math.Max(1, innerWidth);
 
         var titleLayout = SkiaTextLayout.Layout(_spec.Title(viewModel), innerWidth, titleTypeface, _spec.TitleSize * dpi, 1, fontManager, shaperFactory);
-        var titleHeight = titleLayout.Height;
+        var titleHeight = _spec.HistoryLayout ? 22f * dpi : titleLayout.Height;
 
         var contentHeight = titleHeight;
         var lineLayouts = new List<SkiaTextLayout>();
         foreach (var line in _spec.Lines)
         {
-            var layout = SkiaTextLayout.Layout(line.Text(viewModel), innerWidth, bodyTypeface, line.Size * dpi, 2, fontManager, shaperFactory);
+            var layout = SkiaTextLayout.Layout(line.Text(viewModel), innerWidth, bodyTypeface, line.Size * dpi, _spec.HistoryLayout ? 1 : 2, fontManager, shaperFactory);
             lineLayouts.Add(layout);
-            contentHeight += 4f * dpi + layout.Height;
+            contentHeight += _spec.HistoryLayout ? 24f * dpi : 4f * dpi + layout.Height;
         }
 
         var questionLayout = _spec.Question is { } questionGetter
@@ -1633,7 +1359,7 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
             }
         }
 
-        var rowHeight = Math.Max(_spec.PaddingDip * 2 * dpi + titleHeight, _spec.PaddingDip * 2 * dpi + contentHeight);
+        var rowHeight = Math.Max(verticalPadding * 2 + titleHeight, verticalPadding * 2 + contentHeight);
         if (_spec.Checkbox is not null)
             rowHeight = Math.Max(rowHeight, 32f * dpi + _spec.PaddingDip * 2 * dpi);
         if (_spec.LeftGlyph is not null)
@@ -1641,7 +1367,7 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
 
         var bitmapWidth = (int)Math.Ceiling(width);
         var bitmapHeight = (int)Math.Ceiling(rowHeight + _spec.MarginBottomDip * dpi);
-        heightDip = rowHeight + _spec.MarginBottomDip * dpi;
+        heightDip = _spec.HistoryLayout ? (rowHeight + _spec.MarginBottomDip * dpi) / dpi : rowHeight + _spec.MarginBottomDip * dpi;
 
         var bitmap = new SKBitmap(bitmapWidth, bitmapHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
@@ -1653,27 +1379,37 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
         }
 
         var cardRect = SKRect.Create(0, 0, width, rowHeight);
-        using (var background = new SKPaint { Color = colors.CardBackground, IsAntialias = true })
+        var selectedSurface = _spec.SelectedSurface?.Invoke(viewModel) == true;
+        using (var background = new SKPaint { Color = selectedSurface && _spec.TintSelectedSurface ? colors.ChipBackground : colors.CardBackground, IsAntialias = true })
         {
             var radius = _spec.RadiusDip * dpi;
-            canvas.DrawRoundRect(cardRect, radius, radius, background);
+            SurfaceMaterialRaster.Draw(canvas, cardRect, radius, radius, background, colors.Dark, dpi,
+                selectedSurface && _spec.TintSelectedSurface ? SurfaceMaterialKind.Tinted :
+                    _spec.CardBackgroundKey == "CardBackground" ? SurfaceMaterialKind.Raised : SurfaceMaterialKind.None,
+                frameInset: (float)(selectedSurface ? _spec.SelectionThicknessDip : _spec.BorderThicknessDip) * dpi);
         }
 
-        if (colors.Border.Alpha > 0 || _spec.BorderThicknessDip > 0)
+        if (_spec.BorderThicknessDip > 0 || selectedSurface)
         {
             using var border = new SKPaint
             {
-                Color = colors.Border,
+                Color = selectedSurface ? colors.SelectionEdge : colors.FrameEdge,
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = Math.Max(1f, _spec.BorderThicknessDip) * dpi,
+                StrokeWidth = (selectedSurface ? _spec.SelectionThicknessDip : _spec.BorderThicknessDip) * dpi,
             };
-            var radius = _spec.RadiusDip * dpi;
-            canvas.DrawRoundRect(cardRect, radius, radius, border);
+            using var light = selectedSurface ? DashboardSelectionPaint.Shader(cardRect, colors.SelectionTop, colors.SelectionEdge, colors.SelectionBottom) : null;
+            border.Shader = light;
+            var rim = cardRect; rim.Inflate(-border.StrokeWidth / 2, -border.StrokeWidth / 2);
+            var radius = Math.Max(0, _spec.RadiusDip * dpi - border.StrokeWidth / 2);
+            canvas.DrawRoundRect(rim, radius, radius, border);
         }
+        if (!selectedSurface && _spec.CardBackgroundKey == "CardBackground")
+            SurfaceMaterialRaster.LightRaisedFrame(canvas, cardRect, _spec.RadiusDip, colors.FrameEdge, colors.Dark, dpi, (float)_spec.BorderThicknessDip);
+
 
         var x = _spec.PaddingDip * dpi;
-        y = _spec.PaddingDip * dpi;
+        y = verticalPadding;
 
         if (_spec.Checkbox is { } checkboxGetter)
         {
@@ -1695,7 +1431,7 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
             var rightLayout = SkiaTextLayout.Layout(rightText, 90f * dpi, rightTypeface, 13f * dpi, 1, fontManager, shaperFactory);
             var chipWidth = rightLayout.MaxIntrinsicWidth + 16f * dpi;
             using var chipBg = new SKPaint { Color = colors.ChipBackground, IsAntialias = true };
-            canvas.DrawRoundRect(SKRect.Create(width - _spec.PaddingDip * dpi - chipWidth, y + (rowHeight - 24f * dpi) / 2, chipWidth, 24f * dpi), 12f * dpi, 12f * dpi, chipBg);
+            SurfaceMaterialRaster.Draw(canvas, SKRect.Create(width - _spec.PaddingDip * dpi - chipWidth, y + (rowHeight - 24f * dpi) / 2, chipWidth, 24f * dpi), 12f * dpi, 12f * dpi, chipBg, colors.Dark, dpi, SurfaceMaterialKind.Tinted);
             SkiaCardRenderer.PaintLayout(canvas, rightLayout, width - _spec.PaddingDip * dpi - chipWidth + 8f * dpi, y + (rowHeight - 24f * dpi) / 2, colors.Text, dpi);
             textWidth -= chipWidth + 8f * dpi;
         }
@@ -1718,13 +1454,13 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
         }
 
         SkiaCardRenderer.PaintLayout(canvas, titleLayout, x, y, colors.Text, dpi);
-        y += titleLayout.Height;
+        y += titleHeight;
 
         foreach (var layout in lineLayouts)
         {
-            y += 4f * dpi;
+            y += (_spec.HistoryLayout ? 6f : 4f) * dpi;
             SkiaCardRenderer.PaintLayout(canvas, layout, x, y, colors.TextSecondary, dpi);
-            y += layout.Height;
+            y += _spec.HistoryLayout ? 18f * dpi : layout.Height;
         }
 
         foreach (var layout in optionLayouts)
@@ -1734,7 +1470,18 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
             y += layout.Height;
         }
 
-        if (_spec.Chip is { } chipGetter)
+        if (_spec.HistoryLayout && historyChip is { } historyStatus && historyChipLayout is not null)
+        {
+            var chipWidth = historyChipLayout.MaxIntrinsicWidth + (float)StatusChipMetrics.HorizontalPadding * 2 * dpi;
+            var chipX = width - _spec.PaddingDip * dpi - chipWidth;
+            var chipY = (rowHeight - (float)StatusChipMetrics.Height * dpi) / 2;
+            using var chipPaint = new SKPaint { Color = ResolveResource(historyStatus.BgKey, System.Windows.Media.Colors.Gray), IsAntialias = true };
+            SurfaceMaterialRaster.Draw(canvas, SKRect.Create(chipX, chipY, chipWidth, (float)StatusChipMetrics.Height * dpi), (float)StatusChipMetrics.Radius * dpi, (float)StatusChipMetrics.Radius * dpi,
+                chipPaint, colors.Dark, dpi, SurfaceMaterialKind.Tinted);
+            SkiaCardRenderer.PaintLayout(canvas, historyChipLayout, chipX + (float)StatusChipMetrics.HorizontalPadding * dpi,
+                chipY + ((float)StatusChipMetrics.Height * dpi - historyChipLayout.Height) / 2, ResolveResource(historyStatus.FgKey, System.Windows.Media.Colors.Black), dpi);
+        }
+        else if (_spec.Chip is { } chipGetter)
         {
             var chip = chipGetter(viewModel);
             if (chip is not null)
@@ -1744,7 +1491,7 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
                 var chipLayout = SkiaTextLayout.Layout(chip.Value.Text, 200f * dpi, bodyTypeface, 11f * dpi, 1, fontManager, shaperFactory);
                 var chipWidth = chipLayout.MaxIntrinsicWidth + 16f * dpi;
                 using var chipPaint = new SKPaint { Color = chipBg, IsAntialias = true };
-                canvas.DrawRoundRect(SKRect.Create(width - _spec.PaddingDip * dpi - chipWidth, _spec.PaddingDip * dpi, chipWidth, 22f * dpi), 11f * dpi, 11f * dpi, chipPaint);
+                SurfaceMaterialRaster.Draw(canvas, SKRect.Create(width - _spec.PaddingDip * dpi - chipWidth, _spec.PaddingDip * dpi, chipWidth, 22f * dpi), 11f * dpi, 11f * dpi, chipPaint, colors.Dark, dpi, SurfaceMaterialKind.Tinted);
                 SkiaCardRenderer.PaintLayout(canvas, chipLayout, width - _spec.PaddingDip * dpi - chipWidth + 8f * dpi, _spec.PaddingDip * dpi + 2f * dpi, chipFg, dpi);
             }
         }
@@ -1757,7 +1504,7 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
                 var resultLayout = SkiaTextLayout.Layout(result, 200f * dpi, titleTypeface, 11f * dpi, 1, fontManager, shaperFactory);
                 var resultWidth = resultLayout.MaxIntrinsicWidth + 16f * dpi;
                 using var chipPaint = new SKPaint { Color = colors.TextSecondary, IsAntialias = true };
-                canvas.DrawRoundRect(SKRect.Create(width - _spec.PaddingDip * dpi - resultWidth, _spec.PaddingDip * dpi, resultWidth, 24f * dpi), 12f * dpi, 12f * dpi, chipPaint);
+                SurfaceMaterialRaster.Draw(canvas, SKRect.Create(width - _spec.PaddingDip * dpi - resultWidth, _spec.PaddingDip * dpi, resultWidth, 24f * dpi), 12f * dpi, 12f * dpi, chipPaint, colors.Dark, dpi, SurfaceMaterialKind.Tinted);
                 SkiaCardRenderer.PaintLayout(canvas, resultLayout, width - _spec.PaddingDip * dpi - resultWidth + 8f * dpi, _spec.PaddingDip * dpi + 4f * dpi, colors.CardBackground, dpi);
             }
         }
@@ -1787,7 +1534,7 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
         var title = _spec.Title(viewModel);
         var lines = string.Join("|", _spec.Lines.Select(l => l.Text(viewModel)));
         var chip = _spec.Chip?.Invoke(viewModel)?.Text ?? string.Empty;
-        return $"{ThemeManager.CurrentTheme}|{visible}|{title}|{lines}|{chip}";
+        return $"{ThemeManager.CurrentTheme}|surface-v2|{visible}|{title}|{lines}|{chip}|{_spec.SelectedSurface?.Invoke(viewModel) == true}|{_spec.Checkbox?.Invoke(viewModel) == true}";
     }
 
     private static void DrawCheckbox(SKCanvas canvas, float x, float y, float size, bool isChecked, SKColor color)
@@ -1831,24 +1578,27 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
 
     private SKColor ResolveResource(string key, System.Windows.Media.Color fallback)
     {
-        if (System.Windows.Application.Current?.TryFindResource(key) is System.Windows.Media.SolidColorBrush brush)
-            return ToSkia(brush.Color);
-        return ToSkia(fallback);
+        return ToSkia(DashboardSelectionPaint.ResolveColor(key, fallback));
     }
 
     private FluidRowColors ResolveColors()
     {
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
+        var theme = (ThemeManager.CurrentTheme ?? string.Empty) + "|surface-v2|" + SurfaceMaterialRaster.ResourceDark;
         if (_colorsByTheme.TryGetValue(theme, out var cached))
             return cached;
 
         var colors = new FluidRowColors
         {
+            Dark = SurfaceMaterialRaster.ResourceDark,
             CardBackground = ResolveResource(_spec.CardBackgroundKey, System.Windows.Media.Colors.White),
             Border = ResolveResource(_spec.CardBorderKey, System.Windows.Media.Colors.Transparent),
+            FrameEdge = ResolveResource(_spec.BorderColorKey, System.Windows.Media.Colors.Transparent),
             Text = ResolveResource("TextColor", System.Windows.Media.Color.FromRgb(28, 28, 28)),
             TextSecondary = ResolveResource("TextColorSecondary", System.Windows.Media.Color.FromRgb(96, 100, 110)),
             ChipBackground = ResolveResource("SelectionBackground", System.Windows.Media.Color.FromRgb(240, 242, 246)),
+            SelectionEdge = ResolveResource("AccentRimBody", System.Windows.Media.Color.FromRgb(67, 92, 236)),
+            SelectionTop = ResolveResource("AccentRimTop", System.Windows.Media.Color.FromRgb(103, 134, 245)),
+            SelectionBottom = ResolveResource("AccentRimBottom", System.Windows.Media.Color.FromRgb(52, 74, 194)),
         };
 
         _colorsByTheme[theme] = colors;
@@ -1861,11 +1611,16 @@ internal sealed class FluidRowRenderer : SkiaTileRenderer
 
 internal sealed class FluidRowColors
 {
+    public bool Dark { get; init; }
     public required SKColor CardBackground;
     public required SKColor Border;
+    public required SKColor FrameEdge;
     public required SKColor Text;
     public required SKColor TextSecondary;
     public required SKColor ChipBackground;
+    public required SKColor SelectionEdge;
+    public required SKColor SelectionTop;
+    public required SKColor SelectionBottom;
 }
 
 

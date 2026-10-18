@@ -6,6 +6,21 @@ namespace Scriblucent.Controls;
 
 public class OverlayDialogShell : Control
 {
+    private static readonly DependencyPropertyKey CardWidthPropertyKey = DependencyProperty.RegisterReadOnly(
+        nameof(CardWidth), typeof(double), typeof(OverlayDialogShell), new FrameworkPropertyMetadata(540d));
+    public static readonly DependencyProperty CardWidthProperty = CardWidthPropertyKey.DependencyProperty;
+    public double CardWidth => (double)GetValue(CardWidthProperty);
+
+    protected override Size MeasureOverride(Size constraint)
+    {
+        // MaxCardWidth is an upper bound, not a fixed width that can overflow a narrow owner.
+        // The shared 24 DIP inset also reserves the baked dialog shadow on every side.
+        double width = double.IsFinite(constraint.Width) ? Math.Max(1, constraint.Width - 48) : MaxCardWidth;
+        width = Math.Min(MaxCardWidth, width);
+        if (Math.Abs(CardWidth - width) > .01) SetValue(CardWidthPropertyKey, width);
+        return base.MeasureOverride(constraint);
+    }
+
     static OverlayDialogShell()
     {
         DefaultStyleKeyProperty.OverrideMetadata(

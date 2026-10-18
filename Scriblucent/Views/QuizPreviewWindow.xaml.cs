@@ -1,4 +1,4 @@
-﻿using Scriblucent.Animations;
+using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
@@ -22,7 +22,7 @@ using System.Windows.Xps.Packaging;
 
 namespace Scriblucent.Views;
 
-public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
+public partial class QuizPreviewWindow : Window, INotifyPropertyChanged, Scriblucent.Services.IHostedDocumentEditor
 {
     private ScrollViewer? QuestionsScrollViewer
     {
@@ -70,7 +70,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         public string Title { get; }
     }
 
-    private readonly ObservableCollection<QuizPreviewQuestion> _questions;
+    private readonly Scriblucent.ViewModels.BulkObservableCollection<QuizPreviewQuestion> _questions;
     private readonly QuizDocument _sourceDocument;
     private readonly ObservableCollection<QuizNoteLinkOption> _noteLinkOptions = new();
     private Action<Guid>? _openNoteAction;
@@ -83,11 +83,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     // change instead of re-joining every field of every question and option on every keystroke.
     private long _questionsChangeVersion;
     private bool _isInitializing = true;
-    private bool _isFlashingTitleStatus;
     private bool _allowCloseWithoutPrompt;
     private bool _isTagsPanelOpen;
     private bool _lastSavedTagsPanelOpen;
-    private int _tagsPanelAnimationVersion;
     private bool _aiReviewNoticeDismissed;
 
     public QuizPreviewWindow(
@@ -120,7 +118,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     {
         _sourceDocument = document;
         _requestImmediateSave = requestImmediateSave;
-        _questions = new ObservableCollection<QuizPreviewQuestion>(
+        _questions = new Scriblucent.ViewModels.BulkObservableCollection<QuizPreviewQuestion>(
             (document.Questions ?? [])
             .Select((question, index) => new QuizPreviewQuestion(index + 1, question)));
         if (_questions.Count == 0)
@@ -172,6 +170,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         TrackQuestionChanges();
         _isInitializing = false;
         MarkCurrentStateSaved();
+        InitializeBulkSelection();
         WindowContentEnterHelper.AnimateOnLoaded(this);
     }
     public string EditorTitle => TitleTextBox.Text.Trim();
@@ -250,16 +249,22 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
+            var retained = _questions.ToHashSet();
+            foreach (var removed in _trackedQuestions.Where(question => !retained.Contains(question)).ToArray())
+                DetachQuestionChangeTracking(removed);
             foreach (var question in _questions)
                 AttachQuestionChangeTracking(question);
         }
 
+        if (_bulkQuestionEdit) return;
+        BulkSelection.SetItems(_questions.Select(question => question.Id));
         _questionsChangeVersion++;
         UpdateEditedIndicator();
     }
 
     private void AttachQuestionChangeTracking(QuizPreviewQuestion question)
     {
+        if (!_trackedQuestions.Add(question)) return;
         question.PropertyChanged -= QuizQuestion_PropertyChanged;
         question.PropertyChanged += QuizQuestion_PropertyChanged;
         question.Options.CollectionChanged -= QuizOptions_CollectionChanged;
@@ -274,6 +279,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void DetachQuestionChangeTracking(QuizPreviewQuestion question)
     {
+        _trackedQuestions.Remove(question);
         question.PropertyChanged -= QuizQuestion_PropertyChanged;
         question.Options.CollectionChanged -= QuizOptions_CollectionChanged;
 
@@ -283,6 +289,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void QuizQuestion_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_bulkQuestionEdit) return;
         if (e.PropertyName == nameof(QuizPreviewQuestion.PlainTextUserAnswer)
             || e.PropertyName == nameof(QuizPreviewQuestion.HasSelection))
         {
@@ -322,12 +329,14 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             }
         }
 
+        if (_bulkQuestionEdit) return;
         _questionsChangeVersion++;
         UpdateEditedIndicator();
     }
 
     private void QuizOption_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_bulkQuestionEdit) return;
         if (IsSavedOptionProperty(e.PropertyName))
         {
             _questionsChangeVersion++;
@@ -377,19 +386,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void ShowAutoSaveIndicator()
     {
-        if (EditedIndicatorText is null)
-            return;
-
-        _isFlashingTitleStatus = true;
-        UiMotion.FlashInlineStatus(
-            EditedIndicatorText,
-            LocalizationService.GetString("AutoSaving"),
-            () =>
-            {
-                _isFlashingTitleStatus = false;
-                UpdateEditedIndicator();
-            });
+        EditedIndicatorText?.ShowSaved(UpdateEditedIndicator);
     }
+
+    public void ReportWorkspaceSaveFailure() => EditedIndicatorText?.ShowFailure();
 
     private bool HasUnsavedChanges()
     {
@@ -401,11 +401,12 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateEditedIndicator()
     {
-        if (_isInitializing || EditedIndicatorText is null || _isFlashingTitleStatus)
+        if (_bulkQuestionEdit) return;
+        WorkspaceStateChanged?.Invoke();
+        if (_isInitializing || EditedIndicatorText is null)
             return;
 
-        EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
-        UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
+        EditedIndicatorText.SetEdited(HasUnsavedChanges());
     }
 
     private string GetEditorSnapshot()
@@ -443,7 +444,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         var documentTitle = ResolveEditorTitleForPrompt();
         var result = ModernDialog.Show(
-            this,
+            WorkspaceOwner,
             LocalizationService.GetString("UnsavedChanges"),
             string.Format(LocalizationService.GetString("UnsavedChangesConfirmationFormat"), documentTitle),
             ModernDialogTone.Warning,
@@ -471,6 +472,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void SaveAndClose()
     {
+        if (_workspaceSave is not null) { _workspaceSave(); return; }
         // Ensure any in-progress edits (focused TextBox) update their binding source
         CommitFocusedTextBoxBinding();
 
@@ -484,7 +486,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         try
         {
             // Commit all TextBox bindings in the window to ensure all pending edits are saved
-            CommitTextBoxBindingsInVisualTree(this);
+            CommitTextBoxBindingsInVisualTree(ContentRoot);
         }
         catch
         {
@@ -569,22 +571,18 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
 
         var questionsScrollViewer = QuestionsScrollViewer;
+        SubmitAnswers();
         if (UiMotion.PrefersReducedMotion || questionsScrollViewer is null)
         {
-            SubmitAnswers();
             return;
         }
 
+        questionsScrollViewer.Opacity = .75;
         UiMotion.Fade(
             questionsScrollViewer,
-            0.5,
-            UiMotion.NavFadeOutMs,
-            UiMotion.InCubic,
-            () =>
-            {
-                SubmitAnswers();
-                UiMotion.Fade(questionsScrollViewer, 1, UiMotion.QuickMs, UiMotion.OutCubic);
-            });
+            1,
+            120,
+            UiMotion.OutCubic);
     }
 
     private void ResetAnswersButton_Click(object sender, RoutedEventArgs e)
@@ -595,30 +593,22 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             foreach (var question in _questions)
                 question.Reset();
 
-            UpdateSummary(animateScore: true);
+            UpdateSummary(animateScore: false);
         }
 
-        if (UiMotion.PrefersReducedMotion || ScoreBadge.Visibility != Visibility.Visible)
-        {
-            ResetAnswers();
-            return;
-        }
-
-        UiMotion.SlideFadePanel(
-            ScoreBadge,
-            false,
-            UiMotion.NavFadeOutMs,
-            UiMotion.SubtleLiftY,
-            ResetAnswers);
+        // The accepted reset is a model operation, independent of visual completion.
+        ResetAnswers();
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_workspaceClose is not null) { _workspaceClose(); return; }
         switch (GetCloseDecision())
         {
             case UnsavedCloseDecision.Cancel:
                 return;
             case UnsavedCloseDecision.SaveAndClose:
+                if (_workspaceSave is not null) { if (_workspaceSave()) _workspaceClose?.Invoke(); return; }
                 SaveAndClose();
                 return;
             case UnsavedCloseDecision.LeaveWithoutSaving:
@@ -655,7 +645,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         else if (resumeFrom is not null)
         {
             var choice = ModernDialog.Show(
-                this,
+                WorkspaceOwner,
                 LocalizationService.GetString("QuizResumePromptTitle"),
                 LocalizationService.GetString("QuizResumePromptMessage"),
                 ModernDialogTone.Question,
@@ -692,7 +682,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 quizDocument.TimeLimitSeconds ?? 0,
                 resumeFrom)
             {
-                Owner = this
+                Owner = WorkspaceOwner
             };
             // The actual status of the quiz - not which button closed the window - decides
             // whether an attempt gets recorded. This fires the instant a score is computed
@@ -764,7 +754,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             quizDocument.PartialCreditMultipleChoice,
             quizDocument.ExamMode)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         if (optionsDialog.ShowDialog() != true)
@@ -834,7 +824,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             // Quiz applies here too, using whatever's already configured via the Options button.
             var quizModeWindow = new QuizModeWindow(practiceDocument, practiceDocument.TimeLimitSeconds ?? 0)
             {
-                Owner = this
+                Owner = WorkspaceOwner
             };
             quizModeWindow.AttemptSubmitted += attempt => RecordCompletedAttempt(practiceDocument, attempt);
             quizModeWindow.ShowDialog();
@@ -926,7 +916,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     {
         var window = new QuizAttemptHistoryWindow(_sourceDocument)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         window.ShowDialog();
@@ -945,59 +935,12 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
     private void SetTagsPanelOpen(bool isOpen, bool animate)
     {
         _isTagsPanelOpen = isOpen;
-
-        if (!animate)
-        {
-            UiMotion.Stop(TagsPanel);
-            UiMotion.Clear(TagsPanel, UIElement.OpacityProperty);
-            UiMotion.Clear(EnsureTagsPanelTransform(), TranslateTransform.YProperty);
-            TagsPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-            TagsPanel.Opacity = isOpen ? 1 : 0;
-            EnsureTagsPanelTransform().Y = isOpen ? 0 : -6;
-            return;
-        }
-
-        AnimateTagsPanel(isOpen);
-    }
-
-    private void AnimateTagsPanel(bool show)
-    {
-        var animationVersion = ++_tagsPanelAnimationVersion;
-        var transform = EnsureTagsPanelTransform();
-        var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
-        var opacityFrom = TagsPanel.Opacity;
-        var yFrom = transform.Y;
-
-        if (show)
-            TagsPanel.Visibility = Visibility.Visible;
-
-        UiMotion.Stop(TagsPanel);
-        UiMotion.RunComposited(
-            TagsPanel,
-            new[]
-            {
-                UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => TagsPanel.Opacity = value),
-                UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
-            },
-            () =>
-            {
-                if (!show && animationVersion == _tagsPanelAnimationVersion && !_isTagsPanelOpen)
-                    TagsPanel.Visibility = Visibility.Collapsed;
-            });
-    }
-
-    private TranslateTransform EnsureTagsPanelTransform()
-    {
-        if (TagsPanel.RenderTransform is TranslateTransform existing)
-            return existing;
-
-        var transform = new TranslateTransform(0, -6);
-        TagsPanel.RenderTransform = transform;
-        return transform;
+        UiMotion.AnimateLayoutReveal(TagsPanel, isOpen, animate: animate);
     }
 
     private void QuizPreviewWindow_Closing(object? sender, CancelEventArgs e)
     {
+        if (_workspaceDisposed) return;
         if (!WindowCloseCascade.TryCloseOwnedWindows(this))
         {
             e.Cancel = true;
@@ -1035,7 +978,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             Title = LocalizationService.GetString("QuizImportQuestionsDialogTitle")
         };
 
-        if (openFileDialog.ShowDialog(this) != true)
+        if (openFileDialog.ShowDialog(WorkspaceOwner) != true)
             return;
 
         try
@@ -1079,8 +1022,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             if (!IsEditMode)
                 IsEditMode = true;
 
-            foreach (var question in imported)
-                _questions.Add(new QuizPreviewQuestion(_questions.Count + 1, question));
+            InsertQuestionsAtStart(imported.Select(question => new QuizPreviewQuestion(1, question)));
 
             RenumberQuestions();
             UpdateSummary();
@@ -1119,7 +1061,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             OverwritePrompt = true
         };
 
-        if (saveDialog.ShowDialog(this) != true)
+        if (saveDialog.ShowDialog(WorkspaceOwner) != true)
             return;
 
         try
@@ -1167,7 +1109,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void ShowExportDialog(string title, string message)
     {
-        ModernDialog.ShowInfo(this, title, message);
+        ModernDialog.ShowInfo(WorkspaceOwner, title, message);
     }
 
     private void ModeToggleButton_Click(object sender, RoutedEventArgs e)
@@ -1182,9 +1124,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         _isSubmitted = false;
         var question = new QuizPreviewQuestion(_questions.Count + 1, CreateDefaultQuestion());
-        _questions.Add(question);
-        RenumberQuestions();
-        SetQuestionFocus(_questions.Count - 1);
+        InsertQuestionsAtStart([question]);
+        SetQuestionFocus(0);
         VerticalListMotion.AnimateItemEnter(this, QuestionsItemsControl, question, offsetY: UiMotion.ContentLiftY);
         UpdateSummary();
     }
@@ -1272,133 +1213,12 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         comboBox.SelectedIndex = 0;
     }
 
-    private void MoveQuestionUpButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!IsEditMode)
-            return;
-
-        if ((sender as FrameworkElement)?.DataContext is not QuizPreviewQuestion question)
-            return;
-
-        var index = _questions.IndexOf(question);
-        if (index <= 0)
-            return;
-
-        var swapPartner = _questions[index - 1];
-        VerticalListMotion.AnimatePairSwap(
-            this,
-            QuestionsItemsControl,
-            question,
-            swapPartner,
-            () =>
-            {
-                _questions.Move(index, index - 1);
-                RenumberQuestions();
-            },
-            () => SetQuestionFocus(index - 1));
-    }
-
-    private void MoveQuestionDownButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!IsEditMode)
-            return;
-
-        if ((sender as FrameworkElement)?.DataContext is not QuizPreviewQuestion question)
-            return;
-
-        var index = _questions.IndexOf(question);
-        if (index < 0 || index >= _questions.Count - 1)
-            return;
-
-        var swapPartner = _questions[index + 1];
-        VerticalListMotion.AnimatePairSwap(
-            this,
-            QuestionsItemsControl,
-            question,
-            swapPartner,
-            () =>
-            {
-                _questions.Move(index, index + 1);
-                RenumberQuestions();
-            },
-            () => SetQuestionFocus(index + 1));
-    }
-
-    private void MoveOptionUpButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!IsEditMode)
-            return;
-
-        if ((sender as FrameworkElement)?.DataContext is not QuizPreviewOption option)
-            return;
-
-        var question = option.Parent;
-        var options = question.Options;
-        var index = options.IndexOf(option);
-        if (index <= 0)
-            return;
-
-        var swapPartner = options[index - 1];
-        AnimateQuestionOptionSwap(
-            question,
-            option,
-            swapPartner,
-            () => options.Move(index, index - 1),
-            () => question.RefreshOptionOrderState());
-    }
-
-    private void MoveOptionDownButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (!IsEditMode)
-            return;
-
-        if ((sender as FrameworkElement)?.DataContext is not QuizPreviewOption option)
-            return;
-
-        var question = option.Parent;
-        var options = question.Options;
-        var index = options.IndexOf(option);
-        if (index < 0 || index >= options.Count - 1)
-            return;
-
-        var swapPartner = options[index + 1];
-        AnimateQuestionOptionSwap(
-            question,
-            option,
-            swapPartner,
-            () => options.Move(index, index + 1),
-            () => question.RefreshOptionOrderState());
-    }
-
     private void AnimateQuestionOptionEnter(QuizPreviewQuestion question, QuizPreviewOption option)
     {
         if (!TryGetQuestionOptionsList(question, out var optionsList))
             return;
 
         VerticalListMotion.AnimateItemEnter(this, optionsList, option);
-    }
-
-    private void AnimateQuestionOptionSwap(
-        QuizPreviewQuestion question,
-        QuizPreviewOption primaryOption,
-        QuizPreviewOption secondaryOption,
-        Action applyMove,
-        Action? onComplete = null)
-    {
-        if (!TryGetQuestionOptionsList(question, out var optionsList))
-        {
-            applyMove();
-            onComplete?.Invoke();
-            return;
-        }
-
-        VerticalListMotion.AnimatePairSwap(
-            this,
-            optionsList,
-            primaryOption,
-            secondaryOption,
-            applyMove,
-            onComplete);
     }
 
     private bool TryGetQuestionOptionsList(QuizPreviewQuestion question, out ItemsControl optionsList)
@@ -1479,10 +1299,10 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void ToggleFullscreen()
     {
-        if (ShellWindowChrome.IsFullscreenSuspended(this))
-            ShellWindowChrome.ResumeFromFullscreen(this);
+        if (ShellWindowChrome.IsFullscreenSuspended(WorkspaceOwner))
+            ShellWindowChrome.ResumeFromFullscreen(WorkspaceOwner);
         else
-            ShellWindowChrome.SuspendForFullscreen(this);
+            ShellWindowChrome.SuspendForFullscreen(WorkspaceOwner);
     }
 
     private void RenumberQuestions()
@@ -1499,6 +1319,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void HandleEditModeChanged(bool isEditMode)
     {
+        if (!_isInitializing) SyncBulkSelectionChrome();
         if (isEditMode && _isSubmitted)
         {
             _isSubmitted = false;
@@ -1569,74 +1390,8 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         writer.Write(((IDocumentPaginatorSource)document).DocumentPaginator);
     }
 
-    private FlowDocument BuildPrintableDocument()
-    {
-        var document = new FlowDocument
-        {
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = TypeScale.Px(TypeScale.Caption, 12),
-            PagePadding = new Thickness(48),
-            ColumnWidth = 700,
-            Background = Brushes.White,
-            Foreground = Brushes.Black
-        };
-
-        document.Blocks.Add(new Paragraph(new Run(EditorTitle))
-        {
-            FontSize = TypeScale.Px(TypeScale.Display, 24),
-            FontWeight = FontWeights.Bold,
-            Margin = new Thickness(0, 0, 0, 16)
-        });
-
-        foreach (var question in _questions)
-        {
-            document.Blocks.Add(new Paragraph(new Run(string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("QuizQuestionHeaderFormat"), question.Number, question.Type switch
-            {
-                QuizQuestionType.TrueFalse => LocalizationService.GetString("QuizTypeTrueFalse"),
-                QuizQuestionType.MultipleChoice => LocalizationService.GetString("QuizTypeMultipleChoice"),
-                QuizQuestionType.PlainText => LocalizationService.GetString("QuizTypePlainText"),
-                _ => LocalizationService.GetString("QuizTypeSingleChoice")
-            })))
-            {
-                FontSize = TypeScale.Px(TypeScale.BlockTitle, 16),
-                FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 12, 0, 6)
-            });
-
-            document.Blocks.Add(new Paragraph(new Run(question.Question))
-            {
-                Margin = new Thickness(0, 0, 0, 6)
-            });
-
-            if (question.IsPlainText)
-            {
-                document.Blocks.Add(new Paragraph(new Run(string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("QuizCorrectAnswerFormat"), question.PlainTextAnswer)))
-                {
-                    Margin = new Thickness(12, 0, 0, 2)
-                });
-            }
-
-            foreach (var option in question.Options.Where(option => !string.IsNullOrWhiteSpace(option.Text)))
-            {
-                var marker = option.IsCorrect ? "✓" : "•";
-                document.Blocks.Add(new Paragraph(new Run($"{marker} {option.Text}"))
-                {
-                    Margin = new Thickness(12, 0, 0, 2)
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(question.Explanation))
-            {
-                document.Blocks.Add(new Paragraph(new Run(string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("QuizExplanationFormat"), question.Explanation)))
-                {
-                    FontStyle = FontStyles.Italic,
-                    Margin = new Thickness(0, 4, 0, 0)
-                });
-            }
-        }
-
-        return document;
-    }
+    private FlowDocument BuildPrintableDocument() => QuizPrintableExport.Build(ToDocument(),
+        TypeScale.Px(TypeScale.Caption, 12), TypeScale.Px(TypeScale.Display, 24), TypeScale.Px(TypeScale.BlockTitle, 16));
 
     private static QuizQuestion CreateDefaultQuestion()
     {
@@ -1659,9 +1414,11 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void QuizPreviewWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (BulkSelectionBar.HandleOperationKey(e)) return;
+        if (Scriblucent.Controls.EditorSelectionInput.HandleKey(e, BulkSelection, ConfirmDeleteSelectedQuestions)) return;
         if (e.Key == Key.Escape)
         {
-            if (ShellWindowChrome.IsFullscreenSuspended(this))
+            if (ShellWindowChrome.IsFullscreenSuspended(WorkspaceOwner))
             {
                 ToggleFullscreen();
                 e.Handled = true;
@@ -1737,13 +1494,13 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
             AiGeneratedInfoBadge.ToolTip = null;
             if (_isInitializing)
             {
-                AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
-                AiReviewNotice.Visibility = Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, false, axis: Orientation.Horizontal, animate: false);
+                UiMotion.AnimateLayoutReveal(AiReviewNotice, false, animate: false);
                 return;
             }
 
-            UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
-            UiMotion.AnimateInlineReveal(AiReviewNotice, false);
+            UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, false, axis: Orientation.Horizontal);
+            UiMotion.AnimateLayoutReveal(AiReviewNotice, false);
             return;
         }
 
@@ -1754,13 +1511,13 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
         if (_isInitializing)
         {
-            AiGeneratedInfoBadge.Visibility = Visibility.Visible;
-            AiReviewNotice.Visibility = _aiReviewNoticeDismissed ? Visibility.Collapsed : Visibility.Visible;
+            UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, true, axis: Orientation.Horizontal, animate: false);
+            UiMotion.AnimateLayoutReveal(AiReviewNotice, !_aiReviewNoticeDismissed, animate: false);
             return;
         }
 
-        UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
-        UiMotion.AnimateInlineReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
+        UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, true, axis: Orientation.Horizontal);
+        UiMotion.AnimateLayoutReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
     }
 
     public event EventHandler? AiReviewNoticeDismissedPersistRequested;
@@ -1788,6 +1545,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateSummary(bool animateScore = false)
     {
+        if (_bulkQuestionEdit) return;
         var questionCount = _questions.Count;
         var answeredCount = _questions.Count(question => question.HasSelection);
         QuestionCountTextBlock.Text = string.Format(LocalizationService.GetString("QuizQuestionCountFormat"), questionCount);
@@ -1796,13 +1554,13 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         CheckAnswersButton.IsEnabled = !_isSubmitted && questionCount > 0;
         ResetAnswersButton.IsEnabled = _isSubmitted || answeredCount > 0;
         if (ShuffleQuestionsButton is not null)
-            ShuffleQuestionsButton.IsEnabled = questionCount >= 2;
+            ShuffleQuestionsButton.IsEnabled = !BulkSelection.IsActive && questionCount >= 2;
 
         if (!_isSubmitted)
         {
             if (ScoreBadge.Visibility == Visibility.Visible && !animateScore)
             {
-                ScoreBadge.Visibility = Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(ScoreBadge, false, axis: Orientation.Horizontal, animate: false);
                 ScoreTextBlock.Text = string.Empty;
             }
             else if (!animateScore)
@@ -1821,9 +1579,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         ScoreTextBlock.Text = string.Format(LocalizationService.GetString("QuizScoreFormat"), correctCount, questionCount, percent);
 
         if (animateScore && !UiMotion.PrefersReducedMotion)
-            UiMotion.AnimateInlineReveal(ScoreBadge, true);
+            UiMotion.AnimateLayoutReveal(ScoreBadge, true, axis: Orientation.Horizontal);
         else
-            ScoreBadge.Visibility = Visibility.Visible;
+            UiMotion.AnimateLayoutReveal(ScoreBadge, true, axis: Orientation.Horizontal, animate: false);
     }
 
     private void SetQuestionFocus(int index)
@@ -1836,7 +1594,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         }
 
         var container = QuestionsItemsControl.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
-        if (IsLoaded && container is null
+        if (ContentRoot.IsLoaded && container is null
             && FindVisualChild<VirtualizingStackPanel>(QuestionsItemsControl) is { } panel)
         {
             panel.BringIndexIntoViewPublic(index);
@@ -1873,6 +1631,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
 
     internal sealed class QuizPreviewQuestion : INotifyPropertyChanged
     {
+        public Guid Id => _source.Id;
         private readonly QuizQuestion _source;
         private bool _isSubmitted;
         private bool _isFocused;
@@ -2535,7 +2294,6 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
         public void RefreshState()
         {
             OnPropertyChanged(nameof(IsSelected));
-            OnPropertyChanged(nameof(IsCorrect));
             OnPropertyChanged(nameof(IsCorrectAfterSubmit));
             OnPropertyChanged(nameof(IsIncorrectSelectedAfterSubmit));
             OnPropertyChanged(nameof(MarkerLetter));
@@ -2550,6 +2308,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged
                 return;
 
             _isCorrect = value;
+            OnPropertyChanged(nameof(IsCorrect));
             RefreshState();
         }
 

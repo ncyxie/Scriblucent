@@ -1,3 +1,4 @@
+using Scriblucent.Localization;
 using Scriblucent.Animations;
 using Scriblucent.Models;
 using Scriblucent.ViewModels;
@@ -59,14 +60,14 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
     public bool IsLoading => _isLoading;
     public bool ShowEmpty => !_isLoading && !HasItems;
     public string SummaryText => _isLoading
-        ? "Loading history..."
+        ? LocalizationService.GetString("MotionStateLoading")
         : _totalCards == 0
-        ? "No flashcard study progress yet"
-        : string.Format(CultureInfo.CurrentCulture, "{0} studied, {1} known, {2} unknown, {3} total cards", _studiedCards, _knownCards, _unknownCards, _totalCards);
+        ? LocalizationService.GetString("WorkspaceHistoryStudyEmpty")
+        : string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("WorkspaceHistoryStudySummary"), _studiedCards, _knownCards, _unknownCards, _totalCards);
     public string KnownText => _totalCards == 0 ? "-" : string.Format(CultureInfo.CurrentCulture, "{0}/{1}", _knownCards, _totalCards);
     public string UnknownText => _totalCards == 0 ? "-" : string.Format(CultureInfo.CurrentCulture, "{0}", _unknownCards);
     public string StudiedText => _totalCards == 0 ? "-" : string.Format(CultureInfo.CurrentCulture, "{0}", _studiedCards);
-    public string ClearButtonText => _documentProvider is null ? "Clear history" : "Clear this set history";
+    public string ClearButtonText => _documentProvider is null ? LocalizationService.GetString("WorkspaceHistoryClear") : LocalizationService.GetString("WorkspaceHistoryClearSet");
 
     private async void RefreshList()
     {
@@ -145,8 +146,8 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
             items.Add(new StudyDisplayItem
             {
                 Title = string.IsNullOrWhiteSpace(document.Title) ? "Untitled flashcards" : document.Title.Trim(),
-                Details = string.Format(CultureInfo.CurrentCulture, "{0} studied - {1} known - {2} unknown - {3} cards", studied, known, unknown, cards.Length),
-                StatusText = isComplete ? "Complete" : "In progress",
+                Details = string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("WorkspaceHistoryStudyDetails"), studied, known, unknown, cards.Length),
+                StatusText = LocalizationService.GetString(isComplete ? "WorkspaceHistoryComplete" : "WorkspaceHistoryInProgress"),
                 StatusKind = isComplete ? "Complete" : "InProgress",
                 IsComplete = isComplete
             });
@@ -175,9 +176,9 @@ public partial class FlashcardStudyHistoryWindow : Window, System.ComponentModel
             {
                 Title = string.IsNullOrWhiteSpace(card.Question) ? "Untitled card" : card.Question.Trim(),
                 Details = string.IsNullOrWhiteSpace(card.Category)
-                    ? string.Format(CultureInfo.CurrentCulture, "Set {0}", Math.Max(1, card.SetIndex))
-                    : string.Format(CultureInfo.CurrentCulture, "Set {0} - {1}", Math.Max(1, card.SetIndex), card.Category.Trim()),
-                StatusText = statusKind,
+                    ? string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("WorkspaceHistorySet"), Math.Max(1, card.SetIndex))
+                    : string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("WorkspaceHistorySetCategory"), Math.Max(1, card.SetIndex), card.Category.Trim()),
+                StatusText = LocalizationService.GetString("WorkspaceHistory" + statusKind),
                 StatusKind = statusKind,
                 IsComplete = card.IsKnown
             });

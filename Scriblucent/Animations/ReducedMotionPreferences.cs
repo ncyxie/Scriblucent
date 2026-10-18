@@ -18,23 +18,19 @@ public static class ReducedMotionPreferences
     {
         get
         {
-            if (_cached.HasValue)
-                return _cached.Value;
-
-            return Refresh();
+            if (!_cached.HasValue) Refresh();
+            return !MotionPolicy.Spatial;
         }
     }
 
     /// <summary>
-    /// Modal overlays keep blur and transitions unless Windows accessibility disables animations.
-    /// The in-app "Reduce animations" setting only affects decorative UI motion.
+    /// Every surface respects the same application and Windows preference.
     /// </summary>
     public static bool ShouldUseInstantOverlayTransitions
     {
         get
         {
-            lock (Sync)
-                return IsSystemReducedMotion();
+            return MotionPolicy.Quality == MotionQuality.Off;
         }
     }
 
@@ -45,6 +41,17 @@ public static class ReducedMotionPreferences
             _appReduceAnimations = appReduceAnimations;
             _cached = null;
         }
+        Configure(appReduceAnimations ? MotionPreference.Reduced : MotionPreference.Automatic);
+    }
+
+    public static void Configure(MotionPreference preference)
+    {
+        lock (Sync)
+        {
+            _appReduceAnimations = preference != MotionPreference.Automatic;
+            _cached = null;
+            MotionPolicy.Configure(preference, IsSystemReducedMotion());
+        }
     }
 
     public static bool Refresh()
@@ -52,12 +59,13 @@ public static class ReducedMotionPreferences
         lock (Sync)
         {
             _cached = _appReduceAnimations || IsSystemReducedMotion();
+            MotionPolicy.Configure(MotionPolicy.Preference, IsSystemReducedMotion());
             return _cached.Value;
         }
     }
 
     private static bool IsSystemReducedMotion()
-        => !IsMinAnimateEnabled() || IsAnimationEffectsDisabled();
+        => !System.Windows.SystemParameters.ClientAreaAnimation || !IsMinAnimateEnabled() || IsAnimationEffectsDisabled();
 
     private static bool IsMinAnimateEnabled()
     {

@@ -1,162 +1,54 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using Scriblucent.Animations;
 
 namespace Scriblucent.Behaviors;
 
-/// <summary>
-/// Subtle enter and hover motion for dashboard tag chips.
-/// Hover uses lift instead of scale so chip text stays sharp.
-/// </summary>
+/// <summary>Quiet hover; only a semantic tag addition gets an entrance.</summary>
 public static class TagChipMotionBehavior
 {
-    private const int EnterMs = 220;
-    private const int HoverMs = 160;
-    private const double EnterLiftY = 4;
-
-    private sealed class State
-    {
-        public bool IsAttached;
-        public RoutedEventHandler? LoadedHandler;
-        public MouseEventHandler? MouseEnterHandler;
-        public MouseEventHandler? MouseLeaveHandler;
-    }
-
-    private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
-        "State",
-        typeof(State),
-        typeof(TagChipMotionBehavior),
-        new PropertyMetadata(null));
-
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
-        "IsEnabled",
-        typeof(bool),
-        typeof(TagChipMotionBehavior),
-        new PropertyMetadata(false, OnIsEnabledChanged));
-
-    public static void SetIsEnabled(DependencyObject element, bool value)
-        => element.SetValue(IsEnabledProperty, value);
-
-    public static bool GetIsEnabled(DependencyObject element)
-        => (bool)element.GetValue(IsEnabledProperty);
-
-    private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        "IsEnabled", typeof(bool), typeof(TagChipMotionBehavior), new PropertyMetadata(false, Changed));
+    public static void SetIsEnabled(DependencyObject d, bool value) => d.SetValue(IsEnabledProperty, value);
+    public static bool GetIsEnabled(DependencyObject d) => (bool)d.GetValue(IsEnabledProperty);
+    private static FrameworkElement Host(Border border) => border.Child as FrameworkElement ?? border;
+    private static void Changed(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not Border border)
-            return;
-
-        if (e.NewValue is true)
-            Attach(border);
-        else
-            Detach(border);
-    }
-
-    private static void Attach(Border border)
-    {
-        var state = GetOrCreateState(border);
-        if (state.IsAttached)
-            return;
-
-        border.RenderTransformOrigin = new Point(0.5, 0.5);
-
-        state.LoadedHandler = (_, _) =>
+        if (d is not Border border) return;
+        border.Loaded -= Loaded; border.Unloaded -= Unloaded;
+        border.MouseEnter -= Enter; border.MouseLeave -= Leave;
+        if ((bool)e.NewValue)
         {
-            ResetRest(border);
-            if (border.IsVisible)
-                PlayEnter(border);
-        };
-        state.MouseEnterHandler = (_, _) => PlayHover(border, isEnter: true);
-        state.MouseLeaveHandler = (_, _) => PlayHover(border, isEnter: false);
-
-        border.Loaded += state.LoadedHandler;
-        border.Unloaded += (_, _) => Detach(border);
-        border.MouseEnter += state.MouseEnterHandler;
-        border.MouseLeave += state.MouseLeaveHandler;
-        state.IsAttached = true;
-
-        if (border.IsLoaded)
-        {
-            ResetRest(border);
-            if (border.IsVisible)
-                PlayEnter(border);
+            border.Loaded += Loaded; border.Unloaded += Unloaded;
+            border.MouseEnter += Enter; border.MouseLeave += Leave;
+            if (border.IsLoaded) Loaded(border, new RoutedEventArgs());
         }
+        else { UiMotion.Cleanup(border); SurfaceLight.Reset(border); }
     }
-
-    private static void Detach(Border border)
+    private static void Loaded(object sender, RoutedEventArgs e)
     {
-        if (border.GetValue(StateProperty) is not State state || !state.IsAttached)
-            return;
-
-        if (state.LoadedHandler != null)
-            border.Loaded -= state.LoadedHandler;
-        if (state.MouseEnterHandler != null)
-            border.MouseEnter -= state.MouseEnterHandler;
-        if (state.MouseLeaveHandler != null)
-            border.MouseLeave -= state.MouseLeaveHandler;
-
-        UiMotion.Stop(border);
-        state.IsAttached = false;
-    }
-
-    private static void ResetRest(Border border)
-    {
-        UiMotion.Stop(border);
-        border.Opacity = 1;
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(border);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
-        translate.X = 0;
-        translate.Y = 0;
-    }
-
-    private static void PlayEnter(Border border)
-    {
-        if (UiMotion.PrefersReducedMotion)
+        var border = (Border)sender;
+        for (DependencyObject? parent = VisualTreeHelper.GetParent(border); parent is not null; parent = VisualTreeHelper.GetParent(parent))
         {
-            ResetRest(border);
-            return;
+            if (parent is not ItemsControl list) continue;
+            ItemPresenceMotionBehavior.SetEnterDuration(list, 160);
+            ItemPresenceMotionBehavior.SetRise(list, 4);
+            ItemPresenceMotionBehavior.SetIsEnabled(list, true);
+            break;
         }
-
-        UiMotion.Stop(border);
-        var (_, translate) = UiMotion.EnsureScaleTranslateGroup(border);
-        border.Opacity = 0;
-        translate.Y = EnterLiftY;
-
-        UiMotion.Run(
-            border,
-            new[]
-            {
-                UiMotion.Track(EnterMs, UiMotion.OutCubic, 0, 1, value => border.Opacity = value),
-                UiMotion.Track(EnterMs, UiMotion.OutBack, EnterLiftY, 0, value => translate.Y = value)
-            });
+        UiMotion.ChannelTranslate(Host(border), MotionChannel.Interaction).Y = 0;
     }
-
-    private static void PlayHover(Border border, bool isEnter)
+    private static void Unloaded(object sender, RoutedEventArgs e)
+    { var border = (Border)sender; UiMotion.Cleanup(border); SurfaceLight.Reset(border); }
+    private static void Enter(object sender, System.Windows.Input.MouseEventArgs e) => Hover((Border)sender, true);
+    private static void Leave(object sender, System.Windows.Input.MouseEventArgs e) => Hover((Border)sender, false);
+    private static void Hover(Border border, bool enter)
     {
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(border);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
-
-        var targetLift = isEnter ? UiMotion.ChipHoverLiftY : 0.0;
-        var liftFrom = translate.Y;
-
-        UiMotion.Run(
-            border,
-            new[]
-            {
-                UiMotion.Track(HoverMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
-            });
-    }
-
-    private static State GetOrCreateState(Border border)
-    {
-        if (border.GetValue(StateProperty) is State state)
-            return state;
-
-        state = new State();
-        border.SetValue(StateProperty, state);
-        return state;
+        if (!MotionPolicy.Spatial || Scriblucent.Controls.DashboardScrollRenderGate.IsSmoothScrollRendering(border)) return;
+        // Light belongs to the chip surface; its label stays in place.
+        var tracks = new List<NativeMotionTrack>();
+        SurfaceLight.AddTracks(border, tracks, enter, .45, neutral: true);
+        SurfaceMotion.AnimateTracks(border, MotionChannel.Interaction, tracks, enter ? 140 : 180, UiMotion.OutSine);
     }
 }

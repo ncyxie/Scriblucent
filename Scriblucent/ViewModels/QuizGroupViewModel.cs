@@ -9,8 +9,9 @@ public sealed class QuizGroupViewModel : ViewModelBase
     private Brush _backgroundBrush;
     private Brush _foregroundBrush;
 
-    public QuizGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<QuizViewModel> quizzes)
+    public QuizGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<QuizViewModel> quizzes, GroupDisclosureState? disclosure = null)
     {
+        Disclosure = disclosure ?? new GroupDisclosureState();
         GroupId = groupId;
         _name = name;
         BackgroundColor = backgroundColor;
@@ -20,6 +21,7 @@ public sealed class QuizGroupViewModel : ViewModelBase
     }
 
     public Guid GroupId { get; }
+    public GroupDisclosureState Disclosure { get; }
 
     public string Name
     {

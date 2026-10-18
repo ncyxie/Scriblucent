@@ -92,11 +92,13 @@ internal static class WindowThemeService
 
     private static void ApplyCaptionColors(IntPtr handle, Window window, bool isDarkMode)
     {
-        // Main shell caption matches SidebarBackground; feature Client chrome matches FeatureFrameBackground.
+        // Client captions follow the neutral surround outside the rounded workspace.
         var frameKey = ShellWindowChrome.GetShellFrameBackgroundKey(window);
-        var captionFallback = frameKey == "FeatureFrameBackground"
-            ? (isDarkMode ? Color.FromRgb(0x16, 0x16, 0x16) : Color.FromRgb(0xDE, 0xDE, 0xE8))
-            : (isDarkMode ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xEC, 0xEC, 0xF1));
+        var captionFallback = frameKey switch
+        {
+            "WindowBackground" => isDarkMode ? Color.FromRgb(0x23, 0x23, 0x23) : Color.FromRgb(0xEE, 0xF0, 0xF5),
+            _ => isDarkMode ? Color.FromRgb(0x1A, 0x1A, 0x1A) : Color.FromRgb(0xEC, 0xEC, 0xF1)
+        };
         var captionColor = ResolveColor(window, frameKey, captionFallback);
         var borderColor = ResolveColor(
             window,

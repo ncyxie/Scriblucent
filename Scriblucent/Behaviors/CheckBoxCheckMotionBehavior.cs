@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Shapes;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Scriblucent.Animations;
 
@@ -13,8 +14,8 @@ public static class CheckBoxCheckMotionBehavior
 {
     public const double PathLength = 14;
     private const double HiddenDashOffset = 16;
-    private const int EnterMs = 200;
-    private const int ExitMs = 180;
+    private const int EnterMs = 160;
+    private const int ExitMs = 100;
 
     private sealed class State
     {
@@ -178,12 +179,12 @@ public static class CheckBoxCheckMotionBehavior
         {
             glyph.Opacity = 1;
             glyph.StrokeDashOffset = PathLength;
-            UiMotion.Run(
-                glyph,
-                new[]
-                {
-                    UiMotion.Track(EnterMs, UiMotion.OutCubic, PathLength, 0, value => glyph.StrokeDashOffset = value)
-                });
+            glyph.RenderTransformOrigin = new Point(.5, .5);
+            var scale = UiMotion.EnsureScale(glyph); scale.ScaleX = scale.ScaleY = .86;
+            SurfaceMotion.AnimateTracks(glyph, MotionChannel.Interaction,
+                [new(glyph, Shape.StrokeDashOffsetProperty, 0, true),
+                 new(scale, ScaleTransform.ScaleXProperty, 1, true, 1.04, 1),
+                 new(scale, ScaleTransform.ScaleYProperty, 1, true, 1.04, 1)], EnterMs, UiMotion.OutCubic);
             return;
         }
 
@@ -193,8 +194,8 @@ public static class CheckBoxCheckMotionBehavior
             glyph,
             new[]
             {
-                UiMotion.Track(ExitMs, UiMotion.InOutSine, from, HiddenDashOffset, value => glyph.StrokeDashOffset = value),
-                UiMotion.Track(ExitMs, UiMotion.InOutSine, 1, 0, value => glyph.Opacity = value)
+                UiMotion.Track(checkBox is Scriblucent.Controls.CollectionSelectionToggle ? EnterMs : ExitMs, UiMotion.InOutSine, from, HiddenDashOffset, value => glyph.StrokeDashOffset = value),
+                UiMotion.Track(checkBox is Scriblucent.Controls.CollectionSelectionToggle ? EnterMs : ExitMs, UiMotion.InOutSine, 1, 0, value => glyph.Opacity = value)
             },
             () => HideUnchecked(glyph));
     }
@@ -203,6 +204,7 @@ public static class CheckBoxCheckMotionBehavior
     {
         glyph.Opacity = 1;
         glyph.StrokeDashOffset = 0;
+        var scale = UiMotion.EnsureScale(glyph); scale.ScaleX = scale.ScaleY = 1;
     }
 
     private static void HideUnchecked(Path glyph)

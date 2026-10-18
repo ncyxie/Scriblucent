@@ -1,4 +1,6 @@
 ﻿using Scriblucent.Animations;
+using Scriblucent.Behaviors;
+using Scriblucent.Controls;
 using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent.Models;
@@ -25,7 +27,7 @@ using ShapeLine = System.Windows.Shapes.Line;
 
 namespace Scriblucent.Views;
 
-public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
+public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged, Scriblucent.Services.IHostedDocumentEditor
 {
     private enum UnsavedCloseDecision
     {
@@ -44,11 +46,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     // shared column width, not a per-node one - reworking all four to place variable-width boxes
     // without overlapping neighbors is a much bigger change than this needs. Instead the whole
     // map uses one width, recomputed once per RebuildMapCore pass (see ComputeEffectiveNodeWidth)
-    // to fit whatever node currently needs the most room at its own font size - static, not const,
-    // and static (not instance) because the layout-measurement helpers below are static and this
-    // window is always modal/single-instance (see the clipboard fields for the same reasoning).
-    private static double NodeWidth = BaseNodeWidth;
-    private static MindMapNode? LayoutRoot;
+    // to fit whatever node currently needs the most room at its own font size. Each retained
+    // map has its own layout context, so opening another tab cannot change its measurements.
+    private double NodeWidth = BaseNodeWidth;
+    private MindMapNode? LayoutRoot;
     // TextBlock.Measure matches what DrawNodes paints; keep a little slack for layout rounding.
     private const double NodeHeightSlack = 6;
     private const double HorizontalGap = 150;
@@ -100,6 +101,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private bool _isManualDragPending;
     private bool _isLinkDragGesture;
     private bool _connectionRedrawQueued;
+    private readonly Dictionary<Guid, string> _motionNodeText = new();
     private bool _mapViewportRefreshQueued;
     private MindMapNode? _draggedNode;
     private MindMapNode? _pendingDragNode;
@@ -112,11 +114,15 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private bool _suppressManualPositionCapture;
     private bool _isViewPanning;
 
-    // Zoom-session Skia tiles: during zoom gestures the live canvas collapses behind a cached
-    // tile layer rendered off-thread (see SkiaMindMapTileCache), masking the LayoutTransform
+    // Zoom-session Skia snapshots: during zoom gestures the live canvas collapses behind a cached
+    // layer rendered off-thread, masking the LayoutTransform
     // re-raster cost on large maps. The canvas returns ~350ms after the last zoom change.
     private int _tileRevision;
-    private Scriblucent.Rendering.MindMapTileSnapshot? _tileSnapshot;
+    private readonly Guid _tileMapId = Guid.NewGuid();
+    private int _snapshotRequest;
+    private int _snapshotSourceRevision = -1;
+    private string? _snapshotSourceTheme;
+    private bool _snapshotWarmQueued, _mapClosed;
     private DispatcherTimer? _tileSettleTimer;
     private bool _tileSessionActive;
     
@@ -124,7 +130,6 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private readonly Dictionary<MindMapNode, Point> _manualPositions = new();
     private string _lastSavedSnapshot = string.Empty;
     private bool _isInitializing = true;
-    private bool _isFlashingTitleStatus;
     private bool _allowCloseWithoutPrompt;
     private MindMapNoteLinkOption? _selectedLinkedNote;
 
@@ -134,15 +139,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private bool _isArrangePanelOpen;
     private bool _isSearchPanelOpen;
     private bool _isFontPanelOpen;
-    private int _arrangePanelAnimationVersion;
-    private int _searchPanelAnimationVersion;
-    private int _fontPanelAnimationVersion;
 
     // Tags panel is independent of the group above (different row, no visual overlap) so it does
     // not participate in their mutual exclusion, and its state is persisted per-document.
     private bool _isTagsPanelOpen;
     private bool _lastSavedTagsPanelOpen;
-    private int _tagsPanelAnimationVersion;
     private bool _suppressFontPanelChangeHandlers;
 
     // Snapshot-based undo/redo, scoped to content edits only (add/delete/reparent/edit text/
@@ -157,11 +158,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private const int MaxUndoDepth = 50;
 
     // Clipboard for cut/copy/paste and copy/paste style. Static (not per-window) because
-    // MindMapPreviewWindow is always opened via ShowDialog (confirmed - only one instance can
-    // ever be open at a time), so there's no cross-window conflict risk - and a static field means
+    // The shared clipboard stores clones, and paste clones again. A static field means
     // the clipboard survives closing one map and opening another, matching how copy/paste behaves
     // in every other app instead of resetting on close.
-    private static MindMapNode? _clipboardNode;
+
     private static CopiedNodeStyle? _copiedStyle;
     private bool _aiReviewNoticeDismissed;
 
@@ -224,6 +224,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         LoadManualPositionsFromNodes(_root);
         _isManualPositioningMode = useManualPositions || _manualPositions.Count > 0;
         InitializeComponent();
+        InitializeNodeSelection();
         Scriblucent.Services.WindowThemeService.Register(this);
         PopulateFontFamilyBox();
 
@@ -239,6 +240,17 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         ConfigureAiGeneratedIndicator(modelDisplayName);
         AiFeatureGate.Changed += MindMapPreviewWindow_AiFeatureGateChanged;
         Closed += (_, _) => AiFeatureGate.Changed -= MindMapPreviewWindow_AiFeatureGateChanged;
+        ThemeManager.ThemeChanged += MindMapPreviewWindow_ThemeChanged;
+        Closed += (_, _) => ThemeManager.ThemeChanged -= MindMapPreviewWindow_ThemeChanged;
+        Closed += (_, _) =>
+        {
+            _mapClosed = true;
+            _snapshotRequest++;
+            _tileSettleTimer?.Stop();
+            Scriblucent.Rendering.SkiaMindMapSnapshotCache.Release(_tileMapId);
+            UiMotion.Cleanup(MapCanvas);
+            foreach (var node in MapCanvas.Children.OfType<Border>()) UiMotion.Cleanup(node);
+        };
         UpdateSearchResultsText();
 
         _suppressLayoutModeSelectionChanged = true;
@@ -253,27 +265,39 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         OnPropertyChanged(nameof(LinkedNoteButtonText));
         OnPropertyChanged(nameof(LinkedNoteButtonToolTip));
 
-        Loaded += (_, _) =>
-        {
-            MapCanvas.PreviewMouseMove += MapCanvas_PreviewMouseMove;
-            MapCanvas.MouseMove += MapCanvas_MouseMove;
-            MapCanvas.PreviewMouseLeftButtonUp += MapCanvas_PreviewMouseLeftButtonUp;
-            MapCanvas.LostMouseCapture += MapCanvas_LostMouseCapture;
-            MapScrollViewer.PreviewMouseLeftButtonDown += MapScrollViewer_PreviewMouseLeftButtonDown;
-            MapScrollViewer.PreviewMouseDown += MapScrollViewer_PreviewMouseDownForPan;
-            MapScrollViewer.PreviewMouseMove += MapScrollViewer_PreviewMouseMoveForPan;
-            MapScrollViewer.PreviewMouseLeftButtonUp += MapScrollViewer_PreviewMouseButtonUpForPan;
-            MapScrollViewer.PreviewMouseUp += MapScrollViewer_PreviewMouseUpForPan;
-            MapScrollViewer.LostMouseCapture += MapScrollViewer_LostMouseCaptureForPan;
-            RebuildMap(animate: false);
-            MarkCurrentStateSaved();
-            _isInitializing = false;
-            UpdateEditedIndicator();
-        };
+        Loaded += (_, _) => InitializeWorkspaceMap();
         WindowContentEnterHelper.AnimateOnLoaded(this);
         SizeChanged += (_, _) => QueueMapViewportRefresh();
         StateChanged += (_, _) => QueueMapViewportRefresh();
     }
+
+    private bool _workspaceMapInitialized;
+    private void MindMapPreviewWindow_ThemeChanged(object? sender, EventArgs e)
+    {
+        // Generated canvas brushes and raster previews must move to the same theme together.
+        if (_workspaceMapInitialized && !_mapClosed)
+            RebuildMap();
+    }
+
+    private void InitializeWorkspaceMap()
+    {
+        if (_workspaceMapInitialized) return;
+        _workspaceMapInitialized = true;
+        MapCanvas.PreviewMouseMove += MapCanvas_PreviewMouseMove;
+        MapCanvas.MouseMove += MapCanvas_MouseMove;
+        MapCanvas.PreviewMouseLeftButtonUp += MapCanvas_PreviewMouseLeftButtonUp;
+        MapCanvas.LostMouseCapture += MapCanvas_LostMouseCapture;
+        MapScrollViewer.PreviewMouseLeftButtonDown += MapScrollViewer_PreviewMouseLeftButtonDown;
+        MapScrollViewer.PreviewMouseDown += MapScrollViewer_PreviewMouseDownForPan;
+        MapScrollViewer.PreviewMouseMove += MapScrollViewer_PreviewMouseMoveForPan;
+        MapScrollViewer.PreviewMouseLeftButtonUp += MapScrollViewer_PreviewMouseButtonUpForPan;
+        MapScrollViewer.PreviewMouseUp += MapScrollViewer_PreviewMouseUpForPan;
+        MapScrollViewer.LostMouseCapture += MapScrollViewer_LostMouseCaptureForPan;
+        RebuildMap(animate: false);
+        MarkCurrentStateSaved();
+        _isInitializing = false;
+        UpdateEditedIndicator();
+        }
 
     public string EditorTitle => TitleTextBox.Text.Trim();
 
@@ -353,19 +377,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void ShowAutoSaveIndicator()
     {
-        if (EditedIndicatorText is null)
-            return;
-
-        _isFlashingTitleStatus = true;
-        UiMotion.FlashInlineStatus(
-            EditedIndicatorText,
-            LocalizationService.GetString("AutoSaving"),
-            () =>
-            {
-                _isFlashingTitleStatus = false;
-                UpdateEditedIndicator();
-            });
+        EditedIndicatorText?.ShowSaved(UpdateEditedIndicator);
     }
+
+    public void ReportWorkspaceSaveFailure() => EditedIndicatorText?.ShowFailure();
 
     private bool HasUnsavedChanges()
     {
@@ -377,11 +392,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateEditedIndicator()
     {
-        if (_isInitializing || EditedIndicatorText is null || _isFlashingTitleStatus)
+        WorkspaceStateChanged?.Invoke();
+        if (_isInitializing || EditedIndicatorText is null)
             return;
 
-        EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
-        UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
+        EditedIndicatorText.SetEdited(HasUnsavedChanges());
     }
 
     private string GetEditorSnapshot()
@@ -426,7 +441,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         var documentTitle = ResolveEditorTitleForPrompt();
         var result = ModernDialog.Show(
-            this,
+            WorkspaceOwner,
             LocalizationService.GetString("UnsavedChanges"),
             string.Format(LocalizationService.GetString("UnsavedChangesConfirmationFormat"), documentTitle),
             ModernDialogTone.Warning,
@@ -454,6 +469,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void SaveAndClose()
     {
+        if (_workspaceSave is not null) { _workspaceSave(); return; }
         MarkCurrentStateSaved();
         _allowCloseWithoutPrompt = true;
         WindowContentEnterHelper.CloseWithDialogResult(this, true);
@@ -498,12 +514,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         };
     }
 
-    public MindMapDocument ToDocument(MindMapDocument? existingDocument = null)
+    public MindMapDocument ToDocument(MindMapDocument? existingDocument = null, bool captureLayout = true)
     {
-        if (_isManualPositioningMode)
-            CaptureVisibleLayoutAsManualPositions();
-        else
-            ClearManualPositions(_root);
+        if (captureLayout)
+        {
+            if (_isManualPositioningMode) CaptureVisibleLayoutAsManualPositions();
+            else ClearManualPositions(_root);
+        }
 
         return new MindMapDocument
         {
@@ -588,19 +605,19 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (_isManualPositioningMode)
         {
             ManualPositioningStateText.Text = LocalizationService.GetString("MindMapManualPositioningOn");
-            ManualPositioningStatusDot.Fill = Brushes.White;
-            ManualPositioningStateBadge.Background = Brushes.White;
+            ManualPositioningStatusDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "AccentPrimaryForeground");
+            ManualPositioningStateBadge.SetResourceReference(Border.BackgroundProperty, "AccentPrimarySubtle");
             ManualPositioningStateBadge.BorderBrush = Brushes.Transparent;
-            ManualPositioningStateText.Foreground = GetThemeBrush("MindMapSelectedBorderBrush", Color.FromRgb(63, 111, 232));
+            ManualPositioningStateText.SetResourceReference(TextBlock.ForegroundProperty, "AccentPrimarySubtleForeground");
             ManualPositioningToggle.ToolTip = LocalizationService.GetString("MindMapManualPositioningOnHint");
             return;
         }
 
         ManualPositioningStateText.Text = LocalizationService.GetString("MindMapManualPositioningOff");
-        ManualPositioningStatusDot.Fill = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92));
-        ManualPositioningStateBadge.Background = GetThemeBrush("IconButtonBackground", Color.FromRgb(245, 247, 251));
+        ManualPositioningStatusDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "TextColorSecondary");
+        ManualPositioningStateBadge.SetResourceReference(Border.BackgroundProperty, "IconButtonBackground");
         ManualPositioningStateBadge.BorderBrush = Brushes.Transparent;
-        ManualPositioningStateText.Foreground = GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92));
+        ManualPositioningStateText.SetResourceReference(TextBlock.ForegroundProperty, "TextColorSecondary");
         ManualPositioningToggle.ToolTip = LocalizationService.GetString("MindMapManualPositioningOffHint");
     }
 
@@ -613,13 +630,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             AiGeneratedInfoBadge.ToolTip = null;
             if (_isInitializing)
             {
-                AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
-                AiReviewNotice.Visibility = Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, false, axis: Orientation.Horizontal, animate: false);
+                UiMotion.AnimateLayoutReveal(AiReviewNotice, false, animate: false);
                 return;
             }
 
-            UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
-            UiMotion.AnimateInlineReveal(AiReviewNotice, false);
+            UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, false, axis: Orientation.Horizontal);
+            UiMotion.AnimateLayoutReveal(AiReviewNotice, false);
             return;
         }
 
@@ -630,13 +647,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         if (_isInitializing)
         {
-            AiGeneratedInfoBadge.Visibility = Visibility.Visible;
-            AiReviewNotice.Visibility = _aiReviewNoticeDismissed ? Visibility.Collapsed : Visibility.Visible;
+            UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, true, axis: Orientation.Horizontal, animate: false);
+            UiMotion.AnimateLayoutReveal(AiReviewNotice, !_aiReviewNoticeDismissed, animate: false);
             return;
         }
 
-        UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
-        UiMotion.AnimateInlineReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
+        UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, true, axis: Orientation.Horizontal);
+        UiMotion.AnimateLayoutReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
     }
 
     public event EventHandler? AiReviewNoticeDismissedPersistRequested;
@@ -656,27 +673,84 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         Dispatcher.Invoke(() => ConfigureAiGeneratedIndicator(_modelDisplayName));
     }
 
-    private void RebuildMap(bool animate = true)
+    private void RebuildMap(bool animate = true, bool moveNodes = false)
     {
-        if (animate && !_isInitializing && IsLoaded && !UiMotion.PrefersReducedMotion)
-        {
-            UiMotion.Stop(MapCanvas);
-            UiMotion.Fade(
-                MapCanvas,
-                0,
-                UiMotion.NavFadeOutMs,
-                UiMotion.InCubic,
-                () =>
-                {
-                    RebuildMapCore();
-                    MapCanvas.Opacity = 0;
-                    UiMotion.Fade(MapCanvas, 1, UiMotion.QuickMs, UiMotion.OutCubic);
-                });
-            return;
-        }
-
+        UiMotion.Stop(UiMotion.Channel(MapCanvas, MotionChannel.Layout));
+        UiMotion.Stop(MapCanvas);
+        MapCanvas.Opacity = 1;
+        var before = moveNodes && _layouts.Count <= 32 ? new Dictionary<MindMapNode, NodeLayout>(_layouts) : null;
         RebuildMapCore();
+        var nodes = MapCanvas.Children.OfType<Border>().Where(b => b.Tag is MindMapNode).ToArray();
+        var changed = 0;
+        foreach (var border in nodes)
+        {
+            var node = (MindMapNode)border.Tag;
+            if (animate && !_isInitializing && ContentRoot.IsLoaded && changed < 8
+                && (!_motionNodeText.TryGetValue(node.Id, out var text) || text != node.Text))
+            {
+                var newNode = !_motionNodeText.ContainsKey(node.Id);
+                border.Opacity = 0;
+                var rise = UiMotion.ChannelTranslate(border, MotionChannel.Presence);
+                rise.Y = newNode && MotionPolicy.Spatial ? 12 : 0;
+                SurfaceMotion.Arrive(border, newNode ? 220 : 160, translate: rise);
+                if (newNode)
+                    foreach (var edge in MapCanvas.Children.OfType<FrameworkElement>().Where(e => e.Tag is ValueTuple<MindMapNode, MindMapNode> pair && ReferenceEquals(pair.Item2, node)))
+                    { edge.Opacity = 0; UiMotion.Fade(edge, 1, 160); }
+                changed++;
+            }
+        }
+        _motionNodeText.Clear();
+        foreach (var border in nodes) { var node = (MindMapNode)border.Tag; _motionNodeText[node.Id] = node.Text; }
+        if (before is null || !animate || !MotionPolicy.Spatial || nodes.Length > 32
+            || MapCanvas.Children.OfType<ShapePath>().Count() + MapCanvas.Children.OfType<ShapeLine>().Count() > 64) return;
+        var tracks = new List<RenderTransitionClock.Track>();
+        foreach (var border in nodes)
+        {
+            var node = (MindMapNode)border.Tag;
+            if (!before.TryGetValue(node, out var old) || !_layouts.TryGetValue(node, out var target)) continue;
+            var translate = UiMotion.ChannelTranslate(border, MotionChannel.Layout);
+            translate.X = old.X - target.X; translate.Y = old.Y - target.Y;
+            tracks.Add(UiMotion.Track(220, UiMotion.InOutCubic, translate.X, 0, v => translate.X = v));
+            tracks.Add(UiMotion.Track(220, UiMotion.InOutCubic, translate.Y, 0, v => translate.Y = v));
+        }
+        foreach (var path in MapCanvas.Children.OfType<ShapePath>())
+        {
+            if (path.Tag is not ValueTuple<MindMapNode, MindMapNode> pair
+                || !before.TryGetValue(pair.Item1, out var oldParent) || !before.TryGetValue(pair.Item2, out var oldChild)
+                || path.Data is not PathGeometry targetGeometry) continue;
+            var geometry = targetGeometry.Clone(); path.Data = geometry;
+            var figure = geometry.Figures[0]; var segment = (BezierSegment)figure.Segments[0];
+            var oldFigure = oldChild.Direction == 2 ? CreateVerticalConnectionFigure(oldParent, oldChild)
+                : CreateHorizontalConnectionFigure(oldParent, oldChild);
+            var oldSegment = (BezierSegment)oldFigure.Segments[0];
+            var endStart = figure.StartPoint; var end1 = segment.Point1; var end2 = segment.Point2; var end3 = segment.Point3;
+            void Apply(double t)
+            {
+                figure.StartPoint = BlendPoint(oldFigure.StartPoint, endStart, t);
+                segment.Point1 = BlendPoint(oldSegment.Point1, end1, t);
+                segment.Point2 = BlendPoint(oldSegment.Point2, end2, t);
+                segment.Point3 = BlendPoint(oldSegment.Point3, end3, t);
+            }
+            Apply(0); tracks.Add(UiMotion.Track(220, UiMotion.InOutCubic, 0, 1, Apply));
+        }
+        foreach (var line in MapCanvas.Children.OfType<ShapeLine>())
+        {
+            if (line.Tag is not ValueTuple<MindMapNode, MindMapNode> pair
+                || !before.TryGetValue(pair.Item1, out var a) || !before.TryGetValue(pair.Item2, out var b)) continue;
+            var x1 = line.X1; var y1 = line.Y1; var x2 = line.X2; var y2 = line.Y2;
+            void Apply(double t)
+            {
+                line.X1 = UiMotion.Lerp(a.X + a.Width / 2, x1, t); line.Y1 = UiMotion.Lerp(a.Y + a.Height / 2, y1, t);
+                line.X2 = UiMotion.Lerp(b.X + b.Width / 2, x2, t); line.Y2 = UiMotion.Lerp(b.Y + b.Height / 2, y2, t);
+            }
+            Apply(0); tracks.Add(UiMotion.Track(220, UiMotion.InOutCubic, 0, 1, Apply));
+        }
+        UiMotion.Run(MapCanvas, MotionChannel.Layout, tracks);
     }
+
+    private static Point BlendPoint(Point from, Point to, double t)
+        => new(UiMotion.Lerp(from.X, to.X, t), UiMotion.Lerp(from.Y, to.Y, t));
+
 
     private void RebuildMapCore()
     {
@@ -685,7 +759,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _layouts.Clear();
         MapCanvas.Children.Clear();
         _tileRevision++;
-        _tileSnapshot = null;
+        _snapshotSourceRevision = -1;
         LayoutRoot = _root;
         NodeWidth = ComputeEffectiveNodeWidth(_root);
 
@@ -742,6 +816,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         QueueInitialCenterOnRoot();
         UpdateEditedIndicator();
         RefreshFontPanelFromSelection();
+        SyncNodeSelection();
 
         // The visuals were rebuilt above - warm the zoom-tile cache for the visible region so
         // the next zoom session starts with tiles ready (deferred past the layout pass).
@@ -1276,7 +1351,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         Dispatcher.BeginInvoke(() =>
         {
             _mapViewportRefreshQueued = false;
-            if (!IsLoaded)
+            if (!ContentRoot.IsLoaded)
                 return;
 
             RefreshMapViewportSize();
@@ -1314,7 +1389,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         MapCanvas.Width = Math.Max(viewportWidth / minZoom, maxRight + CanvasPadding);
-        MapCanvas.Height = Math.Max(viewportHeight / minZoom, maxBottom + CanvasPadding);
+        MapCanvas.Height = Math.Max(viewportHeight / minZoom, maxBottom + CanvasPadding + NodeSelectionDock.ScrollClearance / Math.Max(.1, MapScaleTransform.ScaleY));
 
         // Keep the transformed wrapper at the canvas size directly: during a tile session the
         // canvas is collapsed, so its SizeChanged never fires and the wrapper (hence the
@@ -1361,7 +1436,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         MapScrollViewer.ScrollToVerticalOffset(Math.Clamp(targetY, 0, Math.Max(0, MapScrollViewer.ScrollableHeight)));
     }
 
-    private static double MeasureChildrenHeight(IReadOnlyList<MindMapNode> children)
+    private double MeasureChildrenHeight(IReadOnlyList<MindMapNode> children)
     {
         if (children.Count == 0)
             return 0;
@@ -1370,7 +1445,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             + VerticalGap * Math.Max(0, children.Count - 1);
     }
 
-    private static double MeasureSubtree(MindMapNode node)
+    private double MeasureSubtree(MindMapNode node)
     {
         var ownHeight = MeasureNodeHeight(node);
         if (!node.IsExpanded || node.Children.Count == 0)
@@ -1382,7 +1457,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return Math.Max(ownHeight, childrenHeight);
     }
 
-    private static double MeasureVerticalSubtree(MindMapNode node)
+    private double MeasureVerticalSubtree(MindMapNode node)
     {
         if (!node.IsExpanded || node.Children.Count == 0)
             return NodeWidth;
@@ -1393,7 +1468,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return Math.Max(NodeWidth, childrenWidth);
     }
 
-    private static Typeface ResolveNodeTypeface(MindMapNode node, out double fontSize)
+    private Typeface ResolveNodeTypeface(MindMapNode node, out double fontSize)
     {
         fontSize = node.FontSize ?? DefaultNodeFontSize;
         var fontFamily = !string.IsNullOrWhiteSpace(node.FontFamily)
@@ -1419,14 +1494,15 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     // title wraps to about PreferredTitleLines (not single-line width), so large fonts / longer
     // phrases widen the column modestly instead of stacking into a tall narrow tower. Collapsed
     // nodes are ignored; expand/collapse rebuilds and re-measures.
-    private static double ComputeEffectiveNodeWidth(MindMapNode root)
+    private double ComputeEffectiveNodeWidth(MindMapNode root)
     {
         var maxWidth = BaseNodeWidth;
 
         foreach (var node in EnumerateVisibleNodes(root))
         {
             var typeface = ResolveNodeTypeface(node, out var fontSize);
-            var contentWidth = MeasurePreferredContentWidth(node.Text, typeface, fontSize);
+            var contentWidth = Math.Max(MeasurePreferredContentWidth(node.Text, typeface, fontSize),
+                MeasureMetaContentWidth(node));
             var neededWidth = contentWidth
                 + NodeTextHorizontalPadding
                 + EstimateChevronReserve(node)
@@ -1435,6 +1511,26 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         return maxWidth;
+    }
+
+    private double MeasureMetaContentWidth(MindMapNode node)
+    {
+        // Dense combinations (badges, folded count, note and link) must fit the wider gaps.
+        var icons = MindMapNodeIconCatalog.NormalizeStoredIcons(node.Icons);
+        var visible = Math.Min(icons.Count, MaxVisibleNodeIcons);
+        var overflow = icons.Count - visible;
+        var width = visible > 0 ? visible * (MetaGlyphSize + MetaItemGap) + MetaItemGap : 0;
+        double LabelWidth(string text) => MeasureWrappedText(text,
+            new Typeface(DefaultNodeFontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+            TypeScale.Px(TypeScale.Chip, 11), double.PositiveInfinity).Width;
+        if (overflow > 0)
+            width += LabelWidth(string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.GetString("MindMapIconOverflowFormat"), overflow));
+        if (node.HasChildren && !node.IsExpanded)
+            width += LabelWidth((EnumerateAllNodes(node).Count() - 1).ToString(CultureInfo.InvariantCulture)) + MetaItemGap;
+        if (!string.IsNullOrWhiteSpace(node.Note)) width += MetaRowHeight + MetaItemGap;
+        if (node.LinkedNoteId.HasValue) width += MetaRowHeight;
+        return width;
     }
 
     // TextBlock.Measure matches what DrawNodes actually paints; FormattedText often under-reports
@@ -1484,7 +1580,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return Math.Clamp(hi, 20, oneLineWidth);
     }
 
-    private static double GetTitleContentWidth(MindMapNode node)
+    private double GetTitleContentWidth(MindMapNode node)
         => Math.Max(
             20,
             NodeWidth
@@ -1542,7 +1638,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     // Height tracks the real wrapped TextBlock (same typeface/DPI/ellipsize as DrawNodes) so a
     // second+ line grows the card instead of clipping inside a one-line shell.
-    private static double MeasureNodeHeight(MindMapNode node)
+    private double MeasureNodeHeight(MindMapNode node)
     {
         var typeface = ResolveNodeTypeface(node, out var fontSize);
         var borderReserve = GetContentBorderThickness(node) * 2;
@@ -1689,6 +1785,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
                 var line = new ShapeLine
                 {
+                    Tag = (node, target),
                     X1 = sourceLayout.X + sourceLayout.Width / 2,
                     Y1 = sourceLayout.Y + sourceLayout.Height / 2,
                     X2 = targetLayout.X + targetLayout.Width / 2,
@@ -1726,6 +1823,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         // Ctrl held at drag-start means "link, don't move" - checked here (not at mouse-down)
         // so it reflects whatever's held right when the drag actually begins.
         _isLinkDragGesture = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        PrepareGroupDrag(node);
 
         if (_isManualPositioningMode && !_isLinkDragGesture)
         {
@@ -1750,7 +1848,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         MapCanvas.CaptureMouse();
         Panel.SetZIndex(border, DraggingNodeZIndex);
         ApplyNodeDragChrome(border, isDragging: true);
-        SelectSingleNode(node);
+        if (!_selectedNodes.Contains(node) || _selectedNodes.Count < 2) SelectSingleNode(node);
         ApplyNodeSelectionVisuals();
     }
 
@@ -1759,6 +1857,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (!_isDraggingNode || _draggedNode is null || _draggedBorder is null)
             return;
 
+        if (MoveGroupDrag(currentCanvasPos)) return;
         if (!_layouts.TryGetValue(_draggedNode, out var layout))
             return;
 
@@ -1849,7 +1948,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         CancelManualDragPending();
     }
 
-    private void ApplyNodeBorderChrome(Border border, MindMapNode node)
+    private void ApplyNodeBorderChrome(Border border, MindMapNode node, bool animate = true)
     {
         var isRoot = ReferenceEquals(node, _root);
         var defaultThickness = node.BorderThickness > 0
@@ -1863,23 +1962,18 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 : GetThemeBrush("MindMapNodeBorderBrush", Color.FromRgb(194, 203, 220));
         border.Effect = null;
 
-        if (_searchMatches.Contains(node))
-        {
-            border.BorderBrush = GetThemeBrush("MindMapSearchMatchBorderBrush", Color.FromRgb(234, 164, 58));
-            border.BorderThickness = new Thickness(Math.Max(defaultThickness, 2));
-        }
+        if (border.Child is null) return;
+        var (resource, thickness) = ResolveNodeRim(node);
+        AccentMotion.Set(border, resource is not null, resource is null ? null : TryFindResource(resource) as Brush,
+            thickness: thickness, animate: animate);
+    }
 
-        if (ReferenceEquals(node, CurrentSearchMatch))
-        {
-            border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(218, 106, 33));
-            border.BorderThickness = new Thickness(Math.Max(defaultThickness, 2));
-        }
-
-        if (_selectedNodes.Contains(node))
-        {
-            border.BorderBrush = GetThemeBrush("MindMapSelectedBorderBrush", Color.FromRgb(67, 92, 236));
-            border.BorderThickness = new Thickness(Math.Max(defaultThickness, 2));
-        }
+    private (string? Resource, double Thickness) ResolveNodeRim(MindMapNode node)
+    {
+        if (ReferenceEquals(node, _dropTargetHoverNode)) return ("AccentRimBrush", 2.5);
+        if (_selectedNodes.Contains(node)) return ("AccentRimBrush", 2);
+        if (ReferenceEquals(node, CurrentSearchMatch)) return ("MindMapSearchActiveBorderBrush", 2);
+        return _searchMatches.Contains(node) ? ("MindMapSearchMatchBorderBrush", 2) : (null, 0d);
     }
 
     private void ApplyNodeSelectionVisuals()
@@ -1891,6 +1985,22 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         RefreshFontPanelFromSelection();
+        SyncNodeSelection();
+        InvalidateMapSnapshot();
+    }
+
+    private void InvalidateMapSnapshot()
+    {
+        _tileRevision++;
+        _snapshotSourceRevision = -1;
+        if (_tileSessionActive) RestoreCanvas();
+        if (_snapshotWarmQueued || _mapClosed) return;
+        _snapshotWarmQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _snapshotWarmQueued = false;
+            if (!_mapClosed && !_tileSessionActive && !_isDraggingNode) WarmSnapshot();
+        }, DispatcherPriority.Loaded);
     }
 
     private void FinalizeManualNodeDrag(MindMapNode node, Border border, Point dropPosition)
@@ -1905,6 +2015,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (MapCanvas.IsMouseCaptured)
             MapCanvas.ReleaseMouseCapture();
 
+        if (_groupDragStarts.Count > 1)
+        {
+            _groupDragStarts.Clear(); Panel.SetZIndex(border, NodeZIndex); ApplyNodeDragChrome(border, false);
+            ApplyNodeSelectionVisuals(); UpdateMapCanvasSize(); UpdateEditedIndicator(); return;
+        }
         var dropTarget = ReferenceEquals(node, _root) ? null : FindDropTargetNode(node, dropPosition);
 
         if (isLinkGesture)
@@ -2046,24 +2161,24 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (ReferenceEquals(_dropTargetHoverNode, candidate))
             return;
 
-        if (_dropTargetHoverNode is not null)
-        {
-            var previousBorder = FindNodeBorder(_dropTargetHoverNode);
-            if (previousBorder is not null)
-                ApplyNodeBorderChrome(previousBorder, _dropTargetHoverNode);
-        }
-
+        var previous = _dropTargetHoverNode;
         _dropTargetHoverNode = candidate;
+        if (previous is not null)
+        {
+            var previousBorder = FindNodeBorder(previous);
+            if (previousBorder is not null)
+                ApplyNodeBorderChrome(previousBorder, previous);
+        }
 
         if (candidate is not null)
         {
             var border = FindNodeBorder(candidate);
             if (border is not null)
             {
-                border.BorderBrush = GetThemeBrush("MindMapSearchActiveBorderBrush", Color.FromRgb(245, 114, 11));
-                border.BorderThickness = new Thickness(3);
+                ApplyNodeBorderChrome(border, candidate);
             }
         }
+        InvalidateMapSnapshot();
     }
 
     private Border? FindNodeBorder(MindMapNode node)
@@ -2081,51 +2196,74 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     // menus in Themes/Controls/Chrome.xaml) - the DropShadowEffect goes on a separate
     // non-hit-testable sibling instead of directly on the text-bearing border, since a shadow
     // effect on the same element that renders text rasterizes (and blurs) the text too.
-    private Popup BuildNotePopup(Border placementTarget, string noteText)
+    private Popup BuildNotePopup(FrameworkElement placementTarget, string noteText)
     {
         var shadowBorder = new Border
         {
             Background = GetThemeBrush("CardBackground", Color.FromRgb(255, 255, 255)),
             BorderBrush = GetThemeBrush("PopupBorder", Color.FromRgb(208, 208, 220)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = ResolveCornerRadiusToken("Radius.Control", 10),
             Effect = TryFindResource("Elevation.Popup") as Effect,
             IsHitTestVisible = false
         };
 
-        var contentBorder = new Border
+        var contentBorder = new SurfaceMaterialBorder
         {
             Background = GetThemeBrush("CardBackground", Color.FromRgb(255, 255, 255)),
             BorderBrush = GetThemeBrush("PopupBorder", Color.FromRgb(208, 208, 220)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = ResolveCornerRadiusToken("Radius.Control", 10),
             Padding = new Thickness(12),
-            MaxWidth = 260,
-            Child = new TextBlock
+            MaxWidth = 320,
+            Child = new ScrollViewer
             {
-                Text = noteText,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = GetThemeBrush("TextColor", Color.FromRgb(31, 41, 55)),
-                FontSize = TypeScale.Px(TypeScale.Caption, 12)
+                Style = TryFindResource("PopupListScrollViewerStyle") as Style,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                MaxHeight = 280,
+                Content = new TextBlock
+                {
+                    Text = noteText,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontFamily = DefaultNodeFontFamily,
+                    FontSize = TypeScale.Px(TypeScale.Body, 14)
+                }
             }
         };
+        SurfaceMaterial.SetKind(contentBorder, SurfaceMaterialKind.Raised);
+        contentBorder.SetResourceReference(Border.BackgroundProperty, "CardBackground");
+        contentBorder.SetResourceReference(Border.BorderBrushProperty, "PopupBorder");
+        shadowBorder.SetResourceReference(Border.BackgroundProperty, "CardBackground");
+        shadowBorder.SetResourceReference(Border.BorderBrushProperty, "PopupBorder");
+        ((TextBlock)((ScrollViewer)contentBorder.Child).Content).SetResourceReference(TextBlock.ForegroundProperty, "TextColor");
 
         // Padding-only outer border, matching Chrome.xaml's own popups - gives the shadow's blur
         // and offset room to render instead of getting clipped at the popup's own edge.
-        var shell = new Grid { Margin = new Thickness(10) };
+        var shell = new Grid { Margin = new Thickness(32), HorizontalAlignment = HorizontalAlignment.Left };
         shell.Children.Add(shadowBorder);
         shell.Children.Add(contentBorder);
 
-        return new Popup
+        var popup = new Popup
         {
             PlacementTarget = placementTarget,
             Placement = PlacementMode.Bottom,
-            VerticalOffset = 6,
+            HorizontalOffset = -32,
+            VerticalOffset = -26,
             StaysOpen = false,
             AllowsTransparency = true,
-            PopupAnimation = PopupAnimation.Fade,
+            PopupAnimation = PopupAnimation.None,
             Child = shell
         };
+        popup.Opened += (_, _) =>
+        {
+            var workArea = FeatureWindowBounds.GetWorkArea(popup.Child);
+            contentBorder.MaxWidth = Math.Max(1, Math.Min(320, workArea.Width - 64));
+            ((ScrollViewer)contentBorder.Child).MaxHeight = Math.Max(1, Math.Min(280, workArea.Height - 88));
+        };
+        placementTarget.Unloaded += (_, _) => popup.IsOpen = false;
+        UiMotion.AttachPopupOpenAnimation(popup);
+        return popup;
     }
 
     private static double EstimateChevronReserve(MindMapNode node)
@@ -2156,10 +2294,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private Brush GetCardMetaBrush()
         => GetThemeBrush("TextColorSecondary", Color.FromRgb(92, 92, 92));
 
-    private Border CreateFoldChevron(MindMapNode node)
+    private Button CreateFoldChevron(MindMapNode node)
     {
-        var chevron = new Border
+        var chevron = new Button
         {
+            Style = TryFindResource("CompactGlyphButtonStyle") as Style,
             Width = ChevronHitSize,
             Height = ChevronHitSize,
             Background = Brushes.Transparent,
@@ -2167,7 +2306,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 1, ChevronTitleGap, 0),
             ToolTip = LocalizationService.GetString(node.IsExpanded ? "MindMapCollapseThisNode" : "MindMapExpandThisNode"),
-            Child = new AppIcon
+            Content = new AppIcon
             {
                 Kind = node.IsExpanded ? AppIconKind.ChevronDown : AppIconKind.ChevronRight,
                 Width = ChevronGlyphSize,
@@ -2179,7 +2318,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             }
         };
 
-        chevron.MouseLeftButtonDown += (_, e) =>
+        System.Windows.Automation.AutomationProperties.SetName(chevron, (string)chevron.ToolTip);
+        chevron.Click += (_, e) =>
         {
             ToggleNodeExpansion(node);
             e.Handled = true;
@@ -2188,16 +2328,17 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         return chevron;
     }
 
-    private Border CreateMetaGlyphButton(AppIconKind kind, string toolTip, MouseButtonEventHandler? onClick = null)
+    private Button CreateMetaGlyphButton(AppIconKind kind, string toolTip, RoutedEventHandler? onClick = null)
     {
-        var hit = new Border
+        var hit = new Button
         {
+            Style = TryFindResource("CompactGlyphButtonStyle") as Style,
             Width = MetaRowHeight,
             Height = MetaRowHeight,
             Background = Brushes.Transparent,
             Cursor = Cursors.Hand,
             ToolTip = toolTip,
-            Child = new AppIcon
+            Content = new AppIcon
             {
                 Kind = kind,
                 Width = MetaGlyphSize,
@@ -2210,7 +2351,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         };
 
         if (onClick is not null)
-            hit.MouseLeftButtonDown += onClick;
+            hit.Click += onClick;
+        System.Windows.Automation.AutomationProperties.SetName(hit, toolTip);
 
         return hit;
     }
@@ -2257,7 +2399,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                     Height = MetaGlyphSize,
                     StrokeThickness = 1.6,
                     Foreground = iconBrush,
-                    Margin = new Thickness(0, 0, 4, 0),
+                    Margin = new Thickness(0, 0, MetaItemGap, 0),
                     IsHitTestVisible = false
                 });
             }
@@ -2297,7 +2439,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         {
             var noteHit = CreateMetaGlyphButton(AppIconKind.Notes, LocalizationService.GetString("MindMapClickToViewNote"));
             var notePopup = BuildNotePopup(noteHit, node.Note!);
-            noteHit.MouseLeftButtonDown += (_, e) =>
+            noteHit.Click += (_, e) =>
             {
                 notePopup.IsOpen = !notePopup.IsOpen;
                 e.Handled = true;
@@ -2353,6 +2495,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
                 var path = new ShapePath
                 {
+                    Tag = (node, child),
                     Data = geometry,
                     Stroke = GetThemeBrush("MindMapConnectionBrush", Color.FromRgb(145, 158, 183)),
                     StrokeThickness = 2,
@@ -2497,6 +2640,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         border.Child = content;
+        ApplyNodeBorderChrome(border, node, animate: false);
+        // One local light group per node keeps hit testing bounded on large maps and lets its
+        // nested commands own the light instead of stacking a second wash behind them.
+        CommandLightBehavior.SetIsScope(border, true);
+        CommandLightBehavior.EnsureControlLight(border, CommandLightRole.Item);
 
             border.MouseLeftButtonDown += (_, e) =>
             {
@@ -2529,8 +2677,9 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
                 CancelManualDragPending();
 
-                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                if (_nodeSelectionMode || Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
                 {
+                    _nodeSelectionMode = true;
                     ToggleNodeSelection(node);
                     ApplyNodeSelectionVisuals();
                 }
@@ -2544,10 +2693,14 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             };
 
             border.ContextMenu = new ContextMenu();
-        border.ContextMenuOpening += (_, _) =>
-        {
-            EnsureNodeSelected(node);
-        };
+        border.ContextMenuOpening += (_, _) => UseContextSelection(node);
+        var selectItem = new MenuItem { Header = LocalizationService.GetString("MassSelectModeTitle") };
+        selectItem.Click += (_, _) => BeginNodeSelection(node);
+        border.ContextMenu.Items.Add(selectItem);
+        var renameItem = new MenuItem { Header = LocalizationService.GetString("RenameSelected") };
+        renameItem.Click += (_, _) => RenameSelectedNodes();
+        border.ContextMenu.Items.Add(renameItem);
+        border.ContextMenu.Items.Add(new Separator());
 
         if (node.HasChildren)
         {
@@ -2654,15 +2807,19 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         pasteStyleMenuItem.Click += (s, e) => PasteNodeStyle(node);
         border.ContextMenu.Items.Add(pasteStyleMenuItem);
 
-        // _clipboardNode/_copiedStyle are static and can change between when this menu was built
+        // _clipboardNodes/_copiedStyle are static and can change between when this menu was built
         // (during the last RebuildMap) and when it's actually opened - refresh enabled state right
         // before showing rather than relying on stale values captured at construction time. The OS
         // clipboard can change from outside the app entirely, so it needs the same live check.
         border.ContextMenu.Opened += (_, _) =>
         {
-            pasteMenuItem.IsEnabled = _clipboardNode is not null;
+            pasteMenuItem.IsEnabled = _clipboardNodes.Count > 0 && _selectedNodes.Count == 1;
+            cutMenuItem.IsEnabled = CanDeleteSelection();
+            editMenuItem.IsEnabled = styleMenuItem.IsEnabled = copyStyleMenuItem.IsEnabled = _selectedNodes.Count == 1;
+            addChildMenuItem.IsEnabled = _selectedNodes.Count == 1;
+            addSiblingMenuItem.IsEnabled = _selectedNodes.Count == 1 && node != _root;
             pasteStyleMenuItem.IsEnabled = _copiedStyle is not null;
-            pasteAsOutlineMenuItem.IsEnabled = TryGetClipboardText(out _);
+            pasteAsOutlineMenuItem.IsEnabled = _selectedNodes.Count == 1 && TryGetClipboardText(out _);
         };
 
         if (node.LinkedNoteId.HasValue)
@@ -2676,6 +2833,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             };
             openLinkMenuItem.Click += (s, e) => OpenNodeLink(node);
             border.ContextMenu.Items.Add(openLinkMenuItem);
+            border.ContextMenu.Opened += (_, _) => openLinkMenuItem.IsEnabled = _selectedNodes.Count == 1;
         }
 
         if (node.CrossLinkTargetIds.Count > 0)
@@ -2687,6 +2845,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             };
             removeCrossLinksMenuItem.Click += (s, e) => RemoveCrossLinks(node);
             border.ContextMenu.Items.Add(removeCrossLinksMenuItem);
+            border.ContextMenu.Opened += (_, _) => removeCrossLinksMenuItem.IsEnabled = _selectedNodes.Count == 1;
         }
 
         border.ContextMenu.Items.Add(new Separator());
@@ -2698,6 +2857,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         };
         deleteMenuItem.Click += (s, e) => DeleteNodeWithConfirmation(node);
         border.ContextMenu.Items.Add(deleteMenuItem);
+        border.ContextMenu.Opened += (_, _) => deleteMenuItem.IsEnabled = CanDeleteSelection();
 
         Canvas.SetLeft(border, layout.X);
         Canvas.SetTop(border, layout.Y);
@@ -2719,7 +2879,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         node.IsExpanded = !node.IsExpanded;
         SelectSingleNode(node);
-        RebuildMap();
+        RebuildMap(moveNodes: true);
     }
 
     // Unlike ToggleNodeExpansion (folds/unfolds only this one level, leaving descendants'
@@ -2732,7 +2892,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         SetExpanded(node, !node.IsExpanded);
         SelectSingleNode(node);
-        RebuildMap();
+        RebuildMap(moveNodes: true);
     }
 
     private void SelectSingleNode(MindMapNode node)
@@ -2741,7 +2901,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _selectedNodes.Add(node);
         _selectedNode = node;
 
-        // Keyboard shortcuts (OnKeyDown) only fire while focus is on the canvas itself - selecting
+        // Keyboard shortcuts (MindMap_KeyDown) only fire while focus is on the canvas itself - selecting
         // a node (Border isn't focusable, so a plain click wouldn't otherwise move focus here) is
         // the one point where "the user is now interacting with a node" is unambiguous, so this is
         // where focus should follow. Harmless/idempotent when already-focused (e.g. from the arrow-
@@ -2761,10 +2921,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     /// is edited through a modal dialog (EditNodeText), which already owns keyboard input while
     /// open, so no separate guard is needed for that case.
     /// </summary>
-    protected override void OnKeyDown(KeyEventArgs e)
+    private void MindMap_KeyDown(object sender, KeyEventArgs e)
     {
-        base.OnKeyDown(e);
-
         if (e.Handled)
             return;
 
@@ -2774,9 +2932,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             || ReferenceEquals(focused, MapScrollViewer)
             || ReferenceEquals(focused, MapCanvas);
 
-        if (!isCanvasFocused)
+        var isIslandFocused = NodeSelectionDock.IsKeyboardFocusWithin;
+        if (!isCanvasFocused && !isIslandFocused)
             return;
 
+        if (HandleNodeSelectionKey(e)) return;
         var isCtrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var isShift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
 
@@ -2825,7 +2985,10 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        if (_selectedNode is null)
+        // Selection mode leaves Tab/Enter to focus/command navigation; ordinary canvas
+        // navigation retains the add-child/sibling shortcuts. F2 works from the island too.
+        if (_selectedNode is null || (_nodeSelectionMode && e.Key is Key.Tab or Key.Enter)
+            || (isIslandFocused && e.Key is not (Key.Delete or Key.F2)))
             return;
 
         switch (e.Key)
@@ -2835,7 +2998,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 e.Handled = true;
                 break;
             case Key.F2:
-                EditNodeText(_selectedNode);
+                if (_selectedNodes.Count > 1) RenameSelectedNodes(); else EditNodeText(_selectedNode);
                 e.Handled = true;
                 break;
             case Key.Tab:
@@ -2907,6 +3070,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void ToggleNodeSelection(MindMapNode node)
     {
+        _nodeSelectionMode = true;
+        MapScrollViewer.Focus();
         if (_selectedNodes.Remove(node))
         {
             if (ReferenceEquals(_selectedNode, node))
@@ -2920,42 +3085,20 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void EnsureNodeSelected(MindMapNode node)
     {
-        if (_selectedNodes.Add(node))
-            _selectedNode = node;
-        else
-            _selectedNode = node;
-    }
-
-    private void RemoveSelectedNode(MindMapNode node)
-    {
-        if (!_selectedNodes.Remove(node))
-            return;
-
-        if (ReferenceEquals(_selectedNode, node))
-            _selectedNode = _selectedNodes.FirstOrDefault();
+        _selectedNodes.Add(node);
+        _selectedNode = node;
     }
 
     private void ClearSelectedNodes()
     {
+        _nodeSelectionMode = false;
         _selectedNodes.Clear();
         _selectedNode = null;
     }
 
     private bool HasSelectedNodes() => _selectedNodes.Count > 0;
 
-    private IReadOnlyList<MindMapNode> GetSelectedExportRoots()
-    {
-        if (_selectedNodes.Count == 0)
-            return Array.Empty<MindMapNode>();
-
-        if (_selectedNodes.Count == 1)
-            return _selectedNodes.ToList();
-
-        var selected = _selectedNodes.ToList();
-        return selected
-            .Where(node => !selected.Any(other => !ReferenceEquals(node, other) && IsAncestorNode(other, node)))
-            .ToList();
-    }
+    private IReadOnlyList<MindMapNode> GetSelectedExportRoots() => MindMapSelectionOperations.Roots(_root, _selectedNodes);
 
     private MindMapNode BuildExportRoot(IReadOnlyList<MindMapNode> selectedRoots)
     {
@@ -2970,8 +3113,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             Text = _root.Text
         };
 
-        foreach (var node in selectedRoots)
-            exportRoot.Children.Add(CloneNode(node));
+        exportRoot.Children.AddRange(MindMapSelectionOperations.CloneForest(selectedRoots, keepExternalLinks: false));
 
         return exportRoot;
     }
@@ -2999,7 +3141,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void StyleNode(MindMapNode node)
     {
-        var dialog = new StyleNodeDialog { Owner = this };
+        if (_selectedNodes.Count > 1) return;
+        var dialog = new StyleNodeDialog { Owner = WorkspaceOwner };
         dialog.SetNoteLinkOptions(NoteLinkOptions);
         dialog.LoadFromNode(node);
 
@@ -3013,12 +3156,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void AddChildNode(MindMapNode parentNode)
     {
+        if (_selectedNodes.Count > 1) return;
         var dialog = new SimpleInputDialog(
             LocalizationService.GetString("MindMapAddChild"),
             LocalizationService.GetString("MindMapAddChildPrompt"),
             string.Empty)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
@@ -3039,6 +3183,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void AddSiblingNode(MindMapNode node)
     {
+        if (_selectedNodes.Count > 1) return;
         if (ReferenceEquals(node, _root))
         {
             ModernMessageBox.Show(
@@ -3058,7 +3203,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             LocalizationService.GetString("MindMapAddSiblingPrompt"),
             string.Empty)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
@@ -3080,12 +3225,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void EditNodeText(MindMapNode node)
     {
+        if (_selectedNodes.Count > 1) return;
         var dialog = new SimpleInputDialog(
             LocalizationService.GetString("Edit"),
             LocalizationService.GetString("MindMapEditNodePrompt"),
             node.Text)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
@@ -3096,104 +3242,19 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void DeleteNodeWithConfirmation(MindMapNode node)
-    {
-        if (ReferenceEquals(node, _root))
-        {
-            ModernMessageBox.Show(
-                LocalizationService.GetString("MindMapCannotDeleteRoot"),
-                LocalizationService.GetString("Delete"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
+    private void DeleteNodeWithConfirmation(MindMapNode node) { UseContextSelection(node); DeleteSelectedNodes(); }
+    private void CutNode(MindMapNode node) { UseContextSelection(node); CutSelectedNodes(); }
+    private void CopyNode(MindMapNode node) { UseContextSelection(node); CopySelectedNodes(); }
+    private void PasteNodeAsChild(MindMapNode targetNode) => PasteSelectedBranches(targetNode);
 
-        var nodeName = string.IsNullOrWhiteSpace(node.Text)
-            ? LocalizationService.GetString("MindMapNodeDefaultName")
-            : node.Text.Trim();
-
-        var confirmed = ModernDialog.ConfirmDanger(
-            this,
-            LocalizationService.GetString("MindMapDeleteNodeTitle"),
-            string.Format(
-                CultureInfo.CurrentCulture,
-                LocalizationService.GetString("MindMapDeleteNodeConfirmationFormat"),
-                nodeName),
-            LocalizationService.GetString("Confirm"));
-
-        if (!confirmed)
-            return;
-
-        // Find parent and reparent children before deleting
-        var parent = FindParentNode(_root, node);
-        if (parent is null)
-            return;
-
-        PushUndoSnapshot();
-
-        // Move all children of the deleted node to the parent
-        foreach (var child in node.Children.ToList())
-            parent.Children.Add(child);
-
-        // Now remove the selected node
-        parent.Children.Remove(node);
-
-        RemoveSelectedNode(node);
-
-        RebuildMap();
-    }
-
-    private void CutNode(MindMapNode node)
-    {
-        if (ReferenceEquals(node, _root))
-        {
-            ModernMessageBox.Show(
-                LocalizationService.GetString("MindMapCannotCutRoot"),
-                LocalizationService.GetString("Cut"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var parent = FindParentNode(_root, node);
-        if (parent is null)
-            return;
-
-        // No confirmation, unlike delete - cut is recoverable via paste or undo.
-        _clipboardNode = CloneNode(node);
-
-        PushUndoSnapshot();
-        parent.Children.Remove(node);
-        RemoveSelectedNode(node);
-        RebuildMap();
-    }
-
-    private void CopyNode(MindMapNode node)
-        => _clipboardNode = CloneNode(node);
-
-    private void PasteNodeAsChild(MindMapNode targetNode)
-    {
-        if (_clipboardNode is null)
-            return;
-
-        PushUndoSnapshot();
-
-        // Clone again rather than reusing _clipboardNode directly, so repeated pastes each get
-        // their own independent node objects instead of sharing references.
-        var pasted = CloneNode(_clipboardNode);
-        targetNode.Children.Add(pasted);
-        targetNode.IsExpanded = true;
-        SelectSingleNode(pasted);
-        RebuildMap();
-    }
-
-    // Reads plain text from the OS clipboard (not the app's own node clipboard _clipboardNode
+    // Reads plain text from the OS clipboard (not the app's own node clipboard _clipboardNodes
     // above - a deliberately separate action/shortcut so the two don't get confused) and parses
     // it as an indented outline, adding the resulting nodes as children of targetNode. Lets you
     // paste a bulleted list or a plain tab-indented outline copied from anywhere and get a real
     // branch out of it instead of one node containing the whole blob of text.
     private void PasteAsOutline(MindMapNode targetNode)
     {
+        if (_selectedNodes.Count > 1) return;
         if (!TryGetClipboardText(out var clipboardText))
             return;
 
@@ -3249,17 +3310,20 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             return;
 
         PushUndoSnapshot();
-        node.BackgroundColor = _copiedStyle.BackgroundColor;
-        node.BorderColor = _copiedStyle.BorderColor;
-        node.BorderThickness = _copiedStyle.BorderThickness;
-        node.NodeShape = _copiedStyle.NodeShape;
-        node.Icons = new List<string>(_copiedStyle.Icons);
-        node.IconBadgeColor = _copiedStyle.IconBadgeColor;
-        node.IsBold = _copiedStyle.IsBold;
-        node.IsItalic = _copiedStyle.IsItalic;
-        node.TextColor = _copiedStyle.TextColor;
-        node.FontFamily = _copiedStyle.FontFamily;
-        node.FontSize = _copiedStyle.FontSize;
+        foreach (var selected in _selectedNodes.Count > 1 ? _selectedNodes.ToArray() : new[] { node })
+        {
+            selected.BackgroundColor = _copiedStyle.BackgroundColor;
+            selected.BorderColor = _copiedStyle.BorderColor;
+            selected.BorderThickness = _copiedStyle.BorderThickness;
+            selected.NodeShape = _copiedStyle.NodeShape;
+            selected.Icons = new List<string>(_copiedStyle.Icons);
+            selected.IconBadgeColor = _copiedStyle.IconBadgeColor;
+            selected.IsBold = _copiedStyle.IsBold;
+            selected.IsItalic = _copiedStyle.IsItalic;
+            selected.TextColor = _copiedStyle.TextColor;
+            selected.FontFamily = _copiedStyle.FontFamily;
+            selected.FontSize = _copiedStyle.FontSize;
+        }
         RebuildMap();
     }
 
@@ -3271,6 +3335,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.PlacementTarget = button;
+            if (menu.Items.OfType<MenuItem>().Skip(1).FirstOrDefault() is { } sibling)
+                sibling.IsEnabled = _selectedNodes.Count == 1 && _selectedNode != _root;
             menu.IsOpen = true;
         }
     }
@@ -3356,7 +3422,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void ExpandAllButton_Click(object sender, RoutedEventArgs e)
     {
         SetExpanded(_root, true);
-        RebuildMap(animate: false);
+        RebuildMap(moveNodes: true);
         Dispatcher.BeginInvoke(CenterViewOnRoot, DispatcherPriority.Loaded);
     }
 
@@ -3369,7 +3435,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         _root.IsExpanded = false;
-        RebuildMap(animate: false);
+        RebuildMap(moveNodes: true);
         Dispatcher.BeginInvoke(CenterViewOnRoot, DispatcherPriority.Loaded);
     }
 
@@ -3383,7 +3449,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         _selectedLayoutMode = ParseLayoutMode(selectedItem.Tag as string);
         _hasCenteredOnRootInitially = false;
-        RebuildMap(animate: false);
+        RebuildMap(moveNodes: true);
         Dispatcher.BeginInvoke(new Action(CenterViewOnRoot), DispatcherPriority.Loaded);
     }
 
@@ -3397,7 +3463,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         _suppressManualPositioningToggleChanged = false;
         UpdateManualPositioningVisualState();
 
-        RebuildMap(animate: false);
+        RebuildMap(moveNodes: true);
         Dispatcher.BeginInvoke(new Action(CenterViewOnRoot), DispatcherPriority.Loaded);
     }
     private void ManualPositioningToggle_Checked(object sender, RoutedEventArgs e)
@@ -3440,9 +3506,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             if (_isSearchPanelOpen) SetSearchPanelOpen(false);
             if (_isFontPanelOpen) SetFontPanelOpen(false);
         }
-
-        _arrangePanelAnimationVersion++;
-        AnimateChromePanel(ArrangePanel, isOpen, _arrangePanelAnimationVersion, () => _isArrangePanelOpen);
+        UiMotion.AnimateLayoutReveal(ArrangePanel, isOpen);
     }
 
     private void SetSearchPanelOpen(bool isOpen)
@@ -3453,9 +3517,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             if (_isArrangePanelOpen) SetArrangePanelOpen(false);
             if (_isFontPanelOpen) SetFontPanelOpen(false);
         }
-
-        _searchPanelAnimationVersion++;
-        AnimateChromePanel(SearchPanel, isOpen, _searchPanelAnimationVersion, () => _isSearchPanelOpen);
+        UiMotion.AnimateLayoutReveal(SearchPanel, isOpen);
         if (isOpen)
             SearchTextBox.Focus();
     }
@@ -3468,59 +3530,11 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             if (_isArrangePanelOpen) SetArrangePanelOpen(false);
             if (_isSearchPanelOpen) SetSearchPanelOpen(false);
         }
-
-        _fontPanelAnimationVersion++;
-        AnimateChromePanel(FontPanel, isOpen, _fontPanelAnimationVersion, () => _isFontPanelOpen);
+        UiMotion.AnimateLayoutReveal(FontPanel, isOpen);
         if (isOpen)
             RefreshFontPanelFromSelection();
+        SyncNodeSelection();
     }
-
-    /// <summary>
-    /// Fade + slide reveal/hide for a collapsible chrome panel - same mechanism as
-    /// NoteEditorWindow's FontPanel (AnimateFontPanel), generalized for reuse by both
-    /// ArrangePanel and SearchPanel. <paramref name="isStillOpen"/> re-checks the panel's current
-    /// desired state when the hide animation finishes, so a rapid open-then-close-then-open
-    /// doesn't leave the panel wrongly collapsed.
-    /// </summary>
-    private void AnimateChromePanel(Border panel, bool show, int animationVersion, Func<bool> isStillOpen)
-    {
-        if (UiMotion.PrefersReducedMotion)
-        {
-            UiMotion.Stop(panel);
-            panel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            panel.Opacity = show ? 1 : 0;
-            EnsureChromePanelTransform(panel).Y = show ? 0 : -6;
-            return;
-        }
-
-        var transform = EnsureChromePanelTransform(panel);
-        var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
-        var opacityFrom = panel.Opacity;
-        var yFrom = transform.Y;
-
-        if (show)
-            panel.Visibility = Visibility.Visible;
-
-        UiMotion.Stop(panel);
-        UiMotion.RunComposited(
-            panel,
-            new[]
-            {
-                UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => panel.Opacity = value),
-                UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
-            },
-            () =>
-            {
-                if (!show && animationVersion == GetLatestAnimationVersion(panel) && !isStillOpen())
-                    panel.Visibility = Visibility.Collapsed;
-            });
-    }
-
-    private int GetLatestAnimationVersion(Border panel)
-        => ReferenceEquals(panel, ArrangePanel) ? _arrangePanelAnimationVersion
-            : ReferenceEquals(panel, SearchPanel) ? _searchPanelAnimationVersion
-            : ReferenceEquals(panel, TagsPanel) ? _tagsPanelAnimationVersion
-            : _fontPanelAnimationVersion;
 
     private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
         => SetTagsPanelOpen(!_isTagsPanelOpen);
@@ -3528,20 +3542,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     private void SetTagsPanelOpen(bool isOpen, bool animate = true)
     {
         _isTagsPanelOpen = isOpen;
-
-        if (!animate)
-        {
-            UiMotion.Stop(TagsPanel);
-            UiMotion.Clear(TagsPanel, UIElement.OpacityProperty);
-            UiMotion.Clear(EnsureChromePanelTransform(TagsPanel), TranslateTransform.YProperty);
-            TagsPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-            TagsPanel.Opacity = isOpen ? 1 : 0;
-            EnsureChromePanelTransform(TagsPanel).Y = isOpen ? 0 : -6;
-            return;
-        }
-
-        _tagsPanelAnimationVersion++;
-        AnimateChromePanel(TagsPanel, isOpen, _tagsPanelAnimationVersion, () => _isTagsPanelOpen);
+        UiMotion.AnimateLayoutReveal(TagsPanel, isOpen, animate: animate);
     }
 
     // FreeMind's own font toolbar lists every font the OS has installed, not a curated handful -
@@ -3556,6 +3557,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             Tag = string.Empty
         };
         FontFamilyBox.Items.Add(defaultItem);
+        FontFamilyBox.Items.Add(new ComboBoxItem { Content = LocalizationService.GetString("MixedSelection"), Tag = "__mixed", IsEnabled = false });
 
         var familyNames = Fonts.SystemFontFamilies
             .Select(family => family.Source)
@@ -3573,78 +3575,85 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     /// (ApplyNodeSelectionVisuals, for clicks/arrow-key nav/drag-finalize) or content edit
     /// (RebuildMapCore, for add/delete/undo/redo/import/reparent) - cheaper and far less
     /// error-prone than hooking every individual SelectSingleNode/ToggleNodeSelection call site
-    /// by hand. Font editing only makes sense for exactly one selected node at a time (unlike
-    /// e.g. delete), so anything else disables the panel rather than guessing.
+    /// by hand. Mixed values remain explicit; changing one control edits only that property
+    /// across the selected nodes in one undo transaction.
     /// </summary>
     private void RefreshFontPanelFromSelection()
     {
         if (!_isFontPanelOpen)
             return;
 
-        var node = _selectedNodes.Count == 1 ? _selectedNode : null;
-
-        FontFamilyBox.IsEnabled = node is not null;
-        FontSizeBox.IsEnabled = node is not null;
-        FontBoldToggleButton.IsEnabled = node is not null;
-        FontItalicToggleButton.IsEnabled = node is not null;
-        FontColorButton.IsEnabled = node is not null;
-        FontPanelHintText.Visibility = node is null ? Visibility.Visible : Visibility.Collapsed;
-
+        var nodes = _selectedNodes.ToArray();
+        bool enabled = nodes.Length > 0;
+        FontFamilyBox.IsEnabled = FontSizeBox.IsEnabled = FontBoldToggleButton.IsEnabled = FontItalicToggleButton.IsEnabled = FontColorButton.IsEnabled = FontColorClearButton.IsEnabled = enabled;
+        FontPanelHintText.Visibility = nodes.Length == 1 ? Visibility.Collapsed : Visibility.Visible;
+        FontPanelHintText.Text = nodes.Length > 1 ? string.Format(LocalizationService.GetString("MindMapFontSelectionHint"), nodes.Length) : LocalizationService.GetString("MindMapFontNoSelectionHint");
         _suppressFontPanelChangeHandlers = true;
         try
         {
-            FontFamilyBox.SelectedValue = node?.FontFamily ?? string.Empty;
-            FontSizeBox.SelectedValue = node?.FontSize is double size
-                ? ((int)size).ToString(CultureInfo.InvariantCulture)
-                : string.Empty;
-            FontBoldToggleButton.IsChecked = node?.IsBold ?? false;
-            FontItalicToggleButton.IsChecked = node?.IsItalic ?? false;
-            FontColorButton.Background = !string.IsNullOrWhiteSpace(node?.TextColor)
-                ? FrozenBrush((Color)ColorConverter.ConvertFromString(node!.TextColor))
-                : Brushes.Transparent;
+            var families = nodes.Select(node => node.FontFamily ?? string.Empty).Distinct().ToArray();
+            var sizes = nodes.Select(node => node.FontSize).Distinct().ToArray();
+            var bold = nodes.Select(node => node.IsBold).Distinct().ToArray();
+            var italic = nodes.Select(node => node.IsItalic).Distinct().ToArray();
+            var colors = nodes.Select(node => node.TextColor).Distinct().ToArray();
+            FontFamilyBox.SelectedValue = families.Length > 1 ? "__mixed" : families.FirstOrDefault() ?? string.Empty;
+            var sizeValue = sizes.Length > 1 ? "__mixed" : sizes.FirstOrDefault()?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+            if (sizeValue != "__mixed" && !FontSizeBox.Items.OfType<ComboBoxItem>().Any(item => Equals(item.Tag, sizeValue)))
+                FontSizeBox.Items.Add(new ComboBoxItem { Content = sizeValue, Tag = sizeValue });
+            FontSizeBox.SelectedValue = sizeValue;
+            FontBoldToggleButton.IsChecked = bold.Length > 1 ? null : bold.FirstOrDefault();
+            FontItalicToggleButton.IsChecked = italic.Length > 1 ? null : italic.FirstOrDefault();
+            FontBoldToggleButton.ToolTip = LocalizationService.GetString("Bold") + (bold.Length > 1 ? " · " + LocalizationService.GetString("MixedSelection") : "");
+            FontItalicToggleButton.ToolTip = LocalizationService.GetString("Italic") + (italic.Length > 1 ? " · " + LocalizationService.GetString("MixedSelection") : "");
+            FontColorButton.Background = colors.Length == 1 && !string.IsNullOrWhiteSpace(colors[0]) ? FrozenBrush((Color)ColorConverter.ConvertFromString(colors[0]!)) : Brushes.Transparent;
+            FontColorButton.ToolTip = LocalizationService.GetString(colors.Length > 1 ? "MixedSelection" : "SelectColor");
         }
-        finally
-        {
-            _suppressFontPanelChangeHandlers = false;
-        }
+        finally { _suppressFontPanelChangeHandlers = false; }
     }
 
     private void ApplyFontPanelChange(Action<MindMapNode> mutate)
     {
-        if (_suppressFontPanelChangeHandlers || _selectedNode is null || _selectedNodes.Count != 1)
+        if (_suppressFontPanelChangeHandlers || _selectedNodes.Count == 0)
             return;
 
         PushUndoSnapshot();
-        mutate(_selectedNode);
+        foreach (var node in _selectedNodes) mutate(node);
         RebuildMap(animate: false);
     }
 
     private void FontFamilyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var value = FontFamilyBox.SelectedValue as string;
+        if (value == "__mixed") return;
         ApplyFontPanelChange(node => node.FontFamily = string.IsNullOrEmpty(value) ? null : value);
     }
 
     private void FontSizeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var value = FontSizeBox.SelectedValue as string;
+        if (value == "__mixed") return;
         ApplyFontPanelChange(node => node.FontSize = string.IsNullOrEmpty(value)
             ? null
             : double.Parse(value, CultureInfo.InvariantCulture));
     }
 
     private void FontBoldToggleButton_Click(object sender, RoutedEventArgs e)
-        => ApplyFontPanelChange(node => node.IsBold = FontBoldToggleButton.IsChecked == true);
+    {
+        bool value = _selectedNodes.Select(node => node.IsBold).Distinct().Count() > 1 || FontBoldToggleButton.IsChecked == true;
+        ApplyFontPanelChange(node => node.IsBold = value);
+    }
 
     private void FontItalicToggleButton_Click(object sender, RoutedEventArgs e)
-        => ApplyFontPanelChange(node => node.IsItalic = FontItalicToggleButton.IsChecked == true);
+    {
+        bool value = _selectedNodes.Select(node => node.IsItalic).Distinct().Count() > 1 || FontItalicToggleButton.IsChecked == true;
+        ApplyFontPanelChange(node => node.IsItalic = value);
+    }
 
     private void FontColorButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedNode is null || _selectedNodes.Count != 1)
-            return;
+        if (_selectedNodes.Count == 0) return;
 
-        var dialog = new ColorPickerDialog { Owner = this };
+        var dialog = new ColorPickerDialog { Owner = WorkspaceOwner };
         if (dialog.ShowDialog() != true || dialog.SelectedColor is not { } color)
             return;
 
@@ -3656,16 +3665,6 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void FontColorClearButton_Click(object sender, RoutedEventArgs e)
         => ApplyFontPanelChange(node => node.TextColor = null);
-
-    private static TranslateTransform EnsureChromePanelTransform(Border panel)
-    {
-        if (panel.RenderTransform is TranslateTransform existing)
-            return existing;
-
-        var transform = new TranslateTransform(0, -6);
-        panel.RenderTransform = transform;
-        return transform;
-    }
 
     private static void SetExpanded(MindMapNode node, bool isExpanded)
     {
@@ -3918,7 +3917,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             FileName = GetExportFileName(exportSelectedBranchOnly)
         };
 
-        if (saveDialog.ShowDialog(this) != true)
+        if (saveDialog.ShowDialog(WorkspaceOwner) != true)
             return;
 
         try
@@ -3960,7 +3959,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void ShowExportDialog(string title, string message)
     {
-        ModernDialog.ShowInfo(this, title, message);
+        ModernDialog.ShowInfo(WorkspaceOwner, title, message);
     }
 
     private string GetExportFileName(bool exportSelectedBranchOnly)
@@ -4370,11 +4369,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_workspaceClose is not null) { _workspaceClose(); return; }
         switch (GetCloseDecision())
         {
             case UnsavedCloseDecision.Cancel:
                 return;
             case UnsavedCloseDecision.SaveAndClose:
+                if (_workspaceSave is not null) { if (_workspaceSave()) _workspaceClose?.Invoke(); return; }
                 SaveAndClose();
                 return;
             case UnsavedCloseDecision.LeaveWithoutSaving:
@@ -4386,6 +4387,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private void MindMapPreviewWindow_Closing(object? sender, CancelEventArgs e)
     {
+        if (_workspaceDisposed) return;
         if (_allowCloseWithoutPrompt)
             return;
 
@@ -4419,7 +4421,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         // Custom fill: pick readable black/white from luminance. Default cards always use theme text.
         if (!string.IsNullOrWhiteSpace(node.BackgroundColor) && nodeBackground is SolidColorBrush solid)
             return IsLightColor(solid.Color)
-                ? GetCardTitleBrush()
+                ? Brushes.Black
                 : Brushes.White;
 
         return GetCardTitleBrush();
@@ -4465,7 +4467,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     // ---------------------------------------------------------------------------------------------
     // Zoom-session tile layer: the live canvas collapses during zoom gestures and cached off-thread
-    // tiles (SkiaMindMapTileCache) cover the viewport, so zooming never blocks on the
+    // snapshots (SkiaMindMapSnapshotCache) cover the viewport, so zooming never blocks on the
     // LayoutTransform re-raster of the whole map. The canvas returns after the settle delay.
     // ---------------------------------------------------------------------------------------------
 
@@ -4485,23 +4487,25 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
     /// start with a snapshot ready instead of a blank flash.</summary>
     private void WarmSnapshot()
     {
-        if (MapScaleTransform is null)
+        if (_mapClosed || MapScaleTransform is null || _tileSessionActive)
             return;
 
         // Always rebuild: the canvas extent changes with the zoom (viewport fit), and a stale
         // extent would size the snapshot image wrong and shift the scrollable area.
         var snapshot = BuildTileSnapshot();
-        _tileSnapshot = snapshot;
         if (snapshot is null)
             return;
 
         var zoom = (float)Math.Max(0.1, MapScaleTransform.ScaleX);
-        var dpi = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var dpi = (float)VisualTreeHelper.GetDpi(ContentRoot).PixelsPerDip;
+        var request = ++_snapshotRequest;
+        var theme = ThemeManager.CurrentTheme;
         Scriblucent.Rendering.SkiaMindMapSnapshotCache.Request(snapshot, zoom, dpi, result =>
         {
-            if (_tileSessionActive)
+            if (_mapClosed || _tileSessionActive || request != _snapshotRequest
+                || snapshot.Revision != _tileRevision || theme != ThemeManager.CurrentTheme)
                 return;
-            ApplySnapshot(result, dpi);
+            if (result is not null) ApplySnapshot(result, snapshot);
         });
     }
 
@@ -4521,7 +4525,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
             }
 
             _tileSessionActive = true;
-            if (MapSnapshotLayer.Source is not null)
+            if (MapSnapshotLayer.Source is not null && _snapshotSourceRevision == _tileRevision
+                && _snapshotSourceTheme == ThemeManager.CurrentTheme)
             {
                 MapCanvas.Visibility = Visibility.Collapsed;
                 MapSnapshotLayer.Visibility = Visibility.Visible;
@@ -4562,7 +4567,6 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         // same content at the same zoom, so the transition is seamless. The snapshot is rebuilt
         // because the canvas extent changed with the zoom.
         var snapshot = BuildTileSnapshot();
-        _tileSnapshot = snapshot;
         if (snapshot is null || MapScaleTransform is null)
         {
             RestoreCanvas();
@@ -4570,20 +4574,23 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
         }
 
         var zoom = (float)Math.Max(0.1, MapScaleTransform.ScaleX);
-        var dpi = (float)VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var dpi = (float)VisualTreeHelper.GetDpi(ContentRoot).PixelsPerDip;
+        var request = ++_snapshotRequest;
+        var theme = ThemeManager.CurrentTheme;
         Scriblucent.Rendering.SkiaMindMapSnapshotCache.Request(snapshot, zoom, dpi, result =>
         {
-            if (_tileSessionActive)
+            if (_mapClosed || _tileSessionActive || request != _snapshotRequest)
                 return; // a new session started - the render still warms the cache
-
-            ApplySnapshot(result, dpi);
+            if (result is not null && snapshot.Revision == _tileRevision && theme == ThemeManager.CurrentTheme)
+                ApplySnapshot(result, snapshot);
             RestoreCanvas();
         });
     }
 
-    private void ApplySnapshot(Scriblucent.Rendering.SkiaMindMapSnapshotCache.SnapshotResult result, float dpi)
+    private void ApplySnapshot(Scriblucent.Rendering.SkiaMindMapSnapshotCache.SnapshotResult result,
+        Scriblucent.Rendering.MindMapTileSnapshot snapshot)
     {
-        if (MapSnapshotLayer is null || _tileSnapshot is null)
+        if (MapSnapshotLayer is null || _mapClosed)
             return;
 
         if (Scriblucent.Services.ScrollPerfDiag.Enabled)
@@ -4594,11 +4601,13 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
                 $"{sv.ScrollableWidth:F2}\t{sv.ScrollableHeight:F2}");
         }
 
-        MapSnapshotLayer.Source = Scriblucent.Rendering.SkiaMindMapSnapshotCache.ToBitmapSource(result.Bitmap, dpi);
+        MapSnapshotLayer.Source = result.Image;
+        _snapshotSourceRevision = snapshot.Revision;
+        _snapshotSourceTheme = ThemeManager.CurrentTheme;
         // The image represents the full canvas extent; the wrapper's zoom transform scales it
         // continuously during gestures (no per-level swaps).
-        MapSnapshotLayer.Width = _tileSnapshot.CanvasWidthDip;
-        MapSnapshotLayer.Height = _tileSnapshot.CanvasHeightDip;
+        MapSnapshotLayer.Width = snapshot.CanvasWidthDip;
+        MapSnapshotLayer.Height = snapshot.CanvasHeightDip;
         Canvas.SetLeft(MapSnapshotLayer, 0);
         Canvas.SetTop(MapSnapshotLayer, 0);
     }
@@ -4661,6 +4670,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
         return new Scriblucent.Rendering.MindMapTileSnapshot
         {
+            MapId = _tileMapId,
             Revision = _tileRevision,
             // Width/Height (not ActualWidth) stay current even while the canvas is collapsed
             // during a session - ActualWidth would lag behind the zoom-dependent canvas size.
@@ -4673,103 +4683,86 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged
 
     private Scriblucent.Rendering.MindMapTileNode BuildNodeSnapshot(MindMapNode node, Border border)
     {
-        var background = (border.Background as SolidColorBrush)?.Color ?? Colors.White;
-        var borderColor = (border.BorderBrush as SolidColorBrush)?.Color ?? Colors.Transparent;
-
-        var title = string.Empty;
-        var fontFamily = "Segoe UI Variable Text";
-        var fontSize = 14f;
-        var fontWeight = 400;
-        var italic = false;
-        var titleColor = Colors.Black;
-        var hasChevron = false;
-        var iconPaths = new List<string>();
-        var iconOverflow = 0;
-        var iconColor = Colors.Gray;
-
-        if (border.Child is Grid content)
+        var frame = SurfaceContour.EffectiveFrame(border);
+        var outer = SurfaceContour.Create(border.RenderSize, border.CornerRadius, frame);
+        var borderContour = SurfaceContour.Ring(outer,
+            SurfaceContour.Create(border.RenderSize, border.CornerRadius, frame, frame.Left));
+        var (resource, thickness) = ResolveNodeRim(node);
+        var rim = resource is null ? null : TryFindResource(resource) as Brush;
+        var rimContour = rim is null ? null : SurfaceContour.Ring(outer,
+            SurfaceContour.Create(border.RenderSize, border.CornerRadius, frame, thickness));
+        var glyphs = new List<Scriblucent.Rendering.MindMapTileGlyph>();
+        var metadata = new List<Scriblucent.Rendering.MindMapTileText>();
+        Scriblucent.Rendering.MindMapTileText? title = null;
+        foreach (var element in NodeVisuals(border))
         {
-            foreach (UIElement contentChild in content.Children)
+            if (element is AppIcon icon && icon.Visibility == Visibility.Visible && icon.ActualWidth > 0)
             {
-                var row = Grid.GetRow(contentChild);
-                if (row == 0 && contentChild is Border titleHost && titleHost.Child is DockPanel titleRow)
-                {
-                    foreach (UIElement rowChild in titleRow.Children)
-                    {
-                        if (rowChild is Border && DockPanel.GetDock(rowChild) == Dock.Left)
-                        {
-                            hasChevron = true;
-                        }
-                        else if (rowChild is TextBlock text)
-                        {
-                            title = text.Text;
-                            fontFamily = text.FontFamily.Source;
-                            fontSize = (float)text.FontSize;
-                            fontWeight = text.FontWeight.ToOpenTypeWeight();
-                            italic = text.FontStyle == FontStyles.Italic;
-                            titleColor = (text.Foreground as SolidColorBrush)?.Color ?? Colors.Black;
-                        }
-                    }
-                }
-                else if (row == 1 && contentChild is StackPanel metaRow)
-                {
-                    foreach (UIElement metaChild in metaRow.Children)
-                    {
-                        if (metaChild is StackPanel iconsHost)
-                        {
-                            foreach (UIElement iconChild in iconsHost.Children)
-                            {
-                                if (iconChild is AppIcon appIcon)
-                                {
-                                    iconColor = (appIcon.Foreground as SolidColorBrush)?.Color ?? Colors.Gray;
-                                    var iconPath = GetNodeIconPath(appIcon.Kind);
-                                    if (iconPath is not null)
-                                        iconPaths.Add(iconPath);
-                                }
-                                else if (iconChild is TextBlock overflowText
-                                         && int.TryParse(overflowText.Text.TrimStart('+'), NumberStyles.Integer, CultureInfo.InvariantCulture, out var overflowCount))
-                                {
-                                    iconOverflow = overflowCount;
-                                }
-                            }
-                        }
-                    }
-                }
+                var path = new PackIconLucide { Kind = icon.LucideKind }.Data;
+                if (string.IsNullOrEmpty(path)) continue;
+                var position = NodeLayoutOffset(icon, border);
+                glyphs.Add(new() { X = position.X, Y = position.Y, Width = icon.ActualWidth,
+                    Height = icon.ActualHeight, Path = path, Color = BrushColor(icon.Foreground) });
+            }
+            else if (element is TextBlock text && text.Visibility == Visibility.Visible && text.ActualWidth > 0)
+            {
+                var position = NodeLayoutOffset(text, border);
+                var snapshot = new Scriblucent.Rendering.MindMapTileText { X = position.X, Y = position.Y,
+                    Width = text.ActualWidth, Height = text.ActualHeight, Text = text.Text,
+                    FontFamily = text.FontFamily.Source, FontSizeDip = (float)text.FontSize,
+                    FontWeight = text.FontWeight.ToOpenTypeWeight(), Italic = text.FontStyle == FontStyles.Italic,
+                    Color = BrushColor(text.Foreground) };
+                // Command templates may acquire helper text later; only document rows enter the tile.
+                if (text.Parent is DockPanel) { snapshot.MaxLines = MaxTitleLines; title = snapshot; }
+                else if (text.Parent is StackPanel) metadata.Add(snapshot);
             }
         }
-
+        var (borderTop, borderBody, borderBottom) = BrushColors(border.BorderBrush);
+        var (rimTop, rimBody, rimBottom) = BrushColors(rim);
         return new Scriblucent.Rendering.MindMapTileNode
         {
-            X = Canvas.GetLeft(border),
-            Y = Canvas.GetTop(border),
-            Width = border.Width,
-            Height = border.Height,
-            IsRoot = ReferenceEquals(node, _root),
-            Shape = node.NodeShape ?? string.Empty,
-            Background = ToArgb(background),
-            Border = ToArgb(borderColor),
-            BorderThickness = border.BorderThickness.Left,
-            Title = title,
-            FontFamily = fontFamily,
-            FontSizeDip = fontSize,
-            FontWeight = fontWeight,
-            Italic = italic,
-            TitleColor = ToArgb(titleColor),
-            HasChevron = hasChevron,
-            Folded = !node.IsExpanded,
-            IconPaths = iconPaths,
-            IconColor = ToArgb(iconColor),
-            IconOverflow = iconOverflow,
+            X = Canvas.GetLeft(border), Y = Canvas.GetTop(border), Width = border.Width, Height = border.Height,
+            Background = BrushColor(border.Background), Border = borderBody,
+            BorderTop = borderTop, BorderBottom = borderBottom,
+            OuterContour = SnapshotGeometry(outer),
+            BorderContour = SnapshotGeometry(borderContour),
+            RimContour = rimContour is null ? null : SnapshotGeometry(rimContour),
+            RimTop = rimTop, RimBody = rimBody, RimBottom = rimBottom,
+            Title = title, Glyphs = glyphs, Metadata = metadata
         };
     }
 
-    private static string? GetNodeIconPath(AppIconKind kind)
-    {
-        var lucideKind = AppIconKindMap.ToLucide(kind);
-        if (lucideKind == PackIconLucideKind.None)
-            return null;
+    private static string SnapshotGeometry(Geometry geometry)
+        => PathGeometry.CreateFromGeometry(geometry).ToString(CultureInfo.InvariantCulture);
 
-        return new PackIconLucide { Kind = lucideKind }.Data;
+    private static IEnumerable<DependencyObject> NodeVisuals(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            // Popups render in their own window and are not part of a zoom tile.
+            if (child is Popup) continue;
+            yield return child;
+            foreach (var descendant in NodeVisuals(child)) yield return descendant;
+        }
+    }
+    private static Point NodeLayoutOffset(Visual element, Visual ancestor)
+    {
+        var position = new Point();
+        for (Visual? current = element; current is not null && !ReferenceEquals(current, ancestor);
+             current = VisualTreeHelper.GetParent(current) as Visual)
+            position += VisualTreeHelper.GetOffset(current);
+        return position; // Layout positions exclude transient button press/arrival transforms.
+    }
+    private static uint BrushColor(Brush? brush)
+        => brush is SolidColorBrush solid ? ToArgb(solid.Color) : 0;
+    private static (uint Top, uint Body, uint Bottom) BrushColors(Brush? brush)
+    {
+        if (brush is not LinearGradientBrush { GradientStops.Count: > 0 } gradient)
+        { var color = BrushColor(brush); return (color, color, color); }
+        return (ToArgb(gradient.GradientStops.First().Color),
+            ToArgb(gradient.GradientStops.OrderBy(stop => Math.Abs(stop.Offset - .42)).First().Color),
+            ToArgb(gradient.GradientStops.Last().Color));
     }
 
     private static uint ToArgb(Color color)

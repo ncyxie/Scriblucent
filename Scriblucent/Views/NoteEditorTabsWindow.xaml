@@ -1,27 +1,29 @@
-<Window x:Class="Scriblucent.NoteEditorTabsWindow"
+﻿<Window x:Class="Scriblucent.EditorWorkspaceWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         xmlns:icons="clr-namespace:Scriblucent.Icons"
-        Title="Note Editor"
-        Height="720"
-        Width="1050"
+        xmlns:motion="clr-namespace:Scriblucent.Animations"
+        Title="{Binding [WorkspaceWindowTitle], Source={StaticResource Loc}}"
+        Height="780"
+        Width="1080" MinWidth="860" MinHeight="650"
         WindowStartupLocation="CenterOwner"
-        Icon="/logo.ico"
+        Icon="/Scriblucent;component/logo.ico"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
-        Background="{DynamicResource FeatureFrameBackground}">
+        Background="{DynamicResource WorkspaceBackdrop}">
     <Window.Resources>
         <Style x:Key="EditorTabTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+            <Setter Property="FontSize" Value="{StaticResource Type.Tab}"/>
             <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
             <Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             <Setter Property="MaxWidth" Value="160"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -31,86 +33,72 @@
         </Style>
 
         <Style x:Key="EditorTabIconStyle" TargetType="icons:AppIcon">
-            <Setter Property="Width" Value="13"/>
-            <Setter Property="Height" Value="13"/>
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
-                    <Setter Property="Foreground" Value="{DynamicResource AccentPrimary}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource AccentPrimarySubtleForeground}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="EditorTabCloseButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Height" Value="22"/>
+        <Style x:Key="EditorTabCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
+            <Setter Property="controls:SurfaceMaterial.Kind" Value="None"/>
+            <Setter Property="Width" Value="28"/><Setter Property="Height" Value="28"/>
+            <Setter Property="MinWidth" Value="28"/><Setter Property="MinHeight" Value="28"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="CloseBorder"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="{StaticResource Radius.Chip}"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="CloseBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource AccentDanger}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="CloseBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="ToolTip" Value="{Binding [CloseTab], Source={StaticResource Loc}}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
+        <Style x:Key="EditorTabKeyboardFocusStyle" TargetType="Control">
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control">
+                <Border CornerRadius="10" BorderThickness="2" BorderBrush="{DynamicResource AccentRimBrush}"/>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
         <Style x:Key="EditorTabItemStyle" TargetType="TabItem">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource EditorTabKeyboardFocusStyle}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Padding" Value="12,4"/>
             <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="MinHeight" Value="40"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="HeaderBorder"
+                                behaviors:CommandLightBehavior.IsEnabled="True"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
-                                CornerRadius="16"
+                                CornerRadius="10"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True"
                                 UseLayoutRounding="True"
-                                behaviors:RoundedClipBehavior.IsEnabled="True"
-                                behaviors:RoundedClipBehavior.CornerRadius="16">
+                                behaviors:RoundedClipBehavior.IsEnabled="True">
                             <ContentPresenter ContentSource="Header"
                                               HorizontalAlignment="Left"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource IconButtonBackground}"/>
-                            </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource CardBackground}"/>
+                                <Setter TargetName="HeaderBorder" Property="behaviors:CommandLightBehavior.IsSelected" Value="True"/>
+                                <Setter TargetName="HeaderBorder" Property="CornerRadius" Value="10,10,0,0"/>
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="Transparent"/>
                                 <Setter Property="Panel.ZIndex" Value="10"/>
                             </Trigger>
                             <MultiTrigger>
@@ -118,10 +106,17 @@
                                     <Condition Property="IsSelected" Value="True"/>
                                     <Condition Property="IsMouseOver" Value="True"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource CardBackground}"/>
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="Transparent"/>
                             </MultiTrigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                            <Trigger Property="controls:EditorChromeContext.IsTabDragging" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="CornerRadius" Value="10"/>
+                                <Setter TargetName="HeaderBorder" Property="Margin" Value="0,0,0,4"/>
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource CardBackground}"/>
+                                <Setter TargetName="HeaderBorder" Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -142,33 +137,47 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Align with editor chrome (FeatureTitleRowPadding / editor Margins = 20). -->
-                            <Border Grid.Row="0"
-                                    Margin="20,14,20,0"
-                                    Padding="6"
-                                    Background="{DynamicResource SelectionBackground}"
-                                    CornerRadius="{StaticResource Radius.Control}"
+                            <!-- Drawing-only connection overlaps the chrome's upper corners without clipping the toolbar. -->
+                            <controls:TabSelectionSurface x:Name="TabSelectionPlate" Grid.RowSpan="2" Panel.ZIndex="1" motion:WindowMotion.Role="Chrome"
+                                VerticalAlignment="Top" Height="54" Margin="24,12,24,0"
+                                Background="{DynamicResource CardBackground}" Rim="Transparent"
+                                CornerRadius="10,10,0,0" ConnectionDepth="14" behaviors:CommandLightBehavior.IsEnabled="True"/>
+
+                            <!-- Document tabs join the editor chrome; selection uses the common content surface. -->
+                            <Grid Grid.Row="0" Panel.ZIndex="2" motion:WindowMotion.Role="Chrome"
+                                    Margin="24,12,24,0"
                                     ClipToBounds="False"
                                     SnapsToDevicePixels="True"
                                     UseLayoutRounding="True">
-                                <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                              VerticalScrollBarVisibility="Disabled"
-                                              ClipToBounds="False"
-                                              behaviors:ScrollBarAutoHideBehavior.Enable="False">
-                                    <!-- StackPanel keeps pill gaps/corners intact; TabPanel was covering right radii. -->
-                                    <StackPanel x:Name="HeaderPanel"
-                                                IsItemsHost="True"
-                                                Orientation="Horizontal"
-                                                Background="Transparent"
-                                                ClipToBounds="False"
-                                                KeyboardNavigation.TabIndex="1"/>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="ScrollTabsLeft" Grid.Column="0" Width="32" Height="32" Margin="0,0,4,0"
+                                    Style="{StaticResource ToolbarIconButtonStyle}" Content="{icons:Icon ChevronLeft}"
+                                    Visibility="Collapsed" ToolTip="{Binding [ScrollTabsLeft], Source={StaticResource Loc}}"
+                                    AutomationProperties.Name="{Binding [ScrollTabsLeft], Source={StaticResource Loc}}"/>
+                                <ScrollViewer x:Name="TabHeaderScrollViewer" Grid.Column="1"
+                                    HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                                    <StackPanel x:Name="HeaderPanel" IsItemsHost="True" Orientation="Horizontal"
+                                        Background="Transparent" ClipToBounds="False" KeyboardNavigation.TabIndex="1"/>
                                 </ScrollViewer>
-                            </Border>
+                                <Button x:Name="ScrollTabsRight" Grid.Column="2" Width="32" Height="32" Margin="4,0,0,0"
+                                    Style="{StaticResource ToolbarIconButtonStyle}" Content="{icons:Icon ChevronRight}"
+                                    Visibility="Collapsed" ToolTip="{Binding [ScrollTabsRight], Source={StaticResource Loc}}"
+                                    AutomationProperties.Name="{Binding [ScrollTabsRight], Source={StaticResource Loc}}"/>
+                                <Button Grid.Column="3" Width="32" Height="32" Margin="6,0,0,0"
+                                    Style="{StaticResource ToolbarIconButtonStyle}" Content="{icons:Icon Plus}"
+                                    Click="NewDocument_Click" ToolTip="{Binding [WorkspaceNewDocument], Source={StaticResource Loc}}"/>
+                            </Grid>
 
-                            <Border Grid.Row="1"
+                            <!-- The connector belongs behind the fields/actions, never above them. -->
+                            <Border Grid.Row="1" Panel.ZIndex="2"
                                     Margin="0,0,0,10"
                                     Background="Transparent"
-                                    CornerRadius="0,10,10,10"
+                                    CornerRadius="0"
                                     ClipToBounds="True"
                                     SnapsToDevicePixels="True">
                                 <Grid>
@@ -176,7 +185,7 @@
                                     <ContentPresenter x:Name="PART_SelectedContentHost"
                                                       ContentSource="SelectedContent"
                                                       Visibility="Collapsed"/>
-                                    <ContentControl x:Name="EditorHost"
+                                    <ContentControl x:Name="EditorHost" controls:EditorChromeContext.IsTabbed="True"
                                                     Focusable="False"
                                                     IsTabStop="False"
                                                     KeyboardNavigation.TabIndex="2"/>
@@ -191,7 +200,9 @@
     <controls:FeatureWindowShell>
         <controls:FeatureWindowShell.Body><Grid>
         <TabControl x:Name="EditorTabs"
+                    behaviors:CommandLightBehavior.IsScope="True"
                     Style="{StaticResource EditorTabControlStyle}"
+                    behaviors:TabSelectionPlateBehavior.IsEnabled="True"
                     ItemContainerStyle="{StaticResource EditorTabItemStyle}"/>
 
     </Grid>

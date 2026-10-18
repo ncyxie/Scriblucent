@@ -91,12 +91,17 @@ public class AppIcon : Control
     {
         base.OnRender(dc);
 
-        var width = ActualWidth;
-        var height = ActualHeight;
+        DrawGlyph(dc, LucideKind, new Rect(RenderSize), Foreground);
+    }
+
+    internal static void DrawGlyph(DrawingContext dc, PackIconLucideKind kind, Rect frame, Brush? foreground)
+    {
+        var width = frame.Width;
+        var height = frame.Height;
         if (width <= 0 || height <= 0)
             return;
 
-        var geometry = LucideGeometryCache.Get(LucideKind);
+        var geometry = LucideGeometryCache.Get(kind);
         if (geometry is null)
             return;
 
@@ -115,11 +120,11 @@ public class AppIcon : Control
         // scaling, then translate so the scaled bounds center in the control.
         var matrix = new Matrix(
             scale, 0, 0, -scale,
-            width / 2 - (bounds.Left + bounds.Width / 2) * scale,
-            height / 2 + (bounds.Top + bounds.Height / 2) * scale);
+            frame.X + width / 2 - (bounds.Left + bounds.Width / 2) * scale,
+            frame.Y + height / 2 + (bounds.Top + bounds.Height / 2) * scale);
 
         dc.PushTransform(new MatrixTransform(matrix));
-        dc.DrawGeometry(Foreground, null, geometry);
+        dc.DrawGeometry(foreground, null, geometry);
         dc.Pop();
     }
 

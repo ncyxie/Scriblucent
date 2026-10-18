@@ -72,7 +72,9 @@ public partial class MainWindow : IDashboardMotionHost
     public void PrepareMutation(DashboardMotionScope scope)
     {
         var engine = EnsureDashboardMotionEngine(scope);
-        engine.BeginLayoutAnimation();
+        // Successive adds retarget one reflow; they share its eventual completion.
+        if (!engine.IsLayoutAnimationActive)
+            engine.BeginLayoutAnimation();
         engine.CapturePositions(ungroupedOnly: false, freezeViewport: false);
     }
 
@@ -120,6 +122,7 @@ public partial class MainWindow : IDashboardMotionHost
             return;
 
         EnsureDashboardContentHostRestState(scope);
+        if (IsLoadingDashboardActive) { EnsureListingCardsInteractive(scope); return; }
 
         if (DataContext is not ViewModels.MainViewModel { IsDashboardRevealMotionEnabled: true })
         {
@@ -138,6 +141,7 @@ public partial class MainWindow : IDashboardMotionHost
         Dispatcher.BeginInvoke(() =>
         {
             EnsureDashboardContentHostRestState(scope);
+            if (IsLoadingDashboardActive) { EnsureListingCardsInteractive(scope); return; }
 
             var target = ResolveDashboardContentRevealTarget(scope);
             if (target is null || target.Visibility != Visibility.Visible)
@@ -245,6 +249,9 @@ public partial class MainWindow : IDashboardMotionHost
                 try
                 {
                     commitSync();
+                    // A filter reversal can keep a group that was already leaving.
+                    foreach (var surviving in borders.Where(candidate => itemsControl.Items.Contains(candidate.DataContext)))
+                        Behaviors.CardSurfaceMotionBehavior.PlayGroupEnter(surviving);
                 }
                 finally
                 {
@@ -639,6 +646,23 @@ public partial class MainWindow : IDashboardMotionHost
            || ReferenceEquals(element, FlashcardsEmptyDashboardPanelElement)
            || ReferenceEquals(element, QuizzesEmptyDashboardPanelElement)
            || ReferenceEquals(element, MindMapsEmptyDashboardPanelElement);
+
+    private void PlayDashboardNavigationChoreography(DashboardMotionScope scope)
+    {
+        if (ResolveEmptyDashboardPanel(scope) is { IsVisible: true } empty)
+        { UiMotion.AnimateEmptyDashboardEnter(empty); return; }
+        var candidates = new[] { ResolveCalendarSectionContainer(scope), ResolveRecentSectionBody(scope), ResolveDashboardContentHost(scope) };
+        var index = 0;
+        foreach (var element in candidates.OfType<FrameworkElement>().Where(e => e.IsVisible && e.ActualHeight > 0).Take(3))
+        {
+            var move = UiMotion.ChannelTranslate(element, MotionChannel.Navigation);
+            SurfaceMotion.Stop(element, MotionChannel.Navigation);
+            move.Y = MotionPolicy.Spatial ? 14 : 0;
+            SurfaceMotion.AnimateTracks(element, MotionChannel.Navigation,
+                [new(move, System.Windows.Media.TranslateTransform.YProperty, 0, true)],
+                240, UiMotion.InOutSine, startDelayMs: Math.Min(80, index++ * 40));
+        }
+    }
 
     private IEnumerable<FrameworkElement> ResolveDashboardSwitchRevealTargets(DashboardMotionScope scope)
     {

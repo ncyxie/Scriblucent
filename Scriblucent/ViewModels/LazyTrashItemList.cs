@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using Scriblucent.Localization;
 
 namespace Scriblucent.ViewModels;
@@ -47,6 +47,13 @@ internal sealed class LazyTrashItemList : IList, IReadOnlyList<TrashItemViewMode
 
     public int Count => _indices?.Length ?? _shared.Entries.Length;
     internal int CreatedItemCount => _shared.CreatedIndices.Count;
+
+    internal int IndexOfId(Guid id)
+    {
+        for (int index = 0; index < Count; index++)
+            if (_shared.Entries[_indices is null ? index : _indices[index]].Id == id) return index;
+        return -1;
+    }
 
     internal IEnumerable<object> EnumerateSources()
     {

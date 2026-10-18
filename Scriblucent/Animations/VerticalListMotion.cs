@@ -44,10 +44,18 @@ public static class VerticalListMotion
                     return;
 
                 itemsControl.ItemContainerGenerator.StatusChanged -= OnStatusChanged;
+                host.Unloaded -= OnUnloaded;
                 TryAnimate();
             }
 
+            void OnUnloaded(object sender, RoutedEventArgs args)
+            {
+                itemsControl.ItemContainerGenerator.StatusChanged -= OnStatusChanged;
+                host.Unloaded -= OnUnloaded;
+            }
+
             itemsControl.ItemContainerGenerator.StatusChanged += OnStatusChanged;
+            host.Unloaded += OnUnloaded;
         }, DispatcherPriority.Loaded);
     }
 
@@ -211,7 +219,7 @@ public static class VerticalListMotion
             element,
             new[]
             {
-                UiMotion.Track(UiMotion.ReflowMs, UiMotion.OutQuad, startOffset, 0, value => translate.Y = value)
+                UiMotion.Track(UiMotion.ReflowMs, UiMotion.InOutCubic, startOffset, 0, value => translate.Y = value)
             },
             () =>
             {

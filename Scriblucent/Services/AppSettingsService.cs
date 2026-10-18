@@ -16,10 +16,11 @@ public static class AppSettingsService
     private static AppSettings? _cachedSettings;
     private static string? _pendingJson;
     private static Timer? _saveTimer;
+    internal static string? SettingsDirectoryOverride { get; set; }
 
     private static string GetSettingsFilePath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
+        var dir = SettingsDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "settings.json");
     }
@@ -70,6 +71,10 @@ public static class AppSettingsService
             var settings = JsonSerializer.Deserialize<AppSettings>(json);
             if (settings is null)
                 return new AppSettings();
+            if (settings.AnimationPreference is { } preference && !Enum.IsDefined(preference))
+                settings.AnimationPreference = null;
+            if (settings.CalendarFirstDayOfWeek is { } firstDay && !Enum.IsDefined(firstDay))
+                settings.CalendarFirstDayOfWeek = null;
 
             var defaultTools = BundledModelHostService.BuildDefaultAiToolSettings();
             if (settings.AiTools is null || settings.AiTools.Count == 0)

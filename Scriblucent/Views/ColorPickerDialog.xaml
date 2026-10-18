@@ -18,37 +18,43 @@
         ShowInTaskbar="False">
     <Window.Resources>
         <Style x:Key="RecentColorSwatchStyle" TargetType="Button">
-            <Setter Property="Width" Value="28"/>
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="behaviors:CommandLightBehavior.Role" Value="Value"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="FocusVisualStyle">
+                <Setter.Value>
+                    <Style TargetType="Control">
+                        <Setter Property="Template">
+                            <Setter.Value><ControlTemplate TargetType="Control">
+                                <Border CornerRadius="6" BorderThickness="2" BorderBrush="{DynamicResource AccentRimBrush}"/>
+                            </ControlTemplate></Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="SwatchBorder"
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="Transparent" HighlightEdge="{DynamicResource AccentPrimary}" x:Name="SwatchBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6"
                                 SnapsToDevicePixels="True"
                                 behaviors:RoundedClipBehavior.IsEnabled="True"/>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SwatchBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                                <Setter TargetName="SwatchBorder" Property="BorderThickness" Value="2"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
     </Window.Resources>
 
-    <controls:OverlayDialogShell MaxCardWidth="380"
-                                  CardPadding="20">
+    <controls:OverlayDialogShell MaxCardWidth="400"
+                                  CardPadding="24">
         <controls:OverlayDialogShell.Header>
             <TextBlock Text="{Binding [SelectColor], Source={StaticResource Loc}}"
                        FontSize="{StaticResource Type.DialogTitle}"
@@ -58,153 +64,149 @@
         </controls:OverlayDialogShell.Header>
 
         <controls:OverlayDialogShell.Body>
-            <StackPanel>
-                <!-- Saturation / Value field (rounded clip so gradients follow CornerRadius). -->
-                <Border x:Name="SpectrumBorder"
-                        Width="320"
-                        Height="180"
-                        HorizontalAlignment="Center"
-                        BorderBrush="{DynamicResource BorderColor}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource Radius.Control}"
-                        behaviors:RoundedClipBehavior.IsEnabled="True"
-                        Cursor="Cross"
-                        SnapsToDevicePixels="True"
-                        MouseLeftButtonDown="Spectrum_MouseLeftButtonDown"
-                        MouseMove="Spectrum_MouseMove"
-                        MouseLeftButtonUp="Spectrum_MouseLeftButtonUp">
-                    <Grid>
-                        <Border x:Name="SpectrumHueFill"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="White" Offset="0"/>
-                                    <GradientStop x:Name="SpectrumHueStop" Color="#FFFF0000" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
+            <ScrollViewer x:Name="ColorBodyScrollViewer" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" Padding="0">
+                <!-- Reserve marker bleed inside the viewport, including when recent colors wrap. -->
+                <StackPanel Margin="8">
+                    <!-- Saturation / Value field (rounded clip so gradients follow CornerRadius). -->
+                    <Grid ClipToBounds="False">
+                        <Border x:Name="SpectrumBorder"
+                                Height="180"
+                                HorizontalAlignment="Stretch"
+                                BorderBrush="{DynamicResource BorderColor}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                Cursor="Cross"
+                                SnapsToDevicePixels="True"
+                                MouseLeftButtonDown="Spectrum_MouseLeftButtonDown"
+                                MouseMove="Spectrum_MouseMove"
+                                MouseLeftButtonUp="Spectrum_MouseLeftButtonUp">
+                            <Grid>
+                                <Border x:Name="SpectrumHueFill"
+                                        CornerRadius="{StaticResource Radius.Control}">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="White" Offset="0"/>
+                                            <GradientStop x:Name="SpectrumHueStop" Color="#FFFF0000" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Border IsHitTestVisible="False"
+                                        CornerRadius="{StaticResource Radius.Control}">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#00000000" Offset="0"/>
+                                            <GradientStop Color="#FF000000" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
                         </Border>
-                        <Border IsHitTestVisible="False"
-                                CornerRadius="{StaticResource Radius.Control}">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                    <GradientStop Color="#00000000" Offset="0"/>
-                                    <GradientStop Color="#FF000000" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                        </Border>
-                        <Canvas IsHitTestVisible="False">
+                        <!-- The marker shares the spectrum's coordinates, but not its fill clip. -->
+                        <Canvas IsHitTestVisible="False" ClipToBounds="False"
+                                UseLayoutRounding="False" SnapsToDevicePixels="False">
                             <Ellipse x:Name="SpectrumThumb"
                                      Width="14"
                                      Height="14"
                                      Stroke="White"
                                      StrokeThickness="2"
-                                     Fill="Transparent">
-                                <Ellipse.Effect>
-                                    <DropShadowEffect BlurRadius="2"
-                                                      ShadowDepth="0"
-                                                      Opacity="0.55"/>
-                                </Ellipse.Effect>
+                                     Fill="Transparent" Effect="{StaticResource Elevation.Thumb}">
                             </Ellipse>
                         </Canvas>
                     </Grid>
-                </Border>
 
-                <!-- Hue rainbow -->
-                <Border x:Name="HueTrackBorder"
-                        Margin="0,12,0,0"
-                        Width="320"
-                        Height="18"
-                        HorizontalAlignment="Center"
-                        BorderBrush="{DynamicResource BorderColor}"
-                        BorderThickness="1"
-                        CornerRadius="9"
-                        behaviors:RoundedClipBehavior.IsEnabled="True"
-                        SnapsToDevicePixels="True">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                            <GradientStop Color="#FFFF0000" Offset="0"/>
-                            <GradientStop Color="#FFFFFF00" Offset="0.17"/>
-                            <GradientStop Color="#FF00FF00" Offset="0.33"/>
-                            <GradientStop Color="#FF00FFFF" Offset="0.50"/>
-                            <GradientStop Color="#FF0000FF" Offset="0.67"/>
-                            <GradientStop Color="#FFFF00FF" Offset="0.83"/>
-                            <GradientStop Color="#FFFF0000" Offset="1"/>
-                        </LinearGradientBrush>
-                    </Border.Background>
-                    <Slider x:Name="HueSlider"
-                            Minimum="0"
-                            Maximum="360"
-                            Value="0"
-                            Opacity="0.92"
-                            VerticalAlignment="Center"
-                            Margin="0,-4"
-                            ValueChanged="HueSlider_ValueChanged"/>
-                </Border>
+                    <!-- Hue rainbow -->
+                    <Border x:Name="HueTrackBorder"
+                            Margin="0,16,0,0"
+                            HorizontalAlignment="Stretch"
+                            Height="18"
 
-                <!-- Preview + hex: same vertical band; flat gray field (no Elevation.Field). -->
-                <Grid Margin="0,14,0,0"
-                      Width="320"
-                      HorizontalAlignment="Center">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="PreviewSwatch"
-                            Width="34"
-                            Height="34"
-                            VerticalAlignment="Center"
-                            Margin="0,0,10,0"
-                            CornerRadius="{StaticResource Radius.Control}"
+                            BorderBrush="{DynamicResource BorderColor}"
+                            BorderThickness="1"
+                            CornerRadius="9"
                             behaviors:RoundedClipBehavior.IsEnabled="True"
-                            BorderBrush="{DynamicResource BorderColor}"
-                            BorderThickness="1"
-                            Background="#1A1A1A"
-                            SnapsToDevicePixels="True"/>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding [ColorHex], Source={StaticResource Loc}}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0"
-                               Foreground="{DynamicResource TextColorSecondary}"
-                               FontSize="{StaticResource Type.Caption}"/>
-                    <Border Grid.Column="2"
-                            Height="34"
-                            VerticalAlignment="Center"
-                            Background="{DynamicResource WindowBackground}"
-                            BorderBrush="{DynamicResource BorderColor}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource Radius.Control}"
-                            Padding="8,0"
                             SnapsToDevicePixels="True">
-                        <TextBox x:Name="HexTextBox"
-                                 Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                 FontFamily="Consolas"
-                                 MaxLength="7"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 Effect="{x:Null}"
-                                 VerticalAlignment="Stretch"
-                                 VerticalContentAlignment="Center"
-                                 ToolTip="#RRGGBB"
-                                 TextChanged="HexTextBox_TextChanged"
-                                 LostFocus="HexTextBox_LostFocus"
-                                 KeyDown="HexTextBox_KeyDown"/>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#FFFF0000" Offset="0"/>
+                                <GradientStop Color="#FFFFFF00" Offset="0.17"/>
+                                <GradientStop Color="#FF00FF00" Offset="0.33"/>
+                                <GradientStop Color="#FF00FFFF" Offset="0.50"/>
+                                <GradientStop Color="#FF0000FF" Offset="0.67"/>
+                                <GradientStop Color="#FFFF00FF" Offset="0.83"/>
+                                <GradientStop Color="#FFFF0000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Slider x:Name="HueSlider" Style="{StaticResource HueSliderStyle}"
+                                Minimum="0"
+                                Maximum="360"
+                                Value="0"
+                                Opacity="0.92"
+                                VerticalAlignment="Center"
+                                Margin="0,-4"
+                                ValueChanged="HueSlider_ValueChanged"/>
                     </Border>
-                </Grid>
 
-                <!-- Recent colors -->
-                <StackPanel x:Name="RecentColorsSection"
-                            Margin="0,14,0,0"
-                            Width="320"
-                            HorizontalAlignment="Center"
-                            Visibility="Collapsed">
-                    <TextBlock Text="{Binding [RecentColors], Source={StaticResource Loc}}"
-                               Foreground="{DynamicResource TextColorSecondary}"
-                               FontSize="{StaticResource Type.Caption}"
-                               Margin="0,0,0,8"/>
-                    <WrapPanel x:Name="RecentColorsPanel"/>
+                    <!-- Preview and inset Hex field share one vertical band. -->
+                    <Grid Margin="0,14,0,0"
+                          HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="PreviewSwatch"
+                                Width="34"
+                                Height="36"
+                                VerticalAlignment="Center"
+                                Margin="0,0,10,0"
+                                CornerRadius="{StaticResource Radius.Control}"
+                                behaviors:RoundedClipBehavior.IsEnabled="True"
+                                BorderBrush="{DynamicResource BorderColor}"
+                                BorderThickness="1"
+                                Background="#1A1A1A"
+                                SnapsToDevicePixels="True"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding [ColorHex], Source={StaticResource Loc}}"
+                                   VerticalAlignment="Center"
+                                   Margin="{StaticResource Field.InlineLabelMargin}"
+                                   Foreground="{DynamicResource TextColorSecondary}"
+                                   FontSize="{StaticResource Type.Control.Helper}"/>
+                        <Border x:Name="HexFieldShell" Grid.Column="2"
+                                Style="{StaticResource ChromeInsetFieldBorderStyle}"
+                                Height="36"
+                                VerticalAlignment="Center"
+                                SnapsToDevicePixels="True">
+                            <TextBox x:Name="HexTextBox"
+                                     Style="{StaticResource EmbeddedFieldTextBoxStyle}"
+                                     FontFamily="Consolas"
+                                     MaxLength="7"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Effect="{x:Null}"
+                                     VerticalAlignment="Stretch"
+                                     VerticalContentAlignment="Center"
+                                     ToolTip="#RRGGBB"
+                                     TextChanged="HexTextBox_TextChanged"
+                                     LostFocus="HexTextBox_LostFocus"
+                                     KeyDown="HexTextBox_KeyDown"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Recent colors -->
+                    <StackPanel x:Name="RecentColorsSection"
+                                Margin="0,14,0,0"
+                                HorizontalAlignment="Stretch"
+                                Visibility="Collapsed">
+                        <TextBlock Text="{Binding [RecentColors], Source={StaticResource Loc}}"
+                                   Foreground="{DynamicResource TextColorSecondary}"
+                                   FontSize="{StaticResource Type.Control.Helper}"
+                                   Margin="0,0,0,8"/>
+                        <WrapPanel x:Name="RecentColorsPanel"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
+            </ScrollViewer>
         </controls:OverlayDialogShell.Body>
 
         <controls:OverlayDialogShell.Footer>

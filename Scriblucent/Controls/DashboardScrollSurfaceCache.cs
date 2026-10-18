@@ -27,23 +27,34 @@ internal static class DashboardScrollSurfaceCache
     private const double IdleReleaseDelaySeconds = 10;
 
     private static readonly Queue<FrameworkElement> Pending = new();
-    private static readonly Dictionary<FrameworkElement, CacheMode?> Applied = new();
+    private static readonly HashSet<FrameworkElement> Queued = new();
+    private sealed record CacheEntry(CacheMode? Original, BitmapCache Owned);
+    private static readonly Dictionary<FrameworkElement, CacheEntry> Applied = new();
     private static Queue<FrameworkElement>? _releaseQueue;
     private static bool _sessionActive;
     private static bool _prewarmActive;
     private static bool _largeViewport;
     private static bool _flushScheduled;
+    private static int _flushGeneration;
     private static DispatcherTimer? _idleReleaseTimer;
 
     public static int AppliedCount => Applied.Count;
-    public static int PendingCount => Pending.Count;
+    public static int PendingCount => Queued.Count;
+    internal readonly record struct StateSnapshot(int Applied, int Pending, bool ScrollActive, bool WarmupActive, bool IdleReleaseArmed);
+    internal static StateSnapshot Snapshot => new(Applied.Count, Queued.Count, _sessionActive, _prewarmActive, _idleReleaseTimer?.IsEnabled == true);
+
+    private static void CancelPending()
+    {
+        Pending.Clear(); Queued.Clear();
+        _flushScheduled = false;
+        _flushGeneration++;
+    }
 
     public static void BeginSession(ScrollViewer scrollViewer)
     {
         // Keep any idle-prewarmed Applied caches; only abandon pending release and pending queue.
-        Pending.Clear();
+        CancelPending();
         _releaseQueue = null;
-        _flushScheduled = false;
         _prewarmActive = false;
         DisarmIdleRelease();
 
@@ -95,22 +106,23 @@ internal static class DashboardScrollSurfaceCache
 
         foreach (var surface in surfaces)
             EnqueueSurface(surface);
+
+        // A resize often warms cards that are all ready already. No flush is queued
+        // then, so this path must finish itself and re-arm their idle expiration.
+        FinishPrewarmIfReady();
     }
 
     public static void EndSession()
     {
-        Pending.Clear();
+        CancelPending();
         _releaseQueue = null;
-        _flushScheduled = false;
         _sessionActive = false;
         _prewarmActive = false;
         _largeViewport = false;
         DisarmIdleRelease();
 
-        foreach (var (surface, cacheMode) in Applied.ToList())
-            surface.CacheMode = cacheMode;
-
-        Applied.Clear();
+        foreach (var surface in Applied.Keys.ToArray())
+            ReleaseSurface(surface);
     }
 
     /// <summary>
@@ -119,8 +131,7 @@ internal static class DashboardScrollSurfaceCache
     /// </summary>
     public static void EndSessionStaggered()
     {
-        Pending.Clear();
-        _flushScheduled = false;
+        CancelPending();
         _sessionActive = false;
         _prewarmActive = false;
         _largeViewport = false;
@@ -138,14 +149,15 @@ internal static class DashboardScrollSurfaceCache
 
     private static void EnqueueSurface(FrameworkElement surface)
     {
-        if (surface.CacheMode is BitmapCache || Applied.ContainsKey(surface))
+        if (surface.CacheMode is BitmapCache || Applied.ContainsKey(surface) || Queued.Contains(surface))
             return;
 
         // The cache is bounded: once the realized-set budget is reached, further surfaces are
         // simply left uncached (they repaint per frame) instead of growing the raster memory.
-        if (Applied.Count >= MaxAppliedSurfaces)
+        if (Applied.Count + Queued.Count >= MaxAppliedSurfaces)
             return;
 
+        Queued.Add(surface);
         Pending.Enqueue(surface);
         ScheduleFlush();
     }
@@ -171,11 +183,9 @@ internal static class DashboardScrollSurfaceCache
         while (released < ReleasesPerFrame && queue.Count > 0)
         {
             var surface = queue.Dequeue();
-            if (!Applied.TryGetValue(surface, out var cacheMode))
+            if (!ReleaseSurface(surface))
                 continue;
 
-            Applied.Remove(surface);
-            surface.CacheMode = cacheMode;
             released++;
         }
 
@@ -195,7 +205,11 @@ internal static class DashboardScrollSurfaceCache
 
         _flushScheduled = true;
         var dispatcher = Pending.Peek().Dispatcher;
-        dispatcher.BeginInvoke(FlushBatch, DispatcherPriority.Background);
+        var generation = _flushGeneration;
+        dispatcher.BeginInvoke(() =>
+        {
+            if (generation == _flushGeneration) FlushBatch();
+        }, DispatcherPriority.Background);
     }
 
     private static void FlushBatch()
@@ -203,7 +217,7 @@ internal static class DashboardScrollSurfaceCache
         _flushScheduled = false;
         if (!_sessionActive && !_prewarmActive)
         {
-            Pending.Clear();
+            CancelPending();
             return;
         }
 
@@ -211,11 +225,16 @@ internal static class DashboardScrollSurfaceCache
         while (applied < CardsPerFrame && Pending.Count > 0)
         {
             var surface = Pending.Dequeue();
-            if (!surface.IsVisible || Applied.ContainsKey(surface))
+            Queued.Remove(surface);
+            if (!surface.IsVisible || Applied.ContainsKey(surface) || surface.CacheMode is BitmapCache
+                || Applied.Count >= MaxAppliedSurfaces)
                 continue;
 
-            Applied[surface] = surface.CacheMode;
-            surface.CacheMode = DpiAwareBitmapCache.Create(surface, enableClearType: false);
+            var cache = DpiAwareBitmapCache.Create(surface, enableClearType: false);
+            Applied[surface] = new(surface.CacheMode, cache);
+            surface.Unloaded += SurfaceUnloaded;
+            surface.IsVisibleChanged += SurfaceVisibilityChanged;
+            surface.SetCurrentValue(UIElement.CacheModeProperty, cache);
             applied++;
         }
 
@@ -224,13 +243,35 @@ internal static class DashboardScrollSurfaceCache
 
         if (Pending.Count > 0)
             ScheduleFlush();
-        else if (_prewarmActive && !_sessionActive)
+        else FinishPrewarmIfReady();
+    }
+
+    private static void FinishPrewarmIfReady()
+    {
+        if (_prewarmActive && !_sessionActive && Queued.Count == 0)
         {
             _prewarmActive = false;
             // The prewarmed caches stay for the interaction window, then release on idle so the
             // memory returns during normal use (the next fling re-warms on demand).
             ArmIdleRelease();
         }
+    }
+
+    private static bool ReleaseSurface(FrameworkElement surface)
+    {
+        if (!Applied.Remove(surface, out var entry)) return false;
+        surface.Unloaded -= SurfaceUnloaded;
+        surface.IsVisibleChanged -= SurfaceVisibilityChanged;
+        // A different motion owner may have replaced the cache in the meantime.
+        if (ReferenceEquals(surface.CacheMode, entry.Owned))
+            surface.SetCurrentValue(UIElement.CacheModeProperty, entry.Original);
+        if (Applied.Count == 0 && Queued.Count == 0) DisarmIdleRelease();
+        return true;
+    }
+    private static void SurfaceUnloaded(object sender, RoutedEventArgs e) => ReleaseSurface((FrameworkElement)sender);
+    private static void SurfaceVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is false) ReleaseSurface((FrameworkElement)sender);
     }
 
     /// <summary>Arms a one-shot idle timer: with no scroll activity for <see cref="IdleReleaseDelaySeconds"/>,

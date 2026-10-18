@@ -7,17 +7,17 @@ public partial class BakedElevationLayer
 {
     public enum ElevationKind
     {
-        Field,
         Button,
         ButtonCard,
-        Dialog
+        Dialog,
+        Paper
     }
 
     public static readonly DependencyProperty KindProperty = DependencyProperty.Register(
         nameof(Kind),
         typeof(ElevationKind),
         typeof(BakedElevationLayer),
-        new PropertyMetadata(ElevationKind.Field, (d, _) => ((BakedElevationLayer)d).Apply()));
+        new PropertyMetadata(ElevationKind.Button, (d, _) => ((BakedElevationLayer)d).Apply()));
 
     public ElevationKind Kind
     {
@@ -49,8 +49,9 @@ public partial class BakedElevationLayer
         {
             ElevationKind.Button => BakedElevationAsset.Button,
             ElevationKind.ButtonCard => BakedElevationAsset.ButtonCard,
+            ElevationKind.Paper => BakedElevationAsset.Paper,
             ElevationKind.Dialog => BakedElevationAsset.Dialog,
-            _ => BakedElevationAsset.Field
+            _ => BakedElevationAsset.Button
         };
 
         var tile = profile.CornerTileSize;

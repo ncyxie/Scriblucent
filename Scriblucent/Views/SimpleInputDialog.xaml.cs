@@ -60,9 +60,7 @@ public partial class SimpleInputDialog : Window
     {
         bool valid = _inputValidator?.Invoke(InputText) ?? true;
         ConfirmButton.IsEnabled = valid;
-        ValidationText.Text = valid ? string.Empty : _validationMessage ?? string.Empty;
-        ValidationText.Visibility = !valid && !string.IsNullOrEmpty(_validationMessage)
-            ? Visibility.Visible : Visibility.Collapsed;
+        ValidationText.Show(valid ? null : _validationMessage);
         return valid;
     }
 

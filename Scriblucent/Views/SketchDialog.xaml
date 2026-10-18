@@ -19,6 +19,7 @@
         ShowInTaskbar="False">
     <Window.Resources>
         <Style x:Key="SketchSwatchButtonStyle" TargetType="Button">
+            <Setter Property="behaviors:CommandLightBehavior.Role" Value="Value"/>
             <Setter Property="Width" Value="22"/>
             <Setter Property="Height" Value="22"/>
             <Setter Property="Margin" Value="2"/>
@@ -29,17 +30,14 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="SwatchBorder"
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="Transparent" HighlightEdge="{DynamicResource AccentPrimary}" x:Name="SwatchBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4"
                                 SnapsToDevicePixels="True"/>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SwatchBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                                <Setter TargetName="SwatchBorder" Property="BorderThickness" Value="2"/>
-                            </Trigger>
+
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>

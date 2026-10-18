@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,7 +27,6 @@ public static class CardSurfaceMotionBehavior
 {
     private const int EnterBurstWindowMs = 450;
     private const int NewCardAnimationWindowMs = 2500;
-    private static int _activeFullEnterAnimations;
     private static long _lastAddTimestampMs;
     private static int _rapidAddCount;
     private static Guid? _lastAddedNoteId;
@@ -109,6 +108,12 @@ public static class CardSurfaceMotionBehavior
         if (!GetIsEnabled(element))
             return;
 
+        if (CollectionSelectionFrame.For(element) is { } selectionFrame)
+        {
+            // Arrival/reflow completion may have changed an inner face transform.
+            // Settle the decoration once; hover itself moves the whole frame.
+            selectionFrame.RefreshFace(); selectionFrame.SyncHover(); return;
+        }
         PlayHover(element, element.IsMouseOver);
     }
 
@@ -120,32 +125,33 @@ public static class CardSurfaceMotionBehavior
     {
         if (!GetIsEnabled(element))
             return;
+        if (CollectionSelectionFrame.For(element) is { } selectionFrame) { selectionFrame.ResetHover(); return; }
 
         var profile = GetProfile(element);
         if (profile == CardSurfaceMotionProfile.GroupSlide)
             return;
 
-        var hoverTarget = profile == CardSurfaceMotionProfile.Listing
-            ? ResolveListingMotionSurface(element)
-            : element;
+        var hoverTarget = ResolveHoverTarget(element, profile);
 
-        UiMotion.Stop(hoverTarget);
+        UiMotion.Stop(UiMotion.Channel(hoverTarget, MotionChannel.Interaction));
 
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(hoverTarget);
+        var translate = UiMotion.ChannelTranslate(hoverTarget, MotionChannel.Interaction);
         // Listing rest size is always 1 (0.88 is enter start only). Hover uses lift, not scale.
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+
         translate.X = 0;
         translate.Y = 0;
 
         ClearLiveShadowEffect(hoverTarget);
+        SurfaceLight.Reset(hoverTarget);
         if (TryResolveBakedShadowPlate(hoverTarget, element, out var plate)
+            && plate is not CardShadowLayer { FollowsFace: true }
             && !IsVisualDescendantOf(plate, hoverTarget))
         {
-            UiMotion.Stop(plate);
-            var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
+            UiMotion.Stop(UiMotion.Channel(plate, MotionChannel.Interaction));
+            var plateTranslate = UiMotion.ChannelTranslate(plate, MotionChannel.Interaction);
             plateTranslate.X = 0;
             plateTranslate.Y = 0;
+            plate.Opacity = .72;
         }
     }
 
@@ -227,14 +233,14 @@ public static class CardSurfaceMotionBehavior
     {
         EnsureInteractive(element);
 
-        if (element is NoteCardControl noteCard)
-            noteCard.ClearDragVisualState();
-
         if (DashboardMotionEngine.IsPendingEnter(element))
         {
             EnsurePendingEnterVisible(element);
             return;
         }
+
+        if (element is NoteCardControl noteCard)
+            noteCard.ClearDragVisualState();
 
         if (DashboardMotionEngine.ShouldDeferForcedVisibility(element))
             return;
@@ -260,6 +266,11 @@ public static class CardSurfaceMotionBehavior
 
     private static void EnsurePendingEnterVisible(FrameworkElement element)
     {
+        // Pending cards belong to the dashboard entrance, including the period
+        // before its clock starts. Do not let recycling reveal that held slot.
+        if (DashboardMotionEngine.TryPrepareEnterState(element))
+            return;
+
         if (DashboardMotionEngine.ShouldDeferForcedVisibility(element))
             return;
 
@@ -353,27 +364,15 @@ public static class CardSurfaceMotionBehavior
         var (groupScale, groupTranslate) = UiMotion.EnsureScaleTranslateGroup(element);
         groupTranslate.X = 0;
         groupTranslate.Y = UiMotion.GroupEnterLiftY;
-        groupScale.ScaleX = UiMotion.GroupEnterScale;
-        groupScale.ScaleY = UiMotion.GroupEnterScale;
+        groupScale.ScaleX = groupScale.ScaleY = 1;
 
         UiMotion.Run(
             element,
             new[]
             {
-                UiMotion.Track(UiMotion.GroupEnterMs, UiMotion.OutCubic, 0, 1, value => element.Opacity = value),
-                UiMotion.Track(UiMotion.GroupEnterMs, UiMotion.OutCubic, UiMotion.GroupEnterLiftY, 0, value => groupTranslate.Y = value),
-                UiMotion.Track(
-                    UiMotion.GroupEnterMs,
-                    UiMotion.OutCubic,
-                    UiMotion.GroupEnterScale,
-                    1,
-                    value =>
-                    {
-                        groupScale.ScaleX = value;
-                        groupScale.ScaleY = value;
-                    },
-                    onComplete: onComplete)
-            });
+                UiMotion.Track(UiMotion.GroupEnterMs, UiMotion.OutSine, 0, 1, value => element.Opacity = value),
+                UiMotion.Track(UiMotion.GroupEnterMs, UiMotion.InOutSine, UiMotion.GroupEnterLiftY, 0, value => groupTranslate.Y = value)
+            }, onComplete);
     }
 
     public static void PlayExit(FrameworkElement element, Action? onComplete = null)
@@ -393,17 +392,13 @@ public static class CardSurfaceMotionBehavior
             case CardSurfaceMotionProfile.GroupSlide:
                 durationMs = UiMotion.GroupExitMs;
                 var (groupExitScale, groupExitTranslate) = UiMotion.EnsureScaleTranslateGroup(element);
+                groupExitScale.ScaleX = groupExitScale.ScaleY = 1;
                 UiMotion.Run(
                     element,
                     new[]
                     {
                         UiMotion.Track(durationMs, UiMotion.InCubic, element.Opacity, 0, value => element.Opacity = value),
-                        UiMotion.Track(durationMs, UiMotion.InCubic, 0, UiMotion.GroupEnterLiftY * 0.5, value => groupExitTranslate.Y = value),
-                        UiMotion.Track(durationMs, UiMotion.InCubic, 1, UiMotion.GroupExitScale, value =>
-                        {
-                            groupExitScale.ScaleX = value;
-                            groupExitScale.ScaleY = value;
-                        })
+                        UiMotion.Track(durationMs, UiMotion.InCubic, groupExitTranslate.Y, UiMotion.GroupEnterLiftY, value => groupExitTranslate.Y = value)
                     },
                     onComplete);
                 break;
@@ -509,7 +504,7 @@ public static class CardSurfaceMotionBehavior
             return;
         }
 
-        PlayEnter(element);
+        PlayEnterImmediate(element);
     }
 
     private static void ScheduleVisibilityFallback(FrameworkElement element)
@@ -548,88 +543,6 @@ public static class CardSurfaceMotionBehavior
         state.UnloadedHandler = null;
         state.MouseEnterHandler = null;
         state.MouseLeaveHandler = null;
-    }
-
-    private static void PlayEnter(FrameworkElement element)
-    {
-        if (GetProfile(element) == CardSurfaceMotionProfile.Listing)
-        {
-            if (DashboardMotionEngine.TryPrepareEnterState(element))
-                return;
-
-            PlayListingEnterImmediate(element);
-            return;
-        }
-
-        if (GetProfile(element) == CardSurfaceMotionProfile.GroupSlide)
-        {
-            PlayGroupEnter(element);
-            return;
-        }
-
-        if (GetProfile(element) == CardSurfaceMotionProfile.NoteCard
-            || !IsNewlyAddedCard(element)
-            || ShouldUseBurstEnter())
-        {
-            PlayEnterImmediate(element);
-            return;
-        }
-
-        var profile = GetProfile(element);
-        UiMotion.Stop(element);
-        _activeFullEnterAnimations++;
-
-        void CompleteEnter()
-        {
-            if (_activeFullEnterAnimations > 0)
-                _activeFullEnterAnimations--;
-        }
-
-        switch (profile)
-        {
-
-            case CardSurfaceMotionProfile.NoteCard:
-                element.Opacity = 0;
-                var (noteScale, noteTranslate) = UiMotion.EnsureScaleTranslateGroup(element);
-                noteTranslate.X = 0;
-                noteTranslate.Y = 0;
-                noteScale.ScaleX = 0.97;
-                noteScale.ScaleY = 0.97;
-                UiMotion.Run(
-                    element,
-                    new[]
-                    {
-                        UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, 0, 1, value => element.Opacity = value),
-                        UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, 0.97, 1, value =>
-                        {
-                            noteScale.ScaleX = value;
-                            noteScale.ScaleY = value;
-                        })
-                    },
-                    CompleteEnter);
-                break;
-
-            default:
-                var (scale, _) = UiMotion.EnsureScaleTranslateGroup(element);
-                element.Opacity = 0;
-                scale.ScaleX = UiMotion.EnterScale;
-                scale.ScaleY = UiMotion.EnterScale;
-                ClearLiveShadowEffect(element);
-
-                UiMotion.Run(
-                    element,
-                    new[]
-                    {
-                        UiMotion.Track(UiMotion.EnterOpacityMs, UiMotion.OutCubic, 0, 1, value => element.Opacity = value),
-                        UiMotion.Track(UiMotion.EnterScaleMs, UiMotion.OutBack, UiMotion.EnterScale, 1, value =>
-                        {
-                            scale.ScaleX = value;
-                            scale.ScaleY = value;
-                        })
-                    },
-                    CompleteEnter);
-                break;
-        }
     }
 
     private static bool IsNewlyAddedCard(FrameworkElement element)
@@ -717,6 +630,7 @@ public static class CardSurfaceMotionBehavior
         ClearLiveShadowEffect(motionSurface);
         if (!layoutRoot.IsMouseOver
             && TryResolveBakedShadowPlate(motionSurface, layoutRoot, out var plate)
+            && plate is not CardShadowLayer { FollowsFace: true }
             && !IsVisualDescendantOf(plate, motionSurface))
         {
             var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
@@ -742,6 +656,7 @@ public static class CardSurfaceMotionBehavior
 
         ClearLiveShadowEffect(motionSurface);
         if (TryResolveBakedShadowPlate(motionSurface, layoutRoot, out var plate)
+            && plate is not CardShadowLayer { FollowsFace: true }
             && !IsVisualDescendantOf(plate, motionSurface))
         {
             var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
@@ -769,7 +684,9 @@ public static class CardSurfaceMotionBehavior
         {
             case CardSurfaceMotionProfile.GroupSlide:
                 element.Opacity = 1;
-                UiMotion.EnsureTranslate(element).Y = 0;
+                var (groupScale, groupTranslate) = UiMotion.EnsureScaleTranslateGroup(element);
+                groupScale.ScaleX = groupScale.ScaleY = 1;
+                groupTranslate.X = groupTranslate.Y = 0;
                 break;
 
             case CardSurfaceMotionProfile.NoteCard:
@@ -797,53 +714,51 @@ public static class CardSurfaceMotionBehavior
 
     private static void PlayHover(FrameworkElement element, bool isEnter)
     {
-        if (ShouldSuppressShadowMotion(element))
+        if (CollectionSelectionFrame.For(element) is { } selectionFrame) { selectionFrame.SyncHover(); return; }
+        if (ShouldSuppressShadowMotion(element) || !MotionPolicy.Spatial)
             return;
 
         var profile = GetProfile(element);
         if (profile == CardSurfaceMotionProfile.GroupSlide)
             return;
 
-        var hoverTarget = profile == CardSurfaceMotionProfile.Listing
-            ? ResolveListingMotionSurface(element)
-            : element;
+        var hoverTarget = ResolveHoverTarget(element, profile);
 
         var durationMs = isEnter ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
         // Lift instead of scale: RenderTransform scale upscales already-drawn ClearType
         // glyphs and inevitably softens text/icons. A translate pop stays pixel-sharp.
         var targetLift = isEnter ? UiMotion.CardHoverLiftY : 0.0;
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(hoverTarget);
+        var translate = UiMotion.ChannelTranslate(hoverTarget, MotionChannel.Interaction);
         // Rest size is always 1 (0.88 is enter start only). Hover animates lift, not scale.
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+
 
         // Prefer the shared nine-slice plate (no live DropShadowEffect). Clear any leftover
         // Effect from older sessions so hover never reintroduces per-card blur cost.
         ClearLiveShadowEffect(hoverTarget);
 
-        var liftFrom = translate.Y;
-        var tracks = new List<RenderTransitionClock.Track>
+        if (!isEnter && translate.Y == 0
+            && !NativeSurfaceMotion.IsRunning(hoverTarget, MotionChannel.Interaction))
         {
-            UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
-        };
-
-        // Listing motion surface is the face border; plate is a sibling and must co-lift.
-        // NoteCard lifts the whole control (plate is a descendant) — skip duplicate plate motion.
-        if (TryResolveBakedShadowPlate(hoverTarget, element, out var plate)
-            && !IsVisualDescendantOf(plate, hoverTarget))
-        {
-            UiMotion.Stop(plate);
-            var (_, plateTranslate) = UiMotion.EnsureScaleTranslateGroup(plate);
-            var plateLiftFrom = plateTranslate.Y;
-            tracks.Add(UiMotion.Track(
-                durationMs,
-                UiMotion.OutCubic,
-                plateLiftFrom,
-                targetLift,
-                value => plateTranslate.Y = value));
+            // Recycling/visibility repair often synchronizes a card already at rest.
+            // Establish its shadow directly instead of starting an empty hover-out clock.
+            ForceRestHoverState(element);
+            return;
         }
 
-        UiMotion.Run(hoverTarget, tracks.ToArray());
+        var tracks = new List<NativeMotionTrack> { new(translate, TranslateTransform.YProperty, targetLift, true) };
+        SurfaceLight.AddTracks(hoverTarget, tracks, isEnter);
+        if (TryResolveBakedShadowPlate(hoverTarget, element, out var plate))
+        {
+            tracks.Add(new(plate, UIElement.OpacityProperty, isEnter ? 1 : .72));
+            if (plate is not CardShadowLayer { FollowsFace: true } && !IsVisualDescendantOf(plate, hoverTarget))
+            {
+                UiMotion.Stop(UiMotion.Channel(plate, MotionChannel.Interaction));
+                var plateTranslate = UiMotion.ChannelTranslate(plate, MotionChannel.Interaction);
+                tracks.Add(new(plateTranslate, TranslateTransform.YProperty, targetLift, true));
+            }
+        }
+        UiMotion.Stop(UiMotion.Channel(hoverTarget, MotionChannel.Interaction));
+        SurfaceMotion.AnimateTracks(hoverTarget, MotionChannel.Interaction, tracks, durationMs, UiMotion.OutCubic);
     }
 
     private static void ClearLiveShadowEffect(FrameworkElement hoverTarget)
@@ -855,6 +770,11 @@ public static class CardSurfaceMotionBehavior
             && hoverTarget.Effect is DropShadowEffect { IsFrozen: false })
             hoverTarget.Effect = null;
     }
+
+    private static FrameworkElement ResolveHoverTarget(FrameworkElement element, CardSurfaceMotionProfile profile)
+        => profile == CardSurfaceMotionProfile.Listing ? ResolveListingMotionSurface(element)
+            : element is NoteCardControl card && card.FindName("HoverMotionSurface") is FrameworkElement surface ? surface
+            : element;
 
     private static bool TryResolveBakedShadowPlate(
         FrameworkElement hoverTarget,

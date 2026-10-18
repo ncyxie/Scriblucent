@@ -21,7 +21,7 @@ using System.Windows.Threading;
 
 namespace Scriblucent.ViewModels;
 
-public class MainViewModel : ViewModelBase
+public partial class MainViewModel : ViewModelBase
 {
     private const string DefaultGroupBackground = "#F8FAFF";
     private const int MassDeleteAnimatedMax = 8;
@@ -99,11 +99,6 @@ public class MainViewModel : ViewModelBase
     private const int NotesLoadBatchSize = 48;
     private const int NotesSingleCommitMax = 120;
     private const int TrashRetentionDays = 30;
-    /// <summary>How many card content previews are decoded at idle - the initial viewport plus a
-    /// buffer. Cards beyond it decode lazily on scroll, so a large library never decodes its
-    /// whole content at startup.</summary>
-    private const int PreviewWarmBudget = 48;
-
     public event EventHandler? NotesDashboardReady;
 
     public bool IsActiveDashboardReady => _activeDashboard switch
@@ -170,12 +165,11 @@ public class MainViewModel : ViewModelBase
     private readonly Dictionary<Guid, QuizViewModel> _selectedQuizzes = new();
     private bool _isMassSelectMode;
     private string _massSelectDashboard = DashboardNotes;
-    private DateTime _calendarSelectedDate = DateTime.Today;
     private AppSettings _settings;
     private readonly Dictionary<Guid, FlashcardSetGroupData> _flashcardSetGroupMetadata = new();
     private readonly Dictionary<Guid, MindMapGroupData> _mindMapGroupMetadata = new();
     private readonly Dictionary<Guid, QuizGroupData> _quizGroupMetadata = new();
-    private readonly ObservableCollection<QuizViewModel> _quizzes = new();
+    private readonly ObservableCollection<QuizViewModel> _quizzes = new BulkObservableCollection<QuizViewModel>();
     public ObservableCollection<FlashcardSetGroupViewModel> FlashcardSetGroups { get; } = new();
     public ObservableCollection<MindMapGroupViewModel> MindMapGroups { get; } = new();
     public ObservableCollection<QuizGroupViewModel> QuizGroups { get; } = new();
@@ -224,28 +218,28 @@ public class MainViewModel : ViewModelBase
 
     private string GetFlashcardsFilePath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
+        var dir = PersistenceDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "flashcards.json");
     }
 
     private string GetFlashcardSetsFilePath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
+        var dir = PersistenceDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "flashcard-sets.json");
     }
 
     private string GetMindMapsFilePath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
+        var dir = PersistenceDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "mind-maps.json");
     }
 
     private string GetQuizzesFilePath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
+        var dir = PersistenceDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "quizzes.json");
     }
@@ -258,6 +252,7 @@ public class MainViewModel : ViewModelBase
         // Create a deep copy of the quiz document
         var newDocument = CloneQuizDocument(sourceQuiz.Document);
 
+        RememberDashboardCopies(DashboardMotionScope.Quizzes, [sourceQuiz.Document.Id], [newDocument.Id]);
         AddOrUpdateQuiz(newDocument);
     }
 
@@ -274,6 +269,7 @@ public class MainViewModel : ViewModelBase
             AiModelDisplayName = source.AiModelDisplayName,
             SourceNoteId = source.SourceNoteId,
             GroupId = source.GroupId,
+            IsPinned = source.IsPinned,
             Schedules = source.Schedules?.Select(schedule => new NoteScheduleEntry
             {
                 ScheduledAt = schedule.ScheduledAt,
@@ -489,7 +485,7 @@ public class MainViewModel : ViewModelBase
                 OnPropertyChanged(nameof(SortButtonText));
                 OnPropertyChanged(nameof(ActiveSortButtonText));
                 OnPropertyChanged(nameof(UserActivitySummaryTitle));
-                OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
+                _calendarPlanner?.RefreshLanguage();
                 OnPropertyChanged(nameof(QuizzesEmptyDashboardPrompt));
                 OnPropertyChanged(nameof(MindMapsEmptyDashboardPrompt));
                 RefreshActivityStats();
@@ -539,6 +535,8 @@ public class MainViewModel : ViewModelBase
         CurrentView = normalized;
         OnPropertyChanged(nameof(ActiveDashboard));
         OnPropertyChanged(nameof(IsActiveDashboardReady));
+        OnPropertyChanged(nameof(CanCreateDashboardItem));
+        CommandManager.InvalidateRequerySuggested();
         OnPropertyChanged(nameof(IsActiveDashboardLoadFailed));
         OnPropertyChanged(nameof(CurrentView));
         OnPropertyChanged(nameof(IsNotesView));
@@ -568,7 +566,6 @@ public class MainViewModel : ViewModelBase
         FlashcardSortOptions = new ObservableCollection<NoteSortOptionItemViewModel>();
         MindMapSortOptions = new ObservableCollection<NoteSortOptionItemViewModel>();
         QuizSortOptions = new ObservableCollection<NoteSortOptionItemViewModel>();
-        CalendarScheduledNotes = new BulkObservableCollection<CalendarScheduledItemViewModel>();
         // Create a view for Notes so we can apply filtering for search
         _notesView = CollectionViewSource.GetDefaultView(Notes);
         _notesView.Filter = FilterUngroupedNotes;
@@ -590,7 +587,7 @@ public class MainViewModel : ViewModelBase
         Scriblucent.Services.ActivityTracker.ActivityUpdated += RefreshActivityStats;
         AiFeatureGate.Changed += OnAiFeatureGateChanged;
 
-        AddNoteCommand = new RelayCommand(AddNote, () => !IsMassSelectMode);
+        AddNoteCommand = new RelayCommand(AddNote);
         ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
         ClearTagFiltersCommand = new RelayCommand(ClearActiveTagFilters, () => ActiveHasActiveTagFilters);
         ExitMassSelectCommand = new RelayCommand(ExitMassSelect, () => IsMassSelectMode);
@@ -620,10 +617,6 @@ public class MainViewModel : ViewModelBase
         {
             SetActiveDashboard(DashboardQuizzes);
         });
-        MoveGroupsUpCommand = new RelayCommand(() => { });
-        MoveGroupsDownCommand = new RelayCommand(() => { });
-        MoveUngroupedUpCommand = new RelayCommand(() => { });
-        MoveUngroupedDownCommand = new RelayCommand(() => { });
         ToggleGroupsSectionCommand = new RelayCommand(() => { });
         ToggleRecentSectionCommand = new RelayCommand(() => { });
         ToggleUngroupedSectionCommand = new RelayCommand(() => { });
@@ -736,6 +729,7 @@ public class MainViewModel : ViewModelBase
             return;
         }
 
+        _noteManualOrder.Set(result.ManualOrder);
         TrashedNotes.Clear();
         if (result.TrashedDocs is { Count: > 0 } trashedDocs)
         {
@@ -792,8 +786,9 @@ public class MainViewModel : ViewModelBase
 
         var setsPath = GetFlashcardSetsFilePath();
         var legacyPath = GetFlashcardsFilePath();
-        Task.Run(() => ReadFlashcardsFromDisk(setsPath, legacyPath)).ContinueWith(task =>
-            CompleteDashboardLoad(task, DashboardFlashcards, ApplyLoadedFlashcards,
+        var run = BeginDashboardLoad(DashboardFlashcards);
+        Task.Run(() => ReadFlashcardsFromDisk(setsPath, legacyPath), run.Token).ContinueWith(task =>
+            CompletePreparedDashboardLoad(task, DashboardFlashcards, run, ApplyLoadedFlashcards,
                 MarkFlashcardsDashboardReady, () => _flashcardDataLoadInProgress = false),
             TaskScheduler.Default);
     }
@@ -807,8 +802,9 @@ public class MainViewModel : ViewModelBase
         _mindMapDataLoadInProgress = true;
 
         var path = GetMindMapsFilePath();
-        Task.Run(() => ReadMindMapsFromDisk(path)).ContinueWith(task =>
-            CompleteDashboardLoad(task, DashboardMindMaps, ApplyLoadedMindMaps,
+        var run = BeginDashboardLoad(DashboardMindMaps);
+        Task.Run(() => ReadMindMapsFromDisk(path), run.Token).ContinueWith(task =>
+            CompletePreparedDashboardLoad(task, DashboardMindMaps, run, ApplyLoadedMindMaps,
                 MarkMindMapsDashboardReady, () => _mindMapDataLoadInProgress = false),
             TaskScheduler.Default);
     }
@@ -822,8 +818,9 @@ public class MainViewModel : ViewModelBase
         _quizDataLoadInProgress = true;
 
         var path = GetQuizzesFilePath();
-        Task.Run(() => ReadQuizzesFromDisk(path)).ContinueWith(task =>
-            CompleteDashboardLoad(task, DashboardQuizzes, ApplyLoadedQuizzes,
+        var run = BeginDashboardLoad(DashboardQuizzes);
+        Task.Run(() => ReadQuizzesFromDisk(path), run.Token).ContinueWith(task =>
+            CompletePreparedDashboardLoad(task, DashboardQuizzes, run, ApplyLoadedQuizzes,
                 MarkQuizzesDashboardReady, () => _quizDataLoadInProgress = false),
             TaskScheduler.Default);
     }
@@ -899,9 +896,13 @@ public class MainViewModel : ViewModelBase
 
         _dashboardLoadRetriesInProgress.Remove(dashboard);
         _dashboardLoadFailures.Add(dashboard);
+        if (string.Equals(dashboard, DashboardNotes, StringComparison.Ordinal))
+            OnPropertyChanged(nameof(NotesEditorLoadFailed));
         if (string.Equals(_activeDashboard, dashboard, StringComparison.Ordinal))
         {
             OnPropertyChanged(nameof(IsActiveDashboardReady));
+            OnPropertyChanged(nameof(CanCreateDashboardItem));
+            CommandManager.InvalidateRequerySuggested();
             OnPropertyChanged(nameof(IsActiveDashboardLoadFailed));
         }
     }
@@ -954,7 +955,7 @@ public class MainViewModel : ViewModelBase
         List<FlashcardSetDocument> TrashedSets,
         List<FlashcardSetGroupData> Groups,
         GroupMetadataSyncAction GroupMetadataAction,
-        List<FlashcardItem> LegacyItems);
+        List<FlashcardItem> LegacyItems, List<Guid>? ManualOrder = null);
 
     // File.Exists returns false for some access errors, which would make an unreadable library
     // look like a new empty one. Only a genuinely missing file may start an empty dashboard.
@@ -996,6 +997,7 @@ public class MainViewModel : ViewModelBase
             List<FlashcardSetDocument> sets;
             List<FlashcardSetDocument> trashedSets = new();
             List<FlashcardSetGroupData> groups = new();
+            List<Guid>? manualOrder = null;
             GroupMetadataSyncAction metadataAction;
             try
             {
@@ -1007,6 +1009,7 @@ public class MainViewModel : ViewModelBase
                     // Migrate any soft-deleted rows that were still sitting in the active list.
                     trashedSets.AddRange(rawSets.Where(set => set.IsDeleted));
                     sets = rawSets.Where(set => !set.IsDeleted).ToList();
+                    manualOrder = store.ManualOrder;
                     groups = store.Groups ?? new List<FlashcardSetGroupData>();
                     metadataAction = GroupMetadataSyncAction.ClearAndSet;
                 }
@@ -1034,7 +1037,7 @@ public class MainViewModel : ViewModelBase
                 }
             }
 
-            return new FlashcardsLoadResult(true, sets, trashedSets, groups, metadataAction, new List<FlashcardItem>());
+            return new FlashcardsLoadResult(true, sets, trashedSets, groups, metadataAction, new List<FlashcardItem>(), manualOrder);
         }
 
         using var legacyStream = OpenDashboardFileWithRetry(legacyPath);
@@ -1056,95 +1059,92 @@ public class MainViewModel : ViewModelBase
         return new FlashcardsLoadResult(false, new List<FlashcardSetDocument>(), new List<FlashcardSetDocument>(), new List<FlashcardSetGroupData>(), GroupMetadataSyncAction.Leave, new List<FlashcardItem>());
     }
 
-    private void ApplyLoadedFlashcards(FlashcardsLoadResult result)
+    private async Task ApplyLoadedFlashcards(FlashcardsLoadResult result, CancellationToken cancellation)
     {
-        FlashcardSets.Clear();
-
-        if (result.UsedNewFormat)
+        _flashcardManualOrder.Set(result.ManualOrder);
+        var prepared = await Task.Run(() =>
         {
-            switch (result.GroupMetadataAction)
+            var source = result.UsedNewFormat ? result.Sets : result.LegacyItems.Count == 0
+                ? new List<FlashcardSetDocument>() : new List<FlashcardSetDocument>
+                {
+                    new() { Title = LocalizationService.GetString("FlashcardsPreviewTitle"), Cards = result.LegacyItems.ToList(),
+                        Tags = new(), CreatedAt = DateTime.UtcNow, LastModified = DateTime.Now }
+                };
+            var ordered = source.Where(document => document is not null)
+                .OrderByDescending(document => document.IsPinned).ThenByDescending(document => document.LastModified)
+                .ThenBy(document => document.Title, StringComparer.CurrentCultureIgnoreCase);
+            var live = PrepareLoadModels(ordered, NormalizeFlashcardSetDocument,
+                document => new FlashcardSetViewModel(document), cancellation);
+            var trash = PrepareLoadModels(result.TrashedSets, document =>
             {
-                case GroupMetadataSyncAction.ClearAndSet:
-                    _flashcardSetGroupMetadata.Clear();
-                    foreach (var meta in result.Groups)
-                        _flashcardSetGroupMetadata[meta.GroupId] = meta;
-                    break;
-                case GroupMetadataSyncAction.ClearOnly:
-                    _flashcardSetGroupMetadata.Clear();
-                    break;
-                case GroupMetadataSyncAction.Leave:
-                    break;
-            }
-
-            foreach (var set in result.Sets
-                         .Where(set => set != null)
-                         .OrderByDescending(set => set.IsPinned)
-                         .ThenByDescending(set => set.LastModified)
-                         .ThenBy(set => set.Title, StringComparer.CurrentCultureIgnoreCase))
+                NormalizeFlashcardSetDocument(document);
+                document.IsDeleted = true; document.DeletedAt ??= DateTime.UtcNow;
+            }, document => new FlashcardSetViewModel(document), cancellation);
+            var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+            var retained = trash.Where(item => item.Document.DeletedAt >= cutoff).ToArray();
+            return (Live: live, Trash: retained, Purged: retained.Length != trash.Length,
+                MediaReferences: CollectFlashcardMediaReferences(live.Concat(retained)));
+        }, cancellation);
+        await DashboardLoadStep(cancellation, () =>
+        {
+            _dashboardLoadFailures.Remove(DashboardFlashcards);
+            if (result.UsedNewFormat)
             {
-                NormalizeFlashcardSetDocument(set);
-                FlashcardSets.Add(new FlashcardSetViewModel(set));
+                switch (result.GroupMetadataAction)
+                {
+                    case GroupMetadataSyncAction.ClearAndSet:
+                        _flashcardSetGroupMetadata.Clear();
+                        foreach (var meta in result.Groups)
+                            _flashcardSetGroupMetadata[meta.GroupId] = meta;
+                        break;
+                    case GroupMetadataSyncAction.ClearOnly:
+                        _flashcardSetGroupMetadata.Clear();
+                        break;
+                    case GroupMetadataSyncAction.Leave:
+                        break;
+                }
             }
-
-            TrashedFlashcardSets.Clear();
-            foreach (var set in result.TrashedSets.Where(set => set != null))
-            {
-                NormalizeFlashcardSetDocument(set);
-                set.IsDeleted = true;
-                set.DeletedAt ??= DateTime.UtcNow;
-                TrashedFlashcardSets.Add(new FlashcardSetViewModel(set));
-            }
-
-            PurgeExpiredTrashedFlashcardSets();
-            NotifyTrashChanged();
-
+            ((BulkObservableCollection<FlashcardSetViewModel>)FlashcardSets).ReplaceAll(prepared.Live);
+            if (result.UsedNewFormat)
+                ((BulkObservableCollection<FlashcardSetViewModel>)TrashedFlashcardSets).ReplaceAll(prepared.Trash);
+            else Flashcards = new ObservableCollection<FlashcardItem>(result.LegacyItems);
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
             NormalizeFlashcardSetGroups();
             RebuildFlashcardSetGroups();
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
+            NotifyTrashChanged();
             RefreshAvailableFlashcardTags();
             NotifyFlashcardSetsChanged();
+            RefreshCalendarScheduledNotes();
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
             _flashcardsLoadCompleted = true;
-            SeedFlashcardSetsSaveSignature();
-            SweepOrphanedFlashcardMedia();
-            return;
-        }
-
-        if (result.LegacyItems.Count > 0)
-        {
-            Flashcards = new ObservableCollection<FlashcardItem>(result.LegacyItems);
-            AddOrUpdateFlashcardSet(new FlashcardSetDocument
-            {
-                Title = LocalizationService.GetString("FlashcardsPreviewTitle"),
-                Cards = result.LegacyItems.ToList(),
-                Tags = new List<string>(),
-                CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.Now
-            });
-        }
-        else
-        {
-            Flashcards = new ObservableCollection<FlashcardItem>();
-        }
-
-        RefreshAvailableFlashcardTags();
-        NotifyFlashcardSetsChanged();
-        _flashcardsLoadCompleted = true;
-        SeedFlashcardSetsSaveSignature();
-        SweepOrphanedFlashcardMedia();
+            if (prepared.Purged || !result.UsedNewFormat && result.LegacyItems.Count > 0) SaveFlashcardSets();
+            else SeedFlashcardSetsSaveSignature();
+            SweepOrphanedFlashcardMedia(prepared.MediaReferences);
+        });
     }
 
     /// <summary>Deferred cleanup for flashcard image/audio attachments (see
     /// FlashcardMediaStorageService) - gathers referenced filenames from the just-loaded sets on
     /// the UI thread (cheap, in-memory), then runs the actual filesystem sweep off-thread.</summary>
-    private void SweepOrphanedFlashcardMedia()
-    {
-        var referencedFileNames = FlashcardSets
-            .SelectMany(set => set.Document.Cards ?? new List<FlashcardItem>())
-            .SelectMany(card => new[] { card.QuestionImageFileName, card.QuestionAudioFileName, card.AnswerImageFileName, card.AnswerAudioFileName })
-            .Where(fileName => !string.IsNullOrWhiteSpace(fileName))
-            .Select(fileName => fileName!)
-            .ToList();
+    private static string[] CollectFlashcardMediaReferences(IEnumerable<FlashcardSetViewModel> sets) => sets
+        .SelectMany(set => set.Document.Cards ?? new List<FlashcardItem>())
+        .SelectMany(card => new[] { card.QuestionImageFileName, card.QuestionAudioFileName, card.AnswerImageFileName, card.AnswerAudioFileName })
+        .Where(fileName => !string.IsNullOrWhiteSpace(fileName)).Select(fileName => fileName!)
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-        Task.Run(() => FlashcardMediaStorageService.DeleteOrphanedFiles(referencedFileNames));
+    private void SweepOrphanedFlashcardMedia(IReadOnlyList<string>? referenceSnapshot = null)
+    {
+        // Isolated document stores must never sweep the user's actual attachment folder.
+        if (PersistenceDirectoryOverride is not null) return;
+        var references = referenceSnapshot ?? CollectFlashcardMediaReferences(FlashcardSets.Concat(TrashedFlashcardSets));
+        Task.Run(() => FlashcardMediaStorageService.DeleteOrphanedFiles(references));
     }
 
     private void SaveFlashcards()
@@ -1157,7 +1157,7 @@ public class MainViewModel : ViewModelBase
         File.WriteAllText(path, json);
     }
 
-    public FlashcardSetViewModel AddOrUpdateFlashcardSet(FlashcardSetDocument document)
+    public FlashcardSetViewModel AddOrUpdateFlashcardSet(FlashcardSetDocument document, bool persist = true)
     {
         NormalizeFlashcardSetDocument(document);
 
@@ -1174,7 +1174,7 @@ public class MainViewModel : ViewModelBase
                 if (!document.GroupId.HasValue && MatchesFlashcardSetFilters(newSetVm))
                     NotifyHasUngroupedFlashcardSetsChanged();
 
-                SaveFlashcardSets();
+                if (persist) SaveFlashcardSets();
                 MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.Flashcards);
             }
             else
@@ -1189,7 +1189,7 @@ public class MainViewModel : ViewModelBase
                 if (!document.GroupId.HasValue && MatchesFlashcardSetFilters(newSetVm))
                     NotifyHasUngroupedFlashcardSetsChanged();
 
-                SaveFlashcardSets();
+                if (persist) SaveFlashcardSets();
                 MotionHost?.CompleteItemAdd(DashboardMotionScope.Flashcards, document.Id);
             }
 
@@ -1220,7 +1220,7 @@ public class MainViewModel : ViewModelBase
         RebuildFlashcardSetGroups();
         RefreshAvailableFlashcardTags();
         ApplyFlashcardFilters();
-        SaveFlashcardSets();
+        if (persist) SaveFlashcardSets();
         NotifyFlashcardSetsChanged();
         RefreshRecentFlashcardSets();
 
@@ -1229,6 +1229,8 @@ public class MainViewModel : ViewModelBase
 
     public void DeleteFlashcardSet(FlashcardSetViewModel set)
     {
+        if (set is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.Flashcards, set.Document.Id) }) == false) return;
         if (set is null)
             return;
 
@@ -1249,10 +1251,14 @@ public class MainViewModel : ViewModelBase
         EnsureMassSelectionConsistency();
     }
 
-    public void SaveFlashcardSets()
+    public void SaveFlashcardSets() => TrySaveFlashcardSets();
+
+    public bool TrySaveFlashcardSets()
     {
+        if (_flashcardDataLoadInProgress && !_flashcardsLoadCompleted) return false;
+
         if (_dashboardLoadFailures.Contains(DashboardFlashcards))
-            return;
+            return false;
 
         try
         {
@@ -1263,7 +1269,7 @@ public class MainViewModel : ViewModelBase
             {
                 signature = BuildFlashcardSetsSignature();
                 if (string.Equals(signature, _lastSavedFlashcardSetsSignature, StringComparison.Ordinal))
-                    return;
+                    return true;
             }
             catch
             {
@@ -1280,6 +1286,7 @@ public class MainViewModel : ViewModelBase
 
             var store = new FlashcardSetStoreData
             {
+                ManualOrder = _flashcardManualOrder.Ids.ToList(),
                 Sets = documents,
                 TrashedFlashcardSets = TrashedFlashcardSets
                     .Select(set => set.Document)
@@ -1297,15 +1304,18 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Persistence errors are non-fatal; ignored.
+            return false;
         }
+        return true;
     }
 
     /// <summary>Cheap fingerprint of everything <see cref="SaveFlashcardSets"/> persists (mirrors
     /// <see cref="BuildNotesStoreSignature"/>).</summary>
     private string BuildFlashcardSetsSignature()
     {
+        ReconcileManualOrder(DashboardMotionScope.Flashcards);
         var builder = new System.Text.StringBuilder();
+        foreach (var id in _flashcardManualOrder.Ids) builder.Append(id).Append(';');
         foreach (var set in FlashcardSets
             .OrderByDescending(s => s.Document.IsPinned)
             .ThenByDescending(s => s.Document.LastModified)
@@ -1399,17 +1409,12 @@ public class MainViewModel : ViewModelBase
         var desiredGroups = new List<FlashcardSetGroupViewModel>();
         foreach (var group in grouped)
         {
-            var visibleSets = group
-                .Where(MatchesFlashcardSetFilters)
-                .OrderByDescending(set => set.Document.IsPinned)
-                .ThenByDescending(set => set.Document.LastModified)
-                .ThenBy(set => set.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var visibleSets = SortFlashcardSets(group.Where(MatchesFlashcardSetFilters));
             if (visibleSets.Count == 0)
                 continue;
 
             var metadata = EnsureFlashcardSetGroupMetadata(group.Key);
-            desiredGroups.Add(new FlashcardSetGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleSets));
+            desiredGroups.Add(new FlashcardSetGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleSets, GetGroupDisclosure(DashboardMotionScope.Flashcards, group.Key)));
         }
 
         var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
@@ -1418,7 +1423,7 @@ public class MainViewModel : ViewModelBase
             .Select(group => group.GroupId)
             .ToList();
 
-        if (TryAnimateGroupRemovals(DashboardMotionScope.Flashcards, removingIds, () => SyncFlashcardSetGroups(desiredGroups)))
+        if (TryAnimateGroupRemovals(DashboardMotionScope.Flashcards, removingIds))
             return;
 
         SyncFlashcardSetGroups(desiredGroups);
@@ -1451,6 +1456,7 @@ public class MainViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(HasFlashcardSetGroups));
         NotifyHasUngroupedFlashcardSetsChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     private FlashcardSetGroupData EnsureFlashcardSetGroupMetadata(Guid groupId)
@@ -1524,22 +1530,10 @@ public class MainViewModel : ViewModelBase
 
     public bool TryReorderFlashcardSetsWithinGroup(FlashcardSetViewModel dragged, FlashcardSetViewModel target, bool placeAfter)
     {
-        if (ReferenceEquals(dragged, target)) return false;
-        var groupId = dragged.Document.GroupId;
-        if (!groupId.HasValue || target.Document.GroupId != groupId) return false;
-
-        var draggedIdx = FlashcardSets.IndexOf(dragged);
-        var targetIdx = FlashcardSets.IndexOf(target);
-        if (draggedIdx < 0 || targetIdx < 0) return false;
-
-        var newIdx = placeAfter ? targetIdx + 1 : targetIdx;
-        if (draggedIdx < newIdx) newIdx--;
-        if (newIdx == draggedIdx) return false;
-
-        FlashcardSets.Move(draggedIdx, Math.Clamp(newIdx, 0, FlashcardSets.Count - 1));
-        RebuildFlashcardSetGroups();
-        SaveFlashcardSets();
-        return true;
+        var first = DashboardOrderItem.From(dragged);
+        var other = DashboardOrderItem.From(target);
+        return first.Group.HasValue && first.Group == other.Group
+            && TryReorderDashboard([dragged], target, placeAfter);
     }
 
     public bool TryMoveFlashcardSetToGroup(FlashcardSetViewModel draggedSet, FlashcardSetGroupViewModel targetGroup)
@@ -1565,32 +1559,6 @@ public class MainViewModel : ViewModelBase
             return true;
 
         CommitMove();
-        return true;
-    }
-
-    public bool MoveFlashcardSetGroupUp(FlashcardSetGroupViewModel group)
-    {
-        return TryMoveFlashcardSetGroup(group, moveUp: true);
-    }
-
-    public bool MoveFlashcardSetGroupDown(FlashcardSetGroupViewModel group)
-    {
-        return TryMoveFlashcardSetGroup(group, moveUp: false);
-    }
-
-    private bool TryMoveFlashcardSetGroup(FlashcardSetGroupViewModel group, bool moveUp)
-    {
-        var currentIndex = FlashcardSetGroups.IndexOf(group);
-        var targetIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
-        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= FlashcardSetGroups.Count)
-            return false;
-
-        var target = FlashcardSetGroups[targetIndex];
-        var currentMeta = EnsureFlashcardSetGroupMetadata(group.GroupId);
-        var targetMeta = EnsureFlashcardSetGroupMetadata(target.GroupId);
-        (currentMeta.SortOrder, targetMeta.SortOrder) = (targetMeta.SortOrder, currentMeta.SortOrder);
-        FlashcardSetGroups.Move(currentIndex, targetIndex);
-        SaveFlashcardSets();
         return true;
     }
 
@@ -1670,7 +1638,9 @@ public class MainViewModel : ViewModelBase
         if (sourceSet is null)
             return;
 
-        AddOrUpdateFlashcardSet(CloneFlashcardSetDocument(sourceSet.Document));
+        var copy = CloneFlashcardSetDocument(sourceSet.Document);
+        RememberDashboardCopies(DashboardMotionScope.Flashcards, [sourceSet.Document.Id], [copy.Id]);
+        AddOrUpdateFlashcardSet(copy);
     }
 
     private static FlashcardSetDocument CloneFlashcardSetDocument(FlashcardSetDocument source)
@@ -1702,6 +1672,7 @@ public class MainViewModel : ViewModelBase
             AiModelDisplayName = source.AiModelDisplayName,
             SourceNoteId = source.SourceNoteId,
             GroupId = source.GroupId,
+            IsPinned = source.IsPinned,
             FlipDelayMilliseconds = source.FlipDelayMilliseconds,
             StudyDueCardsOnly = source.StudyDueCardsOnly
         };
@@ -1733,6 +1704,7 @@ public class MainViewModel : ViewModelBase
             .Select(card => MigrateFlashcardReviewState(new FlashcardItem
             {
                 Id = card.Id == Guid.Empty ? Guid.NewGuid() : card.Id,
+                LinkedNoteId = card.LinkedNoteId,
                 Question = card.Question?.Trim() ?? string.Empty,
                 Answer = card.Answer?.Trim() ?? string.Empty,
                 Category = card.Category?.Trim() ?? string.Empty,
@@ -1741,7 +1713,6 @@ public class MainViewModel : ViewModelBase
                 IsKnown = card.IsKnown && !card.IsUnknown,
                 IsUnknown = card.IsUnknown && !card.IsKnown,
                 IsStarred = card.IsStarred,
-                LinkedNoteId = null,
                 EaseFactor = card.EaseFactor,
                 IntervalDays = card.IntervalDays,
                 Repetitions = card.Repetitions,
@@ -1809,7 +1780,7 @@ public class MainViewModel : ViewModelBase
         List<MindMapDocument> Maps,
         List<MindMapDocument> TrashedMaps,
         List<MindMapGroupData> Groups,
-        GroupMetadataSyncAction GroupMetadataAction);
+        GroupMetadataSyncAction GroupMetadataAction, List<Guid>? ManualOrder = null);
 
     // Pure read - runs off the UI thread via Task.Run in LoadMindMapsPersistedContent. Mirrors
     // ReadNotesFromDisk/ReadFlashcardsFromDisk.
@@ -1823,6 +1794,7 @@ public class MainViewModel : ViewModelBase
         List<MindMapDocument> maps;
         List<MindMapDocument> trashedMaps = new();
         List<MindMapGroupData> groups = new();
+        List<Guid>? manualOrder = null;
         GroupMetadataSyncAction metadataAction;
         try
         {
@@ -1833,6 +1805,7 @@ public class MainViewModel : ViewModelBase
                 trashedMaps = store.TrashedMindMaps ?? new List<MindMapDocument>();
                 trashedMaps.AddRange(rawMaps.Where(map => map.IsDeleted));
                 maps = rawMaps.Where(map => !map.IsDeleted).ToList();
+                manualOrder = store.ManualOrder;
                 groups = store.Groups ?? new List<MindMapGroupData>();
                 metadataAction = GroupMetadataSyncAction.ClearAndSet;
             }
@@ -1869,94 +1842,68 @@ public class MainViewModel : ViewModelBase
             }
         }
 
-        return new MindMapsLoadResult(true, maps, trashedMaps, groups, metadataAction);
+        return new MindMapsLoadResult(true, maps, trashedMaps, groups, metadataAction, manualOrder);
     }
 
-    private void ApplyLoadedMindMaps(MindMapsLoadResult result)
+    private async Task ApplyLoadedMindMaps(MindMapsLoadResult result, CancellationToken cancellation)
     {
-        MindMaps.Clear();
-
-        if (!result.FileExists)
+        _mindMapManualOrder.Set(result.ManualOrder);
+        var prepared = await Task.Run(() =>
         {
+            var ordered = result.Maps.Where(document => document is not null)
+                .OrderByDescending(document => document.IsPinned).ThenByDescending(document => document.LastModified)
+                .ThenBy(document => document.Title, StringComparer.CurrentCultureIgnoreCase);
+            var live = PrepareLoadModels(ordered, NormalizeMindMapDocument,
+                document => new MindMapViewModel(document), cancellation);
+            var trash = PrepareLoadModels(result.TrashedMaps, document =>
+            {
+                NormalizeMindMapDocument(document);
+                document.IsDeleted = true; document.DeletedAt ??= DateTime.UtcNow;
+            }, document => new MindMapViewModel(document), cancellation);
+            var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+            var retained = trash.Where(item => item.Document.DeletedAt >= cutoff).ToArray();
+            return (Live: live, Trash: retained, Purged: retained.Length != trash.Length);
+        }, cancellation);
+        await DashboardLoadStep(cancellation, () =>
+        {
+            _dashboardLoadFailures.Remove(DashboardMindMaps);
+            switch (result.GroupMetadataAction)
+            {
+                case GroupMetadataSyncAction.ClearAndSet:
+                    _mindMapGroupMetadata.Clear();
+                    foreach (var meta in result.Groups)
+                        _mindMapGroupMetadata[meta.GroupId] = meta;
+                    break;
+                case GroupMetadataSyncAction.ClearOnly:
+                    _mindMapGroupMetadata.Clear();
+                    break;
+                case GroupMetadataSyncAction.Leave:
+                    break;
+            }
+            ((BulkObservableCollection<MindMapViewModel>)MindMaps).ReplaceAll(prepared.Live);
+            ((BulkObservableCollection<MindMapViewModel>)TrashedMindMaps).ReplaceAll(prepared.Trash);
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
+            NormalizeMindMapGroups();
+            RebuildMindMapGroups();
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
+            NotifyTrashChanged();
             RefreshAvailableMindMapTags();
             NotifyMindMapsChanged();
+            RefreshCalendarScheduledNotes();
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
             _mindMapsLoadCompleted = true;
-            SeedMindMapsSaveSignature();
-            return;
-        }
-
-        switch (result.GroupMetadataAction)
-        {
-            case GroupMetadataSyncAction.ClearAndSet:
-                _mindMapGroupMetadata.Clear();
-                foreach (var meta in result.Groups)
-                    _mindMapGroupMetadata[meta.GroupId] = meta;
-                break;
-            case GroupMetadataSyncAction.ClearOnly:
-                _mindMapGroupMetadata.Clear();
-                break;
-            case GroupMetadataSyncAction.Leave:
-                break;
-        }
-
-        foreach (var map in result.Maps
-                     .Where(map => map != null)
-                     .OrderByDescending(map => map.IsPinned)
-                     .ThenByDescending(map => map.LastModified)
-                     .ThenBy(map => map.Title, StringComparer.CurrentCultureIgnoreCase))
-        {
-            NormalizeMindMapDocument(map);
-            MindMaps.Add(new MindMapViewModel(map));
-        }
-
-        TrashedMindMaps.Clear();
-        foreach (var map in result.TrashedMaps.Where(map => map != null))
-        {
-            NormalizeMindMapDocument(map);
-            map.IsDeleted = true;
-            map.DeletedAt ??= DateTime.UtcNow;
-            TrashedMindMaps.Add(new MindMapViewModel(map));
-        }
-
-        PurgeExpiredTrashedMindMaps();
-        NotifyTrashChanged();
-
-        NormalizeMindMapGroups();
-        RebuildMindMapGroups();
-        RefreshAvailableMindMapTags();
-        NotifyMindMapsChanged();
-        WarmMindMapPreviewsAtIdle();
-        _mindMapsLoadCompleted = true;
-        SeedMindMapsSaveSignature();
+            if (prepared.Purged) SaveMindMaps();
+            else SeedMindMapsSaveSignature();
+        });
     }
 
-    /// <summary>
-    /// Pre-walks node counts + content previews in small idle-time slices so scrolling into
-    /// fresh mind map cards never re-walks the tree during card realization.
-    /// </summary>
-    private void WarmMindMapPreviewsAtIdle()
-    {
-        // Same reasoning as WarmNoteContentPreviewsAtIdle: warm in MindMapsView's actual
-        // display order, not raw MindMaps load order. Capped to the initial viewport - the
-        // rest decode lazily on scroll.
-        var pending = new Queue<MindMapViewModel>(MindMapsView.Cast<MindMapViewModel>().Take(PreviewWarmBudget));
-        if (pending.Count == 0)
-            return;
-
-        void Pump()
-        {
-            var budget = System.Diagnostics.Stopwatch.StartNew();
-            while (pending.Count > 0 && budget.ElapsedMilliseconds < 4)
-                pending.Dequeue().WarmContentPreview();
-
-            if (pending.Count > 0)
-                Application.Current?.Dispatcher.BeginInvoke(Pump, DispatcherPriority.ApplicationIdle);
-        }
-
-        Application.Current?.Dispatcher.BeginInvoke(Pump, DispatcherPriority.ApplicationIdle);
-    }
-
-    public MindMapViewModel AddOrUpdateMindMap(MindMapDocument document)
+    public MindMapViewModel AddOrUpdateMindMap(MindMapDocument document, bool persist = true)
     {
         NormalizeMindMapDocument(document);
 
@@ -1973,7 +1920,7 @@ public class MainViewModel : ViewModelBase
                 if (!document.GroupId.HasValue && MatchesMindMapFilters(newMapVm))
                     NotifyHasUngroupedMindMapsChanged();
 
-                SaveMindMaps();
+                if (persist) SaveMindMaps();
                 MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.MindMaps);
             }
             else
@@ -1988,7 +1935,7 @@ public class MainViewModel : ViewModelBase
                 if (!document.GroupId.HasValue && MatchesMindMapFilters(newMapVm))
                     NotifyHasUngroupedMindMapsChanged();
 
-                SaveMindMaps();
+                if (persist) SaveMindMaps();
                 MotionHost?.CompleteItemAdd(DashboardMotionScope.MindMaps, document.Id);
             }
 
@@ -2017,7 +1964,7 @@ public class MainViewModel : ViewModelBase
         RebuildMindMapGroups();
         RefreshAvailableMindMapTags();
         ApplyMindMapFilters();
-        SaveMindMaps();
+        if (persist) SaveMindMaps();
         NotifyMindMapsChanged();
         RefreshRecentMindMaps();
 
@@ -2089,7 +2036,7 @@ public class MainViewModel : ViewModelBase
     {
         var groupId = Guid.NewGuid();
         _mindMapGroupMetadata[groupId] = new MindMapGroupData { GroupId = groupId, Name = name, BackgroundColor = DefaultGroupBackground };
-        var group = new MindMapGroupViewModel(groupId, name, DefaultGroupBackground, Enumerable.Empty<MindMapViewModel>());
+        var group = new MindMapGroupViewModel(groupId, name, DefaultGroupBackground, Enumerable.Empty<MindMapViewModel>(), GetGroupDisclosure(DashboardMotionScope.MindMaps, groupId));
         MindMapGroups.Add(group);
         SaveMindMaps();
         return group;
@@ -2195,22 +2142,10 @@ public class MainViewModel : ViewModelBase
 
     public bool TryReorderMindMapsWithinGroup(MindMapViewModel dragged, MindMapViewModel target, bool placeAfter)
     {
-        if (ReferenceEquals(dragged, target)) return false;
-        var groupId = dragged.Document.GroupId;
-        if (!groupId.HasValue || target.Document.GroupId != groupId) return false;
-
-        var draggedIdx = MindMaps.IndexOf(dragged);
-        var targetIdx = MindMaps.IndexOf(target);
-        if (draggedIdx < 0 || targetIdx < 0) return false;
-
-        var newIdx = placeAfter ? targetIdx + 1 : targetIdx;
-        if (draggedIdx < newIdx) newIdx--;
-        if (newIdx == draggedIdx) return false;
-
-        MindMaps.Move(draggedIdx, Math.Clamp(newIdx, 0, MindMaps.Count - 1));
-        RebuildMindMapGroups();
-        SaveMindMaps();
-        return true;
+        var first = DashboardOrderItem.From(dragged);
+        var other = DashboardOrderItem.From(target);
+        return first.Group.HasValue && first.Group == other.Group
+            && TryReorderDashboard([dragged], target, placeAfter);
     }
 
     public bool TryMoveMindMapToGroup(MindMapViewModel draggedMap, MindMapGroupViewModel targetGroup)
@@ -2242,34 +2177,6 @@ public class MainViewModel : ViewModelBase
             return true;
 
         CommitMove();
-        return true;
-    }
-
-    public bool MoveMindMapGroupUp(MindMapGroupViewModel group)
-    {
-        return TryMoveMindMapGroup(group, moveUp: true);
-    }
-
-    public bool MoveMindMapGroupDown(MindMapGroupViewModel group)
-    {
-        return TryMoveMindMapGroup(group, moveUp: false);
-    }
-
-    private bool TryMoveMindMapGroup(MindMapGroupViewModel group, bool moveUp)
-    {
-        var currentIndex = MindMapGroups.IndexOf(group);
-        var targetIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
-        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= MindMapGroups.Count)
-            return false;
-
-        var target = MindMapGroups[targetIndex];
-        var currentMeta = _mindMapGroupMetadata[group.GroupId];
-        var targetMeta = _mindMapGroupMetadata[target.GroupId];
-        currentMeta.SortOrder ??= currentIndex;
-        targetMeta.SortOrder ??= targetIndex;
-        (currentMeta.SortOrder, targetMeta.SortOrder) = (targetMeta.SortOrder, currentMeta.SortOrder);
-        MindMapGroups.Move(currentIndex, targetIndex);
-        SaveMindMaps();
         return true;
     }
 
@@ -2333,10 +2240,14 @@ public class MainViewModel : ViewModelBase
         CommitMove();
     }
 
-    public void SaveMindMaps()
+    public void SaveMindMaps() => TrySaveMindMaps();
+
+    public bool TrySaveMindMaps()
     {
+        if (_mindMapDataLoadInProgress && !_mindMapsLoadCompleted) return false;
+
         if (_dashboardLoadFailures.Contains(DashboardMindMaps))
-            return;
+            return false;
 
         try
         {
@@ -2346,7 +2257,7 @@ public class MainViewModel : ViewModelBase
             {
                 signature = BuildMindMapsSignature();
                 if (string.Equals(signature, _lastSavedMindMapsSignature, StringComparison.Ordinal))
-                    return;
+                    return true;
             }
             catch
             {
@@ -2363,6 +2274,7 @@ public class MainViewModel : ViewModelBase
 
             var store = new MindMapStoreData
             {
+                ManualOrder = _mindMapManualOrder.Ids.ToList(),
                 Maps = documents,
                 TrashedMindMaps = TrashedMindMaps
                     .Select(map => map.Document)
@@ -2380,15 +2292,18 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Persistence errors are non-fatal; ignored.
+            return false;
         }
+        return true;
     }
 
     /// <summary>Cheap fingerprint of everything <see cref="SaveMindMaps"/> persists (mirrors
     /// <see cref="BuildNotesStoreSignature"/>).</summary>
     private string BuildMindMapsSignature()
     {
+        ReconcileManualOrder(DashboardMotionScope.MindMaps);
         var builder = new System.Text.StringBuilder();
+        foreach (var id in _mindMapManualOrder.Ids) builder.Append(id).Append(';');
         foreach (var map in MindMaps
             .OrderByDescending(m => m.Document.IsPinned)
             .ThenByDescending(m => m.Document.LastModified)
@@ -2441,6 +2356,8 @@ public class MainViewModel : ViewModelBase
 
     public void DeleteMindMap(MindMapViewModel mindMapVm)
     {
+        if (mindMapVm is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.MindMap, mindMapVm.Document.Id) }) == false) return;
         if (mindMapVm is null)
             return;
 
@@ -2469,6 +2386,7 @@ public class MainViewModel : ViewModelBase
         // Create a deep copy of the mind map document
         var newDocument = CloneMindMapDocument(sourceMindMap.Document);
 
+        RememberDashboardCopies(DashboardMotionScope.MindMaps, [sourceMindMap.Document.Id], [newDocument.Id]);
         return AddOrUpdateMindMap(newDocument);
     }
 
@@ -2482,6 +2400,7 @@ public class MainViewModel : ViewModelBase
             Root = CloneMindMapNode(source.Root),
             LayoutMode = source.LayoutMode,
             UseManualPositions = source.UseManualPositions,
+            IsPinned = source.IsPinned,
             CreatedAt = DateTime.UtcNow,
             LastModified = DateTime.Now,
             AiModelDisplayName = source.AiModelDisplayName,
@@ -2568,7 +2487,7 @@ public class MainViewModel : ViewModelBase
         List<QuizDocument> Documents,
         List<QuizDocument> TrashedDocuments,
         List<QuizGroupData> Groups,
-        GroupMetadataSyncAction GroupMetadataAction);
+        GroupMetadataSyncAction GroupMetadataAction, List<Guid>? ManualOrder = null);
 
     // Pure read - runs off the UI thread via Task.Run in LoadQuizzesPersistedContent. Mirrors
     // ReadNotesFromDisk/ReadFlashcardsFromDisk/ReadMindMapsFromDisk.
@@ -2582,6 +2501,7 @@ public class MainViewModel : ViewModelBase
         List<QuizDocument> documents;
         List<QuizDocument> trashedDocuments = new();
         List<QuizGroupData> groups = new();
+        List<Guid>? manualOrder = null;
         GroupMetadataSyncAction metadataAction;
         try
         {
@@ -2592,6 +2512,7 @@ public class MainViewModel : ViewModelBase
                 trashedDocuments = store.TrashedQuizzes ?? new List<QuizDocument>();
                 trashedDocuments.AddRange(rawQuizzes.Where(quiz => quiz.IsDeleted));
                 documents = rawQuizzes.Where(quiz => !quiz.IsDeleted).ToList();
+                manualOrder = store.ManualOrder;
                 groups = store.Groups ?? new List<QuizGroupData>();
                 metadataAction = GroupMetadataSyncAction.ClearAndSet;
             }
@@ -2619,67 +2540,68 @@ public class MainViewModel : ViewModelBase
             }
         }
 
-        return new QuizzesLoadResult(true, documents, trashedDocuments, groups, metadataAction);
+        return new QuizzesLoadResult(true, documents, trashedDocuments, groups, metadataAction, manualOrder);
     }
 
-    private void ApplyLoadedQuizzes(QuizzesLoadResult result)
+    private async Task ApplyLoadedQuizzes(QuizzesLoadResult result, CancellationToken cancellation)
     {
-        Quizzes.Clear();
-
-        if (!result.FileExists)
+        _quizManualOrder.Set(result.ManualOrder);
+        var prepared = await Task.Run(() =>
         {
+            var ordered = result.Documents.Where(document => document is not null)
+                .OrderByDescending(document => document.IsPinned).ThenByDescending(document => document.LastModified)
+                .ThenBy(document => document.Title, StringComparer.CurrentCultureIgnoreCase);
+            var live = PrepareLoadModels(ordered, NormalizeQuizDocument,
+                document => new QuizViewModel(document), cancellation);
+            var trash = PrepareLoadModels(result.TrashedDocuments, document =>
+            {
+                NormalizeQuizDocument(document);
+                document.IsDeleted = true; document.DeletedAt ??= DateTime.UtcNow;
+            }, document => new QuizViewModel(document), cancellation);
+            var cutoff = DateTime.UtcNow.AddDays(-TrashRetentionDays);
+            var retained = trash.Where(item => item.Document.DeletedAt >= cutoff).ToArray();
+            return (Live: live, Trash: retained, Purged: retained.Length != trash.Length);
+        }, cancellation);
+        await DashboardLoadStep(cancellation, () =>
+        {
+            _dashboardLoadFailures.Remove(DashboardQuizzes);
+            switch (result.GroupMetadataAction)
+            {
+                case GroupMetadataSyncAction.ClearAndSet:
+                    _quizGroupMetadata.Clear();
+                    foreach (var meta in result.Groups)
+                        _quizGroupMetadata[meta.GroupId] = meta;
+                    break;
+                case GroupMetadataSyncAction.ClearOnly:
+                    _quizGroupMetadata.Clear();
+                    break;
+                case GroupMetadataSyncAction.Leave:
+                    break;
+            }
+            ((BulkObservableCollection<QuizViewModel>)Quizzes).ReplaceAll(prepared.Live);
+            ((BulkObservableCollection<QuizViewModel>)TrashedQuizzes).ReplaceAll(prepared.Trash);
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
+            NormalizeQuizGroups();
+            RebuildQuizGroups();
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
+            NotifyTrashChanged();
             RefreshAvailableQuizTags();
             NotifyQuizzesChanged();
+            RefreshCalendarScheduledNotes();
+        });
+        await DashboardLoadStep(cancellation, () =>
+        {
             _quizzesLoadCompleted = true;
-            SeedQuizzesSaveSignature();
-            return;
-        }
-
-        switch (result.GroupMetadataAction)
-        {
-            case GroupMetadataSyncAction.ClearAndSet:
-                _quizGroupMetadata.Clear();
-                foreach (var meta in result.Groups)
-                    _quizGroupMetadata[meta.GroupId] = meta;
-                break;
-            case GroupMetadataSyncAction.ClearOnly:
-                _quizGroupMetadata.Clear();
-                break;
-            case GroupMetadataSyncAction.Leave:
-                break;
-        }
-
-        foreach (var quiz in result.Documents
-                     .Where(quiz => quiz != null)
-                     .OrderByDescending(quiz => quiz.IsPinned)
-                     .ThenByDescending(quiz => quiz.LastModified)
-                     .ThenBy(quiz => quiz.Title, StringComparer.CurrentCultureIgnoreCase))
-        {
-            NormalizeQuizDocument(quiz);
-            Quizzes.Add(new QuizViewModel(quiz));
-        }
-
-        TrashedQuizzes.Clear();
-        foreach (var quiz in result.TrashedDocuments.Where(quiz => quiz != null))
-        {
-            NormalizeQuizDocument(quiz);
-            quiz.IsDeleted = true;
-            quiz.DeletedAt ??= DateTime.UtcNow;
-            TrashedQuizzes.Add(new QuizViewModel(quiz));
-        }
-
-        PurgeExpiredTrashedQuizzes();
-        NotifyTrashChanged();
-
-        NormalizeQuizGroups();
-        RebuildQuizGroups();
-        RefreshAvailableQuizTags();
-        NotifyQuizzesChanged();
-        _quizzesLoadCompleted = true;
-        SeedQuizzesSaveSignature();
+            if (prepared.Purged) SaveQuizzes();
+            else SeedQuizzesSaveSignature();
+        });
     }
 
-    public QuizViewModel AddOrUpdateQuiz(QuizDocument document)
+    public QuizViewModel AddOrUpdateQuiz(QuizDocument document, bool persist = true)
     {
         NormalizeQuizDocument(document);
 
@@ -2696,7 +2618,7 @@ public class MainViewModel : ViewModelBase
                 if (!document.GroupId.HasValue && MatchesQuizFilters(newQuizVm))
                     NotifyHasUngroupedQuizzesChanged();
 
-                SaveQuizzes();
+                if (persist) SaveQuizzes();
                 MotionHost?.PlayDashboardContentReveal(DashboardMotionScope.Quizzes);
             }
             else
@@ -2711,7 +2633,7 @@ public class MainViewModel : ViewModelBase
                 if (!document.GroupId.HasValue && MatchesQuizFilters(newQuizVm))
                     NotifyHasUngroupedQuizzesChanged();
 
-                SaveQuizzes();
+                if (persist) SaveQuizzes();
                 MotionHost?.CompleteItemAdd(DashboardMotionScope.Quizzes, document.Id);
             }
 
@@ -2746,7 +2668,7 @@ public class MainViewModel : ViewModelBase
         RebuildQuizGroups();
         RefreshAvailableQuizTags();
         ApplyQuizFilters();
-        SaveQuizzes();
+        if (persist) SaveQuizzes();
         NotifyQuizzesChanged();
         RefreshRecentQuizzes();
 
@@ -2755,6 +2677,8 @@ public class MainViewModel : ViewModelBase
 
     public void DeleteQuiz(QuizViewModel quiz)
     {
+        if (quiz is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.Quiz, quiz.Document.Id) }) == false) return;
         if (quiz is null)
             return;
 
@@ -2775,10 +2699,14 @@ public class MainViewModel : ViewModelBase
         EnsureMassSelectionConsistency();
     }
 
-    public void SaveQuizzes()
+    public void SaveQuizzes() => TrySaveQuizzes();
+
+    public bool TrySaveQuizzes()
     {
+        if (_quizDataLoadInProgress && !_quizzesLoadCompleted) return false;
+
         if (_dashboardLoadFailures.Contains(DashboardQuizzes))
-            return;
+            return false;
 
         try
         {
@@ -2788,7 +2716,7 @@ public class MainViewModel : ViewModelBase
             {
                 signature = BuildQuizzesSignature();
                 if (string.Equals(signature, _lastSavedQuizzesSignature, StringComparison.Ordinal))
-                    return;
+                    return true;
             }
             catch
             {
@@ -2805,6 +2733,7 @@ public class MainViewModel : ViewModelBase
 
             var store = new QuizStoreData
             {
+                ManualOrder = _quizManualOrder.Ids.ToList(),
                 Quizzes = documents,
                 TrashedQuizzes = TrashedQuizzes
                     .Select(quiz => quiz.Document)
@@ -2822,15 +2751,18 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Persistence errors are non-fatal; ignored.
+            return false;
         }
+        return true;
     }
 
     /// <summary>Cheap fingerprint of everything <see cref="SaveQuizzes"/> persists (mirrors
     /// <see cref="BuildNotesStoreSignature"/>).</summary>
     private string BuildQuizzesSignature()
     {
+        ReconcileManualOrder(DashboardMotionScope.Quizzes);
         var builder = new System.Text.StringBuilder();
+        foreach (var id in _quizManualOrder.Ids) builder.Append(id).Append(';');
         foreach (var quiz in Quizzes
             .OrderByDescending(q => q.Document.IsPinned)
             .ThenByDescending(q => q.Document.LastModified)
@@ -2929,17 +2861,12 @@ public class MainViewModel : ViewModelBase
         var desiredGroups = new List<QuizGroupViewModel>();
         foreach (var group in grouped)
         {
-            var visibleQuizzes = group
-                .Where(MatchesQuizFilters)
-                .OrderByDescending(quiz => quiz.Document.IsPinned)
-                .ThenByDescending(quiz => quiz.Document.LastModified)
-                .ThenBy(quiz => quiz.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var visibleQuizzes = SortQuizzes(group.Where(MatchesQuizFilters));
             if (visibleQuizzes.Count == 0)
                 continue;
 
             var metadata = EnsureQuizGroupMetadata(group.Key);
-            desiredGroups.Add(new QuizGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleQuizzes));
+            desiredGroups.Add(new QuizGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleQuizzes, GetGroupDisclosure(DashboardMotionScope.Quizzes, group.Key)));
         }
 
         var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
@@ -2948,7 +2875,7 @@ public class MainViewModel : ViewModelBase
             .Select(group => group.GroupId)
             .ToList();
 
-        if (TryAnimateGroupRemovals(DashboardMotionScope.Quizzes, removingIds, () => SyncQuizGroups(desiredGroups)))
+        if (TryAnimateGroupRemovals(DashboardMotionScope.Quizzes, removingIds))
             return;
 
         SyncQuizGroups(desiredGroups);
@@ -2981,6 +2908,7 @@ public class MainViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(HasQuizGroups));
         NotifyHasUngroupedQuizzesChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     private QuizGroupData EnsureQuizGroupMetadata(Guid groupId)
@@ -3054,22 +2982,10 @@ public class MainViewModel : ViewModelBase
 
     public bool TryReorderQuizzesWithinGroup(QuizViewModel dragged, QuizViewModel target, bool placeAfter)
     {
-        if (ReferenceEquals(dragged, target)) return false;
-        var groupId = dragged.Document.GroupId;
-        if (!groupId.HasValue || target.Document.GroupId != groupId) return false;
-
-        var draggedIdx = Quizzes.IndexOf(dragged);
-        var targetIdx = Quizzes.IndexOf(target);
-        if (draggedIdx < 0 || targetIdx < 0) return false;
-
-        var newIdx = placeAfter ? targetIdx + 1 : targetIdx;
-        if (draggedIdx < newIdx) newIdx--;
-        if (newIdx == draggedIdx) return false;
-
-        Quizzes.Move(draggedIdx, Math.Clamp(newIdx, 0, Quizzes.Count - 1));
-        RebuildQuizGroups();
-        SaveQuizzes();
-        return true;
+        var first = DashboardOrderItem.From(dragged);
+        var other = DashboardOrderItem.From(target);
+        return first.Group.HasValue && first.Group == other.Group
+            && TryReorderDashboard([dragged], target, placeAfter);
     }
 
     public bool TryMoveQuizToGroup(QuizViewModel draggedQuiz, QuizGroupViewModel targetGroup)
@@ -3095,32 +3011,6 @@ public class MainViewModel : ViewModelBase
             return true;
 
         CommitMove();
-        return true;
-    }
-
-    public bool MoveQuizGroupUp(QuizGroupViewModel group)
-    {
-        return TryMoveQuizGroup(group, moveUp: true);
-    }
-
-    public bool MoveQuizGroupDown(QuizGroupViewModel group)
-    {
-        return TryMoveQuizGroup(group, moveUp: false);
-    }
-
-    private bool TryMoveQuizGroup(QuizGroupViewModel group, bool moveUp)
-    {
-        var currentIndex = QuizGroups.IndexOf(group);
-        var targetIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
-        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= QuizGroups.Count)
-            return false;
-
-        var target = QuizGroups[targetIndex];
-        var currentMeta = EnsureQuizGroupMetadata(group.GroupId);
-        var targetMeta = EnsureQuizGroupMetadata(target.GroupId);
-        (currentMeta.SortOrder, targetMeta.SortOrder) = (targetMeta.SortOrder, currentMeta.SortOrder);
-        QuizGroups.Move(currentIndex, targetIndex);
-        SaveQuizzes();
         return true;
     }
 
@@ -3337,9 +3227,9 @@ public class MainViewModel : ViewModelBase
 
     public ObservableCollection<NoteCardViewModel> Notes { get; }
     public ObservableCollection<NoteCardViewModel> TrashedNotes { get; } = new BulkObservableCollection<NoteCardViewModel>();
-    public ObservableCollection<FlashcardSetViewModel> TrashedFlashcardSets { get; } = new();
-    public ObservableCollection<MindMapViewModel> TrashedMindMaps { get; } = new();
-    public ObservableCollection<QuizViewModel> TrashedQuizzes { get; } = new();
+    public ObservableCollection<FlashcardSetViewModel> TrashedFlashcardSets { get; } = new BulkObservableCollection<FlashcardSetViewModel>();
+    public ObservableCollection<MindMapViewModel> TrashedMindMaps { get; } = new BulkObservableCollection<MindMapViewModel>();
+    public ObservableCollection<QuizViewModel> TrashedQuizzes { get; } = new BulkObservableCollection<QuizViewModel>();
     public IReadOnlyList<TrashItemViewModel> TrashedItems { get; private set; } = new LazyTrashItemList([], TrashRetentionDays);
 
     public int TrashItemCount =>
@@ -3362,8 +3252,6 @@ public class MainViewModel : ViewModelBase
     public IEnumerable<TagFilterItemViewModel> ActiveTagFilters => IsMindMapsView
         ? MindMapTagFilters
         : IsQuizzesView ? QuizTagFilters : IsFlashcardsView ? FlashcardTagFilters : TagFilters;
-    public ObservableCollection<CalendarScheduledItemViewModel> CalendarScheduledNotes { get; }
-    public IReadOnlyCollection<DateTime> CalendarDatesWithSchedules { get; private set; } = Array.Empty<DateTime>();
      public bool HasGroups => NoteGroups.Count > 0;
     public bool HasNotes => Notes.Count > 0;
     public bool HasUngroupedNotes => UngroupedVisibleCount > 0;
@@ -3401,6 +3289,7 @@ public class MainViewModel : ViewModelBase
                 return;
 
             OnPropertyChanged(nameof(IsNotMassSelectMode));
+            OnPropertyChanged(nameof(CanCreateDashboardItem));
             CommandManager.InvalidateRequerySuggested();
         }
     }
@@ -3455,30 +3344,13 @@ public class MainViewModel : ViewModelBase
         : IsFlashcardsView
             ? string.Format(LocalizationService.GetString("SortButtonFormat"), GetFlashcardSortOptionDisplayName(_selectedFlashcardSortOptionKey))
             : SortButtonText;
-    public bool HasCalendarScheduledNotes => CalendarScheduledNotes.Count > 0;
-
-    public DateTime CalendarSelectedDate
-    {
-        get => _calendarSelectedDate;
-        set
-        {
-            var normalized = value.Date;
-            if (!SetProperty(ref _calendarSelectedDate, normalized))
-                return;
-
-            RefreshCalendarScheduledNotes();
-            OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
-        }
-    }
-
-    public string CalendarSelectedDateDisplay => CalendarSelectedDate.ToString("dddd, dd MMM yyyy", CultureInfo.CurrentCulture);
-
     public string SelectedSortOptionKey
     {
         get => _selectedSortOptionKey;
         set
         {
             var normalized = NormalizeSortOptionKey(value);
+            if (normalized == SortManual) EnsureManualOrder(DashboardMotionScope.Notes);
             if (!SetProperty(ref _selectedSortOptionKey, normalized))
                 return;
 
@@ -3638,7 +3510,10 @@ public class MainViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _isFlashcardDashboardGroupsFirst, value))
+            {
+                _dashboardSelectionScope?.RefreshItems();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -3678,7 +3553,10 @@ public class MainViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _isMindMapDashboardGroupsFirst, value))
+            {
+                _dashboardSelectionScope?.RefreshItems();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -3718,7 +3596,10 @@ public class MainViewModel : ViewModelBase
         set
         {
             if (SetProperty(ref _isQuizDashboardGroupsFirst, value))
+            {
+                _dashboardSelectionScope?.RefreshItems();
                 SaveAppSettings();
+            }
         }
     }
 
@@ -3730,6 +3611,7 @@ public class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _isGroupsFirst, value))
             {
+                _dashboardSelectionScope?.RefreshItems();
                 CommandManager.InvalidateRequerySuggested();
                 SaveAppSettings();
             }
@@ -3907,10 +3789,6 @@ public class MainViewModel : ViewModelBase
     public ICommand ToggleRecentSectionCommand { get; }
     public ICommand ToggleGroupsSectionCommand { get; }
     public ICommand ToggleUngroupedSectionCommand { get; }
-    public ICommand MoveGroupsUpCommand { get; }
-    public ICommand MoveGroupsDownCommand { get; }
-    public ICommand MoveUngroupedUpCommand { get; }
-    public ICommand MoveUngroupedDownCommand { get; }
     public ICommand ClearTagFiltersCommand { get; }
     public ICommand ExitMassSelectCommand { get; }
     public ICommand SelectAllVisibleNotesCommand { get; }
@@ -3956,6 +3834,10 @@ public class MainViewModel : ViewModelBase
         {
             Notes.Add(note);
             OnPropertyChanged(nameof(HasNotes));
+            // The content/empty-state bindings use these separate properties.
+            // Waiting for the debounced mutation reaction keeps the first cards
+            // collapsed for the entire duration of rapid Add input.
+            NotifyNotesDashboardPresentationChanged();
 
             if (!document.GroupId.HasValue && MatchesSearch(note))
             {
@@ -4428,10 +4310,10 @@ public class MainViewModel : ViewModelBase
         RefreshCalendarScheduledNotes();
     }
 
-    private void AddNote()
+    private void AddNote() => CreateNoteForEditor();
+
+    internal NoteCardViewModel CreateNoteForEditor(bool quickAdd = false)
     {
-        if (IsMassSelectMode)
-            return;
 
         var template = GetCachedNoteTemplate();
 
@@ -4444,7 +4326,8 @@ public class MainViewModel : ViewModelBase
             IndentSize = template.IndentSize,
             IsWordWrapEnabled = template.WordWrap
         };
-        AddNoteFromDocument(document);
+        if (quickAdd) TrackQuickAdd(EditorDocumentKind.Note, document.Id);
+        return AddNoteFromDocument(document);
     }
 
     private void EnsureDocumentTypography(NoteDocument document)
@@ -4497,9 +4380,11 @@ public class MainViewModel : ViewModelBase
             IsWordWrapEnabled = noteCard.Document.IsWordWrapEnabled,
             CreatedAt = DateTime.Now,
             LastModified = DateTime.Now,
+            IsPinned = noteCard.Document.IsPinned,
             GroupId = noteCard.Document.GroupId
         };
 
+        RememberDashboardCopies(DashboardMotionScope.Notes, [noteCard.Document.Id], [duplicateDocument.Id]);
         AddNoteFromDocument(duplicateDocument, noteCard);
     }
 
@@ -4725,11 +4610,7 @@ public class MainViewModel : ViewModelBase
     {
         foreach (var group in FlashcardSetGroups)
         {
-            var ordered = group.Sets
-                .OrderByDescending(set => set.Document.IsPinned)
-                .ThenByDescending(set => set.Document.LastModified)
-                .ThenBy(set => set.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var ordered = SortFlashcardSets(group.Sets);
             SyncObservableCollectionOrder(group.Sets, ordered);
         }
     }
@@ -4745,11 +4626,7 @@ public class MainViewModel : ViewModelBase
     {
         foreach (var group in MindMapGroups)
         {
-            var ordered = group.MindMaps
-                .OrderByDescending(map => map.Document.IsPinned)
-                .ThenByDescending(map => map.Document.LastModified)
-                .ThenBy(map => map.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var ordered = SortMindMaps(group.MindMaps);
             SyncObservableCollectionOrder(group.MindMaps, ordered);
         }
     }
@@ -4765,17 +4642,15 @@ public class MainViewModel : ViewModelBase
     {
         foreach (var group in QuizGroups)
         {
-            var ordered = group.Quizzes
-                .OrderByDescending(quiz => quiz.Document.IsPinned)
-                .ThenByDescending(quiz => quiz.Document.LastModified)
-                .ThenBy(quiz => quiz.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var ordered = SortQuizzes(group.Quizzes);
             SyncObservableCollectionOrder(group.Quizzes, ordered);
         }
     }
 
     private void RequestDeleteNote(NoteCardViewModel noteCard)
     {
+        if (noteCard is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.Note, noteCard.Document.Id) }) == false) return;
         if (MotionHost is not null)
         {
             MotionHost.RequestDelete(
@@ -4792,6 +4667,8 @@ public class MainViewModel : ViewModelBase
 
     public void RequestDeleteFlashcardSet(FlashcardSetViewModel set)
     {
+        if (set is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.Flashcards, set.Document.Id) }) == false) return;
         if (MotionHost is not null)
         {
             MotionHost.RequestDelete(
@@ -4811,6 +4688,8 @@ public class MainViewModel : ViewModelBase
 
     public void RequestDeleteQuiz(QuizViewModel quiz)
     {
+        if (quiz is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.Quiz, quiz.Document.Id) }) == false) return;
         if (MotionHost is not null)
         {
             MotionHost.RequestDelete(
@@ -4830,6 +4709,8 @@ public class MainViewModel : ViewModelBase
 
     public void RequestDeleteMindMap(MindMapViewModel mindMapVm)
     {
+        if (mindMapVm is null) return;
+        if (EditorRemovalGuard?.Invoke(new[] { new EditorDocumentKey(EditorDocumentKind.MindMap, mindMapVm.Document.Id) }) == false) return;
         if (MotionHost is not null)
         {
             MotionHost.RequestDelete(
@@ -5407,8 +5288,8 @@ public class MainViewModel : ViewModelBase
         if (expired.Count == 0)
             return;
 
-        foreach (var note in expired)
-            DeleteNoteMediaFiles(note.Document);
+        if (PersistenceDirectoryOverride is null)
+            foreach (var note in expired) DeleteNoteMediaFiles(note.Document);
         RemoveManyFromObservableCollection(TrashedNotes, expired);
 
         QueueSaveNotes();
@@ -5420,6 +5301,7 @@ public class MainViewModel : ViewModelBase
     /// startup, off the UI thread, failure-safe.</summary>
     private void SweepOrphanMediaFiles()
     {
+        if (PersistenceDirectoryOverride is not null) return;
         var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var vm in Notes)
         {
@@ -5712,41 +5594,12 @@ public class MainViewModel : ViewModelBase
         return true;
     }
 
-    public bool MoveGroupUp(NoteGroupViewModel group)
-    {
-        return TryMoveGroup(group, moveUp: true);
-    }
-
-    public bool MoveGroupDown(NoteGroupViewModel group)
-    {
-        return TryMoveGroup(group, moveUp: false);
-    }
-
     public bool TryReorderNotesWithinGroup(NoteCardViewModel draggedNote, NoteCardViewModel targetNote, bool placeAfter)
     {
-        if (ReferenceEquals(draggedNote, targetNote))
-            return false;
-
-        var groupId = draggedNote.Document.GroupId;
-        if (!groupId.HasValue || targetNote.Document.GroupId != groupId)
-            return false;
-
-        var draggedIndex = Notes.IndexOf(draggedNote);
-        var targetIndex = Notes.IndexOf(targetNote);
-        if (draggedIndex < 0 || targetIndex < 0)
-            return false;
-
-        var newIndex = placeAfter ? targetIndex + 1 : targetIndex;
-        if (draggedIndex < newIndex)
-            newIndex--;
-
-        if (newIndex == draggedIndex)
-            return false;
-
-        Notes.Move(draggedIndex, Math.Clamp(newIndex, 0, Notes.Count - 1));
-        RebuildGroups();
-        SaveNotes();
-        return true;
+        var first = DashboardOrderItem.From(draggedNote);
+        var other = DashboardOrderItem.From(targetNote);
+        return first.Group.HasValue && first.Group == other.Group
+            && TryReorderDashboard([draggedNote], targetNote, placeAfter);
     }
 
     public bool TryMoveNoteToGroup(NoteCardViewModel draggedNote, NoteGroupViewModel targetGroup)
@@ -5876,26 +5729,6 @@ public class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsSidebarExpanded));
     }
 
-    private void MoveGroupsUp()
-    {
-        IsGroupsFirst = true;
-    }
-
-    private void MoveGroupsDown()
-    {
-        IsGroupsFirst = false;
-    }
-
-    private void MoveUngroupedUp()
-    {
-        IsGroupsFirst = false;
-    }
-
-    private void MoveUngroupedDown()
-    {
-        IsGroupsFirst = true;
-    }
-
     public ObservableCollection<NoteCardViewModel> RecentNotes { get; } = new();
     public ObservableCollection<FlashcardSetViewModel> RecentFlashcardSets { get; } = new();
     public ObservableCollection<MindMapViewModel> RecentMindMaps { get; } = new();
@@ -5991,11 +5824,14 @@ public class MainViewModel : ViewModelBase
         set
         {
             var normalized = NormalizeFlashcardSortOptionKey(value);
+            if (normalized == SortManual) EnsureManualOrder(DashboardMotionScope.Flashcards);
             if (!SetProperty(ref _selectedFlashcardSortOptionKey, normalized))
                 return;
 
             UpdateFlashcardSortOptionSelection();
             ApplySortToFlashcardSetsView();
+            RebuildFlashcardSetGroups();
+            _dashboardSelectionScope?.RefreshItems();
             OnPropertyChanged(nameof(ActiveSortButtonText));
             SaveAppSettings();
         }
@@ -6007,11 +5843,14 @@ public class MainViewModel : ViewModelBase
         set
         {
             var normalized = NormalizeMindMapSortOptionKey(value);
+            if (normalized == SortManual) EnsureManualOrder(DashboardMotionScope.MindMaps);
             if (!SetProperty(ref _selectedMindMapSortOptionKey, normalized))
                 return;
 
             UpdateMindMapSortOptionSelection();
             ApplySortToMindMapsView();
+            RebuildMindMapGroups();
+            _dashboardSelectionScope?.RefreshItems();
             OnPropertyChanged(nameof(ActiveSortButtonText));
             SaveAppSettings();
         }
@@ -6023,17 +5862,20 @@ public class MainViewModel : ViewModelBase
         set
         {
             var normalized = NormalizeQuizSortOptionKey(value);
+            if (normalized == SortManual) EnsureManualOrder(DashboardMotionScope.Quizzes);
             if (!SetProperty(ref _selectedQuizSortOptionKey, normalized))
                 return;
 
             UpdateQuizSortOptionSelection();
             ApplySortToQuizzesView();
+            RebuildQuizGroups();
+            _dashboardSelectionScope?.RefreshItems();
             OnPropertyChanged(nameof(ActiveSortButtonText));
             SaveAppSettings();
         }
     }
 
-    public ObservableCollection<FlashcardSetViewModel> FlashcardSets { get; } = new();
+    public ObservableCollection<FlashcardSetViewModel> FlashcardSets { get; } = new BulkObservableCollection<FlashcardSetViewModel>();
     public bool HasFlashcardSets => FlashcardSets.Count > 0;
     public bool HasFlashcardSetGroups => FlashcardSetGroups.Count > 0;
     public bool HasUngroupedFlashcardSets => _hasUngroupedFlashcardSetsCache ??=
@@ -6046,7 +5888,7 @@ public class MainViewModel : ViewModelBase
     }
     public int FlashcardSetCount => FlashcardSets.Count;
     public string FlashcardSetCountText => string.Format(LocalizationService.GetString("FlashcardSetCountFormat"), FlashcardSetCount);
-    public ObservableCollection<MindMapViewModel> MindMaps { get; } = new();
+    public ObservableCollection<MindMapViewModel> MindMaps { get; } = new BulkObservableCollection<MindMapViewModel>();
     public bool HasMindMaps => MindMaps.Count > 0;
     public bool HasMindMapGroups => MindMapGroups.Count > 0;
     public bool HasUngroupedMindMaps => _hasUngroupedMindMapsCache ??=
@@ -6423,6 +6265,7 @@ public class MainViewModel : ViewModelBase
         RefreshRecentNotes();
         RefreshCalendarScheduledNotes();
         WarmColdNotesForSearch(_noteFilterWarmEpoch, generation);
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     /// <summary>Body search uses <see cref="NoteCardViewModel.Content"/> only after it is cached.
@@ -6514,6 +6357,7 @@ public class MainViewModel : ViewModelBase
             RebuildFlashcardSetGroups();
         RefreshRecentFlashcardSets();
         NotifyFlashcardSetsChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     private void ApplyMindMapFilters(bool rebuildGroups = true)
@@ -6523,6 +6367,7 @@ public class MainViewModel : ViewModelBase
             RebuildMindMapGroups();
         RefreshRecentMindMaps();
         NotifyMindMapsChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     private void ApplyQuizFilters(bool rebuildGroups = true)
@@ -6532,6 +6377,7 @@ public class MainViewModel : ViewModelBase
             RebuildQuizGroups();
         RefreshRecentQuizzes();
         NotifyQuizzesChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     private bool FilterFlashcardSet(object obj)
@@ -6648,80 +6494,7 @@ public class MainViewModel : ViewModelBase
 
     private void SelectAllVisibleMassItems()
     {
-        if (!IsMassSelectMode)
-            return;
-
-        switch (_massSelectDashboard)
-        {
-            case DashboardFlashcards:
-                ToggleAllVisibleFlashcardSets();
-                break;
-            case DashboardMindMaps:
-                ToggleAllVisibleMindMaps();
-                break;
-            case DashboardQuizzes:
-                ToggleAllVisibleQuizzes();
-                break;
-            default:
-                ToggleAllVisibleNotes();
-                break;
-        }
-    }
-
-    private void ToggleAllVisibleNotes()
-    {
-        var visible = Notes.Where(MatchesSearch).ToList();
-        if (visible.Count == 0)
-            return;
-
-        var allVisibleSelected = visible.All(note => _massSelectedNoteIds.Contains(note.Document.Id));
-        var targetNotes = allVisibleSelected ? Notes.ToList() : visible;
-        foreach (var note in targetNotes)
-            SetNoteSelectedState(note, !allVisibleSelected, notify: false);
-
-        NotifyMassSelectionChanged();
-    }
-
-    private void ToggleAllVisibleFlashcardSets()
-    {
-        var visible = FlashcardSets.Where(MatchesFlashcardSetFilters).ToList();
-        if (visible.Count == 0)
-            return;
-
-        var allVisibleSelected = visible.All(set => _massSelectedFlashcardSetIds.Contains(set.Document.Id));
-        var targetSets = allVisibleSelected ? FlashcardSets.ToList() : visible;
-        foreach (var set in targetSets)
-            SetFlashcardSetSelectedState(set, !allVisibleSelected, notify: false);
-
-        NotifyMassSelectionChanged();
-    }
-
-    private void ToggleAllVisibleMindMaps()
-    {
-        var visible = MindMaps.Where(MatchesMindMapFilters).ToList();
-        if (visible.Count == 0)
-            return;
-
-        var allVisibleSelected = visible.All(map => _massSelectedMindMapIds.Contains(map.Document.Id));
-        var targetMaps = allVisibleSelected ? MindMaps.ToList() : visible;
-        foreach (var map in targetMaps)
-            SetMindMapSelectedState(map, !allVisibleSelected, notify: false);
-
-        NotifyMassSelectionChanged();
-    }
-
-    private void ToggleAllVisibleQuizzes()
-    {
-        var visible = Quizzes.Where(MatchesQuizFilters).ToList();
-        if (visible.Count == 0)
-            return;
-
-        var allVisibleSelected = visible.All(quiz => _massSelectedQuizIds.Contains(quiz.Document.Id));
-        var targetQuizzes = allVisibleSelected ? Quizzes.ToList() : visible;
-        foreach (var quiz in targetQuizzes)
-            SetQuizSelectedState(quiz, !allVisibleSelected, notify: false);
-
-        NotifyMassSelectionChanged();
+        if (IsMassSelectMode) DashboardSelection.SelectAll();
     }
 
     private void DeleteSelectedMassItems()
@@ -6747,6 +6520,7 @@ public class MainViewModel : ViewModelBase
 
     private void DeleteSelectedFlashcardSetsBatch()
     {
+        if (EditorRemovalGuard?.Invoke(GetMassSelectedFlashcardSets().Select(item => new EditorDocumentKey(EditorDocumentKind.Flashcards, item.Document.Id)).ToArray()) == false) return;
         var sets = GetMassSelectedFlashcardSets();
         if (sets.Count == 0)
             return;
@@ -6784,6 +6558,7 @@ public class MainViewModel : ViewModelBase
 
     private void DeleteSelectedMindMapsBatch()
     {
+        if (EditorRemovalGuard?.Invoke(GetMassSelectedMindMaps().Select(item => new EditorDocumentKey(EditorDocumentKind.MindMap, item.Document.Id)).ToArray()) == false) return;
         var maps = GetMassSelectedMindMaps();
         if (maps.Count == 0)
             return;
@@ -6821,6 +6596,7 @@ public class MainViewModel : ViewModelBase
 
     private void DeleteSelectedQuizzesBatch()
     {
+        if (EditorRemovalGuard?.Invoke(GetMassSelectedQuizzes().Select(item => new EditorDocumentKey(EditorDocumentKind.Quiz, item.Document.Id)).ToArray()) == false) return;
         var quizzes = GetMassSelectedQuizzes();
         if (quizzes.Count == 0)
             return;
@@ -6858,6 +6634,7 @@ public class MainViewModel : ViewModelBase
 
     private void DeleteSelectedNotesBatch()
     {
+        if (EditorRemovalGuard?.Invoke(GetMassSelectedNotes().Select(item => new EditorDocumentKey(EditorDocumentKind.Note, item.Document.Id)).ToArray()) == false) return;
         var traceDelete = _massSelectedNoteIds.Count >= 1_000 && ScrollPerfDiag.Enabled;
         var stageStartedAt = traceDelete ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         void TraceStage(string stage)
@@ -7109,6 +6886,7 @@ public class MainViewModel : ViewModelBase
                 IsPinned = note.Document.IsPinned
             })
             .ToList();
+        RememberDashboardCopies(DashboardMotionScope.Notes, selectedNotes.Select(item => item.Document.Id), duplicates.Select(item => item.Id));
         TraceDuplicateStage("cloneDocuments");
 
         if (duplicates.Count == 0)
@@ -7205,6 +6983,7 @@ public class MainViewModel : ViewModelBase
         foreach (var document in documents)
             NormalizeFlashcardSetDocument(document);
 
+        RememberDashboardCopies(DashboardMotionScope.Flashcards, GetMassSelectedFlashcardSets().Select(item => item.Document.Id), documents.Select(item => item.Id));
         var addedIds = documents.Select(document => document.Id).ToList();
 
         _flashcardBatchAddInProgress = true;
@@ -7315,6 +7094,7 @@ public class MainViewModel : ViewModelBase
         foreach (var document in documents)
             NormalizeMindMapDocument(document);
 
+        RememberDashboardCopies(DashboardMotionScope.MindMaps, GetMassSelectedMindMaps().Select(item => item.Document.Id), documents.Select(item => item.Id));
         var addedIds = documents.Select(document => document.Id).ToList();
 
         _mindMapBatchAddInProgress = true;
@@ -7370,6 +7150,7 @@ public class MainViewModel : ViewModelBase
         foreach (var document in documents)
             NormalizeQuizDocument(document);
 
+        RememberDashboardCopies(DashboardMotionScope.Quizzes, GetMassSelectedQuizzes().Select(item => item.Document.Id), documents.Select(item => item.Id));
         var addedIds = documents.Select(document => document.Id).ToList();
 
         _quizBatchAddInProgress = true;
@@ -7893,6 +7674,7 @@ public class MainViewModel : ViewModelBase
 
     private void EnsureMassSelectionConsistency()
     {
+        _dashboardSelectionScope?.RefreshItems();
         _selectedNotes.Clear();
         if (_massSelectedNoteIds.Count > 0)
         {
@@ -7948,6 +7730,7 @@ public class MainViewModel : ViewModelBase
 
     private void NotifyMassSelectionChanged()
     {
+        _dashboardSelectionScope?.Notify();
         OnPropertyChanged(nameof(SelectedNotesCount));
         OnPropertyChanged(nameof(ActiveMassSelectedCount));
         OnPropertyChanged(nameof(MassSelectSelectionText));
@@ -7975,6 +7758,7 @@ public class MainViewModel : ViewModelBase
         _selectedSortOptionKey = selectedKey;
 
         SortOptions.Clear();
+        SortOptions.Add(new NoteSortOptionItemViewModel(SortManual, LocalizationService.GetString("SortManual"), selectedKey == SortManual, SetSortOptionSelected));
         SortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedDesc, LocalizationService.GetString("SortByLastModifiedDesc"), selectedKey == SortLastModifiedDesc, SetSortOptionSelected));
         SortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedAsc, LocalizationService.GetString("SortByLastModifiedAsc"), selectedKey == SortLastModifiedAsc, SetSortOptionSelected));
         SortOptions.Add(new NoteSortOptionItemViewModel(SortCreatedAtDesc, LocalizationService.GetString("SortByCreatedAtDesc"), selectedKey == SortCreatedAtDesc, SetSortOptionSelected));
@@ -7989,6 +7773,7 @@ public class MainViewModel : ViewModelBase
         _selectedFlashcardSortOptionKey = selectedKey;
 
         FlashcardSortOptions.Clear();
+        FlashcardSortOptions.Add(new NoteSortOptionItemViewModel(SortManual, LocalizationService.GetString("SortManual"), selectedKey == SortManual, SetSortOptionSelected));
         FlashcardSortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedDesc, LocalizationService.GetString("SortByLastModifiedDesc"), selectedKey == SortLastModifiedDesc, SetSortOptionSelected));
         FlashcardSortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedAsc, LocalizationService.GetString("SortByLastModifiedAsc"), selectedKey == SortLastModifiedAsc, SetSortOptionSelected));
         FlashcardSortOptions.Add(new NoteSortOptionItemViewModel(SortCreatedAtDesc, LocalizationService.GetString("SortByCreatedAtDesc"), selectedKey == SortCreatedAtDesc, SetSortOptionSelected));
@@ -8005,6 +7790,7 @@ public class MainViewModel : ViewModelBase
         _selectedMindMapSortOptionKey = selectedKey;
 
         MindMapSortOptions.Clear();
+        MindMapSortOptions.Add(new NoteSortOptionItemViewModel(SortManual, LocalizationService.GetString("SortManual"), selectedKey == SortManual, SetSortOptionSelected));
         MindMapSortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedDesc, LocalizationService.GetString("SortByLastModifiedDesc"), selectedKey == SortLastModifiedDesc, SetSortOptionSelected));
         MindMapSortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedAsc, LocalizationService.GetString("SortByLastModifiedAsc"), selectedKey == SortLastModifiedAsc, SetSortOptionSelected));
         MindMapSortOptions.Add(new NoteSortOptionItemViewModel(SortCreatedAtDesc, LocalizationService.GetString("SortByCreatedAtDesc"), selectedKey == SortCreatedAtDesc, SetSortOptionSelected));
@@ -8021,6 +7807,7 @@ public class MainViewModel : ViewModelBase
         _selectedQuizSortOptionKey = selectedKey;
 
         QuizSortOptions.Clear();
+        QuizSortOptions.Add(new NoteSortOptionItemViewModel(SortManual, LocalizationService.GetString("SortManual"), selectedKey == SortManual, SetSortOptionSelected));
         QuizSortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedDesc, LocalizationService.GetString("SortByLastModifiedDesc"), selectedKey == SortLastModifiedDesc, SetSortOptionSelected));
         QuizSortOptions.Add(new NoteSortOptionItemViewModel(SortLastModifiedAsc, LocalizationService.GetString("SortByLastModifiedAsc"), selectedKey == SortLastModifiedAsc, SetSortOptionSelected));
         QuizSortOptions.Add(new NoteSortOptionItemViewModel(SortCreatedAtDesc, LocalizationService.GetString("SortByCreatedAtDesc"), selectedKey == SortCreatedAtDesc, SetSortOptionSelected));
@@ -8057,6 +7844,7 @@ public class MainViewModel : ViewModelBase
 
     private void ApplySortToFlashcardSetsView()
     {
+        if (ApplyManualViewSort(_flashcardSetsView, DashboardMotionScope.Flashcards)) return;
         _flashcardSetsView.SortDescriptions.Clear();
         _flashcardSetsView.SortDescriptions.Add(new SortDescription("Document.IsPinned", ListSortDirection.Descending));
 
@@ -8097,6 +7885,7 @@ public class MainViewModel : ViewModelBase
 
     private void ApplySortToMindMapsView()
     {
+        if (ApplyManualViewSort(_mindMapsView, DashboardMotionScope.MindMaps)) return;
         _mindMapsView.SortDescriptions.Clear();
         _mindMapsView.SortDescriptions.Add(new SortDescription("Document.IsPinned", ListSortDirection.Descending));
 
@@ -8137,6 +7926,7 @@ public class MainViewModel : ViewModelBase
 
     private void ApplySortToQuizzesView()
     {
+        if (ApplyManualViewSort(_quizzesView, DashboardMotionScope.Quizzes)) return;
         _quizzesView.SortDescriptions.Clear();
         _quizzesView.SortDescriptions.Add(new SortDescription("Document.IsPinned", ListSortDirection.Descending));
 
@@ -8181,7 +7971,8 @@ public class MainViewModel : ViewModelBase
         {
             // Sorting through property paths reflects over every card on each comparison.
             // A direct comparer keeps bulk Reset/duplicate costs manageable for large libraries.
-            listView.CustomSort = new NoteCardSortComparer(_selectedSortOptionKey);
+            listView.CustomSort = _selectedSortOptionKey == SortManual
+                ? new ManualDashboardComparer(_noteManualOrder) : new NoteCardSortComparer(_selectedSortOptionKey);
             return;
         }
 
@@ -8327,10 +8118,11 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    private static List<NoteCardViewModel> SortNotesBy(IEnumerable<NoteCardViewModel> notes, string sortOptionKey)
+    private static List<NoteCardViewModel> SortNotesBy(IEnumerable<NoteCardViewModel> notes, string sortOptionKey, IReadOnlyDictionary<Guid, int>? manual = null)
     {
         return sortOptionKey switch
         {
+            SortManual => notes.OrderByDescending(n => n.Document.IsPinned).ThenBy(n => manual?.GetValueOrDefault(n.Document.Id, -1) ?? -1).ToList(),
             SortLastModifiedAsc => notes
                 .OrderByDescending(n => n.Document.IsPinned)
                 .ThenBy(n => n.Document.LastModified)
@@ -8365,12 +8157,13 @@ public class MainViewModel : ViewModelBase
     }
 
     private List<NoteCardViewModel> SortNotes(IEnumerable<NoteCardViewModel> notes)
-        => SortNotesBy(notes, _selectedSortOptionKey);
+        => SortNotesBy(notes, _selectedSortOptionKey, _noteManualOrder.Positions);
 
     private List<FlashcardSetViewModel> SortFlashcardSets(IEnumerable<FlashcardSetViewModel> sets)
     {
         return _selectedFlashcardSortOptionKey switch
         {
+            SortManual => sets.OrderByDescending(item => item.Document.IsPinned).ThenBy(item => _flashcardManualOrder.Position(item.Document.Id)).ToList(),
             SortLastModifiedAsc => sets
                 .OrderByDescending(set => set.Document.IsPinned)
                 .ThenBy(set => set.Document.LastModified)
@@ -8416,6 +8209,7 @@ public class MainViewModel : ViewModelBase
     {
         return _selectedMindMapSortOptionKey switch
         {
+            SortManual => mindMaps.OrderByDescending(item => item.Document.IsPinned).ThenBy(item => _mindMapManualOrder.Position(item.Document.Id)).ToList(),
             SortLastModifiedAsc => mindMaps
                 .OrderByDescending(map => map.Document.IsPinned)
                 .ThenBy(map => map.Document.LastModified)
@@ -8461,6 +8255,7 @@ public class MainViewModel : ViewModelBase
     {
         return _selectedQuizSortOptionKey switch
         {
+            SortManual => quizzes.OrderByDescending(item => item.Document.IsPinned).ThenBy(item => _quizManualOrder.Position(item.Document.Id)).ToList(),
             SortLastModifiedAsc => quizzes
                 .OrderByDescending(quiz => quiz.Document.IsPinned)
                 .ThenBy(quiz => quiz.Document.LastModified)
@@ -8504,6 +8299,7 @@ public class MainViewModel : ViewModelBase
 
     private static string NormalizeSortOptionKey(string? value)
     {
+        if (string.Equals(value, SortManual, StringComparison.OrdinalIgnoreCase)) return SortManual;
         if (string.Equals(value, SortLastModifiedAsc, StringComparison.OrdinalIgnoreCase))
             return SortLastModifiedAsc;
         if (string.Equals(value, SortCreatedAtDesc, StringComparison.OrdinalIgnoreCase))
@@ -8564,6 +8360,7 @@ public class MainViewModel : ViewModelBase
     {
         return NormalizeSortOptionKey(sortKey) switch
         {
+            SortManual => LocalizationService.GetString("SortManual"),
             SortLastModifiedAsc => LocalizationService.GetString("SortByLastModifiedAsc"),
             SortCreatedAtDesc => LocalizationService.GetString("SortByCreatedAtDesc"),
             SortCreatedAtAsc => LocalizationService.GetString("SortByCreatedAtAsc"),
@@ -8624,9 +8421,6 @@ public class MainViewModel : ViewModelBase
         _dashboardRefreshInFlight = true;
 
         var notesSnapshot = Notes.ToList();
-        var flashcardSetsSnapshot = FlashcardSets.ToList();
-        var mindMapsSnapshot = MindMaps.ToList();
-        var quizzesSnapshot = Quizzes.ToList();
         var selectedTagsSnapshot = new HashSet<string>(_selectedTags, StringComparer.OrdinalIgnoreCase);
         var metadataSnapshot = _groupMetadata.ToDictionary(
             kvp => kvp.Key,
@@ -8638,24 +8432,23 @@ public class MainViewModel : ViewModelBase
                 SortOrder = kvp.Value.SortOrder
             });
         var sortOptionKey = _selectedSortOptionKey;
+        var manualSnapshot = new Dictionary<Guid, int>(_noteManualOrder.Positions);
+        var orderRevision = _manualOrderRevision;
         var recentLimit = _recentItemsLimit;
-        var calendarDate = CalendarSelectedDate;
         var uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
 
         Task.Run(() =>
         {
             var noteTags = ComputeSortedDistinctTags(notesSnapshot, note => note.Document.Tags);
-            var groups = ComputeNoteGroups(notesSnapshot, selectedTagsSnapshot, sortOptionKey, metadataSnapshot);
+            var groups = ComputeNoteGroups(notesSnapshot, selectedTagsSnapshot, sortOptionKey, metadataSnapshot, manualSnapshot);
             var recentNotes = ComputeRecentNotes(notesSnapshot, selectedTagsSnapshot, recentLimit);
-            var (calendarItems, calendarDates) = ComputeCalendarScheduledNotes(
-                notesSnapshot, selectedTagsSnapshot, flashcardSetsSnapshot, mindMapsSnapshot, quizzesSnapshot, calendarDate);
 
-            return new DashboardRefreshResult(noteTags, groups, metadataSnapshot, recentNotes, calendarItems, calendarDates);
+            return new DashboardRefreshResult(noteTags, groups, metadataSnapshot, recentNotes);
         }).ContinueWith(task =>
         {
             _dashboardRefreshInFlight = false;
 
-            if (task.IsCompletedSuccessfully)
+            if (task.IsCompletedSuccessfully && orderRevision == _manualOrderRevision && sortOptionKey == _selectedSortOptionKey)
                 ApplyDashboardRefreshResult(task.Result);
 
             if (_dashboardRefreshPending)
@@ -8827,77 +8620,53 @@ public class MainViewModel : ViewModelBase
         RefreshRecentQuizzes();
     }
 
-    /// <summary>Background-safe mirror of <see cref="RefreshCalendarScheduledNotes"/>: same
-    /// four-collection scope and grouping, but tag-filtered (<see cref="MatchesSelectedTags"/>)
-    /// instead of search-filtered, since search text needs the UI-thread-affine
-    /// NoteCardViewModel.Content decode.</summary>
-    private static (List<CalendarScheduledItemViewModel> Items, DateTime[] DatesWithSchedules) ComputeCalendarScheduledNotes(
-        List<NoteCardViewModel> notes,
-        HashSet<string> selectedTags,
-        List<FlashcardSetViewModel> flashcardSets,
-        List<MindMapViewModel> mindMaps,
-        List<QuizViewModel> quizzes,
-        DateTime selectedDate)
-    {
-        return BuildCalendarScheduledNotes(
-            notes.Where(note => HasNoteSchedule(note.Document) && MatchesSelectedTags(note, selectedTags)),
-            flashcardSets, mindMaps, quizzes, selectedDate.Date);
-    }
-
     private void RefreshCalendarScheduledNotes()
     {
-        var (items, datesWithSchedules) = BuildCalendarScheduledNotes(
-            Notes.Where(note => HasNoteSchedule(note.Document) && MatchesSearch(note)),
-            FlashcardSets, MindMaps, Quizzes, CalendarSelectedDate.Date);
-
-        CalendarDatesWithSchedules = datesWithSchedules;
-        OnPropertyChanged(nameof(CalendarDatesWithSchedules));
-        ((BulkObservableCollection<CalendarScheduledItemViewModel>)CalendarScheduledNotes).ReplaceAll(items);
-
-        OnPropertyChanged(nameof(HasCalendarScheduledNotes));
-        OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
+        CalendarPlanner.ReplaceIndex(BuildCalendarScheduleIndex(
+            Notes.Where(note => !note.Document.IsDeleted && HasNoteSchedule(note.Document)),
+            FlashcardSets.Where(set => !set.Document.IsDeleted),
+            MindMaps.Where(map => !map.Document.IsDeleted),
+            Quizzes.Where(quiz => !quiz.Document.IsDeleted)));
     }
 
-    private static (List<CalendarScheduledItemViewModel> Items, DateTime[] DatesWithSchedules) BuildCalendarScheduledNotes(
+    private static List<CalendarScheduledItemViewModel> BuildCalendarScheduleIndex(
         IEnumerable<NoteCardViewModel> notes,
         IEnumerable<FlashcardSetViewModel> flashcardSets,
         IEnumerable<MindMapViewModel> mindMaps,
-        IEnumerable<QuizViewModel> quizzes,
-        DateTime selectedDate)
+        IEnumerable<QuizViewModel> quizzes)
     {
         var items = new List<CalendarScheduledItemViewModel>();
-        var dates = new HashSet<DateTime>();
 
         foreach (var note in notes)
-            AppendCalendarSchedules(GetEffectiveSchedules(note.Document), note, selectedDate, dates, items,
+            AppendCalendarSchedules(GetEffectiveSchedules(note.Document), note, items,
                 static (owner, entry) => new CalendarScheduledItemViewModel
                 {
                     ItemType = ScheduledItemType.Note, Note = owner, Title = owner.Title,
-                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                    SourceEntry = entry, ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
                 });
 
         foreach (var set in flashcardSets)
-            AppendCalendarSchedules(set.Document.Schedules, set, selectedDate, dates, items,
+            AppendCalendarSchedules(set.Document.Schedules, set, items,
                 static (owner, entry) => new CalendarScheduledItemViewModel
                 {
                     ItemType = ScheduledItemType.Flashcard, FlashcardSet = owner, Title = owner.Title,
-                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                    SourceEntry = entry, ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
                 });
 
         foreach (var map in mindMaps)
-            AppendCalendarSchedules(map.Document.Schedules, map, selectedDate, dates, items,
+            AppendCalendarSchedules(map.Document.Schedules, map, items,
                 static (owner, entry) => new CalendarScheduledItemViewModel
                 {
                     ItemType = ScheduledItemType.MindMap, MindMap = owner, Title = owner.Title,
-                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                    SourceEntry = entry, ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
                 });
 
         foreach (var quiz in quizzes)
-            AppendCalendarSchedules(quiz.Document.Schedules, quiz, selectedDate, dates, items,
+            AppendCalendarSchedules(quiz.Document.Schedules, quiz, items,
                 static (owner, entry) => new CalendarScheduledItemViewModel
                 {
                     ItemType = ScheduledItemType.Quiz, Quiz = owner, Title = owner.Title,
-                    ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
+                    SourceEntry = entry, ScheduledAt = entry.ScheduledAt, ScheduleNote = entry.Note ?? string.Empty
                 });
 
         items.Sort((left, right) =>
@@ -8906,7 +8675,7 @@ public class MainViewModel : ViewModelBase
             return time != 0 ? time : StringComparer.CurrentCultureIgnoreCase.Compare(left.Title, right.Title);
         });
 
-        return (items, dates.OrderBy(date => date).ToArray());
+        return items;
     }
 
     private static bool HasNoteSchedule(NoteDocument document)
@@ -8915,8 +8684,6 @@ public class MainViewModel : ViewModelBase
     private static void AppendCalendarSchedules<T>(
         IEnumerable<NoteScheduleEntry>? schedules,
         T owner,
-        DateTime selectedDate,
-        HashSet<DateTime> dates,
         List<CalendarScheduledItemViewModel> items,
         Func<T, NoteScheduleEntry, CalendarScheduledItemViewModel> createItem)
     {
@@ -8924,12 +8691,7 @@ public class MainViewModel : ViewModelBase
             return;
 
         foreach (var entry in schedules)
-        {
-            var date = entry.ScheduledAt.Date;
-            dates.Add(date);
-            if (date == selectedDate)
-                items.Add(createItem(owner, entry));
-        }
+            items.Add(createItem(owner, entry));
     }
 
     private static bool AreSchedulesEqual(IReadOnlyList<NoteScheduleEntry> left, IReadOnlyList<NoteScheduleEntry> right)
@@ -9115,7 +8877,7 @@ public class MainViewModel : ViewModelBase
         List<NoteCardViewModel> notes,
         HashSet<string> selectedTags,
         string sortOptionKey,
-        Dictionary<Guid, NoteGroupData> metadata)
+        Dictionary<Guid, NoteGroupData> metadata, IReadOnlyDictionary<Guid, int>? manual = null)
     {
         var groupedByRecent = notes
             .Where(n => n.Document.GroupId.HasValue)
@@ -9141,7 +8903,7 @@ public class MainViewModel : ViewModelBase
         var plans = new List<NoteGroupPlan>();
         foreach (var group in grouped)
         {
-            var visibleNotes = SortNotesBy(group.Where(n => MatchesSelectedTags(n, selectedTags)), sortOptionKey);
+            var visibleNotes = SortNotesBy(group.Where(n => MatchesSelectedTags(n, selectedTags)), sortOptionKey, manual);
             if (visibleNotes.Count == 0)
                 continue;
 
@@ -9193,7 +8955,7 @@ public class MainViewModel : ViewModelBase
                 continue;
 
             var metadata = EnsureGroupMetadata(group.Key);
-            desiredGroups.Add(new NoteGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleNotes));
+            desiredGroups.Add(new NoteGroupViewModel(group.Key, metadata.Name, metadata.BackgroundColor, visibleNotes, GetGroupDisclosure(DashboardMotionScope.Notes, group.Key)));
         }
         if (groupTimer is not null)
             ScrollPerfDiag.Log($"duplicateGroupStage\tstage=buildDesired\tgroups={desiredGroups.Count}\ttotalMs={groupTimer.ElapsedMilliseconds}");
@@ -9204,7 +8966,7 @@ public class MainViewModel : ViewModelBase
             .Select(group => group.GroupId)
             .ToList();
 
-        if (TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds, () => SyncNoteGroups(desiredGroups, bulkNoteUpdate)))
+        if (TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds, bulkNoteUpdate))
             return;
 
         SyncNoteGroups(desiredGroups, bulkNoteUpdate);
@@ -9251,15 +9013,14 @@ public class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasUngroupedNotes));
         OnPropertyChanged(nameof(HasNotes));
         NotifyNotesDashboardPresentationChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
     private sealed record DashboardRefreshResult(
         List<string> NoteTags,
         List<NoteGroupPlan> Groups,
         Dictionary<Guid, NoteGroupData> GroupMetadata,
-        List<NoteCardViewModel> RecentNotes,
-        List<CalendarScheduledItemViewModel> CalendarScheduledNotes,
-        DateTime[] CalendarDatesWithSchedules);
+        List<NoteCardViewModel> RecentNotes);
 
     private void ApplyDashboardRefreshResult(DashboardRefreshResult result)
     {
@@ -9287,7 +9048,7 @@ public class MainViewModel : ViewModelBase
         }
 
         var desiredGroups = result.Groups
-            .Select(plan => new NoteGroupViewModel(plan.GroupId, plan.Name, plan.BackgroundColor, plan.Notes))
+            .Select(plan => new NoteGroupViewModel(plan.GroupId, plan.Name, plan.BackgroundColor, plan.Notes, GetGroupDisclosure(DashboardMotionScope.Notes, plan.GroupId)))
             .ToList();
 
         var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
@@ -9296,7 +9057,7 @@ public class MainViewModel : ViewModelBase
             .Select(group => group.GroupId)
             .ToList();
 
-        if (!TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds, () => SyncNoteGroups(desiredGroups)))
+        if (!TryAnimateGroupRemovals(DashboardMotionScope.Notes, removingIds))
             SyncNoteGroups(desiredGroups);
 
         RecentNotes.Clear();
@@ -9304,14 +9065,8 @@ public class MainViewModel : ViewModelBase
             RecentNotes.Add(note);
         Scriblucent.Services.StartupProbe.MarkOnce("recentStrip");
 
-        CalendarDatesWithSchedules = result.CalendarDatesWithSchedules;
-        OnPropertyChanged(nameof(CalendarDatesWithSchedules));
-
-        ((BulkObservableCollection<CalendarScheduledItemViewModel>)CalendarScheduledNotes)
-            .ReplaceAll(result.CalendarScheduledNotes);
-
-        OnPropertyChanged(nameof(HasCalendarScheduledNotes));
-        OnPropertyChanged(nameof(CalendarSelectedDateDisplay));
+        // Project the current planner state; this background snapshot may predate a selection or schedule edit.
+        RefreshCalendarScheduledNotes();
     }
 
     private void NotifyNotesChanged()
@@ -9347,16 +9102,11 @@ public class MainViewModel : ViewModelBase
                 _mindMapGroupMetadata[group.Key] = meta;
             }
 
-            var visibleMaps = group
-                .Where(MatchesMindMapFilters)
-                .OrderByDescending(map => map.Document.IsPinned)
-                .ThenByDescending(map => map.Document.LastModified)
-                .ThenBy(map => map.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            var visibleMaps = SortMindMaps(group.Where(MatchesMindMapFilters));
             if (visibleMaps.Count == 0)
                 continue;
 
-            desiredGroups.Add(new MindMapGroupViewModel(group.Key, meta.Name, meta.BackgroundColor, visibleMaps));
+            desiredGroups.Add(new MindMapGroupViewModel(group.Key, meta.Name, meta.BackgroundColor, visibleMaps, GetGroupDisclosure(DashboardMotionScope.MindMaps, group.Key)));
         }
 
         var desiredIds = desiredGroups.Select(group => group.GroupId).ToHashSet();
@@ -9365,7 +9115,7 @@ public class MainViewModel : ViewModelBase
             .Select(group => group.GroupId)
             .ToList();
 
-        if (TryAnimateGroupRemovals(DashboardMotionScope.MindMaps, removingIds, () => SyncMindMapGroups(desiredGroups)))
+        if (TryAnimateGroupRemovals(DashboardMotionScope.MindMaps, removingIds))
             return;
 
         SyncMindMapGroups(desiredGroups);
@@ -9399,14 +9149,32 @@ public class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(MindMapGroups));
         OnPropertyChanged(nameof(HasMindMapGroups));
         NotifyHasUngroupedMindMapsChanged();
+        _dashboardSelectionScope?.RefreshItems();
     }
 
-    private bool TryAnimateGroupRemovals(DashboardMotionScope scope, IReadOnlyList<Guid> removingIds, Action commitSync)
+    private readonly HashSet<DashboardMotionScope> _committingGroupRemovals = [];
+    private bool TryAnimateGroupRemovals(DashboardMotionScope scope, IReadOnlyList<Guid> removingIds, bool bulkNoteUpdate = false)
     {
-        if (removingIds.Count == 0 || MotionHost is null)
+        if (removingIds.Count == 0 || MotionHost is null || _committingGroupRemovals.Contains(scope))
             return false;
 
-        MotionHost.RequestGroupRemovals(scope, removingIds, commitSync);
+        // Filters and mutations can change during exit. Recompute from current documents,
+        // rather than applying the obsolete group snapshot captured before the animation.
+        MotionHost.RequestGroupRemovals(scope, removingIds, () =>
+        {
+            _committingGroupRemovals.Add(scope);
+            try
+            {
+                switch (scope)
+                {
+                    case DashboardMotionScope.Flashcards: RebuildFlashcardSetGroups(); break;
+                    case DashboardMotionScope.MindMaps: RebuildMindMapGroups(); break;
+                    case DashboardMotionScope.Quizzes: RebuildQuizGroups(); break;
+                    default: RebuildGroups(bulkNoteUpdate); break;
+                }
+            }
+            finally { _committingGroupRemovals.Remove(scope); }
+        });
         return true;
     }
 
@@ -9450,9 +9218,9 @@ public class MainViewModel : ViewModelBase
         return true;
     }
     // Persistence: save/load notes to a local JSON file
-    private static string GetNotesFilePath()
+    private string GetNotesFilePath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
+        var dir = PersistenceDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent");
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "notes.json");
     }
@@ -9461,7 +9229,7 @@ public class MainViewModel : ViewModelBase
     /// flashcard media pattern) - keeps the Base64 out of the store JSON. The coordinator is
     /// pointed here when a note loads.</summary>
     public static string NotesMediaDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "notes-media");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "NotesMedia");
 
     private bool _notesWriteInFlight;
     private bool _notesWritePending;
@@ -9515,6 +9283,14 @@ public class MainViewModel : ViewModelBase
     {
         if (_dashboardLoadFailures.Contains(DashboardNotes))
             return;
+        if (_notesWriteInFlight)
+        {
+            // The completing writer will check the latest state once. Re-hashing it
+            // for every queued mutation adds work and can miss a revert to an older
+            // saved state while a newer snapshot is still being written.
+            _notesWritePending = true;
+            return;
+        }
         // Skip the write entirely when nothing changed since the last one - the auto-save tick
         // would otherwise rewrite the whole (tens of MB) store every interval even when the
         // library is untouched. The signature covers every persisted field (see
@@ -9529,20 +9305,18 @@ public class MainViewModel : ViewModelBase
             if (signatureStartedAt != 0)
                 ScrollPerfDiag.Log($"notesSaveSignature\tnotes={Notes.Count}\ttrash={TrashedNotes.Count}\tdurationMs={System.Diagnostics.Stopwatch.GetElapsedTime(signatureStartedAt).TotalMilliseconds:F1}");
             if (string.Equals(signature, _lastSavedNotesSignature, StringComparison.Ordinal))
+            {
+                CompleteQuickAddSave(EditorDocumentKind.Note, PendingQuickAddIds(EditorDocumentKind.Note), true);
                 return;
+            }
         }
         catch
         {
             signature = string.Empty;
         }
 
-        if (_notesWriteInFlight)
-        {
-            _notesWritePending = true;
-            return;
-        }
-
         _notesWriteInFlight = true;
+        var quickAddIds = PendingQuickAddIds(EditorDocumentKind.Note);
         NotesStoreData snapshot;
         string filePath;
         var uiScheduler = TaskScheduler.FromCurrentSynchronizationContext();
@@ -9553,8 +9327,9 @@ public class MainViewModel : ViewModelBase
         }
         catch
         {
-            // Persistence errors are non-fatal; ignored.
+            // Existing notes remain intact; only unconfirmed quick additions are rolled back.
             _notesWriteInFlight = false;
+            CompleteQuickAddSave(EditorDocumentKind.Note, quickAddIds, false);
             return;
         }
 
@@ -9572,14 +9347,16 @@ public class MainViewModel : ViewModelBase
                 // Only a completed write may be remembered as "saved" - otherwise a failed
                 // write would make the next save skip and the changes would never persist.
                 _lastSavedNotesSignature = signature;
+                return true;
             }
             catch
             {
-                // Persistence errors are non-fatal; ignored.
+                return false;
             }
-        }).ContinueWith(_ =>
+        }).ContinueWith(write =>
         {
             _notesWriteInFlight = false;
+            CompleteQuickAddSave(EditorDocumentKind.Note, quickAddIds, write.Result);
             if (_notesWritePending)
             {
                 _notesWritePending = false;
@@ -9636,6 +9413,7 @@ public class MainViewModel : ViewModelBase
 
         return new NotesStoreData
         {
+            ManualOrder = _noteManualOrder.Ids.ToList(),
             Notes = docs,
             TrashedNotes = trashedDocs,
             Groups = _groupMetadata.Values
@@ -9652,74 +9430,69 @@ public class MainViewModel : ViewModelBase
     /// renames, pinning, ordering, trash) are covered field-by-field. The note sequence order
     /// matters - a reorder must look like a change.
     /// </summary>
-    private string BuildNotesStoreSignature() => ComputeNotesStoreSignature(
-        Notes.Select(vm => vm.Document),
-        TrashedNotes.Select(vm => vm.Document),
-        TrashedNotes.Count,
-        _groupMetadata.Values);
+    private string BuildNotesStoreSignature()
+    {
+        ReconcileManualOrder(DashboardMotionScope.Notes);
+        return ComputeNotesStoreSignature(Notes.Select(vm => vm.Document),
+            TrashedNotes.Select(vm => vm.Document), TrashedNotes.Count, _groupMetadata.Values, _noteManualOrder.Ids);
+    }
 
     internal static string ComputeNotesStoreSignature(
         IEnumerable<NoteDocument> notes,
         IEnumerable<NoteDocument> trashedNotes,
         int trashedCount,
-        IEnumerable<NoteGroupData> groups)
+        IEnumerable<NoteGroupData> groups, IEnumerable<Guid>? manualOrder = null)
     {
-        // The old StringBuilder and retained signature each grew with every note. Stream the
-        // same fields into a cryptographic digest so save checks use bounded memory.
+        // This digest is an in-memory change check, not part of the store format.
+        // Buffer binary fields instead of formatting every GUID/timestamp as text:
+        // a large batch must not allocate several strings per note on the UI thread.
         using var sha256 = SHA256.Create();
         using var hashingStream = new CryptoStream(Stream.Null, sha256, CryptoStreamMode.Write,
             leaveOpen: true);
-        using (var writer = new StreamWriter(hashingStream, new UTF8Encoding(false),
-            bufferSize: 8192, leaveOpen: true))
+        using (var buffered = new BufferedStream(hashingStream, 8192))
         {
+            using var writer = new BinaryWriter(buffered, Encoding.UTF8, leaveOpen: true);
+            Span<byte> guid = stackalloc byte[16];
             foreach (var doc in notes)
             {
-                writer.Write(doc.Id.ToString());
-                writer.Write('|');
+                writer.Write((byte)1);
+                doc.Id.TryWriteBytes(guid); writer.Write(guid);
                 writer.Write(doc.LastModified.Ticks);
-                writer.Write('|');
                 writer.Write(doc.Content?.Length ?? 0);
-                writer.Write('|');
                 writer.Write(doc.Images?.Count ?? 0);
-                writer.Write('|');
-                writer.Write(doc.GroupId?.ToString());
-                writer.Write('|');
+                writer.Write(doc.GroupId.HasValue);
+                if (doc.GroupId is { } groupId) { groupId.TryWriteBytes(guid); writer.Write(guid); }
                 writer.Write(doc.IsPinned);
-                writer.Write('|');
-                writer.Write(doc.IsEditorFontPanelOpen?.ToString());
-                writer.Write('|');
-                writer.Write(doc.IsWordWrapEnabled?.ToString());
-                writer.Write(';');
+                writer.Write(doc.IsEditorFontPanelOpen is { } fontPanel ? fontPanel ? (byte)2 : (byte)1 : (byte)0);
+                writer.Write(doc.IsWordWrapEnabled is { } wrap ? wrap ? (byte)2 : (byte)1 : (byte)0);
             }
 
-            writer.Write('T');
+            writer.Write((byte)2);
             writer.Write(trashedCount);
-            writer.Write(';');
             foreach (var doc in trashedNotes)
             {
-                writer.Write(doc.Id.ToString());
-                writer.Write('|');
+                doc.Id.TryWriteBytes(guid); writer.Write(guid);
                 writer.Write(doc.LastModified.Ticks);
-                writer.Write(';');
             }
 
+            writer.Write((byte)3);
             foreach (var group in groups
                 .OrderBy(g => g.SortOrder ?? int.MaxValue)
                 .ThenBy(g => g.Name))
             {
-                writer.Write(group.GroupId.ToString());
-                writer.Write('|');
-                writer.Write(group.Name);
-                writer.Write('|');
-                writer.Write(group.BackgroundColor);
-                writer.Write('|');
-                writer.Write(group.SortOrder?.ToString());
-                writer.Write(';');
+                group.GroupId.TryWriteBytes(guid); writer.Write(guid);
+                writer.Write(group.Name ?? string.Empty);
+                writer.Write(group.BackgroundColor ?? string.Empty);
+                writer.Write(group.SortOrder.HasValue);
+                if (group.SortOrder is { } order) writer.Write(order);
             }
+            writer.Write((byte)4);
+            if (manualOrder is not null)
+                foreach (var id in manualOrder) { id.TryWriteBytes(guid); writer.Write(guid); }
+            writer.Flush();
+            hashingStream.FlushFinalBlock();
+            return Convert.ToHexString(sha256.Hash ?? throw new InvalidOperationException("Note signature hash failed."));
         }
-
-        hashingStream.FlushFinalBlock();
-        return Convert.ToHexString(sha256.Hash ?? throw new InvalidOperationException("Note signature hash failed."));
     }
 
     private void ApplyAppSettings(AppSettings settings, bool applyThemeAndCulture)
@@ -9812,10 +9585,12 @@ public class MainViewModel : ViewModelBase
         var settings = AppSettingsService.Load();
         settings.Language = _selectedLanguage;
         settings.Theme = _selectedTheme;
+        settings.CalendarFirstDayOfWeek = _settings.CalendarFirstDayOfWeek;
         settings.NoteSortOptionKey = _selectedSortOptionKey;
         settings.FlashcardSortOptionKey = _selectedFlashcardSortOptionKey;
         settings.MindMapSortOptionKey = _selectedMindMapSortOptionKey;
         settings.QuizSortOptionKey = _selectedQuizSortOptionKey;
+        settings.CollapsedDashboardGroups = _settings.CollapsedDashboardGroups ?? new();
         settings.EnableScrollbar = _enableScrollbar;
         settings.EnableVerticalScrollbar = _enableVerticalScrollbar;
         settings.EnableHorizontalScrollbar = _enableHorizontalScrollbar;
@@ -9923,7 +9698,7 @@ public class MainViewModel : ViewModelBase
         List<NoteGroupData> Groups,
         string? BackupPath = null,
         List<NoteDocument>? TrashedDocs = null,
-        bool MovedDeletedToTrash = false);
+        bool MovedDeletedToTrash = false, List<Guid>? ManualOrder = null);
 
     private static NotesLoadResult ReadNotesFromDisk(string path)
     {
@@ -9959,7 +9734,7 @@ public class MainViewModel : ViewModelBase
                 docs,
                 store.Groups ?? new List<NoteGroupData>(),
                 TrashedDocs: trashedDocs,
-                MovedDeletedToTrash: deletedInActiveList.Count > 0);
+                MovedDeletedToTrash: deletedInActiveList.Count > 0, ManualOrder: store.ManualOrder);
         }
 
         stream.Position = 0;
@@ -10122,24 +9897,7 @@ public class MainViewModel : ViewModelBase
         RefreshCalendarScheduledNotes();
         Scriblucent.Services.StartupProbe.Mark("completeRecent");
         MarkNotesDashboardReady();
-        WarmNoteContentPreviewsAtIdle();
         SweepOrphanMediaFiles();
-    }
-
-    /// <summary>
-    /// Pre-decodes card content previews (Base64 + RTF extraction) in small idle-time slices
-    /// so scrolling into fresh cards never runs the decoder during card realization.
-    /// </summary>
-    private void WarmNoteContentPreviewsAtIdle()
-    {
-        // Warm in the order notes are actually scrolled to (NotesView's pinned/sorted order),
-        // not raw load order (Notes) — the two diverge until a pin toggle physically reorders
-        // Notes to match, so warming raw Notes can spend the idle window on cards far from what
-        // the user sees first. Only the initial viewport is warmed (the visible window + a
-        // buffer); cards beyond it decode lazily on scroll - for large libraries warming every
-        // card would decode the full content of the whole library at startup.
-        foreach (var note in NotesView.Cast<NoteCardViewModel>().Take(PreviewWarmBudget))
-            NotePreviewWarmQueue.Enqueue(note);
     }
 
     private void MarkNotesDashboardReady()
@@ -10149,6 +9907,8 @@ public class MainViewModel : ViewModelBase
 
         _isNotesDashboardReady = true;
         OnPropertyChanged(nameof(IsActiveDashboardReady));
+        OnPropertyChanged(nameof(CanCreateDashboardItem));
+        CommandManager.InvalidateRequerySuggested();
         NotifyNotesDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardNotes);
         NotesDashboardReady?.Invoke(this, EventArgs.Empty);
@@ -10161,6 +9921,8 @@ public class MainViewModel : ViewModelBase
 
         _isFlashcardsDashboardReady = true;
         OnPropertyChanged(nameof(IsActiveDashboardReady));
+        OnPropertyChanged(nameof(CanCreateDashboardItem));
+        CommandManager.InvalidateRequerySuggested();
         NotifyFlashcardsDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardFlashcards);
     }
@@ -10172,6 +9934,8 @@ public class MainViewModel : ViewModelBase
 
         _isMindMapsDashboardReady = true;
         OnPropertyChanged(nameof(IsActiveDashboardReady));
+        OnPropertyChanged(nameof(CanCreateDashboardItem));
+        CommandManager.InvalidateRequerySuggested();
         NotifyMindMapsDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardMindMaps);
     }
@@ -10183,6 +9947,8 @@ public class MainViewModel : ViewModelBase
 
         _isQuizzesDashboardReady = true;
         OnPropertyChanged(nameof(IsActiveDashboardReady));
+        OnPropertyChanged(nameof(CanCreateDashboardItem));
+        CommandManager.InvalidateRequerySuggested();
         NotifyQuizzesDashboardPresentationChanged();
         EnableDashboardRevealMotionIfActive(DashboardQuizzes);
     }
@@ -10246,6 +10012,8 @@ public class MainViewModel : ViewModelBase
             quiz.NotifyChanged();
     }
 
+    private Action<NoteCardViewModel>? _deleteNoteAction, _removeNoteFromGroupAction, _duplicateNoteAction, _toggleNotePinAction;
+
     /// <summary>Every NoteCardViewModel construction funnels through here so ScheduledAt stays in
     /// sync with the soonest Schedules entry (EnsureDocumentSchedules/SyncLegacyScheduleFields) -
     /// the dashboard card's reminder tooltip binds to ScheduledAt directly. Load paths used to call
@@ -10257,10 +10025,10 @@ public class MainViewModel : ViewModelBase
         EnsureDocumentSchedules(doc);
         return new NoteCardViewModel(
             doc, 
-            RequestDeleteNote, 
-            RemoveFromGroup,
-            DuplicateNote,
-            TogglePin
+            _deleteNoteAction ??= RequestDeleteNote,
+            _removeNoteFromGroupAction ??= RemoveFromGroup,
+            _duplicateNoteAction ??= DuplicateNote,
+            _toggleNotePinAction ??= TogglePin
             );
     }
 
@@ -10298,26 +10066,6 @@ public class MainViewModel : ViewModelBase
             .Select(m => m.SortOrder ?? -1)
             .DefaultIfEmpty(-1)
             .Max() + 1;
-    }
-
-    private bool TryMoveGroup(NoteGroupViewModel group, bool moveUp)
-    {
-        var currentIndex = NoteGroups.IndexOf(group);
-        if (currentIndex < 0)
-            return false;
-
-        var targetIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
-        if (targetIndex < 0 || targetIndex >= NoteGroups.Count)
-            return false;
-
-        var targetGroup = NoteGroups[targetIndex];
-        var current = EnsureGroupMetadata(group.GroupId);
-        var target = EnsureGroupMetadata(targetGroup.GroupId);
-
-        (current.SortOrder, target.SortOrder) = (target.SortOrder, current.SortOrder);
-        NoteGroups.Move(currentIndex, targetIndex);
-        QueueSaveNotes();
-        return true;
     }
 
     private void QueueSaveNotes()

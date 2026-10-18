@@ -5,20 +5,8 @@
              HorizontalAlignment="Center"
              Margin="0,32,0,0">
     <StackPanel x:Name="MotionRoot" HorizontalAlignment="Center">
-        <Border x:Name="GlyphChip"
-                Width="64"
-                Height="64"
-                CornerRadius="{StaticResource Radius.Card}"
-                Background="{DynamicResource AccentPrimarySubtle}"
-                HorizontalAlignment="Center"
-                IsHitTestVisible="False"
-                Margin="0,0,0,16">
-            <icons:AppIcon x:Name="GlyphIcon"
-                           Width="28"
-                           Height="28"
-                           Foreground="{DynamicResource AccentPrimary}"
-                           IsHitTestVisible="False"/>
-        </Border>
+        <Grid x:Name="GlyphChip" Width="144" Height="120" HorizontalAlignment="Center"
+              IsHitTestVisible="False" Margin="0,0,0,20"/>
         <TextBlock x:Name="PromptText"
                    FontFamily="{StaticResource FontFamily.UI}"
                    FontSize="{StaticResource Type.EmptyState}"

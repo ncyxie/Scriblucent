@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 
 namespace Scriblucent.Views;
@@ -33,6 +34,7 @@ public partial class InsertCaptionDialog : Window
     private readonly Func<string, int> _nextNumberForLabel;
     private readonly IReadOnlyList<string> _defaultLabels;
     private List<string> _currentLabels = new();
+    private bool _labelValidationVisible;
 
     /// <summary>The final label set the dialog settled on: the list plus any label the user
     /// typed into the editable combo (a typed label is not part of the ItemsSource until used).</summary>
@@ -79,6 +81,7 @@ public partial class InsertCaptionDialog : Window
         _currentLabels = labels.ToList();
         _defaultLabels = defaultLabels;
         _nextNumberForLabel = nextNumberForLabel;
+        LabelComboBox.AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(Label_TextChanged));
 
         LabelComboBox.ItemsSource = _currentLabels;
         LabelComboBox.Text = label ?? (_currentLabels.Count > 0 ? _currentLabels[0] : string.Empty);
@@ -98,8 +101,10 @@ public partial class InsertCaptionDialog : Window
     {
         OverlayDialogBoundsHelper.Apply(this);
         UiMotion.ConfigurePopupsForWindow(this);
+        // Let the dialog arrive without an input ring competing with its entrance.
+        // Tab/click still enters the native fields; validation focuses the invalid label.
+        CaptionDialogShell.Focus();
         _overlayAnimator.BeginOpen();
-        CaptionTextBox.Focus();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -117,6 +122,7 @@ public partial class InsertCaptionDialog : Window
         // Editable ComboBox raises SelectionChanged before it copies the chosen item
         // into Text, so a label pick must use the item that was just added.
         var label = LabelForPreview(sender, e);
+        if (_labelValidationVisible && label.Length > 0) SetLabelValidation(false);
 
         // OnlyOffice rule: only labels the user created can be deleted.
         DeleteLabelButton.IsEnabled = label.Length > 0 && !_defaultLabels.Contains(label);
@@ -134,6 +140,8 @@ public partial class InsertCaptionDialog : Window
             && selection.AddedItems.Count > 0
             && selection.AddedItems[0] is string picked)
             return picked.Trim();
+        if (ReferenceEquals(sender, LabelComboBox) && e is TextChangedEventArgs { OriginalSource: TextBox input })
+            return input.Text.Trim();
 
         return ResultLabel;
     }
@@ -165,7 +173,11 @@ public partial class InsertCaptionDialog : Window
     {
         if (ResultLabel.Length == 0)
         {
-            ShowValidationMessage(LocalizationService.GetString("CaptionLabelRequired"));
+            SetLabelValidation(true);
+            LabelComboBox.ApplyTemplate();
+            if (LabelComboBox.Template.FindName("PART_EditableTextBox", LabelComboBox) is TextBox input)
+                input.Focus();
+            else LabelComboBox.Focus();
             return;
         }
 
@@ -191,8 +203,11 @@ public partial class InsertCaptionDialog : Window
         }
     }
 
-    private void ShowValidationMessage(string message)
+    private void Label_TextChanged(object sender, TextChangedEventArgs e) => Preview_Changed(sender, e);
+
+    private void SetLabelValidation(bool visible)
     {
-        MessageBox.Show(this, message, LocalizationService.GetString("InsertCaption"), MessageBoxButton.OK, MessageBoxImage.Warning);
+        _labelValidationVisible = visible;
+        LabelValidationMessage.IsError = visible;
     }
 }

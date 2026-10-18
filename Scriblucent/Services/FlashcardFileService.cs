@@ -45,7 +45,7 @@ internal static class FlashcardFileService
     /// for downloaded runtime archives.</summary>
     public static void SaveScribFlashFile(string path, FlashcardSetDocument document)
     {
-        var tempWorkDir = Path.Combine(Path.GetTempPath(), "Scriblucent", "scribflash-export", Guid.NewGuid().ToString("N"));
+        var tempWorkDir = Path.Combine(Path.GetTempPath(), "Scriblucent", "FlashcardExport", Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(tempWorkDir);
@@ -88,7 +88,7 @@ internal static class FlashcardFileService
         if (!File.Exists(path))
             throw new FileNotFoundException(LocalizationService.GetString("FlashcardImportFileNotFound"), path);
 
-        var tempWorkDir = Path.Combine(Path.GetTempPath(), "Scriblucent", "scribflash-import", Guid.NewGuid().ToString("N"));
+        var tempWorkDir = Path.Combine(Path.GetTempPath(), "Scriblucent", "FlashcardImport", Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(tempWorkDir);

@@ -1,3 +1,4 @@
+using Scriblucent.Localization;
 using Scriblucent.Animations;
 using Scriblucent.Models;
 using Scriblucent.ViewModels;
@@ -21,6 +22,7 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
         public string DateDisplay { get; init; } = string.Empty;
         public string TimeDisplay { get; init; } = string.Empty;
         public bool Passed { get; init; }
+        public string StatusText { get; init; } = string.Empty;
     }
 
     private readonly MainViewModel _mainViewModel;
@@ -77,16 +79,16 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
         : "-";
 
     public string ClearButtonText => _singleQuizDocument is not null
-        ? "Clear this quiz history"
-        : "Clear history";
+        ? LocalizationService.GetString("WorkspaceHistoryClearQuiz")
+        : LocalizationService.GetString("WorkspaceHistoryClear");
 
     public string SummaryText => _isLoading
-        ? "Loading history..."
+        ? LocalizationService.GetString("MotionStateLoading")
         : _attempts.Count == 0
-        ? "No quiz attempts yet"
+        ? LocalizationService.GetString("WorkspaceHistoryQuizEmpty")
         : _singleQuizDocument is not null
-            ? string.Format(CultureInfo.CurrentCulture, "{0} attempts for this quiz", _attempts.Count)
-            : string.Format(CultureInfo.CurrentCulture, "{0} attempts across {1} quizzes", _attempts.Count, _quizCount);
+            ? string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("WorkspaceHistoryQuizSingle"), _attempts.Count)
+            : string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("WorkspaceHistoryQuizGlobal"), _attempts.Count, _quizCount);
 
     private async void RefreshList()
     {
@@ -182,7 +184,8 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
                 ScoreDisplay = FormatScoreDisplay(attempt),
                 DateDisplay = attempt.Date.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),
                 TimeDisplay = attempt.TimeTaken.ToString(@"hh\:mm\:ss", CultureInfo.CurrentCulture),
-                Passed = attempt.Percentage >= attempt.PassingScorePercent
+                Passed = attempt.Percentage >= attempt.PassingScorePercent,
+                StatusText = LocalizationService.GetString(attempt.Percentage >= attempt.PassingScorePercent ? "WorkspaceHistoryPass" : "WorkspaceHistoryFail")
             }))
             .OrderByDescending(item => item.Attempt.Date)
             .ToList();
@@ -200,7 +203,8 @@ public partial class QuizAttemptHistoryWindow : Window, INotifyPropertyChanged
                 ScoreDisplay = FormatScoreDisplay(attempt),
                 DateDisplay = attempt.Date.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture),
                 TimeDisplay = attempt.TimeTaken.ToString(@"hh\:mm\:ss", CultureInfo.CurrentCulture),
-                Passed = attempt.Percentage >= attempt.PassingScorePercent
+                Passed = attempt.Percentage >= attempt.PassingScorePercent,
+                StatusText = LocalizationService.GetString(attempt.Percentage >= attempt.PassingScorePercent ? "WorkspaceHistoryPass" : "WorkspaceHistoryFail")
             })
             .OrderByDescending(item => item.Attempt.Date)
             .ToList();

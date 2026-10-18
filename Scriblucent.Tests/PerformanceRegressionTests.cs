@@ -444,6 +444,34 @@ public sealed class PerformanceRegressionTests
         Assert.NotEqual(original, Signature());
     }
 
+    [Fact]
+    public void NotesSaveSignature_LargeLibrariesUseBoundedTemporaryStorage()
+    {
+        var notes = Enumerable.Range(0, 20_000).Select(_ => new NoteDocument { Content = "Preview" }).ToArray();
+        string Signature() => MainViewModel.ComputeNotesStoreSignature(notes, [], 0, []);
+        var expected = Signature();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Equal(expected, Signature());
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(allocated < 128 * 1024, $"Change checking allocated {allocated} bytes for 20,000 notes.");
+    }
+
+    [Fact]
+    public void NotesSaveSignature_DistinguishesNullableFlagsAndDelimitedGroupNames()
+    {
+        var note = new NoteDocument();
+        var group = new NoteGroupData { Name = "a|b", BackgroundColor = "c" };
+        string Signature() => MainViewModel.ComputeNotesStoreSignature([note], [], 0, [group]);
+        var original = Signature();
+        note.IsEditorFontPanelOpen = false; var closed = Signature();
+        note.IsEditorFontPanelOpen = true; var open = Signature();
+        Assert.Equal(3, new[] { original, closed, open }.Distinct().Count());
+        note.IsEditorFontPanelOpen = null;
+        note.IsWordWrapEnabled = false; Assert.NotEqual(original, Signature());
+        note.IsWordWrapEnabled = null;
+        group.Name = "a"; group.BackgroundColor = "b|c"; Assert.NotEqual(original, Signature());
+    }
+
     private sealed record SortableItem(int Order, bool Visible);
 
     private static void RunOnSta(Action action)

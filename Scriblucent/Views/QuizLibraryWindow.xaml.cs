@@ -1,21 +1,24 @@
 using Scriblucent.Animations;
 using Scriblucent.Localization;
+using Scriblucent.Controls;
+using Scriblucent.Services;
 using Scriblucent.Models;
 using Scriblucent.ViewModels;
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace Scriblucent.Views;
 
-public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
+public partial class QuizLibraryWindow : Window, INotifyPropertyChanged, ICombineWorkspaceHost
 {
+    private PickerSelectionBinding<QuizLibraryItemViewModel>? _pickerSelection;
+    public bool? PickerAllChecked => _pickerSelection is null ? false : _pickerSelection.AllChecked;
+    public CombineWorkspacePresentation Workspace { get; } = new(false);
+    private bool _selectionViewRefreshQueued;
     private readonly MainViewModel _mainViewModel;
     private readonly BulkObservableCollection<QuizLibraryItemViewModel> _quizzes = new();
     private readonly BulkObservableCollection<QuizLibraryItemViewModel> _visibleQuizzes = new();
@@ -24,12 +27,11 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private readonly HashSet<string> _selectedTags = new(StringComparer.OrdinalIgnoreCase);
     private string _statusText = string.Empty;
     private string _searchText = string.Empty;
-    private string _combinedQuizTitle = "Combined quiz";
+    private string _combinedQuizTitle = LocalizationService.GetString("PremiumCombinedQuiz");
     private bool _shuffleCombinedQuestions = true;
     private bool _skipDuplicateQuestions = true;
     private DispatcherTimer? _searchFilterDebounceTimer;
     private int _filterGeneration;
-    private bool _isClearingSelection;
     private readonly Dictionary<string, int> _selectedQuestionSignatures = new(StringComparer.OrdinalIgnoreCase);
     private int _selectedQuestionCount;
     private bool _isLoading;
@@ -63,9 +65,23 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     public QuizLibraryWindow(MainViewModel mainViewModel)
     {
         _mainViewModel = mainViewModel;
+        Workspace.Configure(_visibleQuizzes, _categoryFilters,
+            item => _pickerSelection?.Toggle((QuizLibraryItemViewModel)item),
+            () => _pickerSelection?.ToggleMatching(), () => _pickerSelection?.Selection.Clear(),
+            ClearFilters,
+            CreateCombinedQuiz, Close);
+        Workspace.PropertyChanged += Workspace_PropertyChanged;
         InitializeComponent();
         Scriblucent.Services.WindowThemeService.Register(this);
+        Scriblucent.Services.FeatureWindowBounds.Attach(this);
         DataContext = this;
+        _pickerSelection = new(this, () => _quizzes, () => _visibleQuizzes, item => item.Document.Id,
+            (item, value) => item.IsSelected = value, UpdateSelectedQuestionCounts, items =>
+        {
+            _selectedQuizzes.ReplaceAll(items);
+            NotifySelectedQuizzesChanged();
+            OnPropertyChanged(nameof(PickerAllChecked));
+        });
 
         LoadQuizzes();
         LoadCategories();
@@ -78,6 +94,9 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private void QuizLibraryWindow_Closed(object? sender, EventArgs e)
     {
         _isClosed = true;
+        Workspace.PropertyChanged -= Workspace_PropertyChanged;
+        Workspace.Dispose();
+        _pickerSelection?.Dispose();
         _filterGeneration++;
         _searchFilterDebounceTimer?.Stop();
         Closed -= QuizLibraryWindow_Closed;
@@ -92,9 +111,9 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     public ObservableCollection<TagFilterItemViewModel> CategoryFilters => _categoryFilters;
 
-    public string FilteredCountText => string.Format(CultureInfo.CurrentCulture, "{0} quizzes", _visibleQuizzes.Count);
-    public string SelectedCountText => string.Format(CultureInfo.CurrentCulture, "{0} selected", _selectedQuizzes.Count);
-    public string SelectedQuestionCountText => string.Format(CultureInfo.CurrentCulture, "{0} questions in combined quiz", GetCombinedQuestionCount());
+    public string FilteredCountText => string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumQuizzesCount"), _visibleQuizzes.Count);
+    public string SelectedCountText => string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumSelectedCount"), _selectedQuizzes.Count);
+    public string SelectedQuestionCountText => string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumQuestionsCount"), GetCombinedQuestionCount());
     public bool HasSelectedQuizzes => _selectedQuizzes.Count > 0;
 
     public string CombinedQuizTitle
@@ -135,6 +154,32 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         }
     }
 
+    private void Workspace_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(CombineWorkspacePresentation.SearchText): QuizSearchQuery = Workspace.SearchText; break;
+            case nameof(CombineWorkspacePresentation.Title): CombinedQuizTitle = Workspace.Title; break;
+            case nameof(CombineWorkspacePresentation.Shuffle): ShuffleCombinedQuestions = Workspace.Shuffle; break;
+            case nameof(CombineWorkspacePresentation.SkipDuplicates): SkipDuplicateQuestions = Workspace.SkipDuplicates; break;
+            case nameof(CombineWorkspacePresentation.ShowSelectedOnly): _searchFilterDebounceTimer?.Stop(); UpdateFilteredVisibility(); break;
+        }
+    }
+    private void RefreshWorkspaceLibrary() => Workspace.UpdateLibrary(_quizzes.Count, _visibleQuizzes.Count,
+        _categoryFilters.Count > 0, _isLoading, _selectedTags.Count);
+    private void RefreshWorkspaceSelection()
+    {
+        Workspace.UpdateSelection(_selectedQuizzes.Count, GetCombinedQuestionCount(), _selectedQuestionCount);
+        if (!Workspace.ShowSelectedOnly || _selectionViewRefreshQueued || _visibleQuizzes.SequenceEqual(_selectedQuizzes)) return;
+        // Refresh matching IDs after the current selection transaction finishes.
+        _selectionViewRefreshQueued = true;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.DataBind, () =>
+        {
+            _selectionViewRefreshQueued = false;
+            if (!_isClosed && Workspace.ShowSelectedOnly) UpdateFilteredVisibility();
+        });
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void MainViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -158,7 +203,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         if (source.Length >= 10_000)
         {
             _isLoading = true;
-            StatusText = "Loading quizzes...";
+            StatusText = LocalizationService.GetString("PremiumLoadingQuizzes");
             await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Loaded);
         }
 
@@ -192,22 +237,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
     private void QuizWrapper_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(QuizLibraryItemViewModel.IsSelected)
-            && !_isClearingSelection
-            && sender is QuizLibraryItemViewModel quiz)
-        {
-            if (quiz.IsSelected)
-            {
-                UpdateSelectedQuestionCounts(quiz, 1);
-                _selectedQuizzes.Add(quiz);
-            }
-            else
-            {
-                UpdateSelectedQuestionCounts(quiz, -1);
-                _selectedQuizzes.Remove(quiz);
-            }
-            NotifySelectedQuizzesChanged();
-        }
+        if (e.PropertyName == nameof(QuizLibraryItemViewModel.IsSelected) && sender is QuizLibraryItemViewModel item) _pickerSelection?.Toggle(item);
     }
 
     private void LoadCategories()
@@ -220,6 +250,8 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
             filters.Add(wrapper);
         }
         _categoryFilters.ReplaceAll(filters);
+        _selectedTags.IntersectWith(filters.Select(filter => filter.Tag));
+        RefreshWorkspaceLibrary();
     }
 
     private void SetTagSelected(string tag, bool isSelected)
@@ -235,11 +267,20 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
     private async void UpdateFilteredVisibility()
     {
         var generation = ++_filterGeneration;
+        if (Workspace.ShowSelectedOnly)
+        {
+            if (!_visibleQuizzes.SequenceEqual(_selectedQuizzes)) _visibleQuizzes.ReplaceAll(_selectedQuizzes);
+            _pickerSelection?.RefreshItems();
+            OnPropertyChanged(nameof(FilteredCountText));
+            UpdateStatusText();
+            return;
+        }
         var tags = _selectedTags.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var search = _searchText;
         if (tags.Count == 0 && string.IsNullOrWhiteSpace(search))
         {
-            _visibleQuizzes.ReplaceAll(_quizzes);
+            if (!_visibleQuizzes.SequenceEqual(_quizzes)) _visibleQuizzes.ReplaceAll(_quizzes);
+            _pickerSelection?.RefreshItems();
             OnPropertyChanged(nameof(FilteredCountText));
             UpdateStatusText();
             return;
@@ -262,7 +303,8 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
         if (generation != _filterGeneration)
             return;
-        _visibleQuizzes.ReplaceAll(visible);
+        if (!_visibleQuizzes.SequenceEqual(visible)) _visibleQuizzes.ReplaceAll(visible);
+        _pickerSelection?.RefreshItems();
         OnPropertyChanged(nameof(FilteredCountText));
         UpdateStatusText();
     }
@@ -300,62 +342,27 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
             return;
 
         var visibleCount = _visibleQuizzes.Count;
-        StatusText = string.Format(CultureInfo.CurrentCulture, "{0} of {1} quizzes shown", visibleCount, _quizzes.Count);
+        StatusText = string.Format(CultureInfo.CurrentCulture, LocalizationService.GetString("PremiumQuizzesShown"), visibleCount, _quizzes.Count);
     }
 
-    private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (sender is TextBox tb)
-            QuizSearchQuery = tb.Text;
-    }
-
-    private void ClearFiltersButton_Click(object sender, RoutedEventArgs e)
+    private void ClearFilters()
     {
         _selectedTags.Clear();
         foreach (var filter in _categoryFilters)
             filter.IsSelected = false;
 
         QuizSearchQuery = string.Empty;
+        _searchFilterDebounceTimer?.Stop();
         UpdateFilteredVisibility();
         UpdateStatusText();
     }
 
-    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
-    {
-        _isClearingSelection = true;
-        try
-        {
-            foreach (var quiz in _selectedQuizzes.ToArray())
-                quiz.IsSelected = false;
-        }
-        finally
-        {
-            _isClearingSelection = false;
-        }
-
-        _selectedQuizzes.ReplaceAll([]);
-        _selectedQuestionSignatures.Clear();
-        _selectedQuestionCount = 0;
-        NotifySelectedQuizzesChanged();
-    }
-
-    private void QuizItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is Border border && border.DataContext is global::Scriblucent.Views.QuizLibraryItemViewModel quiz)
-            quiz.IsSelected = !quiz.IsSelected;
-    }
-
-    private void SelectionCheckBox_Click(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-    }
-
-    private void CreateCombinedQuizButton_Click(object sender, RoutedEventArgs e)
+    private void CreateCombinedQuiz()
     {
         var selectedQuizzes = _selectedQuizzes.Select(quiz => quiz.Model).ToList();
         if (selectedQuizzes.Count == 0)
         {
-            ModernMessageBox.Show("Select at least one quiz first.", "Combine quizzes", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernMessageBox.Show(LocalizationService.GetString("PremiumSelectQuizFirst"), LocalizationService.GetString("PremiumCombineQuizzes"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -364,16 +371,11 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
             CombinedQuizTitle,
             ShuffleCombinedQuestions,
             SkipDuplicateQuestions);
-        var editor = new QuizPreviewWindow(
-            combined,
-            combined.AiModelDisplayName,
-            combined.Title)
+        if (Application.Current.MainWindow is MainWindow main)
         {
-            Owner = this
-        };
-
-        if (editor.ShowDialog() == true)
-            _mainViewModel.AddOrUpdateQuiz(editor.ToDocument());
+            main.EditorWorkspace.OpenQuiz(combined, draft: true);
+            WindowContentEnterHelper.CloseWithDialogResult(this, true);
+        }
     }
 
     private static QuizDocument BuildCombinedQuiz(
@@ -428,7 +430,7 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
 
         return new QuizDocument
         {
-            Title = string.IsNullOrWhiteSpace(title) ? "Combined quiz" : title.Trim(),
+            Title = string.IsNullOrWhiteSpace(title) ? LocalizationService.GetString("PremiumCombinedQuiz") : title.Trim(),
             Tags = combinedTags,
             Questions = combinedQuestions,
             CreatedAt = DateTime.UtcNow,
@@ -493,14 +495,20 @@ public partial class QuizLibraryWindow : Window, INotifyPropertyChanged
         }
     }
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        Close();
-    }
-
     private void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        switch (propertyName)
+        {
+            case nameof(QuizSearchQuery): Workspace.SearchText = QuizSearchQuery; break;
+            case nameof(CombinedQuizTitle): Workspace.Title = CombinedQuizTitle; break;
+            case nameof(ShuffleCombinedQuestions): Workspace.Shuffle = ShuffleCombinedQuestions; break;
+            case nameof(SkipDuplicateQuestions): Workspace.SkipDuplicates = SkipDuplicateQuestions; RefreshWorkspaceSelection(); break;
+            case nameof(SelectedCountText):
+            case nameof(SelectedQuestionCountText): RefreshWorkspaceSelection(); break;
+            case nameof(FilteredCountText):
+            case nameof(StatusText): RefreshWorkspaceLibrary(); break;
+        }
     }
 
     }

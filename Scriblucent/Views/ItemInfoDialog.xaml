@@ -18,10 +18,9 @@
         ShowInTaskbar="False">
 
     <Window.Resources>
-        <Style x:Key="InfoRowCardStyle" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource SidebarBackground}"/>
+        <Style x:Key="InfoRowCardStyle" TargetType="Border" BasedOn="{StaticResource ContentInsetBorderStyle}">
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="Margin" Value="0,0,10,10"/>
             <Setter Property="MinHeight" Value="66"/>
@@ -31,7 +30,7 @@
             <Border Style="{StaticResource InfoRowCardStyle}">
                 <StackPanel>
                     <TextBlock Text="{Binding Label}"
-                               FontSize="{StaticResource Type.Chip}"
+                               FontSize="{StaticResource Type.Meta}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextColorSecondary}"
                                TextTrimming="CharacterEllipsis"
@@ -54,7 +53,7 @@
 
     <controls:OverlayDialogShell
                                  MaxCardWidth="640"
-                                 CardPadding="28,26,28,22">
+                                 CardPadding="24">
         <controls:OverlayDialogShell.Header>
             <Grid Margin="0,0,0,18">
                 <Grid.ColumnDefinitions>
@@ -63,7 +62,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Level 5 status glyph: fill only (role I soft). -->
-                <Border Grid.Column="0"
+                <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Tinted" Grid.Column="0"
                         Width="46"
                         Height="46"
                         Background="{DynamicResource EditorToolActiveBackground}"
@@ -77,7 +76,7 @@
                                    Foreground="{DynamicResource EditorToolActiveForeground}"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
-                </Border>
+                </controls:SurfaceMaterialBorder>
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding TitleText}"
@@ -98,8 +97,7 @@
                           HorizontalScrollBarVisibility="Disabled"
                           CanContentScroll="False"
                           Padding="0,0,2,0"
-                          MinHeight="400"
-                          MaxHeight="430">
+                          MaxHeight="540">
                 <StackPanel>
                     <ItemsControl ItemsSource="{Binding PrimaryRows}"
                                   ItemTemplate="{StaticResource InfoRowTemplate}">

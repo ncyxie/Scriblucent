@@ -1,5 +1,6 @@
-﻿using Scriblucent.Animations;
+using Scriblucent.Animations;
 using Scriblucent.Behaviors;
+using Scriblucent.Converters;
 using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent;
@@ -223,6 +224,8 @@ public partial class QuizModeWindow : Window
         _isCountdown = _timeLimitSeconds > 0;
         if (_isCountdown)
             _remainingTime = TimeSpan.FromSeconds(_timeLimitSeconds) - _elapsedTime;
+        if (_isCountdown && _remainingTime.TotalSeconds <= 30)
+            HighlightTimerWarning();
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (s, e) =>
@@ -256,10 +259,11 @@ public partial class QuizModeWindow : Window
             return;
 
         _timerWarningActive = true;
-        timerText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+        timerText.SetResourceReference(TextBlock.ForegroundProperty, "AccentWarningSubtleForeground");
+        SurfaceFill.Select(TimerBorder, true, animate: true, resourceKey: "AccentWarningSubtle");
 
-        if (!UiMotion.PrefersReducedMotion)
-            UiMotion.PulseOpacity(timerText, timerText, 0.72, 1.0, 1400);
+        UiMotion.Stop(timerText);
+        timerText.Opacity = 1;
     }
     private void UpdateTimerDisplay(TimeSpan time)
     {
@@ -448,9 +452,16 @@ public partial class QuizModeWindow : Window
 
         if (FindName("FlagQuestionButton") is Button flagButton)
         {
-            flagButton.Background = isFlagged
-                ? (Brush)FindResource("AccentDangerSubtle")
-                : (Brush)FindResource("CardBackground");
+            Scriblucent.Controls.SurfaceMaterial.SetKind(flagButton, isFlagged ? Scriblucent.Controls.SurfaceMaterialKind.Tinted : Scriblucent.Controls.SurfaceMaterialKind.Neutral);
+            flagButton.SetResourceReference(BackgroundProperty, isFlagged ? "AccentDangerSubtle" : "IconButtonBackground");
+            flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.HoverBackgroundProperty,
+                isFlagged ? "AccentDangerSubtleHover" : "IconButtonHoverBackground");
+            flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.PressedBackgroundProperty,
+                isFlagged ? "AccentDangerSubtleHover" : "IconButtonPressedBackground");
+            flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.HighlightWashProperty,
+                isFlagged ? "DangerControlHoverWash" : "ControlHoverSurfaceWash");
+            flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.HighlightEdgeProperty,
+                isFlagged ? "AccentDanger" : "ControlHoverSurfaceEdge");
             flagButton.Foreground = isFlagged
                 ? (Brush)FindResource("AccentDangerSubtleForeground")
                 : (Brush)FindResource("TextColor");
@@ -504,7 +515,7 @@ public partial class QuizModeWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var chip = new Border
+        var chip = new Scriblucent.Controls.SurfaceMaterialBorder
         {
             Margin = new Thickness(0, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center
@@ -584,12 +595,9 @@ public partial class QuizModeWindow : Window
 
         var inputBorder = new Border
         {
-            Padding = new Thickness(10, 8, 10, 8),
             MinHeight = 146
         };
-        inputBorder.SetResourceReference(StyleProperty, "ChromeFieldBorderStyle");
-        // Inset on the white question plate so the field (and its focus ring) read clearly.
-        inputBorder.SetResourceReference(BackgroundProperty, "WindowBackground");
+        inputBorder.SetResourceReference(StyleProperty, "ChromeMultilineFieldBorderStyle");
         FieldFocusRingBehavior.SetIsEnabled(inputBorder, true);
 
         var inputGrid = new Grid();
@@ -628,7 +636,7 @@ public partial class QuizModeWindow : Window
             Foreground = (Brush)FindResource("TextColorSecondary"),
             Opacity = 0.72,
             IsHitTestVisible = false,
-            Margin = new Thickness(0, 1, 0, 0),
+            Margin = new Thickness(FieldContentInsetConverter.NativeTextGutter, 0, FieldContentInsetConverter.NativeTextGutter, 0),
             TextWrapping = TextWrapping.Wrap,
             Visibility = string.IsNullOrEmpty(textBox.Text) ? Visibility.Visible : Visibility.Collapsed
         };
@@ -832,35 +840,41 @@ public partial class QuizModeWindow : Window
                 continue;
 
             var isSelected = selectedOptions.Contains(opt);
-            ApplyOptionSelectionVisual(optButton, isSelected);
+            ApplyOptionSelectionVisual(optButton, isSelected, animate);
 
             if (animate)
                 AnimateOptionSelection(optButton, isSelected);
             else
-                optButton.BorderThickness = isSelected ? new Thickness(2) : new Thickness(0);
+            {
+                optButton.BorderThickness = new Thickness(0);
+                AccentMotion.Set(optButton, isSelected, optButton.TryFindResource("AccentRimBrush") as Brush, animate: false);
+            }
         }
     }
 
-    private void ApplyOptionSelectionVisual(Button button, bool isSelected)
+    private void ApplyOptionSelectionVisual(Button button, bool isSelected, bool animate)
     {
-        button.Background = isSelected
-            ? (Brush)FindResource("SelectionBackground")
-            : (Brush)FindResource("WindowBackground");
+        button.ApplyTemplate();
+        if (button.Template.FindName("OptionBorder", button) is Border face)
+        {
+            button.Background = (Brush)FindResource("IconButtonBackground");
+            SurfaceFill.Select(face, isSelected, animate, "SelectionBackground");
+        }
+        else button.Background = (Brush)FindResource(isSelected ? "SelectionBackground" : "IconButtonBackground");
         button.BorderBrush = isSelected
-            ? (Brush)FindResource("AccentPrimary")
+            ? (Brush)FindResource("AccentRimBrush")
             : Brushes.Transparent;
         button.FontWeight = FontWeights.Normal;
 
         if (TryGetOptionLetterChip(button) is not Border chip)
             return;
 
-        chip.Background = isSelected
-            ? (Brush)FindResource("SelectionBackground")
-            : (Brush)FindResource("InputSurface");
+        chip.Background = (Brush)FindResource("InputSurface");
+        SurfaceFill.Select(chip, isSelected, animate, "SelectionBackground");
         chip.BorderBrush = isSelected
-            ? (Brush)FindResource("AccentPrimary")
+            ? (Brush)FindResource("AccentRimBrush")
             : Brushes.Transparent;
-        chip.BorderThickness = isSelected ? new Thickness(1.5) : new Thickness(0);
+        chip.BorderThickness = new Thickness(1.5);
     }
 
     private static Border? TryGetOptionLetterChip(Button button)
@@ -870,30 +884,8 @@ public partial class QuizModeWindow : Window
 
     private static void AnimateOptionSelection(Button button, bool isSelected)
     {
-        var targetThickness = isSelected ? 2.0 : 0.0;
-        var currentThickness = button.BorderThickness.Left;
-
-        if (Math.Abs(currentThickness - targetThickness) < 0.01)
-            return;
-
-        if (UiMotion.PrefersReducedMotion)
-        {
-            button.BorderThickness = new Thickness(targetThickness);
-            return;
-        }
-
-        // Border rim only — no scale pop (wide option rows make even 1% scale feel like a jump).
-        UiMotion.Run(
-            button,
-            new[]
-            {
-                UiMotion.Track(
-                    UiMotion.QuickMs,
-                    UiMotion.OutCubic,
-                    currentThickness,
-                    targetThickness,
-                    value => button.BorderThickness = new Thickness(value))
-            });
+        button.BorderThickness = new Thickness(0);
+        AccentMotion.Set(button, isSelected, button.TryFindResource("AccentRimBrush") as Brush);
     }
     private void LoadHintSection()
     {
@@ -1125,6 +1117,7 @@ public partial class QuizModeWindow : Window
         if (FindName("ProgressText") is TextBlock pt) pt.Text = string.Format(LocalizationService.GetString("QuizResultsLabelFormat"), correctCount, totalQuestions);
         if (FindName("TimerText") is TextBlock tt) tt.Text = displayTime.ToString(@"hh\:mm\:ss");
 
+        ResultsEmblem.Ratio = percentage / 100d;
         var prepareScoreReveal = !UiMotion.PrefersReducedMotion;
         if (FindName("ResultsTitleText") is TextBlock rt)
         {
@@ -1154,9 +1147,9 @@ public partial class QuizModeWindow : Window
 
         // Retrying within the results screen would defeat exam mode's "one attempt" promise.
         if (FindName("RetryAllButton") is Button rab)
-            UiMotion.AnimateInlineReveal(rab, !_quiz.ExamMode);
+            UiMotion.AnimateLayoutReveal(rab, !_quiz.ExamMode, axis: Orientation.Horizontal);
         if (FindName("RetryWrongButton") is Button rwb)
-            UiMotion.AnimateInlineReveal(rwb, !_quiz.ExamMode && _wrongQuestionIndices.Count > 0);
+            UiMotion.AnimateLayoutReveal(rwb, !_quiz.ExamMode && _wrongQuestionIndices.Count > 0, axis: Orientation.Horizontal);
         if (FindName("ResultsQuestionsList") is ItemsControl resultsList)
         {
             var items = new List<QuizResultItem>(questions.Count);
@@ -1245,20 +1238,21 @@ public partial class QuizModeWindow : Window
         card.Opacity = 0;
         var translate = UiMotion.EnsureTranslate(card);
         translate.Y = UiMotion.ContentLiftY;
-        var delay = Math.Min(index * 35, 280);
+        var delay = Math.Min(index * 30, 90);
 
         UiMotion.RunComposited(
             card,
             new[]
             {
-                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, 0, 1, value => card.Opacity = value, startDelayMs: delay),
-                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, UiMotion.ContentLiftY, 0, value => translate.Y = value, startDelayMs: delay)
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.OutSine, 0, 1, value => card.Opacity = value, startDelayMs: delay),
+                UiMotion.Track(UiMotion.QuickMs, UiMotion.InOutSine, UiMotion.ContentLiftY, 0, value => translate.Y = value, startDelayMs: delay)
             });
     }
 
     /// <summary>Plays the staggered entrance for result cards only when the results list was
     /// just (re)built — recycled containers that re-enter on scroll must not replay it.</summary>
     private DispatcherTimer? _resultsEntranceTimer;
+    private readonly HashSet<int> _revealedResults = new();
 
     private void AllowResultsCardEntrance(bool allow)
     {
@@ -1267,6 +1261,7 @@ public partial class QuizModeWindow : Window
 
         if (!allow)
             return;
+        _revealedResults.Clear();
 
         _resultsEntranceTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -1280,6 +1275,7 @@ public partial class QuizModeWindow : Window
     {
         if (_resultsEntranceTimer is null || sender is not FrameworkElement card || card.DataContext is not QuizResultItem item)
             return;
+        if (item.Index >= 8 || !_revealedResults.Add(item.Index)) return;
 
         AnimateResultsReviewCard(card, item.Index);
     }
@@ -1300,8 +1296,8 @@ public partial class QuizModeWindow : Window
             questionView,
             new[]
             {
-                UiMotion.Track(UiMotion.QuickMs, UiMotion.InCubic, opacityStart, 0, value => questionView.Opacity = value),
-                UiMotion.Track(UiMotion.QuickMs, UiMotion.InCubic, 0, exitOffset, value => translate.X = value)
+                UiMotion.Track(70, UiMotion.InQuad, opacityStart, 0, value => questionView.Opacity = value),
+                UiMotion.Track(70, UiMotion.InQuad, 0, exitOffset, value => translate.X = value)
             },
             () =>
             {
@@ -1312,8 +1308,8 @@ public partial class QuizModeWindow : Window
                     questionView,
                     new[]
                     {
-                        UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, 0, 1, value => questionView.Opacity = value),
-                        UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, -exitOffset, 0, value => translate.X = value)
+                        UiMotion.Track(160, UiMotion.OutSine, 0, 1, value => questionView.Opacity = value),
+                        UiMotion.Track(160, UiMotion.InOutSine, -exitOffset, 0, value => translate.X = value)
                     });
             });
     }
@@ -1346,8 +1342,8 @@ public partial class QuizModeWindow : Window
                     questionView,
                     new[]
                     {
-                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, 0, 1, value => questionView.Opacity = value),
-                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, UiMotion.PanelLiftY, 0, value => translate.Y = value)
+                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutSine, 0, 1, value => questionView.Opacity = value),
+                        UiMotion.Track(UiMotion.OpenMs, UiMotion.InOutSine, UiMotion.PanelLiftY, 0, value => translate.Y = value)
                     });
             });
     }
@@ -1367,9 +1363,9 @@ public partial class QuizModeWindow : Window
         if (FindName("DoneButton") is Button db)
             SetFooterButtonVisible(db, false);
         if (FindName("RetryAllButton") is Button rab)
-            UiMotion.AnimateInlineReveal(rab, false);
+            UiMotion.AnimateLayoutReveal(rab, false, axis: Orientation.Horizontal);
         if (FindName("RetryWrongButton") is Button rwb)
-            UiMotion.AnimateInlineReveal(rwb, false);
+            UiMotion.AnimateLayoutReveal(rwb, false, axis: Orientation.Horizontal);
 
         RefreshQuestionNavigator();
     }
@@ -1381,8 +1377,9 @@ public partial class QuizModeWindow : Window
             Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
             {
                 if (passed && CelebrationOverlay != null)
-                    StudyCelebration.PlayConfetti(CelebrationOverlay);
+                    StudyCelebration.PlayConfetti(CelebrationOverlay, origin: ResultsEmblem);
 
+                ResultsEmblem.Play();
                 StudyCelebration.RevealScore(
                     FindName("ResultsTitleText") as FrameworkElement,
                     FindName("ResultsScoreText") as FrameworkElement,
@@ -1403,26 +1400,21 @@ public partial class QuizModeWindow : Window
             questionView,
             new[]
             {
-                UiMotion.Track(UiMotion.CloseMs, UiMotion.InCubic, questionView.Opacity, 0, value => questionView.Opacity = value)
+                UiMotion.Track(80, UiMotion.InQuad, questionView.Opacity, 0, value => questionView.Opacity = value)
             },
             () =>
             {
                 applyResults();
                 resultsView.Visibility = Visibility.Visible;
                 resultsView.Opacity = 0;
-                var scale = UiMotion.EnsureScale(resultsView, 0.97);
-                scale.ScaleX = 0.97;
-                scale.ScaleY = 0.97;
+                var scale = UiMotion.EnsureScale(resultsView, 1);
+                scale.ScaleX = 1;
+                scale.ScaleY = 1;
                 UiMotion.RunComposited(
                     resultsView,
                     new[]
                     {
-                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, 0, 1, value => resultsView.Opacity = value),
-                        UiMotion.Track(UiMotion.OpenMs, UiMotion.OutCubic, 0.97, 1, value =>
-                        {
-                            scale.ScaleX = value;
-                            scale.ScaleY = value;
-                        })
+                        UiMotion.Track(100, UiMotion.OutSine, 0, 1, value => resultsView.Opacity = value)
                     },
                     PlayCelebration);
             });
@@ -1495,6 +1487,7 @@ public partial class QuizModeWindow : Window
         _elapsedTime = TimeSpan.Zero;
         _remainingTime = _isCountdown ? TimeSpan.FromSeconds(_timeLimitSeconds) : TimeSpan.Zero;
         _timerWarningActive = false;
+        SurfaceFill.Select(TimerBorder, false, animate: false, resourceKey: "AccentWarningSubtle");
 
         if (FindName("TimerText") is TextBlock timerText)
         {
@@ -1503,6 +1496,8 @@ public partial class QuizModeWindow : Window
         }
 
         UpdateTimerDisplay(_isCountdown ? _remainingTime : _elapsedTime);
+        if (_isCountdown && _remainingTime.TotalSeconds <= 30)
+            HighlightTimerWarning();
     }
 
     /// <summary>Lightweight data row for the virtualized results review list. All display
@@ -1510,12 +1505,13 @@ public partial class QuizModeWindow : Window
     /// the visible viewport (recycled), and rendered as Skia tiles while the list scrolls.</summary>
     internal sealed class QuizResultItem
     {
-        public required int Index;
-        public required bool IsCorrect;
-        public required string HeaderText;
-        public required string UserAnswerText;
-        public required string CorrectAnswerText;
-        public required string Explanation;
+        // Native WPF bindings require properties; the cached painter reads the same values.
+        public required int Index { get; init; }
+        public required bool IsCorrect { get; init; }
+        public required string HeaderText { get; init; }
+        public required string UserAnswerText { get; init; }
+        public required string CorrectAnswerText { get; init; }
+        public required string Explanation { get; init; }
 
         public bool HasCorrectAnswer => CorrectAnswerText.Length > 0;
         public bool HasExplanation => Explanation.Length > 0;

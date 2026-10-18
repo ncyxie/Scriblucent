@@ -7,6 +7,12 @@ namespace Scriblucent.Services;
 /// </summary>
 internal static class TypeScale
 {
+    public const string Toolbar = "Type.Control.Toolbar";
+    public const string Form = "Type.Control.Form";
+    public const string Action = "Type.Control.Action";
+    public const string Inline = "Type.Control.Inline";
+    public const string Helper = "Type.Control.Helper";
+    public const string Badge = "Type.Control.Badge";
     public const string Display = "Type.Display";
     public const string PageTitle = "Type.PageTitle";
     public const string DialogTitle = "Type.DialogTitle";
@@ -17,6 +23,10 @@ internal static class TypeScale
     public const string Body = "Type.Body";
     public const string Meta = "Type.Meta";
     public const string Caption = "Type.Caption";
+    public const string CalendarDay = "Type.Calendar.Day";
+    public const string Tab = "Type.Tab";
+    public const string MetricPrimary = "Type.Metric.Primary";
+    public const string MetricSecondary = "Type.Metric.Secondary";
     public const string Chip = "Type.Chip";
 
     public static double Px(string resourceKey, double fallback, FrameworkElement? scope = null)

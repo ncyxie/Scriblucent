@@ -30,8 +30,8 @@ internal static class DiagnosticCleanup
         var diagnosticsDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Scriblucent",
-            "AiCache",
-            "diagnostics");
+            "Logs",
+            "AI");
 
         if (!Directory.Exists(diagnosticsDir))
             return;

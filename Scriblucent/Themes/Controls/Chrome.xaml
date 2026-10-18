@@ -2,8 +2,12 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
                     xmlns:controls="clr-namespace:Scriblucent.Controls"
-                    xmlns:icons="clr-namespace:Scriblucent.Icons">
-    <!-- Level 1 form chrome (role C): InputSurface + Elevation.Field.
+                    xmlns:icons="clr-namespace:Scriblucent.Icons"
+                    xmlns:conv="clr-namespace:Scriblucent.Converters">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/Scriblucent;component/Themes/Tokens.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+    <!-- Level 1 form chrome (role C): flat InputSurface; elevation belongs to cards and floating surfaces.
          BorderThickness stays at theme Field.RestBorderThickness always (never changes on focus).
          Focus ring is an adorner (FieldFocusRingBehavior) so light title fields no longer optically
          shrink when a same-as-fill rest rim turns accent, and 0→N thickness never shifts layout.
@@ -15,8 +19,8 @@
         <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
         <Setter Property="BorderThickness" Value="{DynamicResource Field.RestBorderThickness}"/>
         <Setter Property="CornerRadius" Value="{StaticResource Radius.Control}"/>
-        <Setter Property="Padding" Value="6,0"/>
-        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Padding" Value="{StaticResource Field.ContentPadding}"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Form}"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <!-- No live DropShadow on this border — it wraps text inputs (would blur ClearType). Surface contrast is enough. -->
         <Setter Property="Effect" Value="{x:Null}"/>
@@ -24,13 +28,33 @@
         <Setter Property="behaviors:FieldFocusRingBehavior.IsEnabled" Value="True"/>
     </Style>
 
-    <Style x:Key="ChromeTitleFieldBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromeFieldBorderStyle}">
-        <Setter Property="Padding" Value="8,0"/>
+    <!-- Fields on a raised content face use an inset fill; fields on canvas/recessed groups use InputSurface. -->
+    <Style x:Key="ChromeInsetFieldBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromeFieldBorderStyle}">
+        <Setter Property="Background" Value="{DynamicResource InputSurfaceInset}"/>
+    </Style>
+
+    <Style x:Key="ChromeTitleFieldBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromeInsetFieldBorderStyle}">
         <Setter Property="MinHeight" Value="40"/>
+    </Style>
+
+    <Style x:Key="ChromeMultilineFieldBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromeInsetFieldBorderStyle}">
+        <Setter Property="Padding" Value="{StaticResource Field.MultilinePadding}"/>
+    </Style>
+
+    <!-- Status fits its current message and releases title space when dismissed. -->
+    <Style x:Key="EditorTitleStatusStyle" TargetType="controls:EditorTitleStatus">
+        <Setter Property="Margin" Value="12,0,0,0"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Visibility" Value="Collapsed"/>
     </Style>
 
     <!-- Nested chrome panel: surface only (no field shadow, no rest stroke, no focus ring). -->
     <Style x:Key="ChromePanelBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromeFieldBorderStyle}">
+        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
         <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
         <Setter Property="Padding" Value="10,8"/>
         <Setter Property="MinHeight" Value="0"/>
@@ -40,16 +64,28 @@
         <Setter Property="behaviors:FieldFocusRingBehavior.IsEnabled" Value="False"/>
     </Style>
 
+    <!-- Role E: a neutral recess within a content face, with no additional elevation. -->
+    <Style x:Key="ContentInsetBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromePanelBorderStyle}">
+        <Setter Property="Background" Value="{DynamicResource ContentInsetSurface}"/>
+        <Setter Property="Padding" Value="14,12"/>
+    </Style>
+
+    <!-- A shared pointer light belongs to command bands, never to content cards or forms. -->
+    <Style x:Key="CommandSurfaceBorderStyle" TargetType="Border" BasedOn="{StaticResource ChromePanelBorderStyle}">
+        <Setter Property="behaviors:CommandLightBehavior.IsEnabled" Value="True"/>
+    </Style>
+
     <Style TargetType="{x:Type TextBox}">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
-        <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Form}"/>
         <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
         <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
         <Setter Property="BorderThickness" Value="{DynamicResource Field.RestBorderThickness}"/>
-        <Setter Property="Padding" Value="6,0"/>
-        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="Padding" Value="{StaticResource Field.ContentPadding}"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Form}"/>
         <!-- Center single-line caret/glyphs; AcceptsReturn fields pin Top via trigger. -->
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
@@ -58,33 +94,27 @@
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type TextBox}">
                     <!-- In-tree focus ring (not adorner) so secondary-window rise/sink motion keeps the ring glued.
-                         Shadow is a sibling plate so DropShadowEffect does not rasterize (blur) typed text. -->
+                         A shared directional accent rim carries focus without changing field layout. -->
                     <Grid SnapsToDevicePixels="True" UseLayoutRounding="True">
-                        <controls:BakedElevationLayer Kind="Field"/>
                         <Border x:Name="TextBoxBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Control}"
-                                Padding="{TemplateBinding Padding}"
                                 behaviors:RoundedClipBehavior.IsEnabled="True"
                                 SnapsToDevicePixels="True">
-                            <!-- VCA drives host alignment: Center mid-lines one-line fields; Top for multiline. -->
+                            <!-- TextBoxView already consumes TextBox.Padding. Applying it to this Border
+                                 as well doubles the inset. VCA centers single lines and pins multiline Top. -->
                             <ScrollViewer x:Name="PART_ContentHost"
+                                          Padding="0"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           HorizontalAlignment="Stretch"/>
                         </Border>
-                        <Border x:Name="FocusRing"
-                                BorderBrush="Transparent"
-                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="Transparent"
-                                IsHitTestVisible="False"
-                                SnapsToDevicePixels="True"/>
+                        <controls:AccentRim x:Name="FocusRing" Surface="{Binding ElementName=TextBoxBorder}" Thickness="2"/>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
@@ -96,7 +126,7 @@
         <Style.Triggers>
             <Trigger Property="AcceptsReturn" Value="True">
                 <Setter Property="VerticalContentAlignment" Value="Top"/>
-                <Setter Property="Padding" Value="6,4"/>
+                <Setter Property="Padding" Value="{StaticResource Field.MultilinePadding}"/>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -114,6 +144,7 @@
                 <ControlTemplate TargetType="{x:Type TextBox}">
                     <ScrollViewer x:Name="PART_ContentHost"
                                   Background="Transparent"
+                                  Padding="0"
                                   Margin="{TemplateBinding Padding}"
                                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                   HorizontalAlignment="Stretch"/>
@@ -123,11 +154,29 @@
         <Style.Triggers>
             <Trigger Property="AcceptsReturn" Value="True">
                 <Setter Property="VerticalContentAlignment" Value="Top"/>
+                <!-- The field shell already owns padding, including multiline fields. -->
+                <Setter Property="Padding" Value="0"/>
             </Trigger>
         </Style.Triggers>
     </Style>
 
+    <Style x:Key="InsetFieldTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Background" Value="{DynamicResource InputSurfaceInset}"/>
+    </Style>
+
+    <!-- Boolean form labels wrap within their column; the native CheckBox still owns input and automation. -->
+    <Style x:Key="FormCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="PopupListScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
+        <Setter Property="behaviors:PopupListSizeBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="False"/>
         <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ScrollWheelContainmentBehavior.IsEnabled" Value="True"/>
@@ -139,18 +188,18 @@
     </Style>
 
     <ControlTemplate x:Key="AppComboBoxToggleButtonTemplate" TargetType="ToggleButton">
-        <Border x:Name="ComboBorder"
+        <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Neutral" x:Name="ComboBorder"
                 Background="{TemplateBinding Background}"
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"
                 CornerRadius="{StaticResource Radius.Control}"
-                Padding="{TemplateBinding Padding}">
+                Padding="0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="22"/>
+                    <ColumnDefinition Width="32"/>
                 </Grid.ColumnDefinitions>
-                <icons:AppIcon x:Name="Chevron"
+                <icons:AppIcon x:Name="Chevron" behaviors:ControlDetailMotionBehavior.IsExpanded="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}"
                                Kind="ChevronDown"
                                Width="12"
                                Height="12"
@@ -164,33 +213,30 @@
                     </icons:AppIcon.RenderTransform>
                 </icons:AppIcon>
             </Grid>
-        </Border>
+        </controls:SurfaceMaterialBorder>
         <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
             </Trigger>
             <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="Chevron" Property="RenderTransform">
-                    <Setter.Value>
-                        <RotateTransform Angle="180"/>
-                    </Setter.Value>
-                </Setter>
+                <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
     <Style TargetType="{x:Type ComboBox}">
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
-        <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
-        <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Form}"/>
+        <!-- Non-editable dropdowns are neutral actions; editable variants retain field surfaces. -->
+        <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource InputRestBorder}"/>
         <Setter Property="BorderThickness" Value="{DynamicResource Field.RestBorderThickness}"/>
-        <Setter Property="Padding" Value="10,6"/>
-        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Padding" Value="{StaticResource Field.ContentPadding}"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Form}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -223,20 +269,22 @@
                                       BorderThickness="{TemplateBinding BorderThickness}"
                                       Foreground="{TemplateBinding Foreground}"
                                       Padding="{TemplateBinding Padding}"/>
-                        <Border x:Name="FocusRing"
-                                BorderBrush="Transparent"
-                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="Transparent"
-                                IsHitTestVisible="False"
-                                SnapsToDevicePixels="True"/>
-                        <ContentPresenter IsHitTestVisible="False"
+                        <controls:AccentRim x:Name="FocusRing" Surface="{Binding ElementName=ToggleButton}" Thickness="2"/>
+                        <ContentPresenter behaviors:ClosedDropdownLabelBehavior.IsEnabled="True" IsHitTestVisible="False"
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                           ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                          Margin="10,0,30,0"
+
                                           VerticalAlignment="Center"
-                                          HorizontalAlignment="Left"/>
+                                          HorizontalAlignment="Stretch">
+                            <ContentPresenter.Margin>
+                                <MultiBinding Converter="{x:Static conv:ComboBoxContentInsetConverter.Instance}">
+                                    <Binding Path="Padding" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="BorderThickness" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="IsEditable" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                </MultiBinding>
+                            </ContentPresenter.Margin>
+                        </ContentPresenter>
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
@@ -248,8 +296,7 @@
                                PopupAnimation="None">
                             <!-- Padding only for shadow falloff; MinWidth on the card (not shell) keeps left edge aligned.
                                  Shadow plate is a sibling so list text is not rasterized by DropShadowEffect. -->
-                            <Border Background="Transparent"
-                                    Padding="32"
+                            <Border Padding="32"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
@@ -261,7 +308,7 @@
                                             CornerRadius="{StaticResource Radius.Control}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Control}"
@@ -275,26 +322,33 @@
                                                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                             </ScrollViewer>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <Trigger Property="behaviors:DropdownChoiceWidthBehavior.IsEnabled" Value="True">
+                <Setter Property="Width" Value="{Binding Path=(behaviors:DropdownChoiceWidthBehavior.FittedWidth), RelativeSource={RelativeSource Self}}"/>
+                <Setter Property="HorizontalAlignment" Value="Left"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- Editable ComboBox: same chrome as implicit ComboBox, with PART_EditableTextBox. -->
     <Style x:Key="EditableComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="Background" Value="{DynamicResource InputSurface}"/>
         <Setter Property="IsEditable" Value="True"/>
         <Setter Property="IsTextSearchEnabled" Value="True"/>
         <Setter Property="StaysOpenOnEdit" Value="True"/>
@@ -302,33 +356,37 @@
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ComboBox}">
                     <Grid SnapsToDevicePixels="True">
-                        <Border x:Name="ComboBorder"
+                        <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Neutral" x:Name="ComboBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Control}"
                                 SnapsToDevicePixels="True">
-                        </Border>
-                        <Border x:Name="FocusRing"
-                                BorderBrush="Transparent"
-                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="Transparent"
-                                IsHitTestVisible="False"
-                                SnapsToDevicePixels="True"/>
+                        </controls:SurfaceMaterialBorder>
+                        <controls:AccentRim x:Name="FocusRing" Surface="{Binding ElementName=ComboBorder}" Thickness="2"/>
 
                         <TextBox x:Name="PART_EditableTextBox"
                                  Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                                 Margin="6,0,34,0"
+
                                  Background="Transparent"
                                  Foreground="{TemplateBinding Foreground}"
                                  FontSize="{TemplateBinding FontSize}"
+                                 FontFamily="{TemplateBinding FontFamily}"
+                                 FontWeight="{TemplateBinding FontWeight}"
                                  VerticalContentAlignment="Center"
                                  HorizontalContentAlignment="Left"
-                                 IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                                 IsReadOnly="{TemplateBinding IsReadOnly}">
+                            <TextBox.Margin>
+                                <MultiBinding Converter="{x:Static conv:ComboBoxContentInsetConverter.Instance}">
+                                    <Binding Path="Padding" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="BorderThickness" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="IsEditable" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                </MultiBinding>
+                            </TextBox.Margin>
+                        </TextBox>
 
                         <ToggleButton x:Name="DropDownToggle"
-                                      Width="34"
+                                      Width="32"
                                       HorizontalAlignment="Right"
                                       Focusable="False"
                                       Background="Transparent"
@@ -338,7 +396,7 @@
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
                                     <Border Background="Transparent">
-                                        <icons:AppIcon x:Name="Chevron"
+                                        <icons:AppIcon x:Name="Chevron" behaviors:ControlDetailMotionBehavior.IsExpanded="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}"
                                                        Kind="ChevronDown"
                                                        Width="12"
                                                        Height="12"
@@ -352,13 +410,6 @@
                                         </icons:AppIcon>
                                     </Border>
                                     <ControlTemplate.Triggers>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="Chevron" Property="RenderTransform">
-                                                <Setter.Value>
-                                                    <RotateTransform Angle="180"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </ToggleButton.Template>
@@ -373,8 +424,7 @@
                                AllowsTransparency="True"
                                Focusable="False"
                                PopupAnimation="None">
-                            <Border Background="Transparent"
-                                    Padding="32"
+                            <Border Padding="32"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
@@ -386,7 +436,7 @@
                                             CornerRadius="{StaticResource Radius.Control}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Control}"
@@ -400,7 +450,7 @@
                                                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                             </ScrollViewer>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </Popup>
@@ -410,10 +460,10 @@
                             <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -421,36 +471,40 @@
         </Setter>
     </Style>
 
-    <!-- Form ComboBox: flat closed chrome (no Elevation.Field); popup keeps Elevation.Popup. -->
+    <Style x:Key="InsetEditableComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource EditableComboBoxStyle}">
+        <Setter Property="Background" Value="{DynamicResource InputSurfaceInset}"/>
+    </Style>
+
+    <!-- Form selectors share the neutral action face; popup keeps Elevation.Popup. -->
     <Style x:Key="ChromeComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
-        <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ComboBox}">
                     <Grid SnapsToDevicePixels="True">
-                        <Border x:Name="ComboBorder"
+                        <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Neutral" x:Name="ComboBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Control}"
                                 SnapsToDevicePixels="True"/>
-                        <Border x:Name="FocusRing"
-                                BorderBrush="Transparent"
-                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="Transparent"
-                                IsHitTestVisible="False"
-                                SnapsToDevicePixels="True"/>
-                        <ContentPresenter IsHitTestVisible="False"
+                        <controls:AccentRim x:Name="FocusRing" Surface="{Binding ElementName=ComboBorder}" Thickness="2"/>
+                        <ContentPresenter behaviors:ClosedDropdownLabelBehavior.IsEnabled="True" IsHitTestVisible="False"
                                           Content="{TemplateBinding SelectionBoxItem}"
                                           ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                           ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                          Margin="10,0,34,0"
+
                                           VerticalAlignment="Center"
-                                          HorizontalAlignment="Left"/>
+                                          HorizontalAlignment="Stretch">
+                            <ContentPresenter.Margin>
+                                <MultiBinding Converter="{x:Static conv:ComboBoxContentInsetConverter.Instance}">
+                                    <Binding Path="Padding" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="BorderThickness" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="IsEditable" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                </MultiBinding>
+                            </ContentPresenter.Margin>
+                        </ContentPresenter>
                         <ToggleButton x:Name="DropDownToggle"
-                                      Width="34"
-                                      HorizontalAlignment="Right"
+                                      HorizontalAlignment="Stretch"
                                       Focusable="False"
                                       Background="Transparent"
                                       BorderThickness="0"
@@ -459,27 +513,27 @@
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
                                     <Border Background="Transparent">
-                                        <icons:AppIcon x:Name="Chevron"
-                                                       Kind="ChevronDown"
-                                                       Width="12"
-                                                       Height="12"
-                                                       Foreground="{DynamicResource TextColorSecondary}"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"
-                                                       RenderTransformOrigin="0.5,0.5">
-                                            <icons:AppIcon.RenderTransform>
-                                                <RotateTransform Angle="0"/>
-                                            </icons:AppIcon.RenderTransform>
-                                        </icons:AppIcon>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="32"/>
+                                            </Grid.ColumnDefinitions>
+                                            <icons:AppIcon x:Name="Chevron" behaviors:ControlDetailMotionBehavior.IsExpanded="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}"
+                                                           Kind="ChevronDown"
+                                                           Width="12"
+                                                           Height="12"
+                                                           Foreground="{DynamicResource TextColorSecondary}"
+                                                           Grid.Column="1"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           RenderTransformOrigin="0.5,0.5">
+                                                <icons:AppIcon.RenderTransform>
+                                                    <RotateTransform Angle="0"/>
+                                                </icons:AppIcon.RenderTransform>
+                                            </icons:AppIcon>
+                                        </Grid>
                                     </Border>
                                     <ControlTemplate.Triggers>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="Chevron" Property="RenderTransform">
-                                                <Setter.Value>
-                                                    <RotateTransform Angle="180"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </ToggleButton.Template>
@@ -493,8 +547,7 @@
                                AllowsTransparency="True"
                                Focusable="False"
                                PopupAnimation="None">
-                            <Border Background="Transparent"
-                                    Padding="32"
+                            <Border Padding="32"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
@@ -506,7 +559,7 @@
                                             CornerRadius="{StaticResource Radius.Control}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Control}"
@@ -520,20 +573,21 @@
                                                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                             </ScrollViewer>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -541,19 +595,25 @@
         </Setter>
     </Style>
 
+    <!-- Preserve the named role while using the same selector face on inset and raised hosts. -->
+    <Style x:Key="InsetComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource ChromeComboBoxStyle}"/>
+
     <Style TargetType="{x:Type ComboBoxItem}">
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
-        <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
+        <Setter Property="FontSize" Value="{Binding FontSize, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+        <Setter Property="MinHeight" Value="{Binding MinHeight, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Padding" Value="10,7"/>
+        <Setter Property="Padding" Value="10,6"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ComboBoxItem}">
-                    <Border x:Name="ItemBorder"
+                    <Border x:Name="ItemBorder" behaviors:StateSurfaceMotionBehavior.IsEnabled="True"
+                                behaviors:StateSurfaceMotionBehavior.ActiveState="{Binding IsHighlighted, RelativeSource={RelativeSource TemplatedParent}}"
+                                behaviors:StateSurfaceMotionBehavior.IsSelected="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
@@ -561,16 +621,10 @@
                             Padding="{TemplateBinding Padding}"
                             Margin="2,1"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                        <ContentPresenter behaviors:DropdownLabelBehavior.IsEnabled="True" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource DropdownItemHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
@@ -580,21 +634,22 @@
         </Setter>
     </Style>
 
-    <!-- Feature toolbar chrome = Caption; forms / dialogs / menus stay on default ComboBox Body. -->
+    <!-- Toolbar dropdowns use 14 DIP / 32 DIP; forms use 14 DIP / 36 DIP. -->
     <Style x:Key="FeatureToolbarComboBoxItemStyle" TargetType="{x:Type ComboBoxItem}" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
-        <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
     </Style>
 
     <Style x:Key="FeatureToolbarComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource {x:Type ComboBox}}">
-        <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Toolbar}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource FeatureToolbarComboBoxItemStyle}"/>
     </Style>
 
     <!-- Closed display: SelectedItem.DisplayName (ItemTemplate may include action buttons). -->
     <Style x:Key="SetSelectorComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource FeatureToolbarComboBoxStyle}">
-        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="Padding" Value="{StaticResource Field.ContentPadding}"/>
         <Setter Property="MinHeight" Value="32"/>
-        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -610,21 +665,23 @@
                                       BorderThickness="{TemplateBinding BorderThickness}"
                                       Foreground="{TemplateBinding Foreground}"
                                       Padding="{TemplateBinding Padding}"/>
-                        <Border x:Name="FocusRing"
-                                BorderBrush="Transparent"
-                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="Transparent"
-                                IsHitTestVisible="False"
-                                SnapsToDevicePixels="True"/>
+                        <controls:AccentRim x:Name="FocusRing" Surface="{Binding ElementName=ToggleButton}" Thickness="2"/>
                         <TextBlock IsHitTestVisible="False"
                                    Text="{Binding SelectedItem.DisplayName, RelativeSource={RelativeSource TemplatedParent}, FallbackValue=''}"
-                                   Margin="10,0,30,0"
-                                   HorizontalAlignment="Center"
+
+                                   HorizontalAlignment="Left"
                                    VerticalAlignment="Center"
                                    TextAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
-                                   Foreground="{TemplateBinding Foreground}"/>
+                                   Foreground="{TemplateBinding Foreground}">
+                        <TextBlock.Margin>
+                            <MultiBinding Converter="{x:Static conv:ComboBoxContentInsetConverter.Instance}">
+                                <Binding Path="Padding" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                <Binding Path="BorderThickness" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    <Binding Path="IsEditable" RelativeSource="{RelativeSource TemplatedParent}"/>
+                            </MultiBinding>
+                        </TextBlock.Margin>
+                    </TextBlock>
                         <Popup x:Name="PART_Popup"
                                Placement="Bottom"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
@@ -636,8 +693,7 @@
                                PopupAnimation="None">
                             <!-- Padding only for shadow falloff; MinWidth on the card (not shell) keeps left edge aligned.
                                  Shadow plate is a sibling so list text is not rasterized by DropShadowEffect. -->
-                            <Border Background="Transparent"
-                                    Padding="32"
+                            <Border Padding="32"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
@@ -649,7 +705,7 @@
                                             CornerRadius="{StaticResource Radius.Control}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Control}"
@@ -663,17 +719,17 @@
                                                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                             </ScrollViewer>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -692,38 +748,46 @@
         <Setter Property="Padding" Value="6,2"/>
     </Style>
 
-    <!-- Closed display: Window.LinkedNoteButtonText (null selection shows localized "None"). -->
-    <Style x:Key="LinkedNoteComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource ChromeComboBoxStyle}">
-        <Setter Property="MinWidth" Value="160"/>
-        <Setter Property="MaxWidth" Value="240"/>
+    <!-- Link controls share density and insets; selection belongs to the ComboBox itself. -->
+    <Style x:Key="LinkedNoteComboBoxStyle" TargetType="{x:Type ComboBox}" BasedOn="{StaticResource FeatureToolbarComboBoxStyle}">
+        <Setter Property="ToolTip" Value="{Binding SelectedItem.Title, RelativeSource={RelativeSource Self}}"/>
+        <Setter Property="Width" Value="{StaticResource Control.Width.LinkedNote}"/>
+        <Setter Property="Height" Value="{StaticResource Control.Height.Toolbar}"/>
         <Setter Property="Margin" Value="0,0,8,0"/>
-        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Padding" Value="{StaticResource Field.ContentPadding}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ComboBox}">
                     <Grid SnapsToDevicePixels="True">
-                        <Border x:Name="ComboBorder"
+                        <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Neutral" x:Name="ComboBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Control}"
                                 SnapsToDevicePixels="True"/>
-                        <Border x:Name="FocusRing"
-                                BorderBrush="Transparent"
-                                BorderThickness="{StaticResource Field.FocusBorderThickness}"
-                                CornerRadius="{StaticResource Radius.Control}"
-                                Background="Transparent"
-                                IsHitTestVisible="False"
-                                SnapsToDevicePixels="True"/>
-                        <TextBlock IsHitTestVisible="False"
-                                   Text="{Binding LinkedNoteButtonText, RelativeSource={RelativeSource AncestorType=Window}}"
-                                   Margin="10,0,34,0"
-                                   VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"
-                                   Foreground="{TemplateBinding Foreground}"/>
+                        <controls:AccentRim x:Name="FocusRing" Surface="{Binding ElementName=ComboBorder}" Thickness="2"/>
+                        <Grid Margin="{TemplateBinding Padding}" IsHitTestVisible="False">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="18"/>
+                            </Grid.ColumnDefinitions>
+                            <icons:AppIcon Kind="Link" Width="16" Height="16" Margin="0,0,8,0"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource AccentPrimarySubtleForeground}"/>
+                            <TextBlock x:Name="LinkedNoteLabel" Grid.Column="1"
+                                       Text="{Binding SelectedItem.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                            <Border Grid.Column="2" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <icons:AppIcon x:Name="Chevron" Kind="ChevronDown" Width="12" Height="12"
+                                               behaviors:ControlDetailMotionBehavior.IsExpanded="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                               Foreground="{DynamicResource TextColorSecondary}" RenderTransformOrigin="0.5,0.5">
+                                    <icons:AppIcon.RenderTransform><RotateTransform Angle="0"/></icons:AppIcon.RenderTransform>
+                                </icons:AppIcon>
+                            </Border>
+                        </Grid>
                         <ToggleButton x:Name="DropDownToggle"
-                                      Width="34"
-                                      HorizontalAlignment="Right"
+                                      HorizontalAlignment="Stretch"
                                       Focusable="False"
                                       Background="Transparent"
                                       BorderThickness="0"
@@ -731,29 +795,7 @@
                                       ClickMode="Press">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
-                                    <Border Background="Transparent">
-                                        <icons:AppIcon x:Name="Chevron"
-                                                       Kind="ChevronDown"
-                                                       Width="12"
-                                                       Height="12"
-                                                       Foreground="{DynamicResource TextColorSecondary}"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"
-                                                       RenderTransformOrigin="0.5,0.5">
-                                            <icons:AppIcon.RenderTransform>
-                                                <RotateTransform Angle="0"/>
-                                            </icons:AppIcon.RenderTransform>
-                                        </icons:AppIcon>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="Chevron" Property="RenderTransform">
-                                                <Setter.Value>
-                                                    <RotateTransform Angle="180"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
+                                    <Border Background="Transparent"/>
                                 </ControlTemplate>
                             </ToggleButton.Template>
                         </ToggleButton>
@@ -766,8 +808,7 @@
                                AllowsTransparency="True"
                                Focusable="False"
                                PopupAnimation="None">
-                            <Border Background="Transparent"
-                                    Padding="32"
+                            <Border Padding="32"
                                     ClipToBounds="False">
                                 <Grid HorizontalAlignment="Left"
                                       UseLayoutRounding="True"
@@ -779,7 +820,7 @@
                                             CornerRadius="{StaticResource Radius.Control}"
                                             IsHitTestVisible="False"
                                             Effect="{StaticResource Elevation.Popup}"/>
-                                    <Border Background="{DynamicResource CardBackground}"
+                                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
                                             BorderBrush="{DynamicResource PopupBorder}"
                                             BorderThickness="1"
                                             CornerRadius="{StaticResource Radius.Control}"
@@ -793,20 +834,24 @@
                                                 <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                             </ScrollViewer>
                                         </Border>
-                                    </Border>
+                                    </controls:SurfaceMaterialBorder>
                                 </Grid>
                             </Border>
                         </Popup>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="SelectedItem" Value="{x:Null}">
+                            <Setter TargetName="LinkedNoteLabel" Property="Text" Value="{Binding [QuizLinkedNoteNone], Source={StaticResource Loc}}"/>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
+                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
-                            <Setter TargetName="FocusRing" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+                            <Setter TargetName="ComboBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
+                            <Setter TargetName="FocusRing" Property="IsActive" Value="True"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -814,27 +859,59 @@
         </Setter>
     </Style>
 
-    <!-- Shared chrome for QuizLibrary / FlashcardCombine twin windows. -->
-    <Style x:Key="FeatureCombinePanelStyle" TargetType="Border" BasedOn="{StaticResource ChromePanelBorderStyle}">
-        <Setter Property="Padding" Value="14"/>
-        <Setter Property="Margin" Value="0,0,0,10"/>
+    <!-- The document tab and title/toolbar area are one chrome group when hosted. -->
+    <Style x:Key="EditorChromeStyle" TargetType="Border">
+        <Setter Property="behaviors:CommandLightBehavior.IsEnabled" Value="True"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
+        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
+        <Setter Property="Margin" Value="24,16,24,4"/>
+        <Setter Property="Padding" Value="12"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Style.Triggers>
+            <Trigger Property="controls:EditorChromeContext.IsTabbed" Value="True">
+                <Setter Property="Margin" Value="24,0,24,4"/>
+                <Setter Property="CornerRadius" Value="14"/>
+                <Setter Property="controls:SurfaceMaterial.OpenTop" Value="True"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
+    <!-- Integrated workspaces: headings/actions belong to the background; content earns a face. -->
+    <Style x:Key="WorkspaceHeadingStyle" TargetType="Border">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="24,20,24,14"/>
+    </Style>
+    <Style x:Key="WorkspaceFooterStyle" TargetType="Border">
+        <Setter Property="behaviors:CommandLightBehavior.IsScope" Value="True"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="24,14,24,18"/>
+    </Style>
+    <Style x:Key="WorkspaceSectionStyle" TargetType="Border">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
+        <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Card}"/>
+        <Setter Property="Padding" Value="20,18"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+
+    <!-- Shared chrome for QuizLibrary / FlashcardCombine twin windows. -->
     <Style x:Key="FeatureCombineTextBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
-        <Setter Property="MinHeight" Value="34"/>
-        <Setter Property="Padding" Value="6,0"/>
+        <Setter Property="Background" Value="{DynamicResource InputSurfaceInset}"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Form}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
-    <Style x:Key="FeatureCombineOptionCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource {x:Type CheckBox}}">
+    <Style x:Key="FeatureCombineOptionCheckBoxStyle" TargetType="{x:Type CheckBox}" BasedOn="{StaticResource FormCheckBoxStyle}">
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
         <Setter Property="Margin" Value="0,0,0,6"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
-    <!-- Level 4 D-lite: rest S; selected A 2px (library/combine list rows).
-         Elevation.Field lives on a sibling plate at call sites — not on this border (wraps titles/meta). -->
+    <!-- Dense collection rows stay flat; selection paints a 2 DIP rim without moving content. -->
     <Style x:Key="FeatureCombineItemBorderStyle" TargetType="Border">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
         <Setter Property="Background" Value="{DynamicResource CardBackground}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -843,15 +920,127 @@
         <Setter Property="Margin" Value="0"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Effect" Value="{x:Null}"/>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{DynamicResource HoverBackground}"/>
-            </Trigger>
-            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
-                <Setter Property="BorderThickness" Value="2"/>
-            </DataTrigger>
-        </Style.Triggers>
+        <Setter Property="behaviors:StateSurfaceMotionBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:StateSurfaceMotionBehavior.SelectionThickness" Value="2"/>
+        <Setter Property="behaviors:StateSurfaceMotionBehavior.IsSelected" Value="{Binding IsSelected}"/>
+    </Style>
+    <!-- A slider never animates its value: feedback belongs to the grabber. -->
+    <ControlTemplate x:Key="ModernSliderThumbTemplate" TargetType="Thumb">
+        <Grid Width="18" Height="18">
+            <Border x:Name="ThumbFace" Width="14" Height="14" CornerRadius="7"
+                    Background="{DynamicResource SliderThumbBackground}" BorderBrush="{DynamicResource SliderThumbBorder}"
+                    BorderThickness="2" RenderTransformOrigin="0.5,0.5" Effect="{StaticResource Elevation.Thumb}"/>
+        </Grid>
+    </ControlTemplate>
+    <ControlTemplate x:Key="ModernSliderTemplate" TargetType="Slider">
+        <Grid Margin="2,0">
+            <Border Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{DynamicResource SliderTrackBackground}"/>
+            <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Data" x:Name="ValueFill" Height="4" Width="0" CornerRadius="2" VerticalAlignment="Center"
+                    HorizontalAlignment="Left" Background="{DynamicResource AccentPrimary}" IsHitTestVisible="False"/>
+            <Track x:Name="PART_Track" Focusable="False">
+                <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+                <Track.Thumb><Thumb Template="{StaticResource ModernSliderThumbTemplate}" VerticalAlignment="Center"/></Track.Thumb>
+            </Track>
+        </Grid>
+    </ControlTemplate>
+    <Style x:Key="ModernSliderStyle" TargetType="Slider">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="behaviors:SliderSurfaceBehavior.IsEnabled" Value="True"/>
+        <Setter Property="Template" Value="{StaticResource ModernSliderTemplate}"/>
+        <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger></Style.Triggers>
+    </Style>
+    <!-- Hue is already a value track; preserve its spectrum rather than covering it. -->
+    <Style x:Key="HueSliderStyle" TargetType="Slider" BasedOn="{StaticResource ModernSliderStyle}">
+        <Setter Property="Height" Value="18"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider">
+            <Grid Margin="2,0"><Track x:Name="PART_Track" Focusable="False">
+                <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+                <Track.Thumb><Thumb Template="{StaticResource ModernSliderThumbTemplate}" VerticalAlignment="Center"/></Track.Thumb>
+            </Track></Grid>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+
+    <!-- Immediate preferences remain CheckBoxes, including native Space/automation and routed events. -->
+    <Style x:Key="SettingsSwitchStyle" TargetType="CheckBox">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Form}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="ContentTemplate"><Setter.Value><DataTemplate>
+            <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+        </DataTemplate></Setter.Value></Setter>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <ContentPresenter HorizontalAlignment="Left" Margin="0,0,16,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                <Grid Background="Transparent" Grid.Column="1" Width="40" Height="22" VerticalAlignment="Center">
+                    <Border x:Name="SwitchTrack" CornerRadius="11" Background="{DynamicResource SliderTrackBackground}"/>
+                    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Marker" controls:SurfaceMaterial.Foreground="{DynamicResource AccentPrimaryForeground}" x:Name="SwitchOnTrack" CornerRadius="11" Background="{DynamicResource AccentPrimary}" Opacity="0"
+                            behaviors:ControlDetailMotionBehavior.IsLit="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}"/>
+                    <Border x:Name="SwitchThumb" Width="16" Height="16" Margin="3,0,0,0" HorizontalAlignment="Left" CornerRadius="8"
+                            Background="{DynamicResource AccentPrimaryForeground}"
+                            behaviors:ControlDetailMotionBehavior.IsOn="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}}"/>
+                    <controls:AccentRim x:Name="SwitchFocus" Surface="{Binding ElementName=SwitchTrack}" Thickness="2"/>
+                </Grid>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="SwitchFocus" Property="IsActive" Value="True"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="SwitchTrack" Property="Background" Value="{DynamicResource SwitchTrackHoverBackground}"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+
+    <Style x:Key="StateListBoxItemStyle" TargetType="ListBoxItem">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="MinHeight" Value="32"/><Setter Property="Padding" Value="10,6"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="StateRow" Background="Transparent" CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}"
+                    behaviors:StateSurfaceMotionBehavior.IsEnabled="True"
+                    behaviors:StateSurfaceMotionBehavior.IsSelected="{Binding IsSelected, RelativeSource={RelativeSource TemplatedParent}}"
+                    behaviors:StateSurfaceMotionBehavior.SelectionThickness="2">
+                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="StateRow" Property="behaviors:StateSurfaceMotionBehavior.ActiveState" Value="True"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <!-- Plain lists inherit row feedback too; eligibility does not require a feature style. -->
+    <Style TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource StateListBoxItemStyle}"/>
+    <!-- Native list semantics and recycling, with app-owned viewport chrome. -->
+    <Style TargetType="ListBox">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBox">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}">
+                <ScrollViewer x:Name="PART_ScrollViewer" Focusable="False" Padding="{TemplateBinding Padding}"
+                              CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                              VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                              HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}">
+                    <ItemsPresenter/>
+                </ScrollViewer>
+            </Border>
+        </ControlTemplate></Setter.Value></Setter>
     </Style>
 </ResourceDictionary>

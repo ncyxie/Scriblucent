@@ -1,0 +1,42 @@
+﻿<UserControl x:Class="Scriblucent.Controls.CollectionSelectionDock"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:controls="clr-namespace:Scriblucent.Controls" xmlns:icons="clr-namespace:Scriblucent.Icons"
+ Focusable="True" HorizontalAlignment="Center" UseLayoutRounding="True" SnapsToDevicePixels="True">
+ <UserControl.Resources>
+  <Style x:Key="DockIcon" TargetType="Button" BasedOn="{StaticResource EditorToolIconButtonStyle}">
+   <Setter Property="Width" Value="36"/><Setter Property="Height" Value="36"/>
+   <Setter Property="Margin" Value="0,0,6,0"/><Setter Property="Focusable" Value="True"/>
+  </Style>
+ </UserControl.Resources>
+ <Grid Margin="0">
+  <controls:BakedElevationLayer Kind="ButtonCard" IsHitTestVisible="False"/>
+  <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}"
+    CornerRadius="{DynamicResource Radius.Card}" Padding="6">
+   <StackPanel>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+     <Button x:Name="AllButton" Style="{DynamicResource EditorToolButtonBaseStyle}" Height="36" Padding="6,0,10,0" Margin="0,0,8,0"
+       Focusable="True" controls:SurfaceMaterial.Kind="Tinted" Background="{DynamicResource AccentPrimarySubtle}" Click="AllClick">
+      <StackPanel Orientation="Horizontal">
+       <controls:CollectionSelectionToggle x:Name="AllToggle" IsHitTestVisible="False" Focusable="False" Margin="0,0,6,0"/>
+       <StackPanel VerticalAlignment="Center">
+        <TextBlock x:Name="CountText" FontSize="{DynamicResource Type.Control.Toolbar}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+        <TextBlock x:Name="TotalText" FontSize="{DynamicResource Type.Caption}" Foreground="{DynamicResource TextColorSecondary}"/>
+       </StackPanel>
+      </StackPanel>
+     </Button>
+     <Button x:Name="DuplicateButton" Style="{DynamicResource EditorToolButtonBaseStyle}" Height="36" Padding="10,0" Margin="0,0,6,0" Focusable="True" Click="DuplicateClick">
+      <StackPanel Orientation="Horizontal"><icons:AppIcon x:Name="PrimaryIcon" Kind="Duplicate" Width="16" Height="16"/><TextBlock x:Name="DuplicateLabel" Margin="6,0,0,0" VerticalAlignment="Center" FontSize="{DynamicResource Type.Control.Toolbar}"/></StackPanel>
+     </Button>
+     <Button x:Name="SecondaryButton" Visibility="Collapsed" Style="{StaticResource DockIcon}" Click="SecondaryClick"/>
+     <Button x:Name="DeleteButton" Focusable="True" Width="36" Height="36" Margin="0,0,6,0" Style="{DynamicResource EditorDangerToolButtonStyle}" Content="{icons:Icon Delete, Size=16}" Click="DeleteClick"/>
+     <Button x:Name="MoreButton" Style="{StaticResource DockIcon}" Content="{icons:Icon MoreVertical, Size=16}" Click="MoreClick"/>
+     <Border Margin="1,3,7,3" Width="1" Background="{DynamicResource SidebarSeparator}"/>
+     <Button x:Name="DoneButton" Style="{StaticResource DockIcon}" Margin="0" Content="{icons:Icon Close, Size=16}" Click="DoneClick"/>
+    </StackPanel>
+    <Button x:Name="CancelOperationButton" Visibility="Collapsed" Style="{DynamicResource EditorToolButtonBaseStyle}" HorizontalAlignment="Right" Padding="8,4" Click="CancelOperationClick"/>
+    <TextBlock x:Name="StatusText" Visibility="Collapsed" TextWrapping="Wrap" MaxWidth="360" MaxHeight="48" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" Margin="8,6,8,2"
+      FontSize="{DynamicResource Type.Caption}" Foreground="{DynamicResource TextColorSecondary}"/>
+   </StackPanel>
+  </controls:SurfaceMaterialBorder>
+ </Grid>
+</UserControl>

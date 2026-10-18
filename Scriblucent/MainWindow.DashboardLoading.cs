@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Scriblucent.Animations;
 using Scriblucent.Controls;
@@ -11,15 +10,13 @@ namespace Scriblucent;
 
 public partial class MainWindow
 {
-    private const int DashboardWaveMs = DashboardLoadingOverlay.WaveDurationMs;
-    private readonly Stopwatch _dashboardLoadingClock = new();
+    private readonly Stopwatch _dashboardFrameWait = new();
     private string? _loadingDashboard;
     private int _loadingGeneration;
-    private int _loadingFramesWaiting;
     private bool _loadingDashboardViewActivated;
-    private bool _startupLoadingEntrancePending;
+    private bool _loadingHandoffStarted;
     private EventHandler? _loadingRenderHandler;
-    private DispatcherTimer? _loadingFinishTimer;
+    private DispatcherOperation? _loadingFinishOperation;
 
     private bool IsLoadingDashboardActive => _loadingDashboard is not null;
 
@@ -55,70 +52,27 @@ public partial class MainWindow
 
     private void BeginDashboardLoading(MainViewModel vm)
     {
-        var enterOverCurrentDashboard = IsLoaded
-            && !UiMotion.PrefersReducedMotion
-            && !string.Equals(_lastActiveDashboard, vm.ActiveDashboard, StringComparison.Ordinal);
-        var initialOpacity = enterOverCurrentDashboard
-            ? DashboardLoadingLayer.Visibility == Visibility.Visible
-                ? DashboardLoadingLayer.Opacity : 0
-            : 1;
-
+        SurfaceMotion.Stop(DashboardLoadingLayer, MotionChannel.Presence);
         CancelLoadingCallbacks();
         _loadingGeneration++;
         _loadingDashboard = vm.ActiveDashboard;
-        _loadingFramesWaiting = 0;
-        _loadingDashboardViewActivated = !enterOverCurrentDashboard;
-        _startupLoadingEntrancePending = !IsLoaded && !UiMotion.PrefersReducedMotion;
-        _dashboardLoadingClock.Restart();
+        _loadingDashboardViewActivated = !IsLoaded || string.Equals(_lastActiveDashboard, vm.ActiveDashboard, StringComparison.Ordinal);
+        _loadingHandoffStarted = false;
         DashboardLoadFailurePanel.Visibility = Visibility.Collapsed;
         DashboardLoadingShell.Visibility = Visibility.Visible;
         DashboardLoadingShell.SetLayout(BuildDashboardSkeletonLayout(vm));
-        DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
-        DashboardLoadingShell.Opacity = _startupLoadingEntrancePending ? 0 : 1;
-        DashboardLoadingLayer.BeginAnimation(UIElement.OpacityProperty, null);
-        DashboardLoadingLayer.Opacity = initialOpacity;
+        DashboardLoadingShell.Opacity = 1;
+        // Loading is present before Show/first paint. A delayed fade-in exposes the unfinished page.
+        DashboardLoadingLayer.Opacity = 1;
         DashboardLoadingLayer.Visibility = Visibility.Visible;
-        DashboardLoadingShell.StartWave(UiMotion.PrefersReducedMotion);
-    }
-
-    private void StartStartupLoadingEntrance()
-    {
-        if (!_startupLoadingEntrancePending || _loadingDashboard is null)
-            return;
-
-        _startupLoadingEntrancePending = false;
-        var generation = _loadingGeneration;
-        var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260))
-        {
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-        };
-        fade.Completed += (_, _) =>
-        {
-            if (generation != _loadingGeneration)
-                return;
-            DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
-            DashboardLoadingShell.Opacity = 1;
-        };
-        DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, fade);
+        DashboardLoadingLayer.IsHitTestVisible = true;
+        DashboardLoadingShell.StartWave();
     }
 
     /// <summary>Cover the outgoing page before replacing its content with the loading page.</summary>
     private void EnterDashboardLoading(string dashboard)
     {
-        var generation = _loadingGeneration;
-        if (UiMotion.PrefersReducedMotion || DashboardLoadingLayer.Opacity >= 0.99)
-        {
-            ActivateDashboardUnderLoadingShell(dashboard, generation);
-            return;
-        }
-
-        var fade = new DoubleAnimation(DashboardLoadingLayer.Opacity, 1,
-            TimeSpan.FromMilliseconds(220))
-        {
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-        };
-        fade.Completed += (_, _) => ActivateDashboardUnderLoadingShell(dashboard, generation);
-        DashboardLoadingLayer.BeginAnimation(UIElement.OpacityProperty, fade);
+        ActivateDashboardUnderLoadingShell(dashboard, _loadingGeneration);
     }
 
     private void ActivateDashboardUnderLoadingShell(string dashboard, int generation)
@@ -128,8 +82,6 @@ public partial class MainWindow
             || !string.Equals(_observedViewModel?.ActiveDashboard, dashboard, StringComparison.Ordinal))
             return;
 
-        DashboardLoadingLayer.BeginAnimation(UIElement.OpacityProperty, null);
-        DashboardLoadingLayer.Opacity = 1;
         SetDashboardViewImmediate(dashboard);
         _loadingDashboardViewActivated = true;
         foreach (var view in AllDashboardViews())
@@ -141,8 +93,9 @@ public partial class MainWindow
         Dispatcher.BeginInvoke(EnsureAllListingDashboardsInteractive, DispatcherPriority.Loaded);
     }
 
-    private static DashboardLoadingOverlay.Layout BuildDashboardSkeletonLayout(MainViewModel vm)
+    private DashboardLoadingOverlay.Layout BuildDashboardSkeletonLayout(MainViewModel vm)
     {
+        double Metric(string key, double fallback) => TryFindResource(key) is double value ? value : fallback;
         var common = new DashboardLoadingOverlay.Layout
         {
             ShowRecent = vm.IsRecentSectionVisible,
@@ -164,8 +117,8 @@ public partial class MainWindow
                 ShowUngrouped = vm.IsUngroupedSectionVisible,
                 ExpandUngrouped = vm.IsUngroupedSectionExpanded,
                 GroupsFirst = vm.IsGroupsFirst,
-                CardWidth = 244,
-                CardHeight = 164
+                CardWidth = DashboardVirtualizedNoteCardGrid.GridCellWidth,
+                CardHeight = DashboardVirtualizedNoteCardGrid.GridCellHeight
             },
             DashboardFlashcards => common with
             {
@@ -177,8 +130,8 @@ public partial class MainWindow
                 ShowUngrouped = vm.IsFlashcardDashboardUngroupedSectionVisible,
                 ExpandUngrouped = vm.IsFlashcardDashboardUngroupedSectionExpanded,
                 GroupsFirst = vm.IsFlashcardDashboardGroupsFirst,
-                CardWidth = 330,
-                CardHeight = 204
+                CardWidth = Metric("Dashboard.UngroupedCardWidth", 330),
+                CardHeight = Metric("Dashboard.UngroupedCardHeight", 204)
             },
             DashboardQuizzes => common with
             {
@@ -190,8 +143,8 @@ public partial class MainWindow
                 ShowUngrouped = vm.IsQuizDashboardUngroupedSectionVisible,
                 ExpandUngrouped = vm.IsQuizDashboardUngroupedSectionExpanded,
                 GroupsFirst = vm.IsQuizDashboardGroupsFirst,
-                CardWidth = 330,
-                CardHeight = 194
+                CardWidth = Metric("Dashboard.UngroupedCardWidth", 330),
+                CardHeight = Metric("Dashboard.UngroupedCardHeight", 204)
             },
             DashboardMindMaps => common with
             {
@@ -203,8 +156,8 @@ public partial class MainWindow
                 ShowUngrouped = vm.IsMindMapDashboardUngroupedSectionVisible,
                 ExpandUngrouped = vm.IsMindMapDashboardUngroupedSectionExpanded,
                 GroupsFirst = vm.IsMindMapDashboardGroupsFirst,
-                CardWidth = 360,
-                CardHeight = 224
+                CardWidth = Metric("Dashboard.MindMapUngroupedCardWidth", 360),
+                CardHeight = Metric("Dashboard.MindMapUngroupedCardHeight", 224)
             },
             _ => common with
             {
@@ -214,33 +167,33 @@ public partial class MainWindow
                 ShowUngrouped = true,
                 ExpandUngrouped = true,
                 GroupsFirst = true,
-                CardWidth = 244,
-                CardHeight = 164
+                CardWidth = DashboardVirtualizedNoteCardGrid.GridCellWidth,
+                CardHeight = DashboardVirtualizedNoteCardGrid.GridCellHeight
             }
         };
     }
 
     private void WaitForDashboardFirstFrame()
     {
-        if (_loadingRenderHandler is not null || _loadingFinishTimer is not null)
+        if (_loadingHandoffStarted || _loadingRenderHandler is not null || _loadingFinishOperation is not null)
             return;
-
+        if (!IsLoaded) { CancelDashboardLoading(); return; }
+        _dashboardFrameWait.Restart();
         var generation = _loadingGeneration;
         _loadingRenderHandler = (_, _) =>
         {
-            if (generation != _loadingGeneration || _loadingDashboard is null)
+            if (generation != _loadingGeneration || _loadingDashboard is null || !_loadingDashboardViewActivated)
                 return;
-
-            if (!_loadingDashboardViewActivated)
+            if (!IsVisibleDashboardViewportRealized() && _dashboardFrameWait.Elapsed < TimeSpan.FromSeconds(2))
                 return;
-
-            if (!IsVisibleDashboardViewportRealized() && ++_loadingFramesWaiting < 120)
-                return;
-
             if (_loadingRenderHandler is not null)
                 CompositionTarget.Rendering -= _loadingRenderHandler;
             _loadingRenderHandler = null;
-            Dispatcher.BeginInvoke(() => FinishDashboardLoadingAfterWave(generation), DispatcherPriority.Loaded);
+            _loadingFinishOperation = Dispatcher.BeginInvoke(() =>
+            {
+                _loadingFinishOperation = null;
+                FinishDashboardLoading(generation);
+            }, DispatcherPriority.Loaded);
         };
         CompositionTarget.Rendering += _loadingRenderHandler;
     }
@@ -256,6 +209,7 @@ public partial class MainWindow
 
     private bool AreVisibleCardGridsRealized(DependencyObject node)
     {
+        if (node is UIElement { IsVisible: false }) return true;
         if (node is DashboardVirtualizedCardGrid { HasItems: true } grid
             && grid.IsVisible && IsInDashboardViewport(grid) && !grid.HasRealizedContainers())
             return false;
@@ -290,69 +244,43 @@ public partial class MainWindow
         }
     }
 
-    private void FinishDashboardLoadingAfterWave(int generation)
+    private void FinishDashboardLoading(int generation)
     {
         if (generation != _loadingGeneration || _loadingDashboard is null
             || _observedViewModel is not { IsActiveDashboardReady: true } vm
-            || !string.Equals(vm.ActiveDashboard, _loadingDashboard, StringComparison.Ordinal))
-            return;
-
-        var remaining = UiMotion.PrefersReducedMotion ? 0 :
-            DashboardWaveMs - (int)(_dashboardLoadingClock.ElapsedMilliseconds % DashboardWaveMs);
-        if (!UiMotion.PrefersReducedMotion && remaining < 300)
-            remaining += DashboardWaveMs;
-        _loadingFinishTimer = new DispatcherTimer(DispatcherPriority.Normal)
-        {
-            Interval = TimeSpan.FromMilliseconds(Math.Max(1, remaining))
-        };
-        _loadingFinishTimer.Tick += (_, _) =>
-        {
-            _loadingFinishTimer?.Stop();
-            _loadingFinishTimer = null;
-            FadeDashboardLoadingShell(generation);
-        };
-        _loadingFinishTimer.Start();
+            || !string.Equals(vm.ActiveDashboard, _loadingDashboard, StringComparison.Ordinal)) return;
+        FadeDashboardLoadingShell(generation);
     }
 
     private void FadeDashboardLoadingShell(int generation)
     {
-        if (generation != _loadingGeneration || _loadingDashboard is null)
-            return;
-
+        if (generation != _loadingGeneration || _loadingDashboard is null || _loadingHandoffStarted) return;
+        _loadingHandoffStarted = true;
+        _dashboardFrameWait.Reset();
         DashboardLoadingShell.StopWave();
-        if (UiMotion.PrefersReducedMotion)
+        // Only the cover dissolves. The hydrated dashboard is already opaque and at rest.
+        EnsureAllDashboardContentHostsRestState();
+        foreach (var scope in Enum.GetValues<Scriblucent.Services.DashboardMotionScope>()) EnsureRecentSectionRestState(scope);
+        SurfaceMotion.Animate(DashboardLoadingLayer, 0, 180, UiMotion.InOutSine, false, () =>
         {
-            CancelDashboardLoading();
-            return;
-        }
-
-        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(420))
-        {
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-        };
-        fade.Completed += (_, _) =>
-        {
-            if (generation == _loadingGeneration)
-                CancelDashboardLoading();
-        };
-        DashboardLoadingLayer.BeginAnimation(UIElement.OpacityProperty, fade);
+            if (generation == _loadingGeneration) CancelDashboardLoading();
+        });
     }
 
     private void CancelDashboardLoading()
     {
+        SurfaceMotion.Stop(DashboardLoadingLayer, MotionChannel.Presence);
         CancelLoadingCallbacks();
         _loadingGeneration++;
         _loadingDashboard = null;
         _loadingDashboardViewActivated = false;
-        _startupLoadingEntrancePending = false;
-        _dashboardLoadingClock.Reset();
+        _loadingHandoffStarted = false;
         DashboardLoadingShell.StopWave();
-        DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
         DashboardLoadingShell.Opacity = 1;
         DashboardLoadingShell.Visibility = Visibility.Visible;
         DashboardLoadFailurePanel.Visibility = Visibility.Collapsed;
-        DashboardLoadingLayer.BeginAnimation(UIElement.OpacityProperty, null);
         DashboardLoadingLayer.Opacity = 1;
+        DashboardLoadingLayer.IsHitTestVisible = false;
         DashboardLoadingLayer.Visibility = Visibility.Collapsed;
     }
 
@@ -363,6 +291,8 @@ public partial class MainWindow
 
         DashboardLoadingShell.Visibility = Visibility.Collapsed;
         DashboardLoadFailurePanel.Visibility = Visibility.Visible;
+        DashboardLoadingLayer.Opacity = 1;
+        DashboardLoadingLayer.IsHitTestVisible = true;
         DashboardLoadingLayer.Visibility = Visibility.Visible;
     }
 
@@ -377,7 +307,8 @@ public partial class MainWindow
         if (_loadingRenderHandler is not null)
             CompositionTarget.Rendering -= _loadingRenderHandler;
         _loadingRenderHandler = null;
-        _loadingFinishTimer?.Stop();
-        _loadingFinishTimer = null;
+        _loadingFinishOperation?.Abort();
+        _loadingFinishOperation = null;
+        _dashboardFrameWait.Reset();
     }
 }

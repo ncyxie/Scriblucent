@@ -68,6 +68,37 @@ public static class SmoothScrollBehavior
     public static bool GetIsEnabled(DependencyObject element)
         => (bool)element.GetValue(IsEnabledProperty);
 
+    /// <summary>Category navigation shares the wheel controller and can be interrupted by normal input.</summary>
+    internal static void ScrollTo(ScrollViewer viewer, double verticalOffset)
+    {
+        SetIsEnabled(viewer, true);
+        var state = GetOrCreateState(viewer);
+        if (state is null) return;
+        StopAnimating(state);
+        SyncFromViewer(state);
+        if (!MotionPolicy.Spatial) { ApplyOffset(state, state.CurrentX, Clamp(verticalOffset, 0, viewer.ScrollableHeight)); return; }
+        state.ProgrammaticTarget = true;
+        StartImpulseTo(state, true, verticalOffset);
+        EnsureAnimating(state);
+    }
+
+    internal static void CancelTarget(ScrollViewer viewer)
+    {
+        if (viewer.GetValue(StateProperty) is not State { ProgrammaticTarget: true } state) return;
+        // WPF queues ScrollTo offsets until layout. Replace the last queued command
+        // with the currently visible offset, so cancellation cannot advance a frame later.
+        var x = viewer.HorizontalOffset; var y = viewer.VerticalOffset;
+        StopAnimating(state); ApplyOffset(state, x, y);
+    }
+
+    /// <summary>End a glide at its visible position before routing a card interaction.</summary>
+    internal static void Interrupt(ScrollViewer viewer)
+    {
+        if (viewer.GetValue(StateProperty) is not State state || !state.ScrollAnimationSessionActive) return;
+        var x = state.CurrentX; var y = state.CurrentY;
+        StopAnimating(state); ApplyOffset(state, x, y);
+    }
+
     internal static void SetExternalDrive(ScrollViewer scrollViewer, bool active)
     {
         if (scrollViewer.GetValue(StateProperty) is State state)
@@ -88,6 +119,7 @@ public static class SmoothScrollBehavior
         public required ScrollViewer ScrollViewer { get; init; }
         public bool IsAttached;
         public bool ExternalDrive;
+        public bool ProgrammaticTarget;
         public double CurrentX;
         public double CurrentY;
         public double ImpulseTargetX;
@@ -105,6 +137,9 @@ public static class SmoothScrollBehavior
         public ScrollChangedEventHandler? ScrollChangedHandler;
         public SizeChangedEventHandler? SizeChangedHandler;
         public RoutedEventHandler? LoadedHandler;
+        public RoutedEventHandler? UnloadedHandler;
+        public Window? OwnerWindow;
+        public EventHandler? OwnerClosedHandler;
         public MouseButtonEventHandler? VerticalBarMouseDownHandler;
         public MouseButtonEventHandler? HorizontalBarMouseDownHandler;
 
@@ -131,11 +166,13 @@ public static class SmoothScrollBehavior
         state.ScrollChangedHandler = (_, args) => OnScrollChanged(state, args);
         state.SizeChangedHandler = (_, _) => OnViewerSizeChanged(state);
         state.LoadedHandler = (_, _) => OnLoaded(state);
+        state.UnloadedHandler = (_, _) => { StopAnimating(state); DetachScrollbarHooks(state); };
 
         scrollViewer.PreviewMouseWheel += state.MouseWheelHandler;
         scrollViewer.ScrollChanged += state.ScrollChangedHandler;
         scrollViewer.SizeChanged += state.SizeChangedHandler;
         scrollViewer.Loaded += state.LoadedHandler;
+        scrollViewer.Unloaded += state.UnloadedHandler;
 
         if (scrollViewer.IsLoaded)
             OnLoaded(state);
@@ -159,6 +196,9 @@ public static class SmoothScrollBehavior
         if (state.LoadedHandler != null)
             scrollViewer.Loaded -= state.LoadedHandler;
 
+        scrollViewer.Unloaded -= state.UnloadedHandler;
+        if (state.OwnerWindow is { } owner) owner.Closed -= state.OwnerClosedHandler;
+        state.OwnerWindow = null;
         DetachScrollbarHooks(state);
 
         foreach (var (bar, handler) in state.ExternalScrollBars)
@@ -170,6 +210,12 @@ public static class SmoothScrollBehavior
 
     private static void OnLoaded(State state)
     {
+        if (Window.GetWindow(state.ScrollViewer) is { } owner && !ReferenceEquals(owner, state.OwnerWindow))
+        {
+            if (state.OwnerWindow is { } previous) previous.Closed -= state.OwnerClosedHandler;
+            state.OwnerWindow = owner;
+            owner.Closed += state.OwnerClosedHandler = (_, _) => StopAnimating(state);
+        }
         SyncFromViewer(state);
         AttachScrollbarHooks(state);
     }
@@ -404,6 +450,7 @@ public static class SmoothScrollBehavior
 
     private static void ApplyWheelDeltas(State state, double deltaX, double deltaY)
     {
+        if (state.ProgrammaticTarget) { StopAnimating(state); SyncFromViewer(state); }
         if (deltaX == 0 && deltaY == 0)
             return;
 
@@ -577,12 +624,13 @@ public static class SmoothScrollBehavior
         if (_renderingHandler == null)
         {
             _renderingHandler = OnRendering;
-            CompositionTarget.Rendering += _renderingHandler;
+            RenderTransitionClock.AddFrameObserver(_renderingHandler);
         }
     }
 
     private static void StopAnimating(State state)
     {
+        state.ProgrammaticTarget = false;
         ActiveStates.Remove(state);
         state.ImpulseActiveX = false;
         state.ImpulseActiveY = false;
@@ -591,7 +639,7 @@ public static class SmoothScrollBehavior
 
         if (ActiveStates.Count == 0 && _renderingHandler != null)
         {
-            CompositionTarget.Rendering -= _renderingHandler;
+            RenderTransitionClock.RemoveFrameObserver(_renderingHandler);
             _renderingHandler = null;
             // Deliberately NOT resetting _lastGlobalRenderingTime here: the frame-diag log
             // must stay continuous across sessions (a reset makes every session's first
@@ -639,7 +687,7 @@ public static class SmoothScrollBehavior
 
         if (ActiveStates.Count == 0 && _renderingHandler != null)
         {
-            CompositionTarget.Rendering -= _renderingHandler;
+            RenderTransitionClock.RemoveFrameObserver(_renderingHandler);
             _renderingHandler = null;
             // Also no reset here (see the StopAnimating comment): the frame-diag stream must
             // stay continuous across sessions, or per-tick wheel sessions never log a frame.
@@ -676,7 +724,7 @@ public static class SmoothScrollBehavior
                 state.CurrentY,
                 state.ImpulseTargetY,
                 smoothing,
-                MaxWheelStep(state.ScrollViewer.ViewportHeight, state.ImpulseTargetY - state.CurrentY, deltaSeconds),
+                state.ProgrammaticTarget ? double.PositiveInfinity : MaxWheelStep(state.ScrollViewer.ViewportHeight, state.ImpulseTargetY - state.CurrentY, deltaSeconds),
                 out state.ImpulseActiveY);
         }
 

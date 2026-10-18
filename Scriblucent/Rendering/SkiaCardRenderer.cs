@@ -23,9 +23,9 @@ internal static class SkiaCardRenderer
     private static readonly object TypefaceGate = new();
     private static readonly Dictionary<string, SKTypeface> Typefaces = new();
 
-    public static SKTypeface GetTypeface(string familyName, int weight = 400)
+    public static SKTypeface GetTypeface(string familyName, int weight = 400, bool italic = false)
     {
-        var key = $"{familyName}|{weight}";
+        var key = $"{familyName}|{weight}|{italic}";
         lock (TypefaceGate)
         {
             if (Typefaces.TryGetValue(key, out var cached))
@@ -35,7 +35,8 @@ internal static class SkiaCardRenderer
             // renders "Segoe UI Variable Text" SemiBold); FromFamilyName(name, style) silently
             // returns the default (Regular) instance, which made the tile titles thinner than
             // the live text they mirror.
-            var style = new SKFontStyle((SKFontStyleWeight)weight, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+            var style = new SKFontStyle((SKFontStyleWeight)weight, SKFontStyleWidth.Normal,
+                italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
             var typeface =
                 SKFontManager.Default.MatchFamily(familyName, style)
                 ?? SKFontManager.Default.MatchFamily("Segoe UI", style)
@@ -83,7 +84,8 @@ internal static class SkiaCardRenderer
 
         Func<SKTypeface, SKShaper> shaperFactory = GetShaper;
 
-        var titleLayout = SkiaTextLayout.Layout(title, textWidth, titleTypeface, 14.5f * scale, 1, fontManager, shaperFactory);
+        // The menu slot becomes the selection slot while picking, matching the live header.
+        var titleLayout = SkiaTextLayout.Layout(title, textWidth - 36 * scale, titleTypeface, 14.5f * scale, 1, fontManager, shaperFactory);
 
         // Match the uniform 164-DIP cell so applying a tile keeps the estimated extent stable.
         // Fit the preview line count into the remaining space.
@@ -122,7 +124,8 @@ internal static class SkiaCardRenderer
         using (var background = new SKPaint { Color = colors.Background, IsAntialias = true })
         {
             var radius = CardCornerRadiusDip * scale;
-            canvas.DrawRoundRect(cardRect, radius, radius, background);
+            SurfaceMaterialRaster.Draw(canvas, cardRect, radius, radius, background, colors.Dark, scale,
+                Scriblucent.Controls.SurfaceMaterialKind.Raised, frameInset: scale);
         }
 
         if (colors.Border.Alpha > 0)
@@ -132,11 +135,15 @@ internal static class SkiaCardRenderer
                 Color = colors.Border,
                 IsAntialias = true,
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = 1
+                StrokeWidth = scale
             };
-            var radius = CardCornerRadiusDip * scale;
-            canvas.DrawRoundRect(cardRect, radius, radius, borderPaint);
+            var radius = (CardCornerRadiusDip + .5f) * scale;
+            var rim = cardRect;
+            rim.Inflate(-borderPaint.StrokeWidth / 2, -borderPaint.StrokeWidth / 2);
+            canvas.DrawRoundRect(rim, Math.Max(0, radius - borderPaint.StrokeWidth / 2), Math.Max(0, radius - borderPaint.StrokeWidth / 2), borderPaint);
         }
+        SurfaceMaterialRaster.LightRaisedFrame(canvas, cardRect, CardCornerRadiusDip, colors.Border, colors.Dark, scale);
+
 
         var contentX = (CardMarginDip + CardPaddingDip) * scale;
         var contentY = (CardMarginDip + CardPaddingDip) * scale;
@@ -153,7 +160,7 @@ internal static class SkiaCardRenderer
             var chipWidth = Math.Min(tagsLayout.MaxIntrinsicWidth + 12 * scale, textWidth);
             var chipRect = SKRect.Create(contentX, contentY, chipWidth, tagsLayout.Height);
             using var chip = new SKPaint { Color = colors.TagBackground, IsAntialias = true };
-            canvas.DrawRoundRect(chipRect, 6 * scale, 6 * scale, chip);
+            SurfaceMaterialRaster.Draw(canvas, chipRect, 6 * scale, 6 * scale, chip, colors.Dark, scale);
             PaintLayout(canvas, tagsLayout, contentX + 6 * scale, contentY, colors.TagText, scale);
         }
 
@@ -234,5 +241,6 @@ internal readonly record struct CardRenderColors(
     SKColor Title,
     SKColor Text,
     SKColor TagBackground,
-    SKColor TagText);
+    SKColor TagText,
+    bool Dark = false);
 

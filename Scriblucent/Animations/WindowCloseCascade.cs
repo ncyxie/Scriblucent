@@ -12,12 +12,17 @@ internal static class WindowCloseCascade
     // in turn instead of tearing down the remaining tree via the OS destroy cascade.
     public static bool TryCloseOwnedWindows(Window owner)
     {
-        foreach (var window in owner.OwnedWindows.Cast<Window>().ToArray())
+        var owned = owner.OwnedWindows.Cast<Window>().ToArray();
+        foreach (var workspace in owned.OfType<EditorWorkspaceWindow>())
+            if (!workspace.PreflightWorkspaceClose()) return false;
+        foreach (var window in owned)
         {
+            if (window is EditorWorkspaceWindow) continue;
             window.Close();
             if (window.IsLoaded)
                 return false;
         }
+        foreach (var workspace in owned.OfType<EditorWorkspaceWindow>()) workspace.CloseAfterPreflight();
 
         return true;
     }

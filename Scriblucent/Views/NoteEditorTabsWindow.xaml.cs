@@ -1,7 +1,8 @@
-using Scriblucent.Animations;
+﻿using Scriblucent.Animations;
 using Scriblucent.Icons;
 using Scriblucent.Models;
 using Scriblucent.ViewModels;
+using Scriblucent.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,25 +13,34 @@ using System.Windows.Media;
 
 namespace Scriblucent;
 
-public partial class NoteEditorTabsWindow : Window
+public partial class EditorWorkspaceWindow : Window
 {
     private sealed class EditorTabState
     {
-        public required Guid DocumentId { get; init; }
-        public required NoteEditorWindow Editor { get; init; }
-        public required NoteCardViewModel NoteViewModel { get; init; }
+        public required EditorSession Session { get; init; }
+        public EditorDocumentKey DocumentId => Session.Key;
         public required TabItem TabItem { get; init; }
-        public required UIElement HostedContent { get; init; }
+        public UIElement HostedContent => Session.Content;
         public required TextBlock TitleTextBlock { get; init; }
         public required Button CloseButton { get; init; }
-        public required Action<NoteDocument> AutoSaveHandler { get; init; }
+        public required Action StateHandler { get; init; }
         public required RoutedEventHandler CloseClickHandler { get; init; }
     }
-
-    private readonly Dictionary<Guid, EditorTabState> _tabsByDocumentId = new();
+    private readonly Dictionary<EditorDocumentKey, EditorTabState> _tabsByDocumentId = new();
+    internal IReadOnlyList<EditorSession> Sessions => _tabsByDocumentId.Values.Select(state => state.Session).ToArray();
+    private readonly System.Windows.Threading.DispatcherTimer _autoSaveTimer;
+    private DateTime _nextAutoSave = DateTime.UtcNow;
+    private int _autoSaveInterval;
+    private bool _autoSaveEnabled;
+    private bool _saving;
+    private bool _autoSaving;
+    private bool _preflighting;
+    private EditorSession? _activeSession;
+    private readonly HashSet<EditorSession> _configuredPopups = new();
+    public bool IsCloseApproved { get; private set; }
+    public event Action<EditorDocumentKind>? CreateRequested;
     private bool _isWindowClosing;
     private bool _skipCloseConfirmation;
-
     private TabItem? _dragTab;
     private bool _isDraggingTab;
     private bool _reorderingTabs;
@@ -41,314 +51,317 @@ public partial class NoteEditorTabsWindow : Window
     private int _dragToIndex;
     private double _dragTabWidth;
 
-    public NoteEditorTabsWindow()
+    public EditorWorkspaceWindow()
     {
         InitializeComponent();
-        Scriblucent.Services.WindowThemeService.Register(this);
-        PreviewKeyDown += NoteEditorTabsWindow_PreviewKeyDown;
-        EditorTabs.SelectionChanged += EditorTabs_SelectionChanged;
+        WindowThemeService.Register(this);
+        PreviewKeyDown += Workspace_PreviewKeyDown;
+        EditorTabs.SelectionChanged += (_, _) => { if (!_isDraggingTab && !_reorderingTabs) ShowSelectedEditor(IsLoaded); };
         Loaded += (_, _) => UiMotion.ConfigurePopupsForWindow(this);
         Closed += (_, _) =>
         {
-            // Safety net: FinalizeWindowClose (the normal "dispose every open tab" path) only
-            // runs via the animated-close callback, which WPF skips entirely under reduced
-            // motion (in-app setting or the Windows "Show animations" accessibility setting) -
-            // see WindowContentEnterHelper.OnWindowClosing. This handler always runs regardless
-            // of that path, so sweep any tabs that weren't already disposed (each tab's own
-            // DisposeHostedEditor() is idempotent, so re-calling it for already-closed tabs is
-            // harmless). Runs synchronously - unlike the per-tab background dispose used for a
-            // single tab closing, the whole window (likely the whole app) is tearing down here,
-            // so a bounded few-seconds wait to guarantee worker processes are actually killed
-            // beats a fire-and-forget task that may get cut off by process exit.
-            foreach (var state in _tabsByDocumentId.Values)
-                state.Editor.DisposeHostedEditor(disposeAiBackendSynchronously: true);
+            _autoSaveTimer?.Stop();
+            foreach (var state in _tabsByDocumentId.Values.ToArray()) state.Session.Dispose();
+            _tabsByDocumentId.Clear();
         };
         Closing += Window_Closing;
         WindowContentEnterHelper.AnimateOnLoaded(this, "EditorTabs", FinalizeWindowClose);
+        _autoSaveTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+            { Interval = TimeSpan.FromSeconds(5) };
+        _autoSaveTimer.Tick += AutoSaveTick;
+        var settings = AppSettingsService.Load();
+        _autoSaveInterval = Math.Clamp(settings.AutoSaveIntervalSeconds, 5, 86400);
+        _autoSaveEnabled = settings.EnableAutoSave;
+        _nextAutoSave = DateTime.UtcNow.AddSeconds(_autoSaveInterval);
+        _autoSaveTimer.Start();
     }
 
-    private void EditorTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    public bool FocusDocument(EditorDocumentKey key)
     {
-        if (_isDraggingTab || _reorderingTabs)
-            return;
-
-        ShowSelectedEditor(animate: IsLoaded);
+        if (!_tabsByDocumentId.TryGetValue(key, out var state)) return false;
+        EditorTabs.SelectedItem = state.TabItem;
+        ShowHostedContent(state, false);
+        return true;
     }
 
-    public void OpenOrFocusNote(NoteCardViewModel noteViewModel, object? sharedDataContext, bool animateContent = true)
+    public void OpenOrFocusNote(NoteCardViewModel note, object? sharedDataContext, bool animateContent = true)
     {
-        var documentId = noteViewModel.Document.Id;
-        if (_tabsByDocumentId.TryGetValue(documentId, out var existingState))
-        {
-            EditorTabs.SelectedItem = existingState.TabItem;
-            ShowHostedContent(existingState, animate: false);
-            existingState.Editor.Focus();
-            return;
-        }
-
-        var editor = new NoteEditorWindow();
+        var key = new EditorDocumentKey(EditorDocumentKind.Note, note.Document.Id);
+        if (FocusDocument(key)) return;
+        var editor = new NoteEditorWindow { DataContext = sharedDataContext };
         editor.EnableTabMode();
-        editor.DataContext = sharedDataContext;
-        editor.LoadFromDocument(noteViewModel.Document);
-        editor.SetCurrentDocument(noteViewModel.Document);
-
-        var hostedContent = editor.DetachEditorContentForHosting();
-        if (hostedContent == null)
+        var working = EditorHosting.Clone(note.Document);
+        editor.LoadFromDocument(working);
+        editor.SetCurrentDocument(working);
+        EditorSession? session = null;
+        var content = editor.AttachToWorkspace(this, () => session is not null && SaveSession(session, true), () => CloseDocument(key));
+        session = new EditorSession
         {
-            // editor was constructed (and with it, its own AI worker adapter/idle timer) but
-            // never got wired into a tab - dispose it now instead of abandoning it uncleaned.
-            editor.DisposeHostedEditor();
-            return;
-        }
-
-        var noteIcon = new AppIcon
-        {
-            Kind = AppIconKind.Notes
-        };
-        if (TryFindResource("EditorTabIconStyle") is Style iconStyle)
-            noteIcon.Style = iconStyle;
-
-        var titleText = new TextBlock
-        {
-            Text = GetTabHeaderText(noteViewModel)
-        };
-        if (TryFindResource("EditorTabTitleStyle") is Style titleStyle)
-            titleText.Style = titleStyle;
-
-        var closeButton = new Button
-        {
-            Content = new AppIcon
+            Key = key, Editor = editor, Content = content,
+            Save = () =>
             {
-                Kind = AppIconKind.Close,
-                Width = 11,
-                Height = 11
+                if (sharedDataContext is not MainViewModel vm || !vm.CommitEditorNote(note, editor.CaptureWorkspaceDocument())) return false;
+                editor.MarkWorkspaceSaved();
+                return true;
             }
         };
-        if (TryFindResource("EditorTabCloseButtonStyle") is Style closeStyle)
-            closeButton.Style = closeStyle;
+        AddSession(session, animateContent);
+    }
 
-        var headerPanel = new StackPanel
+    internal void AddSession(EditorSession session, bool animate = true)
+    {
+        var icon = new AppIcon { Kind = session.Icon, Style = (Style)FindResource("EditorTabIconStyle") };
+        var title = new TextBlock { Style = (Style)FindResource("EditorTabTitleStyle") };
+        var close = new Button { Style = (Style)FindResource("EditorTabCloseButtonStyle"),
+            Content = new AppIcon { Kind = AppIconKind.Close, Width = 10, Height = 10 } };
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        panel.Children.Add(icon); panel.Children.Add(title); panel.Children.Add(close);
+        var tab = new TabItem { Header = panel };
+        tab.PreviewMouseLeftButtonDown += TabItem_PreviewMouseLeftButtonDown;
+        tab.PreviewMouseMove += TabItem_PreviewMouseMove;
+        tab.PreviewMouseLeftButtonUp += TabItem_PreviewMouseLeftButtonUp;
+        tab.LostMouseCapture += TabItem_LostMouseCapture;
+        void Update()
         {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        headerPanel.Children.Add(noteIcon);
-        headerPanel.Children.Add(titleText);
-        headerPanel.Children.Add(closeButton);
-
-        // Header-only TabItem — heavy editor UI stays on EditorHost so Items reorder is safe.
-        var tabItem = new TabItem
+            var text = string.IsNullOrWhiteSpace(session.Editor.WorkspaceTitle) ? Localization.LocalizationService.GetString("Untitled") : session.Editor.WorkspaceTitle;
+            title.Text = text + (session.IsDirty ? "  •" : "");
+            tab.ToolTip = text;
+            System.Windows.Automation.AutomationProperties.SetName(tab, text);
+        }
+        Action update = Update;
+        session.Editor.WorkspaceStateChanged += update;
+        RoutedEventHandler closeHandler = (_, e) => { e.Handled = true; CloseTab(session.Key); };
+        close.Click += closeHandler;
+        var state = new EditorTabState { Session = session, TabItem = tab, TitleTextBlock = title, CloseButton = close,
+            StateHandler = update, CloseClickHandler = closeHandler };
+        _tabsByDocumentId.Add(session.Key, state);
+        Update();
+        void Insert()
         {
-            Header = headerPanel,
-            Content = null
-        };
-        tabItem.PreviewMouseLeftButtonDown += TabItem_PreviewMouseLeftButtonDown;
-        tabItem.PreviewMouseMove += TabItem_PreviewMouseMove;
-        tabItem.PreviewMouseLeftButtonUp += TabItem_PreviewMouseLeftButtonUp;
-        tabItem.LostMouseCapture += TabItem_LostMouseCapture;
-
-        Action<NoteDocument> autoSaveHandler = _ =>
-        {
-            noteViewModel.NotifyContentChanged();
-            titleText.Text = GetTabHeaderText(noteViewModel);
-        };
-        editor.DocumentAutoSaved += autoSaveHandler;
-        editor.CloseRequested += OnEditorCloseRequested;
-
-        RoutedEventHandler closeClickHandler = (s, e) =>
-        {
-            e.Handled = true;
-            CloseTab(documentId);
-        };
-        closeButton.Click += closeClickHandler;
-
-        var state = new EditorTabState
-        {
-            DocumentId = documentId,
-            Editor = editor,
-            NoteViewModel = noteViewModel,
-            TabItem = tabItem,
-            HostedContent = hostedContent,
-            TitleTextBlock = titleText,
-            CloseButton = closeButton,
-            AutoSaveHandler = autoSaveHandler,
-            CloseClickHandler = closeClickHandler
-        };
-
-        _tabsByDocumentId[documentId] = state;
-
-        void InsertTab()
-        {
-            EditorTabs.ApplyTemplate();
             _reorderingTabs = true;
-            try
-            {
-                EditorTabs.Items.Add(tabItem);
-                EditorTabs.SelectedItem = tabItem;
-            }
-            finally
-            {
-                _reorderingTabs = false;
-            }
-
-            ShowHostedContent(state, animate: animateContent && IsLoaded);
+            try { EditorTabs.Items.Add(tab); EditorTabs.SelectedItem = tab; }
+            finally { _reorderingTabs = false; }
+            ShowHostedContent(state, animate && IsLoaded);
         }
+        if (IsLoaded) Insert();
+        else { RoutedEventHandler? loaded = null; loaded = (_, _) => { Loaded -= loaded; Insert(); }; Loaded += loaded; }
+    }
 
-        if (IsLoaded)
-            InsertTab();
-        else
-            Loaded += OnLoaded;
-
-        void OnLoaded(object sender, RoutedEventArgs e)
+    internal bool SaveSession(EditorSession session, bool manual)
+    {
+        if (_saving || session.IsDisposed || IsCloseApproved) return false;
+        _saving = true;
+        var wasHitTestVisible = EditorTabs.IsHitTestVisible;
+        EditorTabs.IsHitTestVisible = false;
+        bool saved;
+        string? failure = null;
+        try { session.Editor.CommitWorkspaceEdits(); saved = session.Save(); }
+        catch (Exception ex)
         {
-            Loaded -= OnLoaded;
-            InsertTab();
+            saved = false;
+            failure = ex.Message;
         }
+        finally { _saving = false; EditorTabs.IsHitTestVisible = wasHitTestVisible; }
+        if (saved) session.IsDraft = false;
+        else session.Editor.ReportWorkspaceSaveFailure();
+        if (_tabsByDocumentId.TryGetValue(session.Key, out var state)) state.StateHandler();
+        if (!saved && manual) ModernDialog.ShowError(this, Localization.LocalizationService.GetString("Error"),
+            failure ?? Localization.LocalizationService.GetString("WorkspaceSaveFailed"));
+        return saved;
     }
 
-    public void ApplyMeasurementUnitSystemPreference(string unitSystem)
+    private async void AutoSaveTick(object? sender, EventArgs e)
     {
-        foreach (var state in _tabsByDocumentId.Values)
-            state.Editor.ApplyMeasurementUnitSystemPreference(unitSystem);
-    }
-
-    public void ApplySpellCheckPreference(bool enabled)
-    {
-        foreach (var state in _tabsByDocumentId.Values)
-            state.Editor.ApplySpellCheckPreference(enabled);
-    }
-
-    public void RefreshSpellCheckLanguages()
-    {
-        foreach (var state in _tabsByDocumentId.Values)
-            state.Editor.RefreshSpellCheckLanguages();
-    }
-
-    private void NoteEditorTabsWindow_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Handled || EditorTabs.SelectedItem is not TabItem selectedTab)
-            return;
-
-        var state = _tabsByDocumentId.Values.FirstOrDefault(state => ReferenceEquals(state.TabItem, selectedTab));
-        if (state is null)
-            return;
-
-        if (state.Editor.TryHandleFloatingImageKey(e))
-            return;
-
-        state.Editor.TryHandleEditorTabKey(e);
-    }
-
-    private static string GetTabHeaderText(NoteCardViewModel noteViewModel)
-    {
-        var title = noteViewModel.Document.Title;
-        return string.IsNullOrWhiteSpace(title) ? "Untitled" : title;
-    }
-
-    private void OnEditorCloseRequested(NoteEditorWindow editor)
-    {
-        foreach (var state in _tabsByDocumentId.Values)
+        if (_saving || _autoSaving || _preflighting || IsCloseApproved) return;
+        var settings = AppSettingsService.Load();
+        var interval = Math.Clamp(settings.AutoSaveIntervalSeconds, 5, 86400);
+        if (_autoSaveInterval != interval || _autoSaveEnabled != settings.EnableAutoSave)
         {
-            if (ReferenceEquals(state.Editor, editor))
+            _autoSaveInterval = interval; _autoSaveEnabled = settings.EnableAutoSave;
+            _nextAutoSave = DateTime.UtcNow.AddSeconds(interval);
+        }
+        if (!settings.EnableAutoSave) return;
+        if (DateTime.UtcNow < _nextAutoSave) return;
+        _nextAutoSave = DateTime.UtcNow.AddSeconds(interval);
+        _autoSaving = true;
+        try
+        {
+            foreach (var state in _tabsByDocumentId.Values.ToArray())
             {
-                CloseTab(state.DocumentId, askConfirmation: false);
-                break;
+                if (IsCloseApproved || _preflighting || _saving) break;
+                if (state.Session.IsDisposed) continue;
+                if (state.Session.IsDraft || state.Session.Editor.WorkspaceAutoSaveEligible) SaveSession(state.Session, false);
+                await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
             }
         }
+        finally { _autoSaving = false; }
     }
 
-    private bool CloseTab(Guid documentId, bool askConfirmation = true)
+    private bool ConfirmSessionClose(EditorSession session)
     {
-        if (!_tabsByDocumentId.TryGetValue(documentId, out var state))
-            return true;
+        var wasPreflighting = _preflighting;
+        _preflighting = true;
+        try
+        {
+            session.Editor.CommitWorkspaceEdits();
+            if (!session.IsDirty) return true;
+            var result = ModernDialog.Show(this, Localization.LocalizationService.GetString("UnsavedChanges"),
+                string.Format(Localization.LocalizationService.GetString("UnsavedChangesConfirmationFormat"), session.Editor.WorkspaceTitle),
+                ModernDialogTone.Warning, Localization.LocalizationService.GetString("LeaveWithoutSaving"),
+                Localization.LocalizationService.GetString("Cancel"), Localization.LocalizationService.GetString("WorkspaceSaveAndClose"),
+                primaryStyle: ModernDialogButtonStyle.Danger, secondaryStyle: ModernDialogButtonStyle.Primary);
+            return result switch { ModernDialogResult.Primary => true, ModernDialogResult.Secondary => SaveSession(session, true), _ => false };
+        }
+        finally { _preflighting = wasPreflighting; }
+    }
 
-        if (askConfirmation && !state.Editor.ConfirmCloseIfNeeded())
-            return false;
+    public bool PreflightWorkspaceClose()
+    {
+        if (IsCloseApproved) return true;
+        if (_saving || _preflighting) return false;
+        return _tabsByDocumentId.Values.ToArray().All(state => ConfirmSessionClose(state.Session));
+    }
+    public void CloseAfterPreflight() { _skipCloseConfirmation = true; Close(); }
 
-        if (ReferenceEquals(_dragTab, state.TabItem))
-            EndTabDrag();
-
-        // Last tab: close the window so the shared sink animation runs with content still mounted.
+    public bool PrepareDocumentRemoval(IReadOnlyList<EditorDocumentKey> keys)
+    {
+        if (_saving || _preflighting || IsCloseApproved) return false;
+        var affected = keys.Where(_tabsByDocumentId.ContainsKey).Select(key => _tabsByDocumentId[key]).ToArray();
+        foreach (var state in affected) if (!ConfirmSessionClose(state.Session)) return false;
+        foreach (var state in affected) FinishCloseTab(state);
+        return true;
+    }
+    public void CloseDocument(EditorDocumentKey key) => CloseTab(key);
+    private bool CloseTab(EditorDocumentKey key, bool askConfirmation = true)
+    {
+        if (_saving || _preflighting) return false;
+        if (!_tabsByDocumentId.TryGetValue(key, out var state)) return true;
+        if (askConfirmation && !ConfirmSessionClose(state.Session)) return false;
+        if (ReferenceEquals(_dragTab, state.TabItem)) EndTabDrag();
         if (!_isWindowClosing && _tabsByDocumentId.Count == 1)
         {
             _skipCloseConfirmation = true;
             Close();
             return true;
         }
-
-        if (!UiMotion.PrefersReducedMotion && state.HostedContent is FrameworkElement content)
-        {
-            UiMotion.Fade(
-                content,
-                0,
-                UiMotion.NavFadeOutMs,
-                UiMotion.InCubic,
-                () => FinishCloseTab(state));
-            return true;
-        }
-
         FinishCloseTab(state);
         return true;
     }
 
     private void FinishCloseTab(EditorTabState state)
     {
-        state.Editor.DocumentAutoSaved -= state.AutoSaveHandler;
-        state.Editor.CloseRequested -= OnEditorCloseRequested;
+        state.Session.Editor.WorkspaceStateChanged -= state.StateHandler;
         state.CloseButton.Click -= state.CloseClickHandler;
         state.TabItem.PreviewMouseLeftButtonDown -= TabItem_PreviewMouseLeftButtonDown;
         state.TabItem.PreviewMouseMove -= TabItem_PreviewMouseMove;
         state.TabItem.PreviewMouseLeftButtonUp -= TabItem_PreviewMouseLeftButtonUp;
         state.TabItem.LostMouseCapture -= TabItem_LostMouseCapture;
-
+        if (ReferenceEquals(_activeSession, state.Session)) _activeSession = null;
         var host = GetEditorHost();
-        if (host is not null && ReferenceEquals(host.Content, state.HostedContent))
-            host.Content = null;
-
-        state.Editor.DisposeHostedEditor();
-
-        EditorTabs.Items.Remove(state.TabItem);
+        if (host is not null && ReferenceEquals(host.Content, state.HostedContent)) host.Content = null;
+        state.Session.Dispose();
+        _configuredPopups.Remove(state.Session);
         _tabsByDocumentId.Remove(state.DocumentId);
-
-        if (!_isWindowClosing && EditorTabs.Items.Count == 0)
-        {
-            Close();
-            return;
-        }
-
-        ShowSelectedEditor(animate: false);
+        EditorTabs.Items.Remove(state.TabItem);
+        if (!_isWindowClosing && EditorTabs.Items.Count == 0) { _skipCloseConfirmation = true; Close(); return; }
+        ShowSelectedEditor(false);
     }
 
     private void ShowSelectedEditor(bool animate)
     {
-        if (EditorTabs.SelectedItem is not TabItem selectedTab)
-        {
-            var host = GetEditorHost();
-            if (host is not null)
-                host.Content = null;
-            return;
-        }
-
-        var state = _tabsByDocumentId.Values.FirstOrDefault(s => ReferenceEquals(s.TabItem, selectedTab));
-        if (state is null)
-            return;
-
-        ShowHostedContent(state, animate);
+        if (EditorTabs.SelectedItem is not TabItem tab) return;
+        var state = _tabsByDocumentId.Values.FirstOrDefault(s => ReferenceEquals(s.TabItem, tab));
+        if (state is not null) ShowHostedContent(state, animate);
     }
-
     private void ShowHostedContent(EditorTabState state, bool animate)
     {
         var host = GetEditorHost();
-        if (host is null)
-            return;
-
-        if (!ReferenceEquals(host.Content, state.HostedContent))
-            host.Content = state.HostedContent;
-
-        if (animate && state.HostedContent is FrameworkElement hostedElement)
-            UiMotion.AnimateContentEnter(hostedElement, durationMs: UiMotion.QuickMs, offsetY: UiMotion.SubtleLiftY);
+        if (host is null || ReferenceEquals(host.Content, state.HostedContent)) return;
+        if (_activeSession is { } previous && Keyboard.FocusedElement is UIElement focused
+            && previous.Content.IsAncestorOf(focused)) previous.FocusTarget = focused;
+        _activeSession?.Editor.CommitWorkspaceEdits();
+        _activeSession?.Editor.SetWorkspaceActive(false);
+        if (_activeSession is { } leaving)
+        {
+            HostedEditorMotion.Settle(leaving.Content);
+            // A rapid tab change can interrupt the first entrance. Settle before unmounting so
+            // returning never retains a half-scaled stage or a partially visible heading.
+            ArrivalGroups.Stop(leaving.Content, settle: true);
+            UiMotion.Cleanup(leaving.Content);
+            var (scale, move) = UiMotion.EnsureScaleTranslateGroup(leaving.Content);
+            scale.ScaleX = scale.ScaleY = 1;
+            move.X = move.Y = 0;
+            leaving.Content.Opacity = 1;
+        }
+        var firstEntrance = !state.Session.HasEntered;
+        var animateBody = animate && !WindowContentEnterHelper.IsEnterAnimating(this);
+        if (animateBody) HostedEditorMotion.Prepare(state.Session.Content, firstEntrance);
+        host.Content = state.HostedContent;
+        _activeSession = state.Session;
+        state.Session.Editor.SetWorkspaceActive(true);
+        if (_configuredPopups.Add(state.Session))
+            Dispatcher.BeginInvoke(() => { if (!state.Session.IsDisposed) UiMotion.ConfigurePopupsForWindow(this); },
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        if (state.Session.FocusTarget is UIElement focusTarget)
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (!ReferenceEquals(_activeSession, state.Session) || !focusTarget.IsVisible || !focusTarget.IsEnabled) return;
+                RequestBringIntoViewEventHandler preserveViewport = (_, e) => e.Handled = true;
+                state.Session.Content.AddHandler(FrameworkElement.RequestBringIntoViewEvent, preserveViewport, true);
+                try { Keyboard.Focus(focusTarget); }
+                finally { state.Session.Content.RemoveHandler(FrameworkElement.RequestBringIntoViewEvent, preserveViewport); }
+            }, System.Windows.Threading.DispatcherPriority.Input);
+        state.Session.HasEntered = true;
+        if (animateBody)
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (ReferenceEquals(_activeSession, state.Session) && !state.Session.IsDisposed)
+                    HostedEditorMotion.Enter(state.Session.Content, firstEntrance);
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    public void ApplyMeasurementUnitSystemPreference(string units) { foreach (var editor in NotesEditors()) editor.ApplyMeasurementUnitSystemPreference(units); }
+    public void ApplySpellCheckPreference(bool enabled) { foreach (var editor in NotesEditors()) editor.ApplySpellCheckPreference(enabled); }
+    public void RefreshSpellCheckLanguages() { foreach (var editor in NotesEditors()) editor.RefreshSpellCheckLanguages(); }
+    private IEnumerable<NoteEditorWindow> NotesEditors() => _tabsByDocumentId.Values.Select(s => s.Session.Editor).OfType<NoteEditorWindow>();
+
+    private void Workspace_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_saving) { e.Handled = true; return; }
+        if (e.Handled) return;
+        var modifiers = Keyboard.Modifiers;
+        // AltGr reports Ctrl+Alt on many keyboards; keep normal language input intact.
+        if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) == ModifierKeys.Control)
+        {
+            if (e.Key == Key.S && modifiers == ModifierKeys.Control && _activeSession is not null) { SaveSession(_activeSession, true); e.Handled = true; return; }
+            if (e.Key == Key.W && modifiers == ModifierKeys.Control && _activeSession is not null) { CloseTab(_activeSession.Key); e.Handled = true; return; }
+            if (e.Key == Key.Tab && EditorTabs.Items.Count > 0)
+            {
+                var delta = (Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? -1 : 1;
+                EditorTabs.SelectedIndex = (EditorTabs.SelectedIndex + delta + EditorTabs.Items.Count) % EditorTabs.Items.Count;
+                e.Handled = true; return;
+            }
+        }
+        if (_activeSession?.Editor is NoteEditorWindow note)
+        {
+            if (!note.TryHandleFloatingImageKey(e)) note.TryHandleEditorTabKey(e);
+        }
+    }
+
+    private void NewDocument_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu();
+        foreach (var kind in Enum.GetValues<EditorDocumentKind>())
+        {
+            var label = kind switch { EditorDocumentKind.Note => "Notes", EditorDocumentKind.Flashcards => "Flashcards", EditorDocumentKind.Quiz => "Quizzes", _ => "MindMaps" };
+            var icon = kind switch { EditorDocumentKind.Note => AppIconKind.Notes, EditorDocumentKind.Flashcards => AppIconKind.Flashcards,
+                EditorDocumentKind.Quiz => AppIconKind.Quizzes, _ => AppIconKind.MindMaps };
+            var item = new MenuItem { Header = Localization.LocalizationService.GetString(label), Icon = new AppIcon { Kind = icon, Width = 16, Height = 16 } };
+            item.Click += (_, _) => CreateRequested?.Invoke(kind);
+            menu.Items.Add(item);
+        }
+        UiMotion.OpenContextMenu(menu, (Button)sender);
+    }
     private void TabItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not TabItem tab)
@@ -405,6 +418,8 @@ public partial class NoteEditorTabsWindow : Window
         _dragTabWidth = Math.Max(tab.ActualWidth, 1);
         _dragRestoreZIndex = Panel.GetZIndex(tab);
         Panel.SetZIndex(tab, 1000);
+        Controls.EditorChromeContext.SetIsTabDragging(tab, true);
+        SetPlateDragging(true);
         EditorTabs.SelectedItem = tab;
         ShowSelectedEditor(animate: false);
 
@@ -425,6 +440,7 @@ public partial class NoteEditorTabsWindow : Window
 
         var layoutLeft = _dragTab.TranslatePoint(new Point(0, 0), header).X - _dragTransform.X;
         _dragTransform.X = pointerXInHeader - _grabOffsetInTab - layoutLeft;
+        Behaviors.TabSelectionPlateBehavior.SettleAfterDrag(EditorTabs);
 
         var target = ComputeDragTargetIndex(pointerXInHeader);
         if (target == _dragToIndex)
@@ -527,6 +543,15 @@ public partial class NoteEditorTabsWindow : Window
         // with a stale _dragToIndex (that was sending tabs to the end).
         if (wasDragging)
             CommitTabReorder(tab, toIndex);
+        Controls.EditorChromeContext.SetIsTabDragging(tab, false);
+        SetPlateDragging(false);
+        Behaviors.TabSelectionPlateBehavior.SettleAfterDrag(EditorTabs);
+    }
+
+    private void SetPlateDragging(bool dragging)
+    {
+        if (EditorTabs.Template?.FindName("TabSelectionPlate", EditorTabs) is DependencyObject plate)
+            Controls.EditorChromeContext.SetIsTabDragging(plate, dragging);
     }
 
     private void CommitTabReorder(TabItem tab, int toIndex)
@@ -593,20 +618,23 @@ public partial class NoteEditorTabsWindow : Window
 
     private void Window_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        if (_saving || _preflighting) { e.Cancel = true; return; }
+        EndTabDrag();
         if (WindowContentEnterHelper.ShouldBypassCloseHandling(this))
             return;
 
-        if (_skipCloseConfirmation)
-            return;
+        if (_skipCloseConfirmation) { IsCloseApproved = true; _autoSaveTimer.Stop(); return; }
 
         foreach (var state in _tabsByDocumentId.Values.ToList())
         {
-            if (state.Editor.ConfirmCloseIfNeeded())
+            if (ConfirmSessionClose(state.Session))
                 continue;
 
             e.Cancel = true;
             return;
         }
+        IsCloseApproved = true;
+        _autoSaveTimer.Stop();
     }
 
     private void FinalizeWindowClose()

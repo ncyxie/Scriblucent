@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using Scriblucent.Controls;
+using Scriblucent.Animations;
 
 namespace Scriblucent.Behaviors;
 
@@ -248,7 +249,7 @@ public static class MiddleClickScrollBehavior
         if (_renderingHandler == null)
         {
             _renderingHandler = OnRendering;
-            CompositionTarget.Rendering += _renderingHandler;
+            RenderTransitionClock.AddFrameObserver(_renderingHandler);
         }
     }
 
@@ -374,7 +375,7 @@ public static class MiddleClickScrollBehavior
         if (_renderingHandler == null)
             return;
 
-        CompositionTarget.Rendering -= _renderingHandler;
+        RenderTransitionClock.RemoveFrameObserver(_renderingHandler);
         _renderingHandler = null;
         _lastRenderingTime = TimeSpan.MinValue;
     }
@@ -442,13 +443,6 @@ public static class MiddleClickScrollBehavior
 
     private static IndicatorVisual CreateIndicatorVisual()
     {
-        var ringFill = new SolidColorBrush(Color.FromArgb(245, 252, 252, 252));
-        var ringStroke = new SolidColorBrush(Color.FromArgb(255, 110, 110, 110));
-        var accent = new SolidColorBrush(Color.FromArgb(255, 58, 58, 58));
-        ringFill.Freeze();
-        ringStroke.Freeze();
-        accent.Freeze();
-
         var canvas = new Canvas
         {
             Width = IndicatorSize,
@@ -459,34 +453,37 @@ public static class MiddleClickScrollBehavior
             Background = Brushes.Transparent,
         };
 
-        var ring = new Ellipse
+        var ring = new Scriblucent.Controls.SurfaceMaterialBorder
         {
             Width = 30,
             Height = 30,
-            Stroke = ringStroke,
-            StrokeThickness = 1.25,
-            Fill = ringFill,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(15),
         };
+        ring.SetResourceReference(Border.BackgroundProperty, "CardBackground");
+        ring.SetResourceReference(Border.BorderBrushProperty, "PopupBorder");
+        Scriblucent.Controls.SurfaceMaterial.SetKind(ring, Scriblucent.Controls.SurfaceMaterialKind.Raised);
         Canvas.SetLeft(ring, 5);
         Canvas.SetTop(ring, 5);
 
-        var dot = new Ellipse { Width = 4, Height = 4, Fill = accent };
+        var dot = new Ellipse { Width = 4, Height = 4 };
+        dot.SetResourceReference(Shape.FillProperty, "TextColorSecondary");
         Canvas.SetLeft(dot, 18);
         Canvas.SetTop(dot, 18);
 
-        var arrowUp = CreateChevron(accent, 0);
+        var arrowUp = CreateChevron(0);
         Canvas.SetLeft(arrowUp, 16);
         Canvas.SetTop(arrowUp, 8);
 
-        var arrowDown = CreateChevron(accent, 180);
+        var arrowDown = CreateChevron(180);
         Canvas.SetLeft(arrowDown, 16);
         Canvas.SetTop(arrowDown, 26);
 
-        var arrowLeft = CreateChevron(accent, 270);
+        var arrowLeft = CreateChevron(270);
         Canvas.SetLeft(arrowLeft, 8);
         Canvas.SetTop(arrowLeft, 16);
 
-        var arrowRight = CreateChevron(accent, 90);
+        var arrowRight = CreateChevron(90);
         Canvas.SetLeft(arrowRight, 26);
         Canvas.SetTop(arrowRight, 16);
 
@@ -510,8 +507,9 @@ public static class MiddleClickScrollBehavior
         };
     }
 
-    private static Path CreateChevron(Brush fill, double angleDegrees)
-        => new()
+    private static Path CreateChevron(double angleDegrees)
+    {
+        var arrow = new Path
         {
             Width = 8,
             Height = 8,
@@ -526,11 +524,13 @@ public static class MiddleClickScrollBehavior
                     }, true),
                 },
             },
-            Fill = fill,
             Stretch = Stretch.None,
             RenderTransform = new RotateTransform(angleDegrees, 4, 4),
             Opacity = 0,
         };
+        arrow.SetResourceReference(Shape.FillProperty, "AccentPrimary");
+        return arrow;
+    }
 
     private static void UpdateIndicatorDirection(AutoscrollSession session, Vector offset)
     {

@@ -9,8 +9,9 @@ public sealed class FlashcardSetGroupViewModel : ViewModelBase
     private Brush _backgroundBrush;
     private Brush _foregroundBrush;
 
-    public FlashcardSetGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<FlashcardSetViewModel> sets)
+    public FlashcardSetGroupViewModel(Guid groupId, string name, string backgroundColor, IEnumerable<FlashcardSetViewModel> sets, GroupDisclosureState? disclosure = null)
     {
+        Disclosure = disclosure ?? new GroupDisclosureState();
         GroupId = groupId;
         _name = name;
         BackgroundColor = backgroundColor;
@@ -20,6 +21,7 @@ public sealed class FlashcardSetGroupViewModel : ViewModelBase
     }
 
     public Guid GroupId { get; }
+    public GroupDisclosureState Disclosure { get; }
 
     public string Name
     {

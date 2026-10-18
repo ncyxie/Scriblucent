@@ -2,10 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Scriblucent.Controls"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
         xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
         Title="{Binding [InsertLinkDialogTitle], Source={StaticResource Loc}}"
         Width="440"
-        Height="440"
+        Height="540"
         WindowStartupLocation="CenterOwner"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="ClearType"
@@ -45,10 +46,9 @@
 
                 <TextBlock Text="{Binding [InsertLinkDisplayTextLabel], Source={StaticResource Loc}}"
                            Style="{StaticResource FormOptionLabelStyle}"
-                           Margin="0,0,0,6"/>
-                <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                        Background="{DynamicResource WindowBackground}"
-                        Margin="0,0,0,14">
+                           Margin="{StaticResource Field.LabelMargin}"/>
+                <Border Style="{StaticResource ChromeInsetFieldBorderStyle}"
+                        Margin="{StaticResource Field.RowMargin}">
                     <TextBox x:Name="DisplayTextBox"
                              Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
                 </Border>
@@ -57,9 +57,8 @@
                     <StackPanel>
                         <TextBlock Text="{Binding [InsertLinkUrlLabel], Source={StaticResource Loc}}"
                                    Style="{StaticResource FormOptionLabelStyle}"
-                                   Margin="0,0,0,6"/>
-                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                                Background="{DynamicResource WindowBackground}">
+                                   Margin="{StaticResource Field.LabelMargin}"/>
+                        <Border Style="{StaticResource ChromeInsetFieldBorderStyle}">
                             <TextBox x:Name="UrlTextBox"
                                      Style="{StaticResource EmbeddedFieldTextBoxStyle}"/>
                         </Border>
@@ -70,19 +69,20 @@
                     <StackPanel>
                         <TextBlock Text="{Binding [InsertLinkNoteSearchPlaceholder], Source={StaticResource Loc}}"
                                    Style="{StaticResource FormOptionLabelStyle}"
-                                   Margin="0,0,0,6"/>
-                        <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                                Background="{DynamicResource WindowBackground}"
+                                   Margin="{StaticResource Field.LabelMargin}"/>
+                        <Border Style="{StaticResource ChromeInsetFieldBorderStyle}"
                                 Margin="0,0,0,10">
                             <TextBox x:Name="NoteSearchTextBox"
                                      Style="{StaticResource EmbeddedFieldTextBoxStyle}"
                                      TextChanged="NoteSearchTextBox_TextChanged"/>
                         </Border>
-                        <Border Style="{StaticResource ChromePanelBorderStyle}"
-                                Background="{DynamicResource WindowBackground}"
+                        <Border Style="{StaticResource ContentInsetBorderStyle}"
+
                                 Padding="4"
                                 Height="150">
+                            <Grid>
                             <ListBox x:Name="NoteResultsListBox"
+                                     ItemContainerStyle="{StaticResource StateListBoxItemStyle}"
                                      Background="Transparent"
                                      BorderThickness="0"
                                      SelectionMode="Single"
@@ -107,16 +107,18 @@
                                     </ControlTemplate>
                                 </ListBox.Template>
                             </ListBox>
+                            <StackPanel x:Name="NoteNoResults" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="12">
+                                <icons:AppIcon Kind="Search" Width="22" Height="22" Foreground="{DynamicResource TextColorSecondary}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding [InsertLinkNoResults], Source={StaticResource Loc}}" FontSize="{StaticResource Type.Control.Toolbar}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,4"/>
+                                <TextBlock Text="{Binding [InsertLinkNoResultsHint], Source={StaticResource Loc}}" Style="{StaticResource FormHelperTextStyle}" TextAlignment="Center" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            </Grid>
                         </Border>
                     </StackPanel>
                 </Grid>
 
-                <TextBlock x:Name="ValidationText"
-                           Foreground="{DynamicResource AccentDangerSubtleForeground}"
-                           Style="{StaticResource FormHelperTextStyle}"
-                           Margin="0,10,0,0"
-                           TextWrapping="Wrap"
-                           Visibility="Collapsed"/>
+                <controls:InlineValidationPresenter x:Name="ValidationText"
+                           Margin="0,10,0,0"/>
             </StackPanel>
         </controls:OverlayDialogShell.Body>
 

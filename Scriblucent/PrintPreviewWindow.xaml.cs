@@ -23,6 +23,7 @@ namespace Scriblucent
 
             // Load preview
             PreviewTitle.Text = _title;
+            HeaderDocumentTitle.Text = _title;
             PreviewContent.Text = _content;
             WindowContentEnterHelper.AnimateOnLoaded(this);
         }

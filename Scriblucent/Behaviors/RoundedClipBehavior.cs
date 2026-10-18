@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Scriblucent.Animations;
 
 namespace Scriblucent.Behaviors;
 
@@ -18,6 +19,7 @@ public static class RoundedClipBehavior
         public SizeChangedEventHandler? SizeChangedHandler;
         public DependencyPropertyDescriptor? CornerRadiusDescriptor;
         public EventHandler? CornerRadiusChangedHandler;
+        public DependencyPropertyDescriptor? BorderThicknessDescriptor;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -99,7 +101,9 @@ public static class RoundedClipBehavior
         state.IsAttached = true;
         state.SizeChangedHandler = (_, _) => UpdateClip(element);
         element.SizeChanged += state.SizeChangedHandler;
+        element.Loaded -= OnLoaded;
         element.Loaded += OnLoaded;
+        element.Unloaded += OnUnloaded;
 
         if (element is Border)
         {
@@ -108,6 +112,8 @@ public static class RoundedClipBehavior
                 Border.CornerRadiusProperty,
                 typeof(Border));
             state.CornerRadiusDescriptor?.AddValueChanged(element, state.CornerRadiusChangedHandler);
+            state.BorderThicknessDescriptor = DependencyPropertyDescriptor.FromProperty(Border.BorderThicknessProperty, typeof(Border));
+            state.BorderThicknessDescriptor?.AddValueChanged(element, state.CornerRadiusChangedHandler);
         }
 
         UpdateClip(element);
@@ -115,6 +121,8 @@ public static class RoundedClipBehavior
 
     private static void Detach(FrameworkElement element)
     {
+        element.Loaded -= OnLoaded;
+        element.Unloaded -= OnUnloaded;
         var state = element.GetValue(StateProperty) as State;
         if (state is null || !state.IsAttached)
             return;
@@ -125,6 +133,8 @@ public static class RoundedClipBehavior
 
         if (state.CornerRadiusDescriptor is not null && state.CornerRadiusChangedHandler is not null)
             state.CornerRadiusDescriptor.RemoveValueChanged(element, state.CornerRadiusChangedHandler);
+        if (state.BorderThicknessDescriptor is not null && state.CornerRadiusChangedHandler is not null)
+            state.BorderThicknessDescriptor.RemoveValueChanged(element, state.CornerRadiusChangedHandler);
 
         state.IsAttached = false;
         element.Clip = null;
@@ -132,8 +142,14 @@ public static class RoundedClipBehavior
 
     private static void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement element)
-            UpdateClip(element);
+        if (sender is FrameworkElement element && GetIsEnabled(element)) Attach(element);
+    }
+
+    private static void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element) return;
+        Detach(element);
+        if (GetIsEnabled(element)) element.Loaded += OnLoaded;
     }
 
     private static State GetOrCreateState(FrameworkElement element)
@@ -161,6 +177,14 @@ public static class RoundedClipBehavior
             topInset = 0;
 
         var radius = ResolveRadius(element);
+        if (element is Border border || radius.TopLeft != radius.TopRight || radius.TopLeft != radius.BottomLeft || radius.TopLeft != radius.BottomRight)
+        {
+            var contour = SurfaceContour.Create(new Size(width, height - topInset), radius,
+                element is Border frame ? SurfaceContour.EffectiveFrame(frame) : new Thickness());
+            if (topInset > 0) { contour = contour.Clone(); contour.Transform = new TranslateTransform(0, topInset); contour.Freeze(); }
+            element.Clip = contour;
+            return;
+        }
         var rx = Math.Max(0, Math.Min(radius.TopLeft, width / 2));
         var ry = Math.Max(0, Math.Min(radius.TopLeft, (height - topInset) / 2));
 

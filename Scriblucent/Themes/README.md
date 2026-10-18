@@ -1,71 +1,75 @@
 # Scriblucent design system
 
-Custom WPF theming — not MaterialDesign / MahApps UI / WPF-UI.
-Icons: Lucide via `MahApps.Metro.IconPacks.Lucide` (`AppIcon`).
+Shared WPF resources define geometry, typography, surfaces, and interaction feedback. Use the same control roles across dashboards, editors, and dialogs. Lucide icons are rendered through `AppIcon`.
 
-## Resource load order (`App.xaml`)
+## Resources
 
-1. `Themes/Tokens.xaml` — geometry, type, space, elevation (theme-invariant)
-2. `Themes/LightTheme.xaml` or `DarkTheme.xaml` — brushes (swapped by `ThemeManager`)
-3. `Themes/Generic.xaml` — `AppIcon` + `OverlayDialogShell` / `FeatureWindowShell` templates
-4. `Themes/Controls/Shared.xaml` — Loc + converters
-5. `Themes/Controls/Chrome.xaml` — fields, TextBox, ComboBox
-6. `Themes/Controls/Calendar.xaml` — shared calendar day/header/item styles
-7. `Themes/Controls/Buttons.xaml` — implicit Button, Dialog*, ToolbarIcon, FAB helpers
-8. `Themes/Controls/Dashboard.xaml` — tags, mass-select, section chrome
-9. App-level ScrollBar / Slider / menus
+`App.xaml` loads dictionaries in this order:
 
-## Non-negotiable rules
+1. `Tokens.xaml`: typography, dimensions, spacing, and elevation.
+2. `LightTheme.xaml` or `DarkTheme.xaml`: theme brushes, replaced by `ThemeManager`.
+3. `Generic.xaml`: icon and window-shell templates.
+4. `Controls/Shared.xaml`: localization and converters.
+5. `Controls/Chrome.xaml`: fields and dropdowns.
+6. `Controls/Calendar.xaml`: calendar controls.
+7. `Controls/Buttons.xaml`: shared action styles.
+8. `Controls/Dashboard.xaml`: cards and collection controls.
+9. `Controls/Quiz.xaml`: quiz controls.
 
-| Area | Rule |
-|------|------|
-| Accent | `AccentPrimary` (+ Hover/Pressed/Foreground) for focus, selection, primary CTAs |
-| Surfaces | Main shell: `SidebarBackground` + `WindowBackground`. Feature/editors: `FeatureFrameBackground` (outer ring) + `FeatureStageBackground` (plate) + white fields |
-| Inputs | Outer `Chrome*BorderStyle` + inner `EmbeddedFieldTextBoxStyle` — no local TextBox/ComboBox templates |
-| Buttons | `DialogPrimary/Secondary/Danger/Warning`, `ToolbarIconButtonStyle`, FAB — implicit Button is theme-aware |
-| Dialogs | `OverlayDialogShell` — `ResizeMode=NoResize`, `Radius.Overlay`, `Elevation.Dialog` |
-| Feature windows | `FeatureWindowShell` — inset card on `SidebarBackground` |
-| Headers | DialogHeader (icon chip + title) or WindowChromeHeader (`ChromePanelBorderStyle`) |
-| Bindings | Theme color → `DynamicResource`; geometry/type/space → `StaticResource` |
+Application-level styles supply scrollbars, sliders, and menus. Use `DynamicResource` for theme colours and `StaticResource` for theme-independent dimensions and typography. Localize interface text in both resource files.
 
-## Stroke (border) contract — soft-first
+## Surfaces and controls
 
-**Default: no box stroke.** Separate layers with surface steps (`Sidebar` → `Window` → `Card`) and elevation (`Elevation.*` / `CardShadowLayer`). Use a 1px hairline only for form affordance, selection, or dark-mode card rest edges. Pick by **role**, not by eye. Do not set `BorderBrush` when thickness is 0.
+| Role | Implementation |
+| --- | --- |
+| Workspace | `WorkspaceFrameStyle` over the shared workspace backdrop |
+| Content and nested sections | `CardBackground` and `ContentInsetSurface`; use surface contrast for separation |
+| Fields | `InputSurface` or `InputSurfaceInset`, with shared Chrome styles |
+| Buttons | Shared Dialog, toolbar, and creation-button styles; semantic primary/danger roles |
+| Action groups | One neutral tray, transparent child targets, and `ActionDividerBrush` separators |
+| Selection and focus | Shared accent rim, matching the rendered face contour |
+| Floating surfaces | Shared rounded shell and cached elevation |
 
-| Role | Stroke? | How edge is defined | Examples |
-|------|---------|---------------------|----------|
-| A Filled action | **No** | Fill (+ `Elevation.Button` for primary/FAB) | Dialog CTAs, toolbar icons, FAB |
-| B Soft chip / tag | **No** | Fill only | Tag chips, stat chips |
-| C Form control | **Light: no rest stroke** | Light: shadow + stage contrast; dark: soft rest 1px; focus always accent | Fields, checkbox, radio |
-| D Content card | **Soft-first** | Shadow/elevation; `NoteCardBorder` transparent light / soft dark | Listing tiles, recent, calendar items |
-| E Section / nested group | **No** | Surface contrast; optional `Elevation.Field` | Dashboard sections, Settings groups |
-| F Floating surface | **Soft-first** | `Elevation.*` only when elevated — no rest hairline | Dialogs, menus, popovers, feature stage |
-| G Emphasis / selection | **Yes (accent)** | `NoteCardSelectionBorder` / `AccentPrimary` 1–2px | Mass-select, selected flashcard, focus |
-| H Separator | **Line only** | `SidebarSeparator` | Sidebar rules |
-| I Status glyph | Optional | `Accent*SubtleBorder` | Message icon chips |
+Neutral controls share the theme action palette. Closed non-editable dropdowns use that palette; editable dropdowns use the input palette. Popup lists use the content palette.
 
-**Always keep stroke:** checkboxes/radios, color swatches (empty/light colors), drop-target glow. Dark mode may still show soft card hairlines because shadows read poorly on dark UIs.
+Separate surfaces primarily through fill and elevation. Resting hairlines serve form affordance, dark content-card edges, checkboxes, and colour swatches. Accent borders identify focus, selection, and drop destinations. Mind-map node outlines represent diagram content and retain their own styling.
 
-## Shells
+Use `OverlayDialogShell` for standard dialogs and `FeatureWindowShell` for secondary workspaces. Keep header and footer actions outside a bounded scrolling body when content may exceed the owner height.
 
-- **Overlay dialogs:** set window content to `OverlayDialogShell`; bind animator with `((OverlayDialogShell)Content).BindAnimator(this)` (or `DialogShell.BindAnimator(this)` if named).
-- **Feature windows:** wrap content in `FeatureWindowShell` with Header / Body / Footer slots.
+## Typography and fields
 
-## Do not
+| Role | Text size | Control height |
+| --- | ---: | ---: |
+| Toolbar and inline actions | 14 DIP | 32 DIP |
+| Menu items and form fields | 14 DIP | 36 DIP |
+| Dialog actions | 14 DIP, semibold | 40 DIP |
+| Editor title fields | Shared title role | 40 DIP |
+| Helper text and badges | 13 / 12 DIP | Content size |
 
-- Hardcode `#435CEC` / light-only chip colors in views
-- Copy ComboBox/TextBox ControlTemplates into window resources
-- Invent a third dialog radius or shadow
-- Put decorative strokes on filled buttons, chips, or elevated section shells
+Document typography and diagram geometry are independent of interface typography.
 
-## Edge treatments
+Use `Field.ContentPadding` for ordinary fields and `Field.MultilinePadding` for multiline fields. Labels use `Field.LabelMargin`; rows use `Field.RowMargin`. An embedded text box has zero padding when its outer shell owns the inset. Do not apply padding twice through the text-view template.
 
-| Code | Meaning |
-|------|---------|
-| **S** | Soft — fill/surface only, no box stroke |
-| **E** | Elevation — soft + `Elevation.*` / `CardShadowLayer` |
-| **R** | Rest stroke — theme hairline (`InputRestBorder`, dark card rest, `BorderColor` on checkbox/radio) |
-| **A** | Accent stroke — selection/focus 1–2px |
-| **L** | Line separator — 1px divider, not a box |
+Settings dropdowns stretch across their field row. Inline finite choices can use `DropdownChoiceWidthBehavior` to fit the widest localized label; selection changes must not resize the button. Keep chevrons in their disclosure column and reserve room for badges. Variable document names can use an ellipsis. Popup sizing is independent of the closed face.
 
-Mind-map node outlines represent diagram content and are separate from the application edge contract.
+## Motion and interaction
+
+Use shared motion channels and profiles. Retarget interrupted motion from its visible state and release owned clocks, capture, and subscriptions on unloading or cancellation.
+
+- **Automatic:** tactile button feedback, local pointer light, coordinated navigation, and purposeful staged arrivals.
+- **Reduced:** stationary controls with quieter, shorter feedback; omit spatial and decorative movement.
+- **Off:** settle state immediately.
+
+Browsed cards share hover light, lift, and selection treatment. The card face, shadow, checkbox, tint, and rim move together. Editable containers keep their body quiet while their fields and commands provide feedback. Native keyboard and text-editing behavior remains available.
+
+Card grids use body dragging or a grip without duplicate direction arrows. Linear lists and group headers provide grips with direct earlier/later arrows. Fixed dashboard sections use paired arrows. Drag, keyboard, menu, and arrow routes share ordering, boundary, and persistence logic.
+
+## Rendering and lifecycle
+
+- Match native and cached faces in contour, typography, colour, and DPI-aware dimensions. Selection remains independent of cached card images.
+- Realize the viewport and bounded overscan. Do not construct hidden dashboard trees or load entire libraries for presentation.
+- Prefer cached contours, drawing transforms, and baked elevation for repeated surfaces. Keep live blur and layout work out of scrolling and hover paths.
+- Keep decorative painting clipped to its owning face. A loading cover must continue the full workspace background instead of restarting its gradient.
+- Keep event-driven measurements bounded and detach observers on unload. Do not leave idle rendering subscriptions after feedback settles.
+
+Run the [runtime UI checks](../../tools/MotionAudit/README.md) for the affected control family in both themes and relevant motion preferences.

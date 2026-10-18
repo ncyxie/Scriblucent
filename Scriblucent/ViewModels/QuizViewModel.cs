@@ -1,4 +1,4 @@
-using Scriblucent.Localization;
+﻿using Scriblucent.Localization;
 using Scriblucent.Models;
 using Scriblucent.Services;
 
@@ -16,6 +16,8 @@ public sealed class QuizViewModel : ViewModelBase
     }
 
     public QuizDocument Document { get; }
+
+    internal void NotifyTitleChanged() => OnPropertyChanged(nameof(Title));
 
     public string Title => string.IsNullOrWhiteSpace(Document.Title)
         ? LocalizationService.GetString("QuizUntitled")

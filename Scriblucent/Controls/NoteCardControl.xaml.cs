@@ -4,6 +4,7 @@ using Scriblucent.Behaviors;
 using Scriblucent.ViewModels;
 using Scriblucent.Localization;
 using Scriblucent.Views;
+using Scriblucent.Rendering;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -20,6 +21,23 @@ public partial class NoteCardControl : UserControl
 
     private Point _dragStart;
     private bool _suppressOpenOnMouseUp;
+    private CardTileRequestLease? _tileRequest;
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<System.Windows.Media.Imaging.BitmapSource, System.Windows.Media.Imaging.CroppedBitmap> ScrollFaces = new();
+    internal static System.Windows.Media.Imaging.BitmapSource CropScrollTile(System.Windows.Media.Imaging.BitmapSource source)
+        => ScrollFaces.GetValue(source, tile =>
+        {
+            // Tiles include the grid's outer margin; the control already owns that margin.
+            // Reuse a frozen view of just the face so cached paint never enlarges/clips the card.
+            double scaleX = tile.DpiX / 96, scaleY = tile.DpiY / 96;
+            int x = (int)Math.Round(SkiaCardRenderer.CardMarginDip * scaleX);
+            int y = (int)Math.Round(SkiaCardRenderer.CardMarginDip * scaleY);
+            var face = new System.Windows.Media.Imaging.CroppedBitmap(tile, new Int32Rect(x, y,
+                (int)Math.Round(SkiaCardRenderer.CardWidthDip * scaleX), (int)Math.Round(SkiaCardRenderer.MinCardHeightDip * scaleY)));
+            face.Freeze();
+            return face;
+        });
+    private void CancelTileRequest() { _tileRequest?.Dispose(); _tileRequest = null; }
+    private void TileCacheInvalidated() { if (IsLoaded && IsVisible && IsBitmapMode) ApplyBitmapMode(); }
 
     /// <summary>
     /// Bitmap mode: the card shows only its cached per-note bitmap (see NoteCardBitmapCache)
@@ -56,6 +74,11 @@ public partial class NoteCardControl : UserControl
         PreviewMouseLeftButtonUp += NoteCardControl_PreviewMouseLeftButtonUp;
         Loaded += OnCardLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += (_, e) =>
+        {
+            if (e.NewValue is false) CancelTileRequest();
+            else if (IsLoaded && IsBitmapMode) ApplyBitmapMode();
+        };
         Cursor = Cursors.Hand;
     }
 
@@ -82,6 +105,7 @@ public partial class NoteCardControl : UserControl
 
     private void ApplyBitmapMode()
     {
+        CancelTileRequest();
         if (BitmapLayer is null || CardBorder is null || CardShadow is null)
             return;
 
@@ -90,23 +114,25 @@ public partial class NoteCardControl : UserControl
         CardBorder.Visibility = bitmapMode ? Visibility.Collapsed : Visibility.Visible;
         CardShadow.Visibility = bitmapMode ? Visibility.Collapsed : Visibility.Visible;
 
-        if (bitmapMode && DataContext is NoteCardViewModel vm)
+        if (bitmapMode && IsLoaded && IsVisible && DataContext is NoteCardViewModel vm)
         {
+            var lease = _tileRequest = new CardTileRequestLease();
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this).PixelsPerDip;
             var requestedVm = vm;
-            BitmapLayer.Source = Scriblucent.Rendering.SkiaCardTileCache.GetOrRequest(
+            BitmapLayer.Source = CropScrollTile(Scriblucent.Rendering.SkiaCardTileCache.GetOrRequest(
                 vm, dpi, Scriblucent.Rendering.SkiaTileRenderers.Notes, source =>
             {
                 // The render landed on the thread pool and marshaled back; only apply if this
                 // container still shows the same note in bitmap mode.
-                if (!IsBitmapMode || !ReferenceEquals(DataContext, requestedVm))
+                if (lease.IsDisposed || !IsLoaded || !IsVisible || !IsBitmapMode || !ReferenceEquals(DataContext, requestedVm))
                     return;
 
                 var previousHeight = (BitmapLayer.Source as System.Windows.Media.Imaging.BitmapSource)?.PixelHeight;
-                BitmapLayer.Source = source;
-                if (previousHeight != source.PixelHeight)
+                var face = CropScrollTile(source);
+                BitmapLayer.Source = face;
+                if (previousHeight != face.PixelHeight)
                     InvalidateMeasure();
-            });
+            }, lease: lease));
         }
         else if (!bitmapMode)
         {
@@ -151,8 +177,13 @@ public partial class NoteCardControl : UserControl
             return;
 
         DataContextChanged += NoteCardControl_DataContextChanged;
-        RebuildContentPreview(DataContext as NoteCardViewModel);
+        SkiaCardTileCache.Invalidated += TileCacheInvalidated;
+        ApplyBitmapMode();
+        if (!IsBitmapMode) RebuildContentPreview(DataContext as NoteCardViewModel);
     }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    { base.OnDpiChanged(oldDpi, newDpi); TileCacheInvalidated(); }
 
     private void NoteCardControl_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
@@ -230,8 +261,13 @@ public partial class NoteCardControl : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        CancelTileRequest();
+        SkiaCardTileCache.Invalidated -= TileCacheInvalidated;
+        BitmapLayer.Source = null;
         DataContextChanged -= NoteCardControl_DataContextChanged;
         ContentPreview.Inlines.Clear();
+        _previewViewModel = null;
+        _previewContent = null;
         CardSurfaceMotionBehavior.Cleanup(this);
     }
 
@@ -248,7 +284,7 @@ public partial class NoteCardControl : UserControl
             return;
 
         // Don't open the editor when the mass-select checkbox was clicked
-        if (DashboardMassSelectCheckBoxBehavior.IsMassSelectCheckBox(e.OriginalSource as DependencyObject))
+        if (CollectionSelectionToggle.IsSelectionToggle(e.OriginalSource as DependencyObject))
             return;
 
         // Get the ViewModel from DataContext
@@ -258,8 +294,7 @@ public partial class NoteCardControl : UserControl
 
         if (viewModel != null && mainVm?.IsMassSelectMode == true)
         {
-            mainVm.ToggleMassSelectForNote(viewModel);
-            MassSelectHighlightBehavior.RequestVisualSync(this);
+            // The inner shared frame owns selection; do not toggle a second time on mouse-up.
             return;
         }
 
@@ -586,8 +621,6 @@ public partial class NoteCardControl : UserControl
             return;
 
         ClearDragVisualState();
-        MassSelectHighlightBehavior.SyncContainer(this);
-        DashboardMassSelectCheckBoxBehavior.SyncContainer(this);
         IndicatorRevealMotionBehavior.SyncContainer(this);
     }
 

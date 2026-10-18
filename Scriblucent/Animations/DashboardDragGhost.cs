@@ -24,17 +24,12 @@ public static class DashboardDragGhost
     private const double GhostFloatYOffset = -5;
     private const double GhostLiftAboveGrabY = 14;
     private const double GhostShadowPad = 24;
-    // Match CardShadowLayer default margin (-14,-12,-14,-16) and ShadowRoot opacity.
-    private const double GhostShadowBleedLeft = 14;
-    private const double GhostShadowBleedTop = 12;
-    private const double GhostShadowBleedRight = 14;
-    private const double GhostShadowBleedBottom = 16;
-    private const double GhostShadowPlateOpacity = 0.58;
     private const double CaptureMargin = 16;
     private const double NoteCardRestWidth = 220;
     private const double NoteCardRestMinHeight = 140;
 
     private static WeakReference<FrameworkElement>? _activeDragSource;
+    private static object? _activeDragItem;
     private static DragGhostWindow? _activeGhostWindow;
     private static NoteCardViewModel? _activeDraggedNote;
     private static NoteCardControl? _activeNoteDragSource;
@@ -43,8 +38,9 @@ public static class DashboardDragGhost
     private static readonly List<CardShadowLayer> HiddenShadowPlates = new();
 
     public static bool IsActiveDragSource(FrameworkElement element)
-        => _activeDragSource?.TryGetTarget(out var source) == true
-            && ReferenceEquals(source, element);
+        => DragSourceDimming.IsSource(element)
+            || _activeDragSource?.TryGetTarget(out var source) == true
+                && ReferenceEquals(source, element) && ReferenceEquals(element.DataContext, _activeDragItem);
 
     public static bool IsNoteDropGlowSyncActive => _activeDraggedNote is not null;
 
@@ -66,9 +62,11 @@ public static class DashboardDragGhost
         FrameworkElement dragSource,
         DataObject data,
         DragDropEffects allowedEffects,
-        Point grabOffsetRelativeToSource)
+        Point grabOffsetRelativeToSource,
+        FrameworkElement? preview = null)
     {
         DragGhostWindow? ghostWindow = null;
+        DragSourceDimming? sourceDimming = null;
         DragDropEffects result;
 
         try
@@ -86,6 +84,7 @@ public static class DashboardDragGhost
                 return result;
             }
             _activeDragSource = new WeakReference<FrameworkElement>(dragSource);
+            _activeDragItem = dragSource.DataContext;
             if (dragSource is NoteCardControl { DataContext: NoteCardViewModel draggedNote } noteDragSource)
             {
                 _activeDraggedNote = draggedNote;
@@ -100,17 +99,18 @@ public static class DashboardDragGhost
             dragSource.UpdateLayout();
             ResetRestVisualState(dragSource);
 
-            var captureSurface = ResolveCaptureSurface(dragSource);
+            var captureSurface = preview ?? ResolveCaptureSurface(dragSource);
             captureSurface.UpdateLayout();
 
-            var (captureWidth, captureHeight) = GetRestCaptureSize(dragSource, captureSurface);
+            var (captureWidth, captureHeight) = preview is null ? GetRestCaptureSize(dragSource, captureSurface)
+                : (captureSurface.ActualWidth, captureSurface.ActualHeight);
             if (captureWidth <= 1 || captureHeight <= 1)
             {
                 result = DragDrop.DoDragDrop(dragSource, data, allowedEffects);
                 return result;
             }
 
-            var grabOffsetOnSurface = ResolveGrabOffsetOnSurface(
+            var grabOffsetOnSurface = preview is not null ? new Point(Math.Min(32, captureWidth / 2), 18) : ResolveGrabOffsetOnSurface(
                 dragSource,
                 captureSurface,
                 grabOffsetRelativeToSource);
@@ -126,7 +126,7 @@ public static class DashboardDragGhost
                 snapshot.ContentOffsetX + grabOffsetOnSurface.X,
                 snapshot.ContentOffsetY + grabOffsetOnSurface.Y);
 
-            var bakedGhost = BakeGhostVisual(snapshot, grabOffset, owner);
+            var bakedGhost = BakeGhostVisual(snapshot, grabOffset, owner, captureSurface as Border);
             ghostWindow = new DragGhostWindow(bakedGhost);
             _activeGhostWindow = ghostWindow;
 
@@ -164,17 +164,27 @@ public static class DashboardDragGhost
             void OnQueryContinueDrag(object sender, QueryContinueDragEventArgs e)
                 => ghostWindow?.AlignToCursor();
 
+            // Virtualized items can be reassigned or unloaded inside the native drag loop.
+            // Their replacement is not the dragged item and must never inherit its dimming.
+            void OnSourceReused(object sender, DependencyPropertyChangedEventArgs e) { if (sourceDimming is null) RestoreDragSource(dragSource); }
+            void OnSourceUnloaded(object sender, RoutedEventArgs e) { if (sourceDimming is null) RestoreDragSource(dragSource); }
+
             dragSource.GiveFeedback += OnGiveFeedback;
             dragSource.QueryContinueDrag += OnQueryContinueDrag;
+            dragSource.DataContextChanged += OnSourceReused;
+            dragSource.Unloaded += OnSourceUnloaded;
             if (syncDropVisualsOnRender)
-                CompositionTarget.Rendering += OnRendering;
+                RenderTransitionClock.AddFrameObserver(OnRendering);
 
             try
             {
                 ghostWindow.AlignToCursor();
                 ghostWindow.Show();
                 ghostWindow.AlignToCursor();
-                DimDragSource(dragSource);
+                if (CollectionSelectionFrame.For(dragSource) is not null)
+                    sourceDimming = new DragSourceDimming(owner, _activeDragItem,
+                        dragSource is NoteCardControl ? NoteSourceOpacityDuringDrag : ListingSourceOpacityDuringDrag);
+                else DimDragSource(dragSource);
                 SyncDropVisualsNow();
 
                 result = DragDrop.DoDragDrop(dragSource, data, allowedEffects);
@@ -184,20 +194,26 @@ public static class DashboardDragGhost
             {
                 dragSource.GiveFeedback -= OnGiveFeedback;
                 dragSource.QueryContinueDrag -= OnQueryContinueDrag;
+                dragSource.DataContextChanged -= OnSourceReused;
+                dragSource.Unloaded -= OnSourceUnloaded;
                 if (syncDropVisualsOnRender)
-                    CompositionTarget.Rendering -= OnRendering;
-                RestoreDragSource(dragSource);
+                    RenderTransitionClock.RemoveFrameObserver(OnRendering);
+                if (sourceDimming is not null) sourceDimming.Dispose();
+                else RestoreDragSource(dragSource);
             }
         }
         catch
         {
-            RestoreDragSource(dragSource);
+            if (sourceDimming is not null) sourceDimming.Dispose();
+            else RestoreDragSource(dragSource);
             result = DragDrop.DoDragDrop(dragSource, data, allowedEffects);
             return result;
         }
         finally
         {
+            sourceDimming?.Dispose();
             _activeDragSource = null;
+            _activeDragItem = null;
             _activeDraggedNote = null;
             _activeNoteDragSource = null;
             _activeDraggedListing = null;
@@ -248,6 +264,7 @@ public static class DashboardDragGhost
 
     private static void ResetRestVisualState(FrameworkElement dragSource)
     {
+        if (dragSource is CollectionSelectionFrame frame) frame.ResetHover();
         UiMotion.Stop(dragSource);
 
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(dragSource);
@@ -390,7 +407,7 @@ public static class DashboardDragGhost
         }
     }
 
-    private static BakedGhost BakeGhostVisual(SnapshotCapture snapshot, Point grabOffset, Window owner)
+    private static BakedGhost BakeGhostVisual(SnapshotCapture snapshot, Point grabOffset, Window owner, Border? cardFace = null)
     {
         var contentW = snapshot.Width;
         var contentH = snapshot.Height;
@@ -403,26 +420,31 @@ public static class DashboardDragGhost
         var pixelW = Math.Max(1, (int)Math.Ceiling(bakeW * dpi.DpiScaleX));
         var pixelH = Math.Max(1, (int)Math.Ceiling(bakeH * dpi.DpiScaleY));
 
-        // Skia composites the nine-slice shadow + the captured card instead of a
+        // Skia composites the shared elevation shadow + the captured card instead of a
         // DrawingVisual + RTB pass.
         using var output = new SkiaSharp.SKBitmap(pixelW, pixelH, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
         using (var canvas = new SkiaSharp.SKCanvas(output))
         {
             canvas.Clear(SkiaSharp.SKColors.Transparent);
 
-            // Nine-slice hugs the visible card face only (exclude CaptureMargin pad).
+            // The shadow follows the visible card face only (exclude CaptureMargin pad).
             var face = new Rect(
                 originX + snapshot.ContentOffsetX,
                 originY + snapshot.ContentOffsetY,
                 snapshot.Width - 2 * snapshot.ContentOffsetX,
                 snapshot.Height - 2 * snapshot.ContentOffsetY);
-            DrawCardShadowNineSliceSkia(canvas, face, dpi);
+            DashboardDragShadow.Draw(canvas, face, dpi, cardFace);
 
+            // Capture and owner DPI can differ. Scale in DIP space so the bitmap face
+            // covers the same rectangle used by its shadow on either monitor.
             using var snapshotBitmap = Scriblucent.Rendering.SkiaBitmapUtil.FromSource((BitmapSource)snapshot.Image);
             canvas.DrawBitmap(
                 snapshotBitmap,
-                (float)(originX * dpi.DpiScaleX),
-                (float)(originY * dpi.DpiScaleY),
+                new SkiaSharp.SKRect(
+                    (float)(originX * dpi.DpiScaleX),
+                    (float)(originY * dpi.DpiScaleY),
+                    (float)((originX + snapshot.Width) * dpi.DpiScaleX),
+                    (float)((originY + snapshot.Height) * dpi.DpiScaleY)),
                 Scriblucent.Rendering.SkiaBitmapUtil.LinearSampling);
         }
 
@@ -439,92 +461,6 @@ public static class DashboardDragGhost
             (int)Math.Round(grabPx.Y));
     }
 
-    private static SkiaSharp.SKBitmap[]? _shadowSlices;
-
-    private static SkiaSharp.SKBitmap[] ShadowSlices
-    {
-        get
-        {
-            if (_shadowSlices is not null)
-                return _shadowSlices;
-
-            ImageSource[] sources =
-            {
-                CardShadowAsset.TopLeft,
-                CardShadowAsset.TopRight,
-                CardShadowAsset.BottomLeft,
-                CardShadowAsset.BottomRight,
-                CardShadowAsset.TopEdge,
-                CardShadowAsset.BottomEdge,
-                CardShadowAsset.LeftEdge,
-                CardShadowAsset.RightEdge,
-            };
-
-            var slices = new SkiaSharp.SKBitmap[sources.Length];
-            for (var i = 0; i < sources.Length; i++)
-            {
-                var bitmapSource = (BitmapSource)sources[i];
-                var width = bitmapSource.PixelWidth;
-                var height = bitmapSource.PixelHeight;
-                var bitmap = new SkiaSharp.SKBitmap(width, height, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
-                bitmapSource.CopyPixels(
-                    new Int32Rect(0, 0, width, height),
-                    bitmap.GetPixels(),
-                    width * height * 4,
-                    width * 4);
-                slices[i] = bitmap;
-            }
-
-            _shadowSlices = slices;
-            return slices;
-        }
-    }
-
-    private static void DrawCardShadowNineSliceSkia(SkiaSharp.SKCanvas canvas, Rect face, DpiScale dpi)
-    {
-        var scaleX = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
-        var scaleY = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
-        var left = GhostShadowBleedLeft;
-        var top = GhostShadowBleedTop;
-        var right = GhostShadowBleedRight;
-        var bottom = GhostShadowBleedBottom;
-        var corner = CardShadowAsset.CornerTileSize;
-
-        var plate = new Rect(
-            face.X - left,
-            face.Y - top,
-            face.Width + left + right,
-            face.Height + top + bottom);
-
-        var x0 = plate.X * scaleX;
-        var x1 = (plate.X + corner) * scaleX;
-        var x2 = (plate.Right - corner) * scaleX;
-        var y0 = plate.Y * scaleY;
-        var y1 = (plate.Y + corner) * scaleY;
-        var y2 = (plate.Bottom - corner) * scaleY;
-        var midW = Math.Max(0, x2 - x1);
-        var midH = Math.Max(0, y2 - y1);
-        var c = corner * scaleX;
-
-        var slices = ShadowSlices;
-        using var paint = new SkiaSharp.SKPaint
-        {
-            Color = new SkiaSharp.SKColor(255, 255, 255, (byte)Math.Round(255 * GhostShadowPlateOpacity))
-        };
-
-        DrawSlice(canvas, slices[0], x0, y0, c, c, paint);
-        DrawSlice(canvas, slices[4], x1, y0, midW, c, paint);
-        DrawSlice(canvas, slices[1], x2, y0, c, c, paint);
-        DrawSlice(canvas, slices[6], x0, y1, c, midH, paint);
-        DrawSlice(canvas, slices[7], x2, y1, c, midH, paint);
-        DrawSlice(canvas, slices[2], x0, y2, c, c, paint);
-        DrawSlice(canvas, slices[5], x1, y2, midW, c, paint);
-        DrawSlice(canvas, slices[3], x2, y2, c, c, paint);
-    }
-
-    private static void DrawSlice(SkiaSharp.SKCanvas canvas, SkiaSharp.SKBitmap bitmap, double x, double y, double width, double height, SkiaSharp.SKPaint paint)
-        => canvas.DrawBitmap(bitmap, new SkiaSharp.SKRect((float)x, (float)y, (float)(x + width), (float)(y + height)), Scriblucent.Rendering.SkiaBitmapUtil.LinearSampling, paint);
-
     private static SnapshotCapture? CaptureSnapshot(
         FrameworkElement dragSource,
         FrameworkElement surface,
@@ -537,16 +473,13 @@ public static class DashboardDragGhost
 
         try
         {
-            var preferDirectCapture = dragSource is not NoteCardControl;
-
-            if (preferDirectCapture && TryDirectCapture(surface, width, height, dpi, out var direct))
-                return new SnapshotCapture(direct, width, height, 0, 0);
-
+            // Capture every face in the same local frame. Directly rendering a listing
+            // Border includes its layout offset, leaving part of the ghost shadow uncovered.
             if (TryPaddedVisualCapture(surface, width, height, dpi, out var padded))
                 return padded;
 
-            if (!preferDirectCapture && TryDirectCapture(surface, width, height, dpi, out direct))
-                return new SnapshotCapture(direct, width, height, 0, 0);
+            // If local-frame capture fails, Execute keeps native dragging available.
+            // Direct RTB capture can include layout offsets and expose the shadow body.
         }
         finally
         {
@@ -554,42 +487,6 @@ public static class DashboardDragGhost
         }
 
         return null;
-    }
-
-    private static bool TryDirectCapture(
-        FrameworkElement element,
-        double width,
-        double height,
-        DpiScale dpi,
-        out ImageSource image)
-    {
-        image = null!;
-        var savedEffect = element.Effect;
-        element.Effect = null;
-
-        try
-        {
-            var pixelWidth = Math.Max(1, (int)Math.Ceiling(width * dpi.DpiScaleX));
-            var pixelHeight = Math.Max(1, (int)Math.Ceiling(height * dpi.DpiScaleY));
-            var rtb = new RenderTargetBitmap(
-                pixelWidth,
-                pixelHeight,
-                dpi.PixelsPerInchX,
-                dpi.PixelsPerInchY,
-                PixelFormats.Pbgra32);
-            rtb.Render(element);
-            rtb.Freeze();
-            image = rtb;
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            element.Effect = savedEffect;
-        }
     }
 
     private static bool TryPaddedVisualCapture(
@@ -609,22 +506,37 @@ public static class DashboardDragGhost
         element.Effect = null;
         try
         {
+            var faceBounds = new Rect(0, 0, width, height);
+            if (VisualTreeHelper.GetParent(element) is Visual parent)
+                faceBounds = element.TransformToAncestor(parent).TransformBounds(faceBounds);
             var drawing = new DrawingVisual();
             using (var context = drawing.RenderOpen())
             {
                 var brush = new VisualBrush(element)
                 {
-                    Stretch = Stretch.None,
+                    // Normalize the transformed viewbox back to the rest-size face.
+                    // Nested entrance transforms (including the template's .88 scale)
+                    // must not leave a small card over a full-size shadow. Keep the
+                    // live transform tree intact, including motion channels/bindings.
+                    Stretch = Stretch.Fill,
                     AlignmentX = AlignmentX.Left,
                     AlignmentY = AlignmentY.Top,
-                    Viewbox = new Rect(0, 0, width, height),
+                    Viewbox = faceBounds,
                     ViewboxUnits = BrushMappingMode.Absolute
                 };
-                brush.Freeze();
+                // A VisualBrush referencing a live face cannot be frozen. Freeze only
+                // the rendered bitmap; freezing here made every padded capture fail.
+                if (element is Border face)
+                {
+                    var contour = SurfaceContour.Create(new Size(width, height), face.CornerRadius, SurfaceContour.EffectiveFrame(face)).Clone();
+                    contour.Transform = new TranslateTransform(CaptureMargin, CaptureMargin);
+                    contour.Freeze(); context.PushClip(contour);
+                }
                 context.DrawRectangle(
                     brush,
                     null,
                     new Rect(CaptureMargin, CaptureMargin, width, height));
+                if (element is Border) context.Pop();
             }
 
             var image = RenderDrawingToBitmap(drawing, pixelWidth, pixelHeight, dpi);
@@ -643,6 +555,11 @@ public static class DashboardDragGhost
 
     private static FrameworkElement ResolveCaptureSurface(FrameworkElement dragSource)
     {
+        if (dragSource is CollectionSelectionFrame frame)
+        {
+            var face = FindVisibleFace(frame, frame.FaceName);
+            if (face is not null) return face;
+        }
         if (dragSource.FindName("CardBorder") is FrameworkElement cardBorder)
             return cardBorder;
 
@@ -658,6 +575,14 @@ public static class DashboardDragGhost
         }
 
         return dragSource;
+    }
+
+    private static Border? FindVisibleFace(DependencyObject root, string name)
+    {
+        if (root is Border { IsVisible: true } face && face.Name == name) return face;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            if (FindVisibleFace(VisualTreeHelper.GetChild(root, i), name) is { } found) return found;
+        return null;
     }
 
     private static bool TryResolveListingFace(FrameworkElement dragSource, out FrameworkElement face)

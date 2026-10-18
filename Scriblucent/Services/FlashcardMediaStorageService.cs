@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
@@ -7,13 +7,8 @@ using System.Windows.Media.Imaging;
 namespace Scriblucent.Services;
 
 /// <summary>
-/// Stores flashcard image/audio attachments as separate files under
-/// %LocalAppData%\Scriblucent\FlashcardMedia, rather than embedding them as base64 inside
-/// flashcards.json (the way Notes currently embeds images) - flashcards.json is rewritten in full
-/// on every save, and audio clips especially can be far bigger than the compressed images Notes
-/// stores, so keeping media out of that file avoids a real, growing save-time cost. Not
-/// flashcard-specific in its actual logic (a plain file-based blob store), so it's the natural
-/// thing to reuse if Notes' image storage is ever migrated off embedded-base64 later.
+/// Stores flashcard image/audio attachments under %LocalAppData%\Scriblucent\FlashcardMedia.
+/// Documents reference these files by name, keeping media payloads out of the JSON store.
 /// </summary>
 internal static class FlashcardMediaStorageService
 {
@@ -21,9 +16,11 @@ internal static class FlashcardMediaStorageService
     private const int JpegQuality = 86;
     private static readonly string[] AllowedAudioExtensions = { ".mp3", ".wav" };
 
+    internal static string? MediaDirectoryOverride { get; set; }
+
     private static string GetMediaFolderPath()
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "FlashcardMedia");
+        var dir = MediaDirectoryOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scriblucent", "FlashcardMedia");
         Directory.CreateDirectory(dir);
         return dir;
     }

@@ -1,10 +1,74 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
-                    xmlns:controls="clr-namespace:Scriblucent.Controls">
+                    xmlns:controls="clr-namespace:Scriblucent.Controls"
+                    xmlns:icons="clr-namespace:Scriblucent.Icons">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/Scriblucent;component/Themes/Tokens.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <Style x:Key="ButtonKeyboardFocusStyle" TargetType="Control">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Control">
+                    <Border BorderBrush="{DynamicResource AccentRimBrush}" BorderThickness="2"
+                            CornerRadius="{StaticResource Radius.Control}"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Card-sized commands keep keyboard focus on their own rounded contour. -->
+    <Style x:Key="CardButtonKeyboardFocusStyle" TargetType="Control" BasedOn="{StaticResource ButtonKeyboardFocusStyle}">
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control">
+            <Border BorderBrush="{DynamicResource AccentRimBrush}" BorderThickness="2"
+                    CornerRadius="{StaticResource Radius.Card}"/>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+
+    <!-- Disclosure is an action, not a persistent selection. The chevron owns expanded state. -->
+    <Style x:Key="DisclosureHeaderToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Form}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="MinHeight" Value="36"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToggleButton">
+            <controls:InteractionSurface x:Name="DisclosureHeaderFace" Role="Compact"
+                    Background="{TemplateBinding Background}" BorderThickness="0"
+                    CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}"
+                    HighlightWash="{DynamicResource ControlHoverSurfaceWash}"
+                    HighlightEdge="{DynamicResource ControlHoverSurfaceEdge}"
+                    HoverBackground="{DynamicResource IconButtonHoverBackground}"
+                    PressedBackground="{DynamicResource IconButtonPressedBackground}">
+                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  RecognizesAccessKey="True"/>
+            </controls:InteractionSurface>
+            <ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+            </Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
 
     <!-- Implicit Button — theme-aware fallback -->
     <Style TargetType="{x:Type Button}">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Standard"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource ControlHoverSurfaceWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource ControlHoverSurfaceEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource ButtonHoverBackground}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource ButtonPressedBackground}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -20,7 +84,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Border x:Name="ButtonBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
@@ -29,14 +98,8 @@
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource ButtonPressedBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
@@ -47,6 +110,14 @@
     </Style>
 
     <Style x:Key="ToolbarIconButtonBaseStyle" TargetType="Button">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource ControlHoverSurfaceWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource ControlHoverSurfaceEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource IconButtonHoverBackground}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource IconButtonPressedBackground}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ButtonBorder"/>
         <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -63,22 +134,21 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="ButtonBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
-                            CornerRadius="{StaticResource Radius.Control}">
+                            CornerRadius="{StaticResource Radius.Control}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
                         </Trigger>
@@ -89,9 +159,58 @@
     </Style>
 
     <Style x:Key="ToolbarIconButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonBaseStyle}">
-        <Setter Property="Width" Value="30"/>
-        <Setter Property="Height" Value="30"/>
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="Height" Value="32"/>
         <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
+    </Style>
+
+    <!-- One material for the movement cluster; individual targets reveal on interaction. -->
+    <Style x:Key="ReorderControlTrayStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource ActionStripBackground}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Control}"/>
+        <Setter Property="Padding" Value="2"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+    </Style>
+    <Style x:Key="ReorderTrayButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="None"/>
+        <Setter Property="Focusable" Value="True"/>
+    </Style>
+    <Style x:Key="EmbeddedReorderControlTrayStyle" TargetType="Border" BasedOn="{StaticResource ReorderControlTrayStyle}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="None"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style x:Key="ActionStripDividerStyle" TargetType="Border">
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Height" Value="14"/>
+        <Setter Property="Margin" Value="6,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Background" Value="{DynamicResource ActionDividerBrush}"/>
+        <Setter Property="Opacity" Value="0.55"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+    <Style x:Key="DashboardDisclosureButtonStyle" TargetType="Button" BasedOn="{StaticResource ReorderTrayButtonStyle}">
+        <Setter Property="Width" Value="{StaticResource Control.Size.Section}"/>
+        <Setter Property="Height" Value="{StaticResource Control.Size.Section}"/>
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <controls:InteractionSurface x:Name="ButtonBorder" Background="{TemplateBinding Background}"
+                        Role="Compact" CornerRadius="{StaticResource Radius.Control}"
+                        HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                        HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                        HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                        PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}">
+                        <icons:AppIcon x:Name="DisclosureChevron" Kind="ChevronDown" Width="14" Height="14" Foreground="{TemplateBinding Foreground}"/>
+                    </controls:InteractionSurface>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.55"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="OverlayCloseIconButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
@@ -103,6 +222,7 @@
     <Style x:Key="DialogButtonBaseStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ButtonBorder"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Action}"/>
         <Setter Property="MinWidth" Value="100"/>
         <Setter Property="Padding" Value="20,10"/>
         <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
@@ -116,9 +236,12 @@
     </Style>
 
     <Style x:Key="DialogSecondaryButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource DialogButtonBaseStyle}">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource IconButtonHoverBackground}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource IconButtonPressedBackground}"/>
         <!-- IconButtonBackground reads on white Card / InputSurface panels (toolbars, dialogs, question cards).
-             On gray FeatureFrame / Sidebar chrome, prefer CardBackground via a local override or
-             SettingsChromeSecondaryButtonStyle / FeatureFrame raised secondaries. -->
+             On neutral canvas / navigation chrome, prefer CardBackground via a local override or
+             SettingsChromeSecondaryButtonStyle for content-surface secondaries. -->
         <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
@@ -126,7 +249,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="ButtonBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
@@ -135,14 +263,8 @@
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
@@ -153,7 +275,13 @@
     </Style>
 
     <Style x:Key="DialogDangerButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource DialogButtonBaseStyle}">
+        <Setter Property="controls:InteractionSurface.Role" Value="Prominent"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource FilledControlHoverWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource FilledControlHoverEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentDangerHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentDangerPressed}"/>
         <Setter Property="Background" Value="{DynamicResource AccentDanger}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Filled"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentDangerForeground}"/>
@@ -161,8 +289,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <controls:BakedElevationLayer Kind="Button"/>
-                        <Border x:Name="ButtonBorder"
+                        <controls:BakedElevationLayer x:Name="ButtonShadow" Kind="Button" Opacity="0" IsHitTestVisible="False"/>
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
@@ -171,15 +304,9 @@
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"/>
-                        </Border>
+                        </controls:InteractionSurface>
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentDangerHover}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentDangerPressed}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
@@ -190,7 +317,13 @@
     </Style>
 
     <Style x:Key="DialogWarningButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource DialogButtonBaseStyle}">
+        <Setter Property="controls:InteractionSurface.Role" Value="Prominent"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource FilledControlHoverWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource FilledControlHoverEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentWarningHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentWarningPressed}"/>
         <Setter Property="Background" Value="{DynamicResource AccentWarning}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Filled"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentWarningForeground}"/>
@@ -198,8 +331,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <controls:BakedElevationLayer Kind="Button"/>
-                        <Border x:Name="ButtonBorder"
+                        <controls:BakedElevationLayer x:Name="ButtonShadow" Kind="Button" Opacity="0" IsHitTestVisible="False"/>
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
@@ -208,15 +346,9 @@
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"/>
-                        </Border>
+                        </controls:InteractionSurface>
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentWarningHover}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentWarningPressed}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
@@ -227,7 +359,13 @@
     </Style>
 
     <Style x:Key="DialogPrimaryButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource DialogButtonBaseStyle}">
+        <Setter Property="controls:InteractionSurface.Role" Value="Prominent"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource FilledControlHoverWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource FilledControlHoverEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentPrimaryHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentPrimaryPressed}"/>
         <Setter Property="Background" Value="{DynamicResource AccentPrimary}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Filled"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryForeground}"/>
@@ -235,8 +373,13 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Grid UseLayoutRounding="True" SnapsToDevicePixels="True">
-                        <controls:BakedElevationLayer Kind="Button"/>
-                        <Border x:Name="ButtonBorder"
+                        <controls:BakedElevationLayer x:Name="ButtonShadow" Kind="Button" Opacity="0" IsHitTestVisible="False"/>
+                        <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent"
                                 BorderThickness="0"
@@ -245,15 +388,9 @@
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"
                                               RecognizesAccessKey="True"/>
-                        </Border>
+                        </controls:InteractionSurface>
                     </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentPrimaryHover}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentPrimaryPressed}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
                         </Trigger>
@@ -263,12 +400,20 @@
         </Setter>
     </Style>
 
+    <Style x:Key="DialogSuccessButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogPrimaryButtonStyle}">
+        <Setter Property="Background" Value="{DynamicResource AccentSuccess}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentSuccessForeground}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentSuccessHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentSuccessPressed}"/>
+    </Style>
+
     <Style x:Key="EmptyDashboardPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogPrimaryButtonStyle}">
         <Setter Property="MinWidth" Value="180"/>
         <Setter Property="Padding" Value="18,10"/>
         <Style.Triggers>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+                <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
                 <Setter Property="BorderBrush" Value="Transparent"/>
                 <Setter Property="BorderThickness" Value="0"/>
                 <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
@@ -281,57 +426,74 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Feature toolbar chrome = Type.Caption; forms / dialogs / menus = Type.Body. -->
+    <!-- Toolbar controls share the 14 DIP / 32 DIP density family. -->
     <!-- Shared feature-window toolbar CTAs (preview / library / combine).
          Sit on white ChromePanel / card surfaces → inherit IconButtonBackground, not CardBackground. -->
     <Style x:Key="FeatureToolbarSecondaryButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
-        <Setter Property="Padding" Value="14,7"/>
-        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Toolbar}"/>
         <Setter Property="MinWidth" Value="96"/>
-        <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
         <Setter Property="Margin" Value="0,0,8,8"/>
     </Style>
 
     <Style x:Key="FeatureToolbarPrimaryButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource DialogPrimaryButtonStyle}">
-        <Setter Property="Padding" Value="14,7"/>
-        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Padding" Value="14,0"/>
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Toolbar}"/>
         <Setter Property="MinWidth" Value="96"/>
-        <Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
         <Setter Property="Margin" Value="0,0,8,8"/>
     </Style>
 
     <Style x:Key="ChromeLinkedNoteButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource FeatureToolbarSecondaryButtonStyle}">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource IconButtonHoverBackground}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource IconButtonPressedBackground}"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="LinkedNoteBorder"/>
-        <Setter Property="Margin" Value="0,0,8,0"/>
-        <Setter Property="MinWidth" Value="160"/>
-        <Setter Property="MaxWidth" Value="240"/>
-        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Margin" Value="0,0,4,0"/>
+        <Setter Property="MinWidth" Value="96"/>
+        <Setter Property="MaxWidth" Value="{StaticResource Control.Width.LinkedNote}"/>
+        <Setter Property="Height" Value="{StaticResource Control.Height.Toolbar}"/>
+        <Setter Property="Padding" Value="10,0,8,0"/>
+        <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-        <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Border x:Name="LinkedNoteBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="LinkedNoteBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{StaticResource Radius.Control}"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="Center"
-                                          RecognizesAccessKey="True"/>
-                    </Border>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="18"/>
+                            </Grid.ColumnDefinitions>
+                            <icons:AppIcon Kind="Link" Width="16" Height="16" Margin="0,0,8,0"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource AccentPrimarySubtleForeground}"/>
+                            <TextBlock Grid.Column="1" Text="{TemplateBinding Content}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" Foreground="{TemplateBinding Foreground}"/>
+                            <Border Grid.Column="2" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <icons:AppIcon Kind="ChevronRight" Width="12" Height="12"
+                                               Foreground="{DynamicResource TextColorSecondary}"/>
+                            </Border>
+                        </Grid>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="LinkedNoteBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="LinkedNoteBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.65"/>
                         </Trigger>
@@ -339,23 +501,41 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Path=(controls:EditorChromeContext.Controller).SelectedLinkedNote, RelativeSource={RelativeSource Self}}" Value="{x:Null}">
+                <Setter Property="Visibility" Value="Collapsed"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Embedded commands keep their document footprint and share toolbar feedback. -->
+    <Style x:Key="CompactGlyphButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonBaseStyle}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
+    </Style>
+
+    <Style x:Key="CompactTextActionButtonStyle" TargetType="Button" BasedOn="{StaticResource CompactGlyphButtonStyle}">
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Helper}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentPrimary}"/>
+        <Setter Property="Height" Value="22"/>
+        <Setter Property="Padding" Value="4,2"/>
     </Style>
 
     <Style x:Key="LinkedNoteToolbarButtonStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource ChromeLinkedNoteButtonStyle}"/>
 
     <Style x:Key="ChromeDangerIconButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource DangerControlHoverWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource AccentDanger}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentDangerHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentDangerPressed}"/>
         <Setter Property="Background" Value="{DynamicResource AccentDanger}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Filled"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentDangerForeground}"/>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{DynamicResource AccentDangerHover}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{DynamicResource AccentDangerPressed}"/>
-            </Trigger>
-        </Style.Triggers>
     </Style>
 
     <!-- Editor icon-toolbar family - promoted from NoteEditorWindow.xaml (was window-local) so any
@@ -363,6 +543,13 @@
          map editor's chrome redesign. Level 6 toolbar: rest S; active tool A via
          BorderBrush/Thickness (SetEditorToolButtonActive). -->
     <Style x:Key="EditorToolButtonBaseStyle" TargetType="Button">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource ControlHoverSurfaceWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource ControlHoverSurfaceEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource IconButtonHoverBackground}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource IconButtonPressedBackground}"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ButtonBorder"/>
         <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -379,7 +566,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="ButtonBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
@@ -389,14 +581,8 @@
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           Margin="0"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
                         </Trigger>
@@ -415,13 +601,23 @@
     </Style>
 
     <Style x:Key="EditorDangerToolButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorToolButtonBaseStyle}">
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource DangerControlHoverWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource AccentDanger}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentDangerSubtleHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentDangerSubtleHover}"/>
         <Setter Property="Background" Value="{DynamicResource AccentDangerSubtle}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentDangerSubtleForeground}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="ButtonBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
@@ -430,14 +626,8 @@
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           Margin="0"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentDangerSubtleHover}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource AccentDangerSubtleHover}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
                         </Trigger>
@@ -449,14 +639,18 @@
 
     <Style x:Key="EditorToolSearchInputStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="Width" Value="220"/>
-        <Setter Property="Height" Value="34"/>
+        <Setter Property="Height" Value="32"/>
         <Setter Property="Margin" Value="0,0,6,0"/>
         <Setter Property="Padding" Value="10,0"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
 
     <Style x:Key="EditorPrimarySaveButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorToolButtonBaseStyle}">
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Prominent"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource FilledControlHoverWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource FilledControlHoverEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentPrimaryHover}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentPrimaryPressed}"/>
         <Setter Property="Focusable" Value="True"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="SaveButtonBorder"/>
         <Setter Property="Width" Value="38"/>
@@ -465,11 +659,19 @@
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryForeground}"/>
         <Setter Property="Background" Value="{DynamicResource AccentPrimary}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Filled"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="SaveButtonBorder"
+                    <Grid>
+                        <controls:BakedElevationLayer x:Name="ButtonShadow" Kind="Button" Opacity="0" IsHitTestVisible="False"/>
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="SaveButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="Transparent"
                             BorderThickness="0"
@@ -477,14 +679,9 @@
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
+                    </Grid>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="SaveButtonBorder" Property="Background" Value="{DynamicResource AccentPrimaryHover}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="SaveButtonBorder" Property="Background" Value="{DynamicResource AccentPrimaryPressed}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
                         </Trigger>
@@ -496,7 +693,7 @@
 
     <Style x:Key="EditorSideToolButtonStyle" TargetType="Button" BasedOn="{StaticResource EditorToolButtonBaseStyle}">
         <Setter Property="Width" Value="38"/>
-        <Setter Property="Height" Value="34"/>
+        <Setter Property="Height" Value="32"/>
         <Setter Property="Margin" Value="0,0,0,6"/>
         <Setter Property="FontSize" Value="{StaticResource Type.SectionTitle}"/>
         <Setter Property="FontWeight" Value="Normal"/>
@@ -505,6 +702,12 @@
     <!-- ToggleButton counterpart to EditorToolIconButtonStyle. Checked state matches
          SetEditorToolButtonActive: pastel fill plus the accent edge, not a solid fill. -->
     <Style x:Key="EditorToolIconToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
+        <Setter Property="controls:InteractionSurface.HighlightWash" Value="{DynamicResource ControlHoverSurfaceWash}"/>
+        <Setter Property="controls:InteractionSurface.HighlightEdge" Value="{DynamicResource ControlHoverSurfaceEdge}"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource IconButtonHoverBackground}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource IconButtonPressedBackground}"/>
         <Setter Property="Width" Value="32"/>
         <Setter Property="Height" Value="32"/>
         <Setter Property="Margin" Value="0,0,6,0"/>
@@ -522,7 +725,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="ButtonBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="ButtonBorder"
+                            Role="{TemplateBinding controls:InteractionSurface.Role}"
+                            HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}"
+                            HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}"
+                            HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}"
+                            PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
@@ -531,11 +739,8 @@
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           Margin="0"
                                           RecognizesAccessKey="True"/>
-                    </Border>
+                    </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                        </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter Property="Background" Value="{DynamicResource EditorToolActiveBackground}"/>
                             <Setter Property="BorderBrush" Value="{DynamicResource EditorToolActiveBorder}"/>
@@ -555,6 +760,8 @@
          local StyleNodeColorSwatchButtonStyle (kept separate: that one matches the dialog's card
          chrome, this one matches the dense icon-toolbar chrome). -->
     <Style x:Key="EditorColorSwatchButtonStyle" TargetType="Button">
+        <Setter Property="behaviors:CommandLightBehavior.Role" Value="Value"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource ButtonKeyboardFocusStyle}"/>
         <Setter Property="Width" Value="32"/>
         <Setter Property="Height" Value="32"/>
         <Setter Property="Margin" Value="0,0,6,0"/>
@@ -564,15 +771,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="SwatchBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" x:Name="SwatchBorder" Role="Compact" HighlightWash="Transparent" HighlightEdge="{DynamicResource AccentPrimary}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{StaticResource Radius.Control}"/>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="SwatchBorder" Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
-                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.55"/>
                         </Trigger>
@@ -580,5 +784,26 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+    <!-- Full-row links keep the command contour and keyboard focus, with a transparent rest face. -->
+    <Style x:Key="LinkRowButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="None"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
+        <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentPrimarySubtle}"/>
+        <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource SelectionBackground}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="Padding" Value="12,9"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+
+    <Style x:Key="InlineActionButtonStyle" TargetType="Button" BasedOn="{StaticResource DialogSecondaryButtonStyle}">
+        <Setter Property="MinHeight" Value="{StaticResource Control.Height.Inline}"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="Padding" Value="10,0"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Control.Inline}"/>
+        <Setter Property="controls:InteractionSurface.Role" Value="Compact"/>
     </Style>
 </ResourceDictionary>

@@ -13,14 +13,8 @@ public partial class FlashcardsDashboardPage : UserControl
 
     private MainWindow? Host => Window.GetWindow(this) as MainWindow;
 
-    private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
-        => Host?.CalendarScheduleGearButton_Click(sender, e);
-    private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => Host?.CalendarScheduledItemCard_MouseLeftButtonUp(sender, e);
     private void CreateFlashcardsButton_Click(object sender, RoutedEventArgs e)
         => Host?.CreateFlashcardsButton_Click(sender, e);
-    private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
-        => Host?.DashboardCalendar_SelectedDatesChanged(sender, e);
     private void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)
         => Host?.DashboardGroupBorder_PreviewDragLeave(sender, e);
     private void DashboardGroupBorder_PreviewDragOver(object sender, DragEventArgs e)
@@ -65,8 +59,6 @@ public partial class FlashcardsDashboardPage : UserControl
         => Host?.DisbandDashboardGroupMenuItem_Click(sender, e);
     private void DuplicateFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.DuplicateFlashcardSetMenuItem_Click(sender, e);
-    private void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
-        => Host?.FlashcardDashboardActionsButton_Click(sender, e);
     private void FlashcardSetInfoMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.FlashcardSetInfoMenuItem_Click(sender, e);
     private void ImportButton_Click(object sender, RoutedEventArgs e)
@@ -81,10 +73,6 @@ public partial class FlashcardsDashboardPage : UserControl
         => Host?.MoveDashboardContentDownButton_Click(sender, e);
     private void MoveDashboardContentUpButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveDashboardContentUpButton_Click(sender, e);
-    private void MoveDashboardGroupDownButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveDashboardGroupDownButton_Click(sender, e);
-    private void MoveDashboardGroupUpButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveDashboardGroupUpButton_Click(sender, e);
     private void MoveFlashcardDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveFlashcardDashboardGroupsDownButton_Click(sender, e);
     private void MoveFlashcardDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)
@@ -93,12 +81,6 @@ public partial class FlashcardsDashboardPage : UserControl
         => Host?.MoveFlashcardDashboardUngroupedDownButton_Click(sender, e);
     private void MoveFlashcardDashboardUngroupedUpButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveFlashcardDashboardUngroupedUpButton_Click(sender, e);
-    private void OpenFlashcardCombineMenuItem_Click(object sender, RoutedEventArgs e)
-        => Host?.OpenFlashcardCombineMenuItem_Click(sender, e);
-    private void OpenFlashcardHistoryMenuItem_Click(object sender, RoutedEventArgs e)
-        => Host?.OpenFlashcardHistoryMenuItem_Click(sender, e);
-    private void OpenFlashcardStatisticsMenuItem_Click(object sender, RoutedEventArgs e)
-        => Host?.OpenFlashcardStatisticsMenuItem_Click(sender, e);
     private void OpenFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.OpenFlashcardSetMenuItem_Click(sender, e);
     private void RecentFlashcardSetButton_Click(object sender, RoutedEventArgs e)

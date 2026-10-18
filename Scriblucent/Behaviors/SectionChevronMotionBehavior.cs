@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Scriblucent.Animations;
 
 namespace Scriblucent.Behaviors;
@@ -15,6 +17,7 @@ public static class SectionChevronMotionBehavior
     private sealed class State
     {
         public bool HasInitialized;
+        public bool InitializationPending;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -25,15 +28,15 @@ public static class SectionChevronMotionBehavior
 
     public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.RegisterAttached(
         "IsExpanded",
-        typeof(bool),
+        typeof(bool?),
         typeof(SectionChevronMotionBehavior),
-        new PropertyMetadata(false, OnIsExpandedChanged));
+        new PropertyMetadata(null, OnIsExpandedChanged));
 
     public static void SetIsExpanded(DependencyObject element, bool value)
         => element.SetValue(IsExpandedProperty, value);
 
     public static bool GetIsExpanded(DependencyObject element)
-        => (bool)element.GetValue(IsExpandedProperty);
+        => element.GetValue(IsExpandedProperty) is true;
 
     private static void OnIsExpandedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -55,7 +58,6 @@ public static class SectionChevronMotionBehavior
         if (sender is not FrameworkElement element)
             return;
 
-        element.Loaded -= OnTargetLoaded;
         UpdateExpandedState(element, GetIsExpanded(element));
     }
 
@@ -63,11 +65,26 @@ public static class SectionChevronMotionBehavior
     {
         var state = GetOrCreateState(element);
         Apply(element, expanded, animate: state.HasInitialized);
-        state.HasInitialized = true;
+        if (state.HasInitialized || state.InitializationPending) return;
+        state.InitializationPending = true;
+        // Ancestor state bindings can resolve after a child's Loaded event. Finish
+        // that initial binding batch before allowing later changes to animate.
+        element.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            state.InitializationPending = false;
+            if (!element.IsLoaded) return;
+            Apply(element, GetIsExpanded(element), animate: false);
+            state.HasInitialized = true;
+        });
     }
 
     private static void Apply(FrameworkElement element, bool expanded, bool animate)
     {
+        if (element is Control control)
+        {
+            control.ApplyTemplate();
+            if (control.Template?.FindName("DisclosureChevron", control) is FrameworkElement glyph) element = glyph;
+        }
         var rotate = EnsureRotate(element);
         var target = expanded ? ExpandedAngle : CollapsedAngle;
 
@@ -113,6 +130,9 @@ public static class SectionChevronMotionBehavior
 
         state = new State();
         element.SetValue(StateProperty, state);
+        element.Loaded -= OnTargetLoaded;
+        element.Loaded += OnTargetLoaded;
+        element.Unloaded += (_, _) => state.HasInitialized = false;
         return state;
     }
 }

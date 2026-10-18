@@ -13,12 +13,6 @@ public partial class NotesDashboardPage : UserControl
 
     private MainWindow? Host => Window.GetWindow(this) as MainWindow;
 
-    private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
-        => Host?.CalendarScheduleGearButton_Click(sender, e);
-    private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => Host?.CalendarScheduledItemCard_MouseLeftButtonUp(sender, e);
-    private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
-        => Host?.DashboardCalendar_SelectedDatesChanged(sender, e);
     private void DisbandGroupMenuItem_Click(object sender, RoutedEventArgs e)
         => Host?.DisbandGroupMenuItem_Click(sender, e);
     private void GroupBorder_DragLeave(object sender, DragEventArgs e)
@@ -33,6 +27,8 @@ public partial class NotesDashboardPage : UserControl
         => Host?.GroupColorMenuItem_Click(sender, e);
     private void GroupMenuButton_Click(object sender, RoutedEventArgs e)
         => Host?.GroupMenuButton_Click(sender, e);
+    private void CreateNoteButton_Click(object sender, RoutedEventArgs e)
+        => Host?.CreateNoteButton_Click(sender, e);
     private void ImportButton_Click(object sender, RoutedEventArgs e)
         => Host?.ImportButton_Click(sender, e);
     private void MoveCalendarDownButton_Click(object sender, RoutedEventArgs e)
@@ -47,10 +43,6 @@ public partial class NotesDashboardPage : UserControl
         => Host?.MoveGroupsDownButton_Click(sender, e);
     private void MoveGroupsUpButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveGroupsUpButton_Click(sender, e);
-    private void MoveSingleGroupDownButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveSingleGroupDownButton_Click(sender, e);
-    private void MoveSingleGroupUpButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveSingleGroupUpButton_Click(sender, e);
     private void MoveUngroupedDownButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveUngroupedDownButton_Click(sender, e);
     private void MoveUngroupedUpButton_Click(object sender, RoutedEventArgs e)

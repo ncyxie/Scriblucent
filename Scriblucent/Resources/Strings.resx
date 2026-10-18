@@ -262,6 +262,8 @@
   <data name="MoveGroupsSectionUp" xml:space="preserve"><value>Move groups section up</value></data>
   <data name="MoveGroupsSectionDown" xml:space="preserve"><value>Move groups section down</value></data>
   <data name="ToggleGroupsSection" xml:space="preserve"><value>Show/hide groups</value></data>
+  <data name="ExpandGroup" xml:space="preserve"><value>Expand group</value></data>
+  <data name="CollapseGroup" xml:space="preserve"><value>Collapse group</value></data>
   <data name="MoveThisGroupUp" xml:space="preserve"><value>Move this group up</value></data>
   <data name="MoveThisGroupDown" xml:space="preserve"><value>Move this group down</value></data>
   <data name="MoveUngroupedSectionUp" xml:space="preserve"><value>Move ungrouped section up</value></data>
@@ -382,8 +384,8 @@
   <data name="FailedToPrintNote" xml:space="preserve"><value>Failed to print note:</value></data>
   <data name="PrintError" xml:space="preserve"><value>Print Error</value></data>
   <data name="OpenFileDialogFilter" xml:space="preserve"><value>Supported note files (*.scribnote;*.notecard;*.rtf;*.txt)|*.scribnote;*.notecard;*.rtf;*.txt|Scriblucent note (*.scribnote)|*.scribnote|Legacy note package (*.notecard)|*.notecard|Rich Text Format (*.rtf)|*.rtf|Text Files (*.txt)|*.txt|All files (*.*)|*.*</value></data>
-  <data name="AboutTagline" xml:space="preserve"><value>Notes. Flashcards. Mind Maps. Quizzes.</value></data>
-  <data name="AboutDescription" xml:space="preserve"><value>Study offline with local AI — notes become flashcards, mind maps, and quizzes. Your data stays on your device.</value></data>
+  <data name="AboutTagline" xml:space="preserve"><value>Write. Recite. Get it right.</value></data>
+  <data name="AboutDescription" xml:space="preserve"><value>Learn offline at your own pace. Take notes, build flashcards, map ideas, and test yourself, all in one private space.</value></data>
   <data name="AboutMaintainedBy" xml:space="preserve"><value>Maintained by</value></data>
   <data name="AboutOriginalContributors" xml:space="preserve"><value>Original NoteCards contributors</value></data>
   <data name="AboutLicenseFooter" xml:space="preserve"><value>MIT License · 2026</value></data>
@@ -429,7 +431,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="RemoveFromGroup" xml:space="preserve"><value>Remove from Group</value></data>
   <data name="RenameGroup" xml:space="preserve"><value>Rename Group</value></data>
   <data name="RenameGroupPrompt" xml:space="preserve"><value>Enter a new group name:</value></data>
-  <data name="GroupBackgroundColor" xml:space="preserve"><value>Group Background Color</value></data>
+  <data name="GroupBackgroundColor" xml:space="preserve"><value>Group colour</value></data>
   <data name="GroupColorDefault" xml:space="preserve"><value>Default Blue</value></data>
   <data name="GroupColorBlue" xml:space="preserve"><value>Blue</value></data>
   <data name="GroupColorMint" xml:space="preserve"><value>Mint</value></data>
@@ -554,6 +556,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="ClearContent" xml:space="preserve"><value>Clear Content</value></data>
   <data name="ClearContentTitle" xml:space="preserve"><value>Clear Content</value></data>
   <data name="ClearContentPrompt" xml:space="preserve"><value>Are you sure you want to clear all content from this note? This action cannot be undone.</value></data>
+  <data name="NotSaved" xml:space="preserve"><value>Not saved</value></data>
   <data name="Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="AutoSaving" xml:space="preserve"><value>Auto-saving...</value></data>
   <data name="EditHistory" xml:space="preserve"><value>Edit History</value></data>
@@ -631,7 +634,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="SaveAndExit" xml:space="preserve"><value>Save</value></data>
   <data name="EditedIndicator" xml:space="preserve"><value>Edited</value></data>
   <data name="TabCloseWarning" xml:space="preserve"><value>This tab has unsaved changes. Close anyway?</value></data>
-  <data name="SelectMultiple" xml:space="preserve"><value>Select item</value></data>
+  <data name="SelectMultiple" xml:space="preserve"><value>Select items</value></data>
   <data name="CalendarAssignMenu" xml:space="preserve"><value>Schedule in calendar...</value></data>
   <data name="CalendarAssignTitle" xml:space="preserve"><value>Schedule note</value></data>
   <data name="CalendarAssignHint" xml:space="preserve"><value>Add one or more reminder dates for this note.</value></data>
@@ -643,6 +646,10 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="CalendarAddSchedule" xml:space="preserve"><value>Add reminder</value></data>
   <data name="CalendarRemoveSchedule" xml:space="preserve"><value>Remove reminder</value></data>
   <data name="CalendarEditSchedule" xml:space="preserve"><value>Edit schedule</value></data>
+  <data name="CalendarPreviousPeriod" xml:space="preserve"><value>Previous period</value></data>
+  <data name="CalendarNextPeriod" xml:space="preserve"><value>Next period</value></data>
+  <data name="CalendarChoosePeriod" xml:space="preserve"><value>Choose a month or year</value></data>
+  <data name="CalendarOpenDay" xml:space="preserve"><value>An open day</value></data>
   <data name="CalendarNoSchedulesForDay" xml:space="preserve"><value>No scheduled items for this day.</value></data>
   <data name="CalendarClearSchedule" xml:space="preserve"><value>Clear schedule</value></data>
   <data name="CalendarDateRequired" xml:space="preserve"><value>Please select a date for the reminder.</value></data>
@@ -984,7 +991,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapToolbarSearch" xml:space="preserve"><value>Search</value></data>
   <data name="MindMapToolbarFont" xml:space="preserve"><value>Font</value></data>
   <data name="MindMapFontDefault" xml:space="preserve"><value>Default</value></data>
-  <data name="MindMapFontNoSelectionHint" xml:space="preserve"><value>Select a single node to edit its font.</value></data>
+  <data name="MindMapFontNoSelectionHint" xml:space="preserve"><value>Select nodes to edit their font.</value></data>
   <data name="MindMapLayoutMode" xml:space="preserve"><value>Layout:</value></data>
   <data name="MindMapLayoutBalancedTree" xml:space="preserve"><value>Balanced tree</value></data>
   <data name="MindMapLayoutRightTree" xml:space="preserve"><value>Right tree</value></data>
@@ -1126,4 +1133,285 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="EditorInsertGroup" xml:space="preserve"><value>Insert:</value></data>
   <data name="ListStartingValueInvalid" xml:space="preserve"><value>Enter a whole number from 1 to 2,147,483,647.</value></data>
   <data name="EditCaption" xml:space="preserve"><value>Edit caption</value></data>
+  <data name="MotionAutomatic" xml:space="preserve"><value>Automatic</value></data>
+  <data name="MotionReduced" xml:space="preserve"><value>Reduced</value></data>
+  <data name="MotionOff" xml:space="preserve"><value>Off</value></data>
+  <data name="MotionDescription" xml:space="preserve"><value>Expressive motion adapts to your computer. Reduced keeps brief fades; Off makes changes immediate. Windows accessibility preferences are always respected.</value></data>
+  <data name="MotionStateTrashDescription" xml:space="preserve"><value>Deleted items will appear here until you restore or remove them.</value></data>
+  <data name="MotionStateStudyTitle" xml:space="preserve"><value>Your study story starts here</value></data>
+  <data name="MotionStateStudyDescription" xml:space="preserve"><value>Complete a flashcard session to see your progress over time.</value></data>
+  <data name="MotionStateQuizTitle" xml:space="preserve"><value>Ready for your first attempt</value></data>
+  <data name="MotionStateQuizDescription" xml:space="preserve"><value>Complete a quiz to keep your results and review your progress.</value></data>
+  <data name="MotionStateEditTitle" xml:space="preserve"><value>A fresh page</value></data>
+  <data name="MotionStateEditDescription" xml:space="preserve"><value>Saved versions of this note will appear here.</value></data>
+  <data name="MotionStateLoading" xml:space="preserve"><value>Gathering your history…</value></data>
+  <data name="MotionStateSelectionTitle" xml:space="preserve"><value>Build your next quiz</value></data>
+  <data name="MotionStateSelectionDescription" xml:space="preserve"><value>Choose quizzes from the library. Your selection comes together here.</value></data>
+  <data name="MotionStateSearchDescription" xml:space="preserve"><value>Try a different search or filter.</value></data>
+  <data name="InsertLinkNoResults" xml:space="preserve"><value>No matching notes</value></data>
+  <data name="InsertLinkNoResultsHint" xml:space="preserve"><value>Try a different title or clear the search.</value></data>
+  <data name="PremiumCombineOptions" xml:space="preserve"><value>Options and filters</value></data>
+  <data name="PremiumCombineFlashcards" xml:space="preserve"><value>Combine flashcards</value></data>
+  <data name="PremiumCombineFlashcardsHelp" xml:space="preserve"><value>Select existing flashcard sets and merge their cards into a new set.</value></data>
+  <data name="PremiumAllFlashcardSets" xml:space="preserve"><value>All flashcard sets</value></data>
+  <data name="PremiumSearchFlashcards" xml:space="preserve"><value>Search flashcard sets, tags, cards…</value></data>
+  <data name="PremiumSetTitle" xml:space="preserve"><value>Combined set title</value></data>
+  <data name="PremiumFilterTag" xml:space="preserve"><value>Filter by tag</value></data>
+  <data name="PremiumSelectedSets" xml:space="preserve"><value>Selected sets</value></data>
+  <data name="PremiumShuffleCards" xml:space="preserve"><value>Shuffle cards</value></data>
+  <data name="PremiumSkipCards" xml:space="preserve"><value>Skip duplicate cards</value></data>
+  <data name="PremiumClearSelection" xml:space="preserve"><value>Clear selection</value></data>
+  <data name="PremiumClearFilter" xml:space="preserve"><value>Clear filter</value></data>
+  <data name="PremiumCreateSet" xml:space="preserve"><value>Create combined set</value></data>
+  <data name="PremiumCombineQuizzes" xml:space="preserve"><value>Combine quizzes</value></data>
+  <data name="PremiumCombineQuizzesHelp" xml:space="preserve"><value>Select existing quizzes and merge their questions into a new quiz.</value></data>
+  <data name="PremiumAllQuizzes" xml:space="preserve"><value>All quizzes</value></data>
+  <data name="PremiumSearchQuizzes" xml:space="preserve"><value>Search quizzes, tags, questions…</value></data>
+  <data name="PremiumQuizTitle" xml:space="preserve"><value>Combined quiz title</value></data>
+  <data name="PremiumSelectedQuizzes" xml:space="preserve"><value>Selected quizzes</value></data>
+  <data name="PremiumShuffleQuestions" xml:space="preserve"><value>Shuffle questions</value></data>
+  <data name="PremiumSkipQuestions" xml:space="preserve"><value>Skip duplicate questions</value></data>
+  <data name="PremiumCreateQuiz" xml:space="preserve"><value>Create combined quiz</value></data>
+  <data name="PremiumFlashcardStatistics" xml:space="preserve"><value>Flashcard statistics</value></data>
+  <data name="PremiumDueToday" xml:space="preserve"><value>Due today</value></data>
+  <data name="PremiumTotal" xml:space="preserve"><value>Total</value></data>
+  <data name="PremiumNew" xml:space="preserve"><value>New</value></data>
+  <data name="PremiumLearning" xml:space="preserve"><value>Learning</value></data>
+  <data name="PremiumMature" xml:space="preserve"><value>Mature</value></data>
+  <data name="PremiumCardBreakdown" xml:space="preserve"><value>Card breakdown</value></data>
+  <data name="PremiumForecast" xml:space="preserve"><value>Forecast · next 14 days</value></data>
+  <data name="PremiumIntervals" xml:space="preserve"><value>Interval lengths</value></data>
+  <data name="PremiumSetsCount" xml:space="preserve"><value>{0} sets</value></data>
+  <data name="PremiumQuizzesCount" xml:space="preserve"><value>{0} quizzes</value></data>
+  <data name="PremiumSelectedCount" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="PremiumCardsCount" xml:space="preserve"><value>{0} cards in combined set</value></data>
+  <data name="PremiumQuestionsCount" xml:space="preserve"><value>{0} questions in combined quiz</value></data>
+  <data name="PremiumSetsShown" xml:space="preserve"><value>{0} of {1} sets shown</value></data>
+  <data name="PremiumQuizzesShown" xml:space="preserve"><value>{0} of {1} quizzes shown</value></data>
+  <data name="PremiumLoadingSets" xml:space="preserve"><value>Loading flashcard sets…</value></data>
+  <data name="PremiumLoadingQuizzes" xml:space="preserve"><value>Loading quizzes…</value></data>
+  <data name="PremiumCombinedFlashcards" xml:space="preserve"><value>Combined flashcards</value></data>
+  <data name="PremiumCombinedQuiz" xml:space="preserve"><value>Combined quiz</value></data>
+  <data name="PremiumSelectSetFirst" xml:space="preserve"><value>Select at least one flashcard set first.</value></data>
+  <data name="PremiumSelectQuizFirst" xml:space="preserve"><value>Select at least one quiz first.</value></data>
+  <data name="PremiumToday" xml:space="preserve"><value>Today</value></data>
+  <data name="PremiumTomorrow" xml:space="preserve"><value>Tomorrow</value></data>
+  <data name="PremiumDifficulty" xml:space="preserve"><value>Difficulty</value></data>
+  <data name="PremiumEaseFactor" xml:space="preserve"><value>Ease factor</value></data>
+  <data name="WorkspaceHistoryStudied" xml:space="preserve">
+    <value>Studied</value>
+  </data>
+  <data name="WorkspaceHistoryKnown" xml:space="preserve">
+    <value>Known</value>
+  </data>
+  <data name="WorkspaceHistoryUnknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="WorkspaceHistoryComplete" xml:space="preserve">
+    <value>Complete</value>
+  </data>
+  <data name="WorkspaceHistoryInProgress" xml:space="preserve">
+    <value>In progress</value>
+  </data>
+  <data name="WorkspaceHistoryClear" xml:space="preserve">
+    <value>Clear history</value>
+  </data>
+  <data name="WorkspaceHistoryClearSet" xml:space="preserve">
+    <value>Clear this set history</value>
+  </data>
+  <data name="WorkspaceHistoryClearQuiz" xml:space="preserve">
+    <value>Clear this quiz history</value>
+  </data>
+  <data name="WorkspaceHistoryStudyEmpty" xml:space="preserve">
+    <value>No flashcard study progress yet</value>
+  </data>
+  <data name="WorkspaceHistoryStudySummary" xml:space="preserve">
+    <value>{0} studied · {1} known · {2} unknown · {3} total cards</value>
+  </data>
+  <data name="WorkspaceHistoryStudyDetails" xml:space="preserve">
+    <value>{0} studied · {1} known · {2} unknown · {3} cards</value>
+  </data>
+  <data name="WorkspaceHistorySet" xml:space="preserve">
+    <value>Set {0}</value>
+  </data>
+  <data name="WorkspaceHistorySetCategory" xml:space="preserve">
+    <value>Set {0} · {1}</value>
+  </data>
+  <data name="WorkspaceHistoryQuizEmpty" xml:space="preserve">
+    <value>No quiz attempts yet</value>
+  </data>
+  <data name="WorkspaceHistoryQuizSingle" xml:space="preserve">
+    <value>{0} attempts for this quiz</value>
+  </data>
+  <data name="WorkspaceHistoryQuizGlobal" xml:space="preserve">
+    <value>{0} attempts across {1} quizzes</value>
+  </data>
+  <data name="WorkspaceHistoryAverage" xml:space="preserve">
+    <value>Average</value>
+  </data>
+  <data name="WorkspaceHistoryBest" xml:space="preserve">
+    <value>Best</value>
+  </data>
+  <data name="WorkspaceHistoryPassRate" xml:space="preserve">
+    <value>Pass rate</value>
+  </data>
+  <data name="WorkspaceHistoryPass" xml:space="preserve">
+    <value>PASS</value>
+  </data>
+  <data name="WorkspaceHistoryFail" xml:space="preserve">
+    <value>FAIL</value>
+  </data>
+  <data name="ScrollTabsLeft" xml:space="preserve"><value>Scroll tabs left</value></data>
+  <data name="ScrollTabsRight" xml:space="preserve"><value>Scroll tabs right</value></data>
+  <data name="NoteEditorWindowTitle" xml:space="preserve"><value>Note editor</value></data>
+  <data name="WorkspaceSaveFailed" xml:space="preserve"><value>The document could not be saved. Your changes remain open. Please try again.</value></data>
+  <data name="WorkspaceNewDocument" xml:space="preserve"><value>New document</value></data>
+  <data name="WorkspaceWindowTitle" xml:space="preserve"><value>Document workspace</value></data>
+  <data name="WorkspaceSaveAndClose" xml:space="preserve"><value>Save and close</value></data>
+  <data name="WorkspaceCreateNoteFailed" xml:space="preserve"><value>The note could not be created because the notes library could not be loaded. Open the Notes dashboard to review the loading error.</value></data>
+  <data name="FlashcardQuestionRequired" xml:space="preserve">
+    <value>Add a question before saving.</value>
+  </data>
+  <data name="FlashcardAnswerRequired" xml:space="preserve">
+    <value>Add an answer before saving.</value>
+  </data>
+  <data name="CalendarAllTypes" xml:space="preserve"><value>All types</value></data>
+  <data name="CalendarUpcoming" xml:space="preserve"><value>Upcoming</value></data>
+  <data name="CalendarDay" xml:space="preserve"><value>Day</value></data>
+  <data name="CalendarReminderCount" xml:space="preserve"><value>{0} reminders</value></data>
+  <data name="CalendarNothingUpcoming" xml:space="preserve"><value>Room for what’s next</value></data>
+  <data name="CalendarUpcomingEmptyHint" xml:space="preserve"><value>No upcoming reminders. Plan something worth returning to.</value></data>
+  <data name="CalendarFilterTypes" xml:space="preserve"><value>Filter reminder types</value></data>
+  <data name="CalendarReminderActions" xml:space="preserve"><value>Reminder actions</value></data>
+  <data name="CalendarManageSchedules" xml:space="preserve"><value>Manage item reminders</value></data>
+  <data name="CalendarChooseItem" xml:space="preserve"><value>Choose content</value></data>
+  <data name="CalendarSearchItems" xml:space="preserve"><value>Find a note, set, mind map or quiz…</value></data>
+  <data name="CalendarUpdateReminder" xml:space="preserve"><value>Update reminder</value></data>
+  <data name="CalendarInvalidReminder" xml:space="preserve"><value>Choose content, a valid date and a time from 00:00 to 23:59.</value></data>
+  <data name="CalendarStaleReminder" xml:space="preserve"><value>This reminder changed. Reopen its schedule to edit the current version.</value></data>
+  <data name="CalendarNewReminder" xml:space="preserve"><value>New reminder</value></data>
+  <data name="CalendarClearDraft" xml:space="preserve"><value>Clear reminders</value></data>
+  <data name="CalendarScheduleHeading" xml:space="preserve"><value>Reminders</value></data>
+  <data name="CalendarEditReminderHeading" xml:space="preserve"><value>Edit reminder</value></data>
+  <data name="CalendarNoReminders" xml:space="preserve"><value>No reminders yet.</value></data>
+  <data name="CalendarPast" xml:space="preserve"><value>Past</value></data>
+  <data name="CalendarNothingPast" xml:space="preserve"><value>No past reminders</value></data>
+  <data name="CalendarPastEmptyHint" xml:space="preserve"><value>Earlier schedules will appear here. Visit Upcoming to see what is ahead.</value></data>
+  <data name="CalendarViewUpcoming" xml:space="preserve"><value>View upcoming</value></data>
+  <data name="CalendarMoveTo" xml:space="preserve"><value>Move to</value></data>
+  <data name="CalendarChooseMoveDate" xml:space="preserve"><value>Choose date…</value></data>
+  <data name="CalendarMoveReminder" xml:space="preserve"><value>Move reminder</value></data>
+  <data name="CalendarMoveAction" xml:space="preserve"><value>Move</value></data>
+  <data name="CalendarReminderMoved" xml:space="preserve"><value>Moved to {0}</value></data>
+  <data name="CalendarReminderRemoved" xml:space="preserve"><value>Reminder removed</value></data>
+  <data name="CalendarChangeUndone" xml:space="preserve"><value>Change undone</value></data>
+  <data name="CalendarUndoConflict" xml:space="preserve"><value>This item’s reminders changed. Undo cannot restore an older version.</value></data>
+  <data name="CalendarUndoReminderChange" xml:space="preserve"><value>Undo the previous reminder change</value></data>
+  <data name="CalendarDismissRecovery" xml:space="preserve"><value>Dismiss feedback and clear reminder undo history</value></data>
+  <data name="CreationActions" xml:space="preserve"><value>Creation actions</value></data>
+  <data name="CloseCreationActions" xml:space="preserve"><value>Close creation actions</value></data>
+  <data name="NewNoteAction" xml:space="preserve"><value>New note</value></data>
+  <data name="NewFlashcardsAction" xml:space="preserve"><value>New flashcard set</value></data>
+  <data name="NewMindMapAction" xml:space="preserve"><value>New mind map</value></data>
+  <data name="NewQuizAction" xml:space="preserve"><value>New quiz</value></data>
+  <data name="QuickAddNote" xml:space="preserve"><value>Quick add note</value></data>
+  <data name="QuickAddFlashcards" xml:space="preserve"><value>Quick add flashcard set</value></data>
+  <data name="QuickAddMindMap" xml:space="preserve"><value>Quick add mind map</value></data>
+  <data name="QuickAddQuiz" xml:space="preserve"><value>Quick add quiz</value></data>
+  <data name="QuickAddExplanation" xml:space="preserve"><value>Add without opening the editor. Keep adding here; open any card when you are ready.</value></data>
+  <data name="QuickAddFailed" xml:space="preserve"><value>The new items could not be saved and were not added. Your existing library is unchanged. Please try again.</value></data>
+  <data name="NewMindMapCentralTopic" xml:space="preserve"><value>Central Topic</value></data>
+  <data name="EditorSelectAllMatching" xml:space="preserve"><value>Select all in this list (Ctrl+A)</value></data>
+  <data name="EditorClearSelection" xml:space="preserve"><value>Clear selection</value></data>
+  <data name="EditorSelectionDone" xml:space="preserve"><value>Done</value></data>
+  <data name="EditorChangeCategory" xml:space="preserve"><value>Change category</value></data>
+  <data name="EditorCustomCategory" xml:space="preserve"><value>Enter category…</value></data>
+  <data name="EditorClearCategory" xml:space="preserve"><value>Clear category</value></data>
+  <data name="EditorCategoryPrompt" xml:space="preserve"><value>Category for selected cards. Leave empty to clear it.</value></data>
+  <data name="EditorStarSelected" xml:space="preserve"><value>Star selected</value></data>
+  <data name="EditorUnstarSelected" xml:space="preserve"><value>Unstar selected</value></data>
+  <data name="EditorMoveSelectedUp" xml:space="preserve"><value>Move selected up</value></data>
+  <data name="EditorMoveSelectedDown" xml:space="preserve"><value>Move selected down</value></data>
+  <data name="EditorDeleteSelectedConfirmation" xml:space="preserve"><value>Delete {0} selected items? This cannot be undone.</value></data>
+  <data name="EditorCopiesHiddenByFilters" xml:space="preserve"><value>{0} copies created outside the current filters.</value></data>
+  <data name="SelectionMatchingTotal" xml:space="preserve"><value>of {0} matching items</value></data>
+  <data name="SelectionDuplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="SelectionDeleteCount" xml:space="preserve"><value>Delete {0} selected items</value></data>
+  <data name="SelectionExportWorking" xml:space="preserve"><value>Exporting selected items…</value></data>
+  <data name="SelectionExportComplete" xml:space="preserve"><value>Selected items exported.</value></data>
+  <data name="SelectionExportCancelled" xml:space="preserve"><value>Export cancelled.</value></data>
+  <data name="SelectionExportFailed" xml:space="preserve"><value>Could not export selected items.</value></data>
+  <data name="SelectionExportUnsupported" xml:space="preserve"><value>This export format is not supported.</value></data>
+  <data name="SelectionExportSelected" xml:space="preserve"><value>Export selected…</value></data>
+  <data name="SelectionExportSuffix" xml:space="preserve"><value>Selected</value></data>
+  <data name="SelectionPickerMatching" xml:space="preserve"><value>{0} of {1} matching selected</value></data>
+  <data name="SelectionDeleteNodesConfirmation" xml:space="preserve"><value>Delete {0} selected nodes? Unselected children will be kept.</value></data>
+  <data name="SelectionRootProtected" xml:space="preserve"><value>Root selected. Cut and Delete are unavailable.</value></data>
+  <data name="SelectionExportEmpty" xml:space="preserve"><value>There are no selected items to export.</value></data>
+  <data name="RenameSelected" xml:space="preserve"><value>Rename selected…</value></data>
+  <data name="RenameTo" xml:space="preserve"><value>Rename to</value></data>
+  <data name="RenameReplace" xml:space="preserve"><value>Find and replace</value></data>
+  <data name="RenameAffixes" xml:space="preserve"><value>Add prefix / suffix</value></data>
+  <data name="RenameNumbered" xml:space="preserve"><value>Numbered names</value></data>
+  <data name="RenamePrefix" xml:space="preserve"><value>Prefix</value></data>
+  <data name="RenameSuffix" xml:space="preserve"><value>Suffix</value></data>
+  <data name="RenameBase" xml:space="preserve"><value>Base name</value></data>
+  <data name="RenameStart" xml:space="preserve"><value>Start at</value></data>
+  <data name="RenamePreviewCount" xml:space="preserve"><value>{0} names will change · showing {1} of {2}</value></data>
+  <data name="RenameFindRequired" xml:space="preserve"><value>Enter the text to find.</value></data>
+  <data name="RenameStartInvalid" xml:space="preserve"><value>Enter a positive starting number.</value></data>
+  <data name="RenameEmptyName" xml:space="preserve"><value>Every resulting name must contain text.</value></data>
+  <data name="RenameSaveFailed" xml:space="preserve"><value>The names could not be saved. No titles were changed.</value></data>
+  <data name="MindMapFontSelectionHint" xml:space="preserve"><value>Changes apply to {0} selected nodes. Mixed values are shown.</value></data>
+  <data name="TrashDeletePermanently" xml:space="preserve"><value>Delete permanently</value></data>
+  <data name="RenameDialogTitle" xml:space="preserve"><value>Rename selected items</value></data>
+  <data name="RenameApply" xml:space="preserve"><value>Rename</value></data>
+  <data name="RenamePreviewWorking" xml:space="preserve"><value>Preparing preview…</value></data>
+  <data name="CombineAllView" xml:space="preserve"><value>All</value></data>
+  <data name="CombineSelectedView" xml:space="preserve"><value>Selected ({0})</value></data>
+  <data name="CombineBackToAll" xml:space="preserve"><value>Browse all</value></data>
+  <data name="CombineSelectedViewHelp" xml:space="preserve"><value>All your selections are shown here. Your library filters are kept in All.</value></data>
+  <data name="CombineBuildSetTitle" xml:space="preserve"><value>Build your next set</value></data>
+  <data name="CombineBuildSetDescription" xml:space="preserve"><value>Choose sets from your library. Bring their cards together in one new set.</value></data>
+  <data name="CombineBuildQuizDescription" xml:space="preserve"><value>Choose quizzes from your library. Bring their questions together in one new quiz.</value></data>
+  <data name="CombineNoTags" xml:space="preserve"><value>No tags available yet. Add tags to your library items to filter them here.</value></data>
+  <data name="CombineNoSets" xml:space="preserve"><value>No flashcard sets yet</value></data>
+  <data name="CombineNoQuizzes" xml:space="preserve"><value>No quizzes yet</value></data>
+  <data name="CombineLibraryEmptyDescription" xml:space="preserve"><value>Create something in your dashboard, then come back to combine it.</value></data>
+  <data name="CombineNothingSelected" xml:space="preserve"><value>Nothing selected yet</value></data>
+  <data name="CombineSelectionEmptyDescription" xml:space="preserve"><value>Browse your library and choose what to include.</value></data>
+  <data name="CombineNoMatchingSets" xml:space="preserve"><value>No matching sets</value></data>
+  <data name="CombineNoMatchingQuizzes" xml:space="preserve"><value>No matching quizzes</value></data>
+  <data name="CombineNoMatchesDescription" xml:space="preserve"><value>Try another search or clear your filters. Your selection is kept.</value></data>
+  <data name="CombineCardCount" xml:space="preserve"><value>{0} cards</value></data>
+  <data name="CombineQuestionCount" xml:space="preserve"><value>{0} questions</value></data>
+  <data name="CombineSourceSets" xml:space="preserve"><value>From {0} selected sets</value></data>
+  <data name="CombineSourceQuizzes" xml:space="preserve"><value>From {0} selected quizzes</value></data>
+  <data name="CombineDuplicatesRemoved" xml:space="preserve"><value>{0} duplicates excluded</value></data>
+  <data name="CombineActiveTags" xml:space="preserve"><value>Tags ({0})</value></data>
+  <data name="CombineOptions" xml:space="preserve"><value>Options</value></data>
+  <data name="CombineOneSet" xml:space="preserve"><value>1 set</value></data>
+  <data name="CombineOneQuiz" xml:space="preserve"><value>1 quiz</value></data>
+  <data name="CombineOneCard" xml:space="preserve"><value>1 card</value></data>
+  <data name="CombineOneQuestion" xml:space="preserve"><value>1 question</value></data>
+  <data name="CombineFromOneSet" xml:space="preserve"><value>From 1 selected set</value></data>
+  <data name="CombineFromOneQuiz" xml:space="preserve"><value>From 1 selected quiz</value></data>
+  <data name="CombineOneDuplicate" xml:space="preserve"><value>1 duplicate excluded</value></data>
+  <data name="SortManual" xml:space="preserve"><value>Manual</value></data>
+  <data name="ReorderDrag" xml:space="preserve"><value>Drag to reorder</value></data>
+  <data name="ReorderOptions" xml:space="preserve"><value>Ordering options</value></data>
+  <data name="ReorderHandleHint" xml:space="preserve"><value>Drag to reorder, or click for move options</value></data>
+  <data name="ReorderEarlier" xml:space="preserve"><value>Move earlier</value></data>
+  <data name="ReorderLater" xml:space="preserve"><value>Move later</value></data>
+  <data name="ReorderSelectionScope" xml:space="preserve"><value>Select items from one group and pinned section to move them together.</value></data>
+  <data name="CalendarWeekStartsOn" xml:space="preserve"><value>Calendar week starts on</value></data>
+  <data name="CalendarWeekStartDefault" xml:space="preserve"><value>Follow app language</value></data>
+  <data name="CalendarWeekStartDescription" xml:space="preserve"><value>Applies to dashboard calendars and reminder date pickers.</value></data>
+  <data name="CalendarMonday" xml:space="preserve"><value>Monday</value></data>
+  <data name="CalendarTuesday" xml:space="preserve"><value>Tuesday</value></data>
+  <data name="CalendarWednesday" xml:space="preserve"><value>Wednesday</value></data>
+  <data name="CalendarThursday" xml:space="preserve"><value>Thursday</value></data>
+  <data name="CalendarFriday" xml:space="preserve"><value>Friday</value></data>
+  <data name="CalendarSaturday" xml:space="preserve"><value>Saturday</value></data>
+  <data name="CalendarSunday" xml:space="preserve"><value>Sunday</value></data>
 </root>

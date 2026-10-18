@@ -3244,7 +3244,8 @@ public sealed class FloatingImageCoordinator
     }
 
     /// <summary>Keeps a photo at the geometry it was given, including one just inserted.
-    /// A narrower page may still pull it back in; growing the page does not move it.</summary>
+    /// A narrower page or an unreachable horizontal position may pull it back in;
+    /// growing the page does not move it.</summary>
     private bool TryKeepRestoredPlacement(NoteImageSession session, NoteImageWidget widget)
     {
         if (!_restoredPlacement.TryGetValue(session.Id, out var saved))
@@ -3258,12 +3259,16 @@ public sealed class FloatingImageCoordinator
         }
 
         var pageShrunk = saved.BoundsWidth > 1 && measured && boundsWidth < saved.BoundsWidth - 1;
+        // A restored coordinate beyond the scrollable page cannot be reached or selected.
+        // Deep Y positions and far-right positions on an unwrapped, scrollable page remain valid.
+        var outsideReachableWidth = measured
+            && (session.DocumentLeft >= boundsWidth || session.DocumentLeft + session.Width <= 0);
         var sameGeometry = Math.Abs(session.DocumentLeft - saved.Left) < 0.01
             && Math.Abs(session.DocumentTop - saved.Top) < 0.01
             && Math.Abs(session.Width - saved.Width) < 0.01
             && Math.Abs(session.Height - saved.Height) < 0.01;
 
-        if (!pageShrunk && sameGeometry)
+        if (!pageShrunk && !outsideReachableWidth && sameGeometry)
         {
             ProjectSessionToWidget(session, widget, exactSize: true);
             return true;

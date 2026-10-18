@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Runtime.CompilerServices;
 using Scriblucent.Animations;
 
 namespace Scriblucent.Behaviors;
@@ -12,7 +13,9 @@ namespace Scriblucent.Behaviors;
 /// </summary>
 public static class RadioButtonSelectionMotionBehavior
 {
-    private const int EnterMs = 200;
+    private const int EnterMs = 120;
+    private static readonly ConditionalWeakTable<DependencyObject, Dictionary<string, int>> KeyboardIntents = new();
+    private static int _keyboardRevision;
 
     private sealed class State
     {
@@ -23,6 +26,11 @@ public static class RadioButtonSelectionMotionBehavior
         public MouseButtonEventHandler? PreviewMouseDownHandler;
         public RoutedEventHandler? CheckedHandler;
         public RoutedEventHandler? UncheckedHandler;
+        public RoutedEventHandler? UnloadedHandler;
+        public KeyEventHandler? KeyDownHandler;
+        public MouseButtonEventHandler? MouseUpHandler;
+        public MouseEventHandler? MouseLeaveHandler;
+        public Ellipse? Glyph;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -62,7 +70,7 @@ public static class RadioButtonSelectionMotionBehavior
 
         state.PreviewMouseDownHandler = (_, e) =>
         {
-            if (e.ChangedButton != MouseButton.Left)
+            if (e.ChangedButton != MouseButton.Left || !state.IsReady || !radioButton.IsEnabled)
                 return;
 
             state.PendingUserSelection = radioButton.IsChecked != true;
@@ -72,12 +80,32 @@ public static class RadioButtonSelectionMotionBehavior
             state.IsReady = true;
             QueueRestSync(radioButton);
         };
+        state.UnloadedHandler = (_, _) =>
+        {
+            state.IsReady = false; state.PendingUserSelection = false;
+            if (state.Glyph is { } glyph) { SurfaceMotion.Stop(glyph); UiMotion.Stop(glyph); }
+            state.Glyph = null;
+        };
+        state.KeyDownHandler = (_, e) =>
+        {
+            if (!state.IsReady || !radioButton.IsEnabled || e.IsRepeat
+                || e.Key is not (Key.Space or Key.Enter or Key.Left or Key.Right or Key.Up or Key.Down)) return;
+            var (scope, group) = KeyboardGroup(radioButton);
+            var intents = KeyboardIntents.GetValue(scope, _ => new());
+            var revision = ++_keyboardRevision; intents[group] = revision;
+            radioButton.Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+            { if (intents.TryGetValue(group, out var current) && current == revision) intents.Remove(group); });
+        };
+        state.MouseUpHandler = (_, _) => radioButton.Dispatcher.BeginInvoke(DispatcherPriority.Input,
+            () => state.PendingUserSelection = false);
+        state.MouseLeaveHandler = (_, _) => state.PendingUserSelection = false;
         state.CheckedHandler = (_, _) =>
         {
             if (!state.IsReady)
                 return;
 
-            if (state.PendingUserSelection)
+            var (scope, group) = KeyboardGroup(radioButton);
+            if (state.PendingUserSelection || KeyboardIntents.TryGetValue(scope, out var intents) && intents.ContainsKey(group))
             {
                 state.PendingUserSelection = false;
                 AnimateChecked(radioButton);
@@ -99,7 +127,10 @@ public static class RadioButtonSelectionMotionBehavior
         radioButton.Loaded += state.LoadedHandler;
         radioButton.Checked += state.CheckedHandler;
         radioButton.Unchecked += state.UncheckedHandler;
-        radioButton.Unloaded += (_, _) => Detach(radioButton);
+        radioButton.Unloaded += state.UnloadedHandler;
+        radioButton.PreviewKeyDown += state.KeyDownHandler;
+        radioButton.PreviewMouseLeftButtonUp += state.MouseUpHandler;
+        radioButton.MouseLeave += state.MouseLeaveHandler;
         state.IsAttached = true;
 
         if (radioButton.IsLoaded)
@@ -122,9 +153,13 @@ public static class RadioButtonSelectionMotionBehavior
             radioButton.Checked -= state.CheckedHandler;
         if (state.UncheckedHandler != null)
             radioButton.Unchecked -= state.UncheckedHandler;
+        radioButton.Unloaded -= state.UnloadedHandler;
+        radioButton.PreviewKeyDown -= state.KeyDownHandler;
+        radioButton.PreviewMouseLeftButtonUp -= state.MouseUpHandler;
+        radioButton.MouseLeave -= state.MouseLeaveHandler;
 
-        if (TryResolveGlyph(radioButton) is { } glyph)
-            UiMotion.Stop(glyph);
+        if (state.Glyph is { } glyph) { SurfaceMotion.Stop(glyph); UiMotion.Stop(glyph); }
+        state.Glyph = null;
 
         state.IsAttached = false;
         state.IsReady = false;
@@ -167,12 +202,7 @@ public static class RadioButtonSelectionMotionBehavior
         }
 
         glyph.Opacity = 0;
-        UiMotion.Run(
-            glyph,
-            new[]
-            {
-                UiMotion.Track(EnterMs, UiMotion.OutCubic, 0, 1, value => glyph.Opacity = value)
-            });
+        SurfaceMotion.Animate(glyph, 1, EnterMs, UiMotion.OutSine, false);
     }
 
     private static void ShowChecked(RadioButton radioButton)
@@ -209,8 +239,15 @@ public static class RadioButtonSelectionMotionBehavior
             return null;
 
         radioButton.ApplyTemplate();
-        return radioButton.Template?.FindName("RadioGlyph", radioButton) as Ellipse;
+        var glyph = radioButton.Template?.FindName("RadioGlyph", radioButton) as Ellipse;
+        GetOrCreateState(radioButton).Glyph = glyph;
+        return glyph;
     }
+
+    private static (DependencyObject Scope, string Group) KeyboardGroup(RadioButton radio)
+        => (string.IsNullOrEmpty(radio.GroupName) ? radio.Parent ?? radio :
+            (DependencyObject?)Window.GetWindow(radio) ?? PresentationSource.FromVisual(radio)?.RootVisual ?? radio,
+            radio.GroupName ?? "");
 
     private static State GetOrCreateState(RadioButton radioButton)
     {

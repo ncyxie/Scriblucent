@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Scriblucent.MotionAudit</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Scriblucent/Scriblucent.csproj"/>
+    <!-- The compiled shell resolves its icon and brand SVGs relative to the entry assembly. -->
+    <Resource Include="../../Scriblucent/logo.ico" Link="logo.ico"/>
+    <Resource Include="../../Scriblucent/Assets/brand-logo-dark.svg" Link="Assets/brand-logo-dark.svg"/>
+    <Resource Include="../../Scriblucent/Assets/brand-logo-light.svg" Link="Assets/brand-logo-light.svg"/>
+  </ItemGroup>
+</Project>

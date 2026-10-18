@@ -14,6 +14,19 @@ namespace Scriblucent.Behaviors;
 /// </summary>
 public static class FieldFocusRingBehavior
 {
+    static FieldFocusRingBehavior()
+    {
+        Scriblucent.Animations.RenderTransitionClock.ActivityChanged += () =>
+        {
+            if (Scriblucent.Animations.RenderTransitionClock.IsAnyRunning && ActiveRings.Count > 0)
+                EnsureRenderingHook();
+            else
+            {
+                OnRendering(null, EventArgs.Empty);
+                TeardownRenderingHook();
+            }
+        };
+    }
     private sealed class State
     {
         public bool IsAttached;
@@ -22,6 +35,8 @@ public static class FieldFocusRingBehavior
         public SizeChangedEventHandler? SizeChangedHandler;
         public RoutedEventHandler? LoadedHandler;
         public FieldFocusRingAdorner? Adorner;
+        public Window? Window;
+        public ScrollChangedEventHandler? ScrollHandler;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -83,12 +98,14 @@ public static class FieldFocusRingBehavior
         element.IsKeyboardFocusWithinChanged += state.FocusWithinHandler;
         element.SizeChanged += state.SizeChangedHandler;
         element.Loaded += state.LoadedHandler;
+        element.Unloaded += OnUnloaded;
 
         Sync(element, state);
     }
 
     private static void Detach(FrameworkElement element)
     {
+        element.Unloaded -= OnUnloaded;
         var state = element.GetValue(StateProperty) as State;
         if (state is null || !state.IsAttached)
             return;
@@ -105,6 +122,12 @@ public static class FieldFocusRingBehavior
         state.Element = null;
     }
 
+    private static void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.GetValue(StateProperty) is State state)
+            RemoveAdorner(element, state);
+    }
+
     private static void Sync(FrameworkElement element, State state)
     {
         if (!element.IsLoaded)
@@ -113,13 +136,14 @@ public static class FieldFocusRingBehavior
         if (element.IsKeyboardFocusWithin)
             EnsureAdorner(element, state);
         else
-            RemoveAdorner(element, state);
+            RemoveAdorner(element, state, animate: true);
     }
 
     private static void EnsureAdorner(FrameworkElement element, State state)
     {
         if (state.Adorner is not null)
         {
+            Scriblucent.Animations.UiMotion.Fade(state.Adorner, 1, 160, Scriblucent.Animations.UiMotion.OutSine);
             state.Adorner.InvalidateVisual();
             TryUpdateAdorner(element);
             TrackActive(state, active: true);
@@ -132,9 +156,13 @@ public static class FieldFocusRingBehavior
 
         try
         {
-            state.Adorner = new FieldFocusRingAdorner(element);
+            state.Adorner = new FieldFocusRingAdorner(element) { Opacity = .35 };
             layer.Add(state.Adorner);
+            Scriblucent.Animations.UiMotion.Fade(state.Adorner, 1, 160, Scriblucent.Animations.UiMotion.OutSine);
             layer.Update(element);
+            state.Window = Window.GetWindow(element);
+            state.ScrollHandler = (_, _) => TryUpdateAdorner(element);
+            state.Window?.AddHandler(ScrollViewer.ScrollChangedEvent, state.ScrollHandler);
             TrackActive(state, active: true);
         }
         catch
@@ -145,8 +173,18 @@ public static class FieldFocusRingBehavior
         }
     }
 
-    private static void RemoveAdorner(FrameworkElement element, State state)
+    private static void RemoveAdorner(FrameworkElement element, State state, bool animate = false)
     {
+        if (animate && state.Adorner is { } fading && element.IsLoaded)
+        {
+            Scriblucent.Animations.UiMotion.Fade(fading, 0, 130, Scriblucent.Animations.UiMotion.OutSine,
+                () => { if (!element.IsKeyboardFocusWithin && ReferenceEquals(state.Adorner, fading)) RemoveAdorner(element, state); });
+            return;
+        }
+        if (state.Adorner is { } stopping) Scriblucent.Animations.SurfaceMotion.Stop(stopping);
+        if (state.ScrollHandler is not null) state.Window?.RemoveHandler(ScrollViewer.ScrollChangedEvent, state.ScrollHandler);
+        state.ScrollHandler = null;
+        state.Window = null;
         TrackActive(state, active: false);
 
         if (state.Adorner is null)
@@ -196,10 +234,10 @@ public static class FieldFocusRingBehavior
     {
         EnsureAppEventsHooked();
 
-        if (_renderingHooked || !_appIsActive)
+        if (_renderingHooked || !_appIsActive || !Scriblucent.Animations.RenderTransitionClock.IsAnyRunning)
             return;
 
-        CompositionTarget.Rendering += OnRendering;
+        Scriblucent.Animations.RenderTransitionClock.Rendered += OnRendering;
         _renderingHooked = true;
     }
 
@@ -208,7 +246,7 @@ public static class FieldFocusRingBehavior
         if (!_renderingHooked)
             return;
 
-        CompositionTarget.Rendering -= OnRendering;
+        Scriblucent.Animations.RenderTransitionClock.Rendered -= OnRendering;
         _renderingHooked = false;
     }
 
@@ -279,10 +317,15 @@ public static class FieldFocusRingBehavior
 
     private sealed class FieldFocusRingAdorner : Adorner
     {
+        private (Size Size, CornerRadius Radius, Thickness Frame, double Stroke)? _geometryKey;
+        private Geometry? _geometry;
+        private static readonly DependencyProperty RimBrushProperty = DependencyProperty.Register("RimBrush", typeof(Brush), typeof(FieldFocusRingAdorner),
+            new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
         public FieldFocusRingAdorner(UIElement adornedElement)
             : base(adornedElement)
         {
             IsHitTestVisible = false;
+            SetResourceReference(RimBrushProperty, "AccentRimBrush");
         }
 
         public override GeneralTransform GetDesiredTransform(GeneralTransform transform)
@@ -319,31 +362,25 @@ public static class FieldFocusRingBehavior
             if (thickness <= 0)
                 return;
 
-            var brush = ResolveBrush(fe);
+            var brush = GetValue(RimBrushProperty) as Brush;
             if (brush is null)
                 return;
 
-            var radius = ResolveRadius(fe);
-            var inset = thickness * 0.5;
-            var rect = new Rect(
-                inset,
-                inset,
-                Math.Max(0, width - thickness),
-                Math.Max(0, height - thickness));
-
-            var pen = new Pen(brush, thickness) { LineJoin = PenLineJoin.Round };
-            if (pen.CanFreeze)
-                pen.Freeze();
-
-            drawingContext.DrawRoundedRectangle(null, pen, rect, radius, radius);
+            var radius = fe is Border face ? face.CornerRadius : new CornerRadius(ResolveRadius(fe));
+            var frame = fe is Border border ? Scriblucent.Animations.SurfaceContour.EffectiveFrame(border) : new Thickness();
+            var key = (fe.RenderSize, radius, frame, thickness);
+            if (_geometryKey != key)
+            {
+                _geometryKey = key;
+                _geometry = Scriblucent.Animations.SurfaceContour.Ring(
+                    Scriblucent.Animations.SurfaceContour.Create(fe.RenderSize, radius, frame),
+                    Scriblucent.Animations.SurfaceContour.Create(fe.RenderSize, radius, frame, thickness));
+            }
+            drawingContext.DrawGeometry(brush, null, _geometry);
         }
 
-        // Field.FocusBorderThickness/AccentPrimary are global theme constants, not per-element
-        // values, so caching them once (invalidated on theme change) avoids re-walking the resource
-        // tree on every CompositionTarget.Rendering-driven redraw while a field is focused.
+        // Focus thickness is a shared token; paint uses a dynamic rim brush on the adorner.
         private static double? _cachedThickness;
-        private static bool _brushCached;
-        private static Brush? _cachedBrush;
         private static bool _themeChangedHooked;
 
         private static void EnsureThemeInvalidationHooked()
@@ -355,8 +392,6 @@ public static class FieldFocusRingBehavior
             ThemeManager.ThemeChanged += (_, _) =>
             {
                 _cachedThickness = null;
-                _brushCached = false;
-                _cachedBrush = null;
             };
         }
 
@@ -371,17 +406,6 @@ public static class FieldFocusRingBehavior
                 : 2;
             _cachedThickness = thickness;
             return thickness;
-        }
-
-        private static Brush? ResolveBrush(FrameworkElement fe)
-        {
-            EnsureThemeInvalidationHooked();
-            if (_brushCached)
-                return _cachedBrush;
-
-            _cachedBrush = FindThemeResource(fe, "AccentPrimary") as Brush;
-            _brushCached = true;
-            return _cachedBrush;
         }
 
         private static double ResolveRadius(FrameworkElement fe)

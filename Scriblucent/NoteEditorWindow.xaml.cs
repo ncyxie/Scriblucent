@@ -1,4 +1,4 @@
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
@@ -29,7 +29,7 @@ using WeCantSpell.Hunspell;
 
 namespace Scriblucent
 {
-    public partial class NoteEditorWindow : Window
+    public partial class NoteEditorWindow : Window, Scriblucent.Services.IHostedDocumentEditor
     {
         private bool _isHostedInTab;
         // Last search/replace state for Find Next / Replace functionality
@@ -161,7 +161,7 @@ namespace Scriblucent
         private DateTime _lastAutoSaveTime = DateTime.MinValue;
         private string _lastSavedContent = string.Empty;
         private string _lastSavedSnapshot = string.Empty;
-        private DispatcherTimer? _postSaveSnapshotTimer;
+        private bool _restoreBaselineHasFieldEdits;
         private NoteDocument? _currentDocument;
         private bool _aiReviewNoticeDismissedWithoutDocument;
         private readonly FloatingImageCoordinator _floatingImages = new();
@@ -291,7 +291,6 @@ namespace Scriblucent
             var primary = fontFamilySource.Split(',')[0].Trim();
             return string.IsNullOrWhiteSpace(primary) ? DefaultEditorFontFamily : primary;
         }
-        private int _tagsPanelAnimationVersion;
         private long _editorChangeVersion;
         private long _lastSavedEditorChangeVersion;
         private const double DefaultIndentSize = 48.0;
@@ -345,7 +344,7 @@ namespace Scriblucent
             _mindMapConversionService = new MindMapConversionService(_aiBackend);
             _quizConversionService = new QuizConversionService(_aiBackend, groundedQuestionPlanner);
             _studyPlanCoordinator = new StudyPlanCoordinator(_aiBackend);
-            // Note editors are hosted inside NoteEditorTabsWindow (never shown as their own
+            // Note editors are hosted inside EditorWorkspaceWindow (never shown as their own
             // window). Do not attach ShellWindowChrome here — that would nest a second caption.
             InitializeEditorFormattingOptions();
             InitializeEditorUiPreferences();
@@ -359,7 +358,7 @@ namespace Scriblucent
             ApplyCurrentLineSpacingToDocument();
             UpdateEditorToolButtonStates();
             // Spell check picks its dictionary from the effective Language - the editor's Content
-            // gets reparented into NoteEditorTabsWindow's tree (see that window's host.Content
+            // gets reparented into EditorWorkspaceWindow's tree (see that window's host.Content
             // swap), so setting it on this Window instance wouldn't survive; set it directly on
             // the RichTextBox instead.
             ContentTextBox.Language = XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag);
@@ -396,7 +395,7 @@ namespace Scriblucent
             ContentTextBox.ContextMenuOpening += ContentTextBox_ContextMenuOpening;
             PreviewKeyDown += NoteEditorWindow_PreviewKeyDown;
             PreviewKeyUp += NoteEditorWindow_PreviewKeyUp;
-            // RootGrid is reparented into NoteEditorTabsWindow; keep image shortcuts on the body
+            // RootGrid is reparented into EditorWorkspaceWindow; keep image shortcuts on the body
             // so Delete/Back/Escape still reach the coordinator when this Window is not in the route.
             RootGrid.PreviewKeyDown += RootGrid_PreviewKeyDown;
             RootGrid.PreviewMouseDown += RootGrid_PreviewMouseDown;
@@ -729,9 +728,16 @@ namespace Scriblucent
             UpdateEditorScrollbarCorner();
         }
 
+        private bool _windowMotionRegistered;
+
         private void NoteEditorWindow_Loaded(object sender, RoutedEventArgs e)
         {
             UiMotion.ConfigurePopupsForWindow(this);
+            if (!_isHostedInTab && ReferenceEquals(sender, this) && !_windowMotionRegistered)
+            {
+                WindowContentEnterHelper.AnimateOnLoaded(this, beforeFinalClose: PerformEditorCloseCleanup);
+                _windowMotionRegistered = true;
+            }
             AttachContentScrollViewer();
         }
 
@@ -995,10 +1001,10 @@ namespace Scriblucent
         private void AnimateEditorScrollbars(double targetOpacity)
         {
             if (EditorMirrorVerticalScrollBar is { Visibility: Visibility.Visible })
-                UiMotion.Fade(EditorMirrorVerticalScrollBar, targetOpacity, 180, UiMotion.OutQuad);
+                UiMotion.Fade(EditorMirrorVerticalScrollBar, targetOpacity, 120, UiMotion.OutCubic);
 
             if (EditorMirrorHorizontalScrollBar is { Visibility: Visibility.Visible })
-                UiMotion.Fade(EditorMirrorHorizontalScrollBar, targetOpacity, 180, UiMotion.OutQuad);
+                UiMotion.Fade(EditorMirrorHorizontalScrollBar, targetOpacity, 120, UiMotion.OutCubic);
         }
 
         private void UpdateEditorScrollbarCorner()
@@ -1213,7 +1219,7 @@ namespace Scriblucent
                     case NoteEditorWindow editorWindow:
                         editorWindow.ApplySpellCheckPreference(enabled);
                         break;
-                    case NoteEditorTabsWindow tabsWindow:
+                    case EditorWorkspaceWindow tabsWindow:
                         tabsWindow.ApplySpellCheckPreference(enabled);
                         break;
                 }
@@ -1236,13 +1242,14 @@ namespace Scriblucent
         }
 
         /// <param name="disposeAiBackendSynchronously">
-        /// Kept for compat with NoteEditorTabsWindow.Closed sweep; previously per-tab
+        /// Kept for compat with EditorWorkspaceWindow.Closed sweep; previously per-tab
         /// LLamaSharpWorkerAdapter disposal could block ~3s. With app-scoped AiBackendHost
         /// the backend is singleton and app-lifetime only (App.OnExit calls Shutdown), so
         /// per-tab close no longer tears it down - parameter is now ignored.
         /// </param>
         public void DisposeHostedEditor(bool disposeAiBackendSynchronously = false)
         {
+            if (_isDisposed) return;
             _isDisposed = true;
             DropParkedSelection();
 
@@ -1253,7 +1260,6 @@ namespace Scriblucent
             _counterUpdateDebounceTimer?.Stop();
             _selectionUiTimer?.Stop();
             _findHighlightDebounceTimer?.Stop();
-            _postSaveSnapshotTimer?.Stop();
             DetachContentScrollViewer();
             _floatingImages.Detach();
             _wrapLayout?.Dispose();
@@ -1282,23 +1288,25 @@ namespace Scriblucent
 
         private Window GetDialogOwnerWindow()
         {
-            // Hosted editors live inside NoteEditorTabsWindow; this window itself is never
+            // Hosted editors live inside EditorWorkspaceWindow; this window itself is never
             // shown, so it must never be used as a dialog Owner (that throws). Fall back to
             // the main window when the hosted content is already detached.
-            return Window.GetWindow(ContentTextBox)
+            return _workspaceOwner ?? Window.GetWindow(ContentTextBox)
                 ?? Application.Current?.MainWindow
                 ?? this;
         }
 
         private void NoteEditorWindow_Closing(object sender, CancelEventArgs e)
         {
+            if (WindowContentEnterHelper.ShouldBypassCloseHandling(this)) return;
             if (!_allowCloseWithoutPrompt && !ConfirmCloseIfNeeded())
             {
                 e.Cancel = true;
                 return;
             }
 
-            PerformEditorCloseCleanup();
+            _allowCloseWithoutPrompt = true;
+            if (!_windowMotionRegistered || UiMotion.PrefersReducedMotion) PerformEditorCloseCleanup();
         }
 
         private void PerformEditorCloseCleanup()
@@ -1620,6 +1628,7 @@ namespace Scriblucent
             _heldSelectionStart = selection.Start;
             _heldSelectionEnd = selection.End;
             _heldCaretAtStart = ContentTextBox.CaretPosition?.CompareTo(selection.Start) == 0;
+            SmoothCaretBehavior.SetIsSuspended(ContentTextBox, true);
             _selectionCollapsedForScroll = true;
             _selectionUiTimer?.Stop();
             var visible = ContentTextBox.GetPositionFromPoint(new Point(8, 4), snapToText: true)
@@ -1662,6 +1671,7 @@ namespace Scriblucent
             _heldSelectionStart = null;
             _heldSelectionEnd = null;
             ContentTextBox.ClearValue(TextBoxBase.CaretBrushProperty);
+            SmoothCaretBehavior.SetIsSuspended(ContentTextBox, false);
         }
 
         private void ReplaceEditorSelection(TextPointer start, TextPointer end)
@@ -1913,6 +1923,21 @@ namespace Scriblucent
 
         private void ContentTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            // Wrap lanes/spacers alter the live FlowDocument, but are stripped from saved
+            // content. Refresh geometry/cache state without recording an authored edit or
+            // scheduling another wrap pass in response to the engine's own changes.
+            if (_wrapLayout?.IsApplying == true)
+            {
+                InvalidateSelectionTiles();
+                InvalidateFindTiles();
+                _findDocumentVersion++;
+                ReleaseFindCache();
+                if (_selectionCollapsedForScroll || ContentTextBox.Selection is { IsEmpty: false })
+                    QueueSelectionOverlay();
+                if (_findBarOpen) QueueFindOverlay(DispatcherPriority.Render);
+                return;
+            }
+
             TableEditor_TextChanged(e);
             if (!_isLoadingDocument && !_isApplyingEditorEdgeSpacing && !_isSerializingEditorContent
                 && !_isApplyingHyperlinkCtrlHints && !_isApplyingSpellCheckDecorations && !_floatingImages.IsAdjustingExtentPad)
@@ -2272,6 +2297,8 @@ namespace Scriblucent
 
         private void EditorField_TextChanged(object sender, TextChangedEventArgs e)
         {
+            // A late photo-load settle must not acknowledge title/tag edits made after load.
+            if (!_isLoadingDocument && _currentDocument is not null) _restoreBaselineHasFieldEdits = true;
             UpdateEditedIndicator();
         }
 
@@ -2306,7 +2333,7 @@ namespace Scriblucent
             // Spell-check squiggle application is a real TextDecoration mutation but cosmetic
             // (cleared before every save) - it must not mark the note as edited.
             if (_isLoadingDocument || _isSerializingEditorContent || _suppressEditedMarking
-                || _isApplyingSpellCheckDecorations)
+                || _isApplyingSpellCheckDecorations || _wrapLayout?.IsApplying == true)
                 return;
 
             _editorChangeVersion++;
@@ -2432,57 +2459,10 @@ namespace Scriblucent
             FindReplaceReplaceRow.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void AnimateCollapsingRow(
-            RowDefinition row,
-            FrameworkElement content,
-            bool expand,
-            Action? onCollapsed = null,
-            Action? onExpanded = null)
-        {
-            if (row == null)
-                return;
-
-            var targetHeight = expand ? MeasureRowContent(content) : 0;
-            var currentHeight = row.ActualHeight;
-            if (currentHeight <= 0 && row.Height.IsAbsolute)
-                currentHeight = row.Height.Value;
-
-            if (UiMotion.PrefersReducedMotion || Math.Abs(currentHeight - targetHeight) < 0.5)
-            {
-                UiMotion.Clear(row, RowDefinition.HeightProperty);
-                row.Height = new GridLength(Math.Max(0, targetHeight), GridUnitType.Pixel);
-                if (!expand)
-                    onCollapsed?.Invoke();
-                else
-                    onExpanded?.Invoke();
-                return;
-            }
-
-            UiMotion.AnimateRowHeight(
-                row,
-                row,
-                currentHeight,
-                targetHeight,
-                UiMotion.OpenMs,
-                UiMotion.OutQuad,
-                () =>
-                {
-                    if (!expand)
-                        onCollapsed?.Invoke();
-                    else
-                        onExpanded?.Invoke();
-                });
-        }
-
-        private double MeasureRowContent(FrameworkElement content)
-        {
-            var width = RootGrid.ActualWidth;
-            if (width <= 0)
-                width = ActualWidth > 0 ? ActualWidth : 860;
-
-            content.Measure(new Size(width, double.PositiveInfinity));
-            return content.DesiredSize.Height;
-        }
+        private void AnimateCollapsingRow(RowDefinition row, FrameworkElement content, bool expand,
+            Action? onCollapsed = null, Action? onExpanded = null)
+            => UiMotion.AnimateLayoutReveal(content, expand,
+                () => { if (expand) onExpanded?.Invoke(); else onCollapsed?.Invoke(); }, row: row);
 
         private void RememberFindState()
         {
@@ -2938,7 +2918,7 @@ namespace Scriblucent
         /// <summary>
         /// Handles Escape/Delete/Back for a selected floating image.
         /// Selection chrome is the gate — RTB often keeps keyboard focus after image mouse-down.
-        /// Public so <see cref="NoteEditorTabsWindow"/> can forward keys when content is hosted.
+        /// Public so <see cref="EditorWorkspaceWindow"/> can forward keys when content is hosted.
         /// </summary>
         public bool TryHandleFloatingImageKey(KeyEventArgs e)
         {
@@ -3026,11 +3006,13 @@ namespace Scriblucent
             AiCancelButton.ToolTip = "Cancel";
             AiCancelButton.IsEnabled = true;
             AiCancelButton.Visibility = Visibility.Visible;
+            AnimateStatusIndicatorRow(expand: true);
         }
 
         private void HideAiCancelButton()
         {
             AiCancelButton.Visibility = Visibility.Collapsed;
+            if (StatusIndicatorText.Visibility != Visibility.Visible) AnimateStatusIndicatorRow(expand: false);
         }
 
         private void SetAiConversionButtonsEnabled(bool isEnabled)
@@ -3223,28 +3205,12 @@ namespace Scriblucent
 
                 var modelDisplayName = BundledModelHostService.Instance.GetSelectedModelDisplayName();
                 var flashcardsMainWindow = Application.Current.MainWindow as MainWindow;
-                var flashcardsMainViewModel = flashcardsMainWindow?.DataContext as MainViewModel;
 
-                var preview = new FlashcardsPreviewWindow(
-                    flashcards,
-                    noteOptions: flashcardsMainViewModel?.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
-                    modelDisplayName: modelDisplayName,
-                    title: documentTitle,
-                    tags: ParseTags(TagsTextBox.Text),
-                    sourceNoteId: _currentDocument?.Id,
-                    openNoteAction: flashcardsMainWindow is not null && flashcardsMainViewModel is not null
-                        ? noteId => flashcardsMainWindow.OpenNoteById(flashcardsMainViewModel, noteId)
-                        : null)
+                flashcardsMainWindow?.EditorWorkspace.OpenFlashcards(new FlashcardSetDocument
                 {
-                    Owner = GetDialogOwnerWindow()
-                };
-
-                if (preview.ShowDialog() == true && flashcardsMainViewModel is not null)
-                {
-                    var document = preview.ToDocument();
-                    document.SourceNoteId = _currentDocument?.Id;
-                    flashcardsMainViewModel.AddOrUpdateFlashcardSet(document);
-                }
+                    Cards = flashcards.ToList(), Title = documentTitle, Tags = ParseTags(TagsTextBox.Text).ToList(),
+                    AiModelDisplayName = modelDisplayName, SourceNoteId = _currentDocument?.Id
+                }, draft: true);
 
                 ShowStatusIndicator(BuildAiSuccessText(
                     "ConvertToFlashcardsSuccess",
@@ -3407,33 +3373,14 @@ namespace Scriblucent
 
                 var modelDisplayName = BundledModelHostService.Instance.GetSelectedModelDisplayName();
 
-                // Resolved once and reused both for construction (note-link picker options/open
-                // action) and after ShowDialog (saving) - the AI-review window otherwise had no
-                // way to populate or act on either linked-note picker (document-level or
-                // per-node), unlike every other place a MindMapPreviewWindow gets opened.
+                // The workspace supplies the shared note-link options and opens the result as a draft.
                 var mainWindow = Application.Current.MainWindow as MainWindow;
-                var mainViewModel = mainWindow?.DataContext as MainViewModel;
 
-                var preview = new MindMapPreviewWindow(
-                    mindMap,
-                    noteOptions: mainViewModel?.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
-                    modelDisplayName: modelDisplayName,
-                    title: documentTitle,
-                    tags: ParseTags(TagsTextBox.Text),
-                    sourceNoteId: _currentDocument?.Id,
-                    openNoteAction: mainWindow is not null && mainViewModel is not null
-                        ? noteId => mainWindow.OpenNoteById(mainViewModel, noteId)
-                        : null)
+                mainWindow?.EditorWorkspace.OpenMindMap(new MindMapDocument
                 {
-                    Owner = GetDialogOwnerWindow()
-                };
-
-                if (preview.ShowDialog() == true && mainViewModel is not null)
-                {
-                    var document = preview.ToDocument();
-                    document.SourceNoteId = _currentDocument?.Id;
-                    mainViewModel.AddOrUpdateMindMap(document);
-                }
+                    Root = mindMap, Title = documentTitle, Tags = ParseTags(TagsTextBox.Text).ToList(),
+                    AiModelDisplayName = modelDisplayName, SourceNoteId = _currentDocument?.Id
+                }, draft: true);
 
                 ShowStatusIndicator(BuildAiSuccessText(
                     "ConvertToMindMapSuccess",
@@ -3601,24 +3548,9 @@ namespace Scriblucent
                 quiz.Tags = ParseTags(TagsTextBox.Text).ToList();
 
                 var quizMainWindow = Application.Current.MainWindow as MainWindow;
-                var quizMainViewModel = quizMainWindow?.DataContext as MainViewModel;
 
-                var preview = new QuizPreviewWindow(
-                    quiz,
-                    noteOptions: quizMainViewModel?.Notes.Select(note => new QuizPreviewWindow.QuizNoteLinkOption(note.Document.Id, note.Document.Title)),
-                    modelDisplayName: modelDisplayName,
-                    title: documentTitle,
-                    openNoteAction: quizMainWindow is not null && quizMainViewModel is not null
-                        ? noteId => quizMainWindow.OpenNoteById(quizMainViewModel, noteId)
-                        : null)
-                {
-                    Owner = GetDialogOwnerWindow()
-                };
-
-                if (preview.ShowDialog() == true && quizMainViewModel is not null)
-                {
-                    quizMainViewModel.AddOrUpdateQuiz(preview.ToDocument());
-                }
+                quiz.Title = documentTitle;
+                quizMainWindow?.EditorWorkspace.OpenQuiz(quiz, draft: true);
 
                 ShowStatusIndicator(BuildAiSuccessText(
                     "ConvertToTestSuccess",
@@ -3851,9 +3783,8 @@ namespace Scriblucent
             StatusIndicatorText.Text = message;
             StatusIndicatorText.Visibility = Visibility.Visible;
             StatusIndicatorText.Opacity = 0;
-            UiMotion.Fade(StatusIndicatorText, 1, UiMotion.OpenMs, UiMotion.OutQuad);
-            if (pulse)
-                UiMotion.PulseOpacity(StatusIndicatorText, StatusIndicatorText, 0.72, 1.0);
+            UiMotion.Fade(StatusIndicatorText, 1, 120, UiMotion.OutQuad);
+
         }
 
     private void ShowPersistentStatusIndicatorWithoutAnimation(string message)
@@ -3875,7 +3806,7 @@ namespace Scriblucent
             StatusIndicatorText.Text = string.Empty;
             StatusIndicatorText.Visibility = Visibility.Collapsed;
             if (StatusIndicatorRow != null)
-                StatusIndicatorRow.Height = new GridLength(0);
+                StatusIndicatorRow.Height = new GridLength(StatusIndicatorExpandedHeight);
         }
 
         private void HideStatusIndicator()
@@ -3892,8 +3823,8 @@ namespace Scriblucent
             UiMotion.Fade(
                 StatusIndicatorText,
                 0,
-                UiMotion.SectionMs,
-                UiMotion.OutCubic,
+                120,
+                UiMotion.InQuad,
                 () =>
                 {
                     StatusIndicatorText.Visibility = Visibility.Collapsed;
@@ -3904,28 +3835,10 @@ namespace Scriblucent
 
         private void AnimateStatusIndicatorRow(bool expand)
         {
-            if (StatusIndicatorRow == null)
-                return;
-
-            var targetHeight = expand ? StatusIndicatorExpandedHeight : 0;
-            var currentHeight = StatusIndicatorRow.ActualHeight;
-            if (currentHeight <= 0)
-                currentHeight = StatusIndicatorRow.Height.Value;
-
-            if (Math.Abs(currentHeight - targetHeight) < 0.5)
-            {
-                UiMotion.Clear(StatusIndicatorRow, RowDefinition.HeightProperty);
-                StatusIndicatorRow.Height = new GridLength(targetHeight, GridUnitType.Pixel);
-                return;
-            }
-
-            UiMotion.AnimateRowHeight(
-                StatusIndicatorRow,
-                StatusIndicatorRow,
-                currentHeight,
-                targetHeight,
-                UiMotion.OpenMs,
-                UiMotion.OutQuad);
+            if (StatusIndicatorRow is null) return;
+            var target = expand || AiCancelButton.Visibility == Visibility.Visible ? StatusIndicatorExpandedHeight : 0;
+            UiMotion.AnimateRowHeight(StatusIndicatorRow, StatusIndicatorRow, StatusIndicatorRow.ActualHeight,
+                target, 160);
         }
 
         internal FindReplaceResult PerformFindNext(
@@ -4668,6 +4581,7 @@ namespace Scriblucent
         /// the note opens clean.</summary>
         private async Task RestorePhotosAsync(IReadOnlyList<NoteImageAttachment>? attachments)
         {
+            _restoreBaselineHasFieldEdits = false;
             _suppressEditedMarking = true;
             _floatingImages.SuppressMarkerSweep = true;
             try
@@ -4702,7 +4616,7 @@ namespace Scriblucent
             _restoreSettleTimer?.Stop();
             _suppressEditedMarking = false;
             ApplyEditorEdgeSpacing();
-            MarkCurrentStateSaved();
+            if (!_restoreBaselineHasFieldEdits) MarkCurrentStateSaved();
             UpdateEditedIndicator();
         }
 
@@ -6060,6 +5974,7 @@ namespace Scriblucent
         // Start the auto-save timer
         private void StartAutoSaveTimer()
         {
+            if (_workspaceSave is not null) return;
             if (_isAutoSaveEnabled)
             {
                 _autoSaveTimer?.Dispose();
@@ -6173,6 +6088,7 @@ namespace Scriblucent
 
         private void MarkCurrentStateSaved()
         {
+            _restoreBaselineHasFieldEdits = false;
             _lastSavedContent = GetContentAsText();
             _lastSavedEditorChangeVersion = _editorChangeVersion;
             _lastSavedSnapshot = GetEditorSnapshot();
@@ -6180,39 +6096,14 @@ namespace Scriblucent
             UpdateEditedIndicator();
         }
 
-        // The post-save debounce passes (spell-check re-decoration, wrap re-apply) mutate the
-        // flow ~120-150ms after a save and bump _editorChangeVersion; snapshotting immediately
-        // would leave the note marked as edited and re-arm the auto-save every 30 seconds.
-        private void DeferMarkCurrentStateSaved()
-        {
-            if (_postSaveSnapshotTimer is null)
-            {
-                _postSaveSnapshotTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
-                _postSaveSnapshotTimer.Tick += (_, _) =>
-                {
-                    _postSaveSnapshotTimer.Stop();
-                    if (_currentDocument is not null && !_isLoadingDocument)
-                        MarkCurrentStateSaved();
-                };
-            }
-
-            _postSaveSnapshotTimer.Stop();
-            _postSaveSnapshotTimer.Start();
-        }
-
-        private bool _isFlashingTitleStatus;
-
         private void UpdateEditedIndicator()
         {
-            if (_isLoadingDocument || EditedIndicatorText is null || _isFlashingTitleStatus)
+            WorkspaceStateChanged?.Invoke();
+            if (_workspaceOwner is not null && !_workspaceActive) return;
+            if (_isLoadingDocument || EditedIndicatorText is null)
                 return;
 
-            EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
-            var shouldShow = HasUnsavedChanges();
-            if (shouldShow)
-                UiMotion.AnimateInlineReveal(EditedIndicatorText, true);
-            else
-                UiMotion.AnimateInlineReveal(EditedIndicatorText, false);
+            EditedIndicatorText.SetEdited(HasUnsavedChanges());
         }
 
         private string GetEditorSnapshot()
@@ -6422,50 +6313,36 @@ namespace Scriblucent
                     // Save to document
                     SaveToDocument(_currentDocument);
 
-                    // Update last saved content - deferred: the post-save debounce passes
-                    // (spell-check re-decoration, wrap re-apply) mutate the flow shortly after
-                    // the save; snapshotting now would leave the note looking edited (and the
-                    // auto-save re-firing every 30 seconds).
-                    DeferMarkCurrentStateSaved();
-                    _lastAutoSaveTime = DateTime.Now;
-
-                    // Show visual indicator
-                    ShowAutoSaveIndicator();
-
-                    // Raise event so MainWindow can refresh the note card
-                    DocumentAutoSaved?.Invoke(_currentDocument);
-
-                    // Save notes to disk (via MainViewModel)
+                    // A status reports the confirmed write, rather than a queued background save.
                     if (Application.Current.MainWindow?.DataContext is MainViewModel mainVm)
                     {
                         mainVm.RefreshTagFiltersAfterNoteEdit();
-                        mainVm.SaveNotes();
+                        if (!mainVm.TrySaveNotes()) { ReportWorkspaceSaveFailure(); return; }
                     }
+
+                    // Cosmetic wrap/spell-check work does not advance the authored revision.
+                    // Acknowledge this write now, before a subsequent user edit can arrive.
+                    MarkCurrentStateSaved();
+                    _lastAutoSaveTime = DateTime.Now;
+                    DocumentAutoSaved?.Invoke(_currentDocument);
+                    if (Application.Current.MainWindow?.DataContext is MainViewModel) ShowAutoSaveIndicator();
                 }
             }
             catch (Exception ex)
             {
                 // Don't disturb the user during auto-save; log for later diagnosis instead.
                 CrashLog.Append("AutoSave", ex);
+                ReportWorkspaceSaveFailure();
             }
         }
 
         // Show visual auto-save indicator beside the title (same slot as Edited).
         private void ShowAutoSaveIndicator()
         {
-            if (EditedIndicatorText is null)
-                return;
-
-            _isFlashingTitleStatus = true;
-            UiMotion.FlashInlineStatus(
-                EditedIndicatorText,
-                LocalizationService.GetString("AutoSaving"),
-                () =>
-                {
-                    _isFlashingTitleStatus = false;
-                    UpdateEditedIndicator();
-                });
+            EditedIndicatorText?.ShowSaved(UpdateEditedIndicator);
         }
+
+        public void ReportWorkspaceSaveFailure() => EditedIndicatorText?.ShowFailure();
 
         // Enable/disable auto-save
         public void SetAutoSaveEnabled(bool enabled)
@@ -7005,6 +6882,11 @@ namespace Scriblucent
                 return;
 
             ApplyContentToEditor(dialog.SelectedVersion.Content);
+            if (_workspaceSave is not null)
+            {
+                if (_workspaceSave()) ShowStatusIndicator(LocalizationService.GetString("VersionRestored"));
+                return;
+            }
             SaveToDocument(_currentDocument);
             MarkCurrentStateSaved();
 
@@ -7019,11 +6901,12 @@ namespace Scriblucent
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_workspaceSave is not null) { _workspaceSave(); return; }
             // Mark the close FIRST: the save below skips the wrap engine's transient re-apply
             // (it would be disposed moments later anyway) so the exit animation isn't preceded
             // by a synchronous full convergence pass (tens of ms with photos).
             _allowCloseWithoutPrompt = true;
-            SaveCurrentDocument();
+            if (!SaveCurrentDocument()) { _allowCloseWithoutPrompt = false; return; }
 
             // Close the window after saving
             if (_isHostedInTab)
@@ -7034,21 +6917,29 @@ namespace Scriblucent
 
         private bool SaveCurrentDocument()
         {
+            if (_workspaceSave is not null) return _workspaceSave();
             if (_currentDocument == null)
                 return true;
 
-            SaveToDocument(_currentDocument);
-            MarkCurrentStateSaved();
-
-            DocumentAutoSaved?.Invoke(_currentDocument);
-
-            if (Application.Current.MainWindow?.DataContext is MainViewModel mainVm)
+            try
             {
-                mainVm.RefreshTagFiltersAfterNoteEdit();
-                mainVm.SaveNotes();
+                SaveToDocument(_currentDocument);
+                if (Application.Current.MainWindow?.DataContext is MainViewModel mainVm)
+                {
+                    mainVm.RefreshTagFiltersAfterNoteEdit();
+                    if (!mainVm.TrySaveNotes()) { ReportWorkspaceSaveFailure(); return false; }
+                }
+                MarkCurrentStateSaved();
+                ShowAutoSaveIndicator();
+                DocumentAutoSaved?.Invoke(_currentDocument);
+                return true;
             }
-
-            return true;
+            catch (Exception ex)
+            {
+                CrashLog.Append("SaveNote", ex);
+                ReportWorkspaceSaveFailure();
+                return false;
+            }
         }
 
         private void ApplyContentToEditor(string? content)
@@ -7386,8 +7277,7 @@ namespace Scriblucent
 
             if (!animate)
             {
-                UiMotion.Clear(FontPanelRow, RowDefinition.HeightProperty);
-                FontPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(FontPanel, isOpen, animate: false, row: FontPanelRow);
                 FontPanelRow.Height = isOpen ? GridLength.Auto : new GridLength(0);
                 return;
             }
@@ -7423,59 +7313,9 @@ namespace Scriblucent
         private void SetTagsPanelOpen(bool isOpen, bool animate, bool persist = true)
         {
             _isTagsPanelOpen = isOpen;
-            if (persist)
-                PersistCurrentDocumentEditorUiState();
-
+            if (persist) PersistCurrentDocumentEditorUiState();
             UpdateEditorToolButtonStates();
-
-            if (!animate)
-            {
-                UiMotion.Stop(TagsPanel);
-                UiMotion.Clear(TagsPanel, UIElement.OpacityProperty);
-                UiMotion.Clear(EnsureTagsPanelTransform(), TranslateTransform.YProperty);
-                TagsPanel.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-                TagsPanel.Opacity = isOpen ? 1 : 0;
-                EnsureTagsPanelTransform().Y = isOpen ? 0 : -6;
-                return;
-            }
-
-            AnimateTagsPanel(isOpen);
-        }
-
-        private void AnimateTagsPanel(bool show)
-        {
-            var animationVersion = ++_tagsPanelAnimationVersion;
-            var transform = EnsureTagsPanelTransform();
-            var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
-            var opacityFrom = TagsPanel.Opacity;
-            var yFrom = transform.Y;
-
-            if (show)
-                TagsPanel.Visibility = Visibility.Visible;
-
-            UiMotion.Stop(TagsPanel);
-            UiMotion.RunComposited(
-                TagsPanel,
-                new[]
-                {
-                    UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => TagsPanel.Opacity = value),
-                    UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
-                },
-                () =>
-                {
-                    if (!show && animationVersion == _tagsPanelAnimationVersion && !_isTagsPanelOpen)
-                        TagsPanel.Visibility = Visibility.Collapsed;
-                });
-        }
-
-        private TranslateTransform EnsureTagsPanelTransform()
-        {
-            if (TagsPanel.RenderTransform is TranslateTransform existing)
-                return existing;
-
-            var transform = new TranslateTransform(0, -6);
-            TagsPanel.RenderTransform = transform;
-            return transform;
+            UiMotion.AnimateLayoutReveal(TagsPanel, isOpen, animate: animate);
         }
 
         private void ApplyLineSpacingToTargetParagraphs(double spacingMultiplier)
@@ -8415,11 +8255,7 @@ namespace Scriblucent
 
         private const int DefaultInsertedTableRows = 3;
         private const int DefaultInsertedTableColumns = 3;
-        private const int MaxTableSizePickerDimension = 8;
-        private bool _tableSizePickerInitialized;
-        private int _tableSizePickerHoverRows = DefaultInsertedTableRows;
-        private int _tableSizePickerHoverColumns = DefaultInsertedTableColumns;
-
+        private const int MaxTableSizePickerDimension = TableSizePicker.MaximumDimension;
         private void InsertTableButton_Click(object sender, RoutedEventArgs e)
         {
             if (ActiveTable() is not null) OpenTableTools();
@@ -8428,86 +8264,27 @@ namespace Scriblucent
 
         private void OpenTableSizePicker()
         {
-            EnsureTableSizePickerInitialized();
-            HighlightTableSizePicker(DefaultInsertedTableRows, DefaultInsertedTableColumns);
+            TableSizePickerGrid.Select(DefaultInsertedTableRows, DefaultInsertedTableColumns, animate: false);
             TableSizePickerPopup.IsOpen = true;
         }
 
-        private void EnsureTableSizePickerInitialized()
+        private void TableSizePickerPopup_Opened(object? sender, EventArgs e) => TableSizePickerGrid.Focus();
+
+        private void TableSizePicker_SelectionChanged(object? sender, EventArgs e)
+            => TableSizePickerLabel.Text = TableSizePickerGrid.SelectionLabel;
+
+        private void TableSizePicker_InsertRequested(object? sender, EventArgs e)
         {
-            if (_tableSizePickerInitialized || TableSizePickerGrid is null)
-                return;
-
-            TableSizePickerGrid.Children.Clear();
-            for (var row = 1; row <= MaxTableSizePickerDimension; row++)
-            {
-                for (var column = 1; column <= MaxTableSizePickerDimension; column++)
-                {
-                    var cell = new Border
-                    {
-                        Width = 18,
-                        Height = 18,
-                        Margin = new Thickness(2),
-                        BorderThickness = new Thickness(1),
-                        BorderBrush = TryFindResource("BorderColor") as Brush ?? Brushes.Gray,
-                        Background = TryFindResource("CardBackground") as Brush ?? Brushes.White,
-                        Cursor = Cursors.Hand,
-                        Tag = (row, column)
-                    };
-                    cell.MouseEnter += TableSizePickerCell_MouseEnter;
-                    cell.MouseLeftButtonUp += TableSizePickerCell_MouseLeftButtonUp;
-                    TableSizePickerGrid.Children.Add(cell);
-                }
-            }
-
-            _tableSizePickerInitialized = true;
-        }
-
-        private void TableSizePickerCell_MouseEnter(object sender, MouseEventArgs e)
-        {
-            if (sender is not Border { Tag: (int rows, int columns) })
-                return;
-
-            HighlightTableSizePicker(rows, columns);
-        }
-
-        private void TableSizePickerCell_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (sender is not Border { Tag: (int rows, int columns) })
-                return;
-
+            var rows = TableSizePickerGrid.Rows;
+            var columns = TableSizePickerGrid.Columns;
             TableSizePickerPopup.IsOpen = false;
             InsertTableOfSize(rows, columns);
-            e.Handled = true;
         }
 
-        private void HighlightTableSizePicker(int rows, int columns)
+        private void TableSizePicker_DismissRequested(object? sender, EventArgs e)
         {
-            _tableSizePickerHoverRows = rows;
-            _tableSizePickerHoverColumns = columns;
-
-            if (TableSizePickerLabel is not null)
-            {
-                TableSizePickerLabel.Text = string.Format(
-                    LocalizationService.GetString("InsertTableSizeFormat"),
-                    rows,
-                    columns);
-            }
-
-            var selectedBackground = TryFindResource("HoverBackground") as Brush ?? Brushes.LightGray;
-            var idleBackground = TryFindResource("CardBackground") as Brush ?? Brushes.White;
-            var selectedBorder = TryFindResource("TextColor") as Brush ?? Brushes.Black;
-            var idleBorder = TryFindResource("BorderColor") as Brush ?? Brushes.Gray;
-
-            foreach (Border cell in TableSizePickerGrid.Children.OfType<Border>())
-            {
-                if (cell.Tag is not (int cellRows, int cellColumns))
-                    continue;
-
-                var selected = cellRows <= rows && cellColumns <= columns;
-                cell.Background = selected ? selectedBackground : idleBackground;
-                cell.BorderBrush = selected ? selectedBorder : idleBorder;
-            }
+            TableSizePickerPopup.IsOpen = false;
+            InsertTableButton.Focus();
         }
 
         private void InsertTableOfSize(int rows, int columns)
@@ -9772,7 +9549,11 @@ namespace Scriblucent
             {
                 _currentDocument.AiReviewNoticeDismissed = true;
                 if (Application.Current?.MainWindow?.DataContext is MainViewModel mainViewModel)
+                {
+                    if (_workspaceSave is not null && mainViewModel.Notes.FirstOrDefault(n => n.Document.Id == _currentDocument.Id) is { } note)
+                        note.Document.AiReviewNoticeDismissed = true;
                     mainViewModel.SaveNotes();
+                }
             }
 
             ApplyAiReviewNoticeVisibility();

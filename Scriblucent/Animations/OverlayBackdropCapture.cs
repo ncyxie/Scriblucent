@@ -1,178 +1,310 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using Scriblucent.Rendering;
 
 namespace Scriblucent.Animations;
 
-/// <summary>
-/// Captures a pre-blurred snapshot for overlay scrims at true 1:1 DIP size
-/// (pixel size = DIPs × DPI scale), so the backdrop never looks zoomed.
-/// </summary>
+/// <summary>Capture is UI-only; Gaussian processing is worker-only. Leases share owner snapshots.</summary>
 public static class OverlayBackdropCapture
 {
-    private const double BlurMin = 6;
-    private const double BlurMax = 14;
-    private const int OverlayZIndexThreshold = 200;
-
-    public static BitmapSource? TryCaptureForDimAnimation(Window? window)
-        => TryCaptureForDimAnimation(window, GetBlurRadius(window));
-
-    /// <summary>
-    /// Captures window content with modal overlays (ZIndex &gt;= 200) temporarily hidden,
-    /// so the scrim matches the real layout 1:1 — including the sidebar/content gap.
-    /// </summary>
-    public static BitmapSource? TryCaptureBehindOverlays(Window? window)
-        => TryCaptureBehindOverlays(window, GetBlurRadius(window));
-
-    /// <summary>
-    /// One blur of the owner with any open scrim (Trash, Settings, About) out of the shot,
-    /// so a dialog does not blur an already blurred title-bar edge.
-    /// </summary>
-    public static BitmapSource? TryCaptureForDialog(Window? owner)
-        => OverlayBackgroundSuspender.WithPageVisible(() => TryCaptureBehindOverlays(owner));
-
-    public static BitmapSource? TryCaptureBehindOverlays(Window? window, double blurRadius)
+    public readonly record struct Measurement(double CaptureMs, double BlurMs, double PublicationMs,
+        int Pixels, bool Applied, string? Failure, int CaptureThread, int BlurThread)
     {
-        if (window?.Content is not Panel rootPanel)
-            return TryCaptureForDimAnimation(window, blurRadius);
+        public double TraversalMs { get; init; }
+        public double RasterMs { get; init; }
+        public double FreezeMs { get; init; }
+        public double RestoreMs { get; init; }
+        public double RequestToPreparedMs { get; init; }
+        public double PreparedToPublicationMs { get; init; }
+    }
+    private readonly record struct CapturePhases(double Traversal, double Raster, double Freeze, double Restore);
+    public static event Action<Measurement>? Measured;
+    private sealed class Snapshot
+    {
+        internal BitmapSource? Image;
+        internal Size Size;
+        internal DpiScale Dpi;
+        internal object? Theme;
+        internal int Users, Version;
+        internal double Reserved;
+        internal CancellationTokenSource? Cancellation;
+        internal Task<BitmapSource?>? Pending;
+        internal TaskCompletionSource? Prepared;
+        internal Measurement Metrics;
+    }
+    private static readonly ConditionalWeakTable<Window, Snapshot> Snapshots = new();
+    private static readonly SemaphoreSlim BlurGate = new(1, 1);
+    internal static bool IsProcessing => BlurGate.CurrentCount == 0
+        || Snapshots.Any(entry => entry.Value.Pending is { IsCompleted: false });
+    internal static double RetainedPixels => Snapshots.Sum(entry => entry.Value.Reserved);
+    internal static void Invalidate(Window window)
+    {
+        if (!Snapshots.TryGetValue(window, out var state)) return;
+        state.Version++;
+        state.Cancellation?.Cancel();
+        state.Cancellation?.Dispose(); state.Cancellation = null;
+        state.Prepared?.TrySetCanceled(); state.Prepared = null;
+        state.Pending = null; state.Image = null;
+        MotionCacheBudget.Release(state.Reserved); state.Reserved = 0;
+    }
 
-        var hidden = new List<(UIElement Element, Visibility Visibility)>();
-        try
+    public static IDisposable Request(Window? owner, Action<BitmapSource?> completed)
+        => new RequestLease(owner, completed);
+
+    // Capture readiness is separate from worker readiness: no foreground clock starts inside UI raster work.
+    internal static IDisposable RequestPrepared(Window? owner, Action<BitmapSource?> completed, Action prepared,
+        Func<Task>? beforeRefresh = null, bool deferInitial = false)
+        => new RequestLease(owner, completed, prepared, beforeRefresh, deferInitial);
+
+    private sealed class RequestLease : IDisposable
+    {
+        private readonly Window? _owner;
+        private readonly Action<BitmapSource?> _completed;
+        private Action? _prepared;
+        private readonly Func<Task>? _beforeRefresh;
+        private readonly bool _deferInitial;
+        private readonly CancellationTokenSource _cancel = new();
+        private int _revision;
+        private bool _disposed;
+        internal RequestLease(Window? owner, Action<BitmapSource?> completed, Action? prepared = null,
+            Func<Task>? beforeRefresh = null, bool deferInitial = false)
         {
-            foreach (UIElement child in rootPanel.Children)
+            _owner = owner; _completed = completed; _prepared = prepared; _beforeRefresh = beforeRefresh;
+            _deferInitial = deferInitial;
+            if (owner is null) { prepared?.Invoke(); completed(null); return; }
+            owner.Dispatcher.VerifyAccess();
+            Snapshots.GetValue(owner, _ => new()).Users++;
+            owner.Closed += Closed; owner.SizeChanged += SizeChanged; owner.DpiChanged += DpiChanged;
+            MotionPolicy.BackdropChanged += MaterialChanged;
+            ThemeManager.ThemeChanged += ThemeChanged;
+            Restart();
+        }
+        private void Closed(object? sender, EventArgs e) => Dispose();
+        private void SizeChanged(object sender, SizeChangedEventArgs e) => Restart();
+        private void DpiChanged(object sender, DpiChangedEventArgs e) => Restart();
+        private void MaterialChanged() => Restart();
+        private void ThemeChanged(object? sender, EventArgs e) => Restart();
+        private async void Restart()
+        {
+            if (_disposed || _owner is null || _owner.Dispatcher.HasShutdownStarted) return;
+            if (!_owner.Dispatcher.CheckAccess()) { _ = _owner.Dispatcher.BeginInvoke(Restart); return; }
+            var revision = ++_revision;
+            var requestTimer = Stopwatch.StartNew(); double preparedAt = 0;
+            try
             {
-                if (child is not FrameworkElement element)
-                    continue;
-                if (Panel.GetZIndex(element) < OverlayZIndexThreshold)
-                    continue;
-                if (element.Visibility != Visibility.Visible)
-                    continue;
-
-                hidden.Add((element, element.Visibility));
-                element.Visibility = Visibility.Hidden;
+                // Before preparation, this request still owns starting the entrance. Waiting
+                // for that entrance after resize/theme/DPI restart would deadlock both sides.
+                if ((_deferInitial || (revision > 1 && _prepared is null)) && _beforeRefresh is not null)
+                    await _beforeRefresh().WaitAsync(_cancel.Token);
+                if (_disposed || revision != _revision) return;
+                var imageTask = GetAsync(_owner);
+                var preparation = Snapshots.TryGetValue(_owner, out var pending) ? pending.Prepared?.Task : null;
+                if (preparation is not null) await preparation.WaitAsync(_cancel.Token);
+                await _owner.Dispatcher.InvokeAsync(() =>
+                {
+                    if (_disposed || revision != _revision) return;
+                    preparedAt = requestTimer.Elapsed.TotalMilliseconds;
+                    var prepared = _prepared; _prepared = null; prepared?.Invoke();
+                }, DispatcherPriority.Loaded, _cancel.Token);
+                var image = await imageTask.WaitAsync(_cancel.Token);
+                await _owner.Dispatcher.InvokeAsync(() =>
+                {
+                    if (_disposed || revision != _revision) return;
+                    var timer = Stopwatch.StartNew();
+                    _completed(image); timer.Stop();
+                    if (Snapshots.TryGetValue(_owner, out var state))
+                        Measured?.Invoke(state.Metrics with
+                        {
+                            PublicationMs = timer.Elapsed.TotalMilliseconds,
+                            RequestToPreparedMs = preparedAt,
+                            PreparedToPublicationMs = requestTimer.Elapsed.TotalMilliseconds - preparedAt
+                        });
+                }, DispatcherPriority.Background, _cancel.Token);
             }
-
-            rootPanel.UpdateLayout();
-            return TryCaptureForDimAnimation(window, blurRadius);
+            catch (OperationCanceledException) { }
+            catch (Exception error)
+            {
+                if (!_disposed && revision == _revision && !_owner.Dispatcher.HasShutdownStarted)
+                    await _owner.Dispatcher.InvokeAsync(() =>
+                    {
+                        if (_disposed || revision != _revision) return;
+                        var prepared = _prepared; _prepared = null; prepared?.Invoke();
+                        _completed(null);
+                    }, DispatcherPriority.Background);
+                Debug.WriteLine($"Backdrop publication: {error.Message}");
+            }
         }
-        catch
+        public void Dispose()
         {
-            return null;
-        }
-        finally
-        {
-            foreach (var (element, visibility) in hidden)
-                element.Visibility = visibility;
+            if (_disposed) return;
+            _disposed = true; _cancel.Cancel(); _cancel.Dispose();
+            if (_owner is null) return;
+            _owner.Closed -= Closed; _owner.SizeChanged -= SizeChanged; _owner.DpiChanged -= DpiChanged;
+            MotionPolicy.BackdropChanged -= MaterialChanged;
+            ThemeManager.ThemeChanged -= ThemeChanged;
+            if (Snapshots.TryGetValue(_owner, out var state) && --state.Users == 0) Invalidate(_owner);
         }
     }
 
-    public static BitmapSource? TryCaptureForDimAnimation(Window? window, double blurRadius)
+    private static Task<BitmapSource?> GetAsync(Window owner)
     {
-        if (window?.Content is not FrameworkElement root)
-            return null;
+        var state = Snapshots.GetValue(owner, _ => new());
+        if (!MotionPolicy.BackdropBlur || owner.Content is not FrameworkElement root)
+        {
+            Invalidate(owner);
+            state.Metrics = new(0, 0, 0, 0, false, "Material preference", Environment.CurrentManagedThreadId, 0);
+            return Task.FromResult<BitmapSource?>(null);
+        }
+        var size = root.RenderSize; var dpi = VisualTreeHelper.GetDpi(root);
+        var theme = root.TryFindResource("WindowBackground");
+        if (state.Size != size || !state.Dpi.Equals(dpi) || !ReferenceEquals(state.Theme, theme)) Invalidate(owner);
+        state.Size = size; state.Dpi = dpi; state.Theme = theme;
+        if (state.Image is not null) return Task.FromResult<BitmapSource?>(state.Image);
+        if (state.Pending is not null) return state.Pending;
+        state.Cancellation = new();
+        state.Prepared = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        state.Pending = CaptureAndBlurAsync(owner, root, state, state.Version, state.Prepared, state.Cancellation.Token);
+        return state.Pending;
+    }
 
-        var suspendedEffects = SuspendEffectsForCapture(root);
+    private static async Task<BitmapSource?> CaptureAndBlurAsync(Window owner, FrameworkElement root,
+        Snapshot state, int version, TaskCompletionSource prepared, CancellationToken token)
+    {
+        double reserved = 0;
+        var ownsWorkerGate = false;
         try
         {
-            root.UpdateLayout();
-
-            var sourceWidth = root.RenderSize.Width;
-            var sourceHeight = root.RenderSize.Height;
-            if (sourceWidth < 1 || sourceHeight < 1)
+            var captureTimer = new Stopwatch(); var captureThread = 0;
+            CapturePhases phases = default;
+            // Render the immediate scrim feedback before preparing the foreground entrance.
+            var captured = await owner.Dispatcher.InvokeAsync(() =>
+            {
+                token.ThrowIfCancellationRequested(); captureThread = Environment.CurrentManagedThreadId;
+                captureTimer.Start();
+                var result = OverlayBackgroundSuspender.WithPageVisible(owner, () => CapturePage(root, out phases));
+                captureTimer.Stop();
+                if (result is not null)
+                    reserved = MotionCacheBudget.TryReservePixels(result.PixelWidth * (double)result.PixelHeight, requireSpatial: false);
+                return result;
+            }, DispatcherPriority.Background, token);
+            token.ThrowIfCancellationRequested();
+            prepared.TrySetResult();
+            if (captured is null || reserved == 0)
+            {
+                state.Metrics = new(captureTimer.Elapsed.TotalMilliseconds, 0, 0, 0, false,
+                    captured is null ? "Capture unavailable" : "Texture budget exhausted", captureThread, 0)
+                    { TraversalMs = phases.Traversal, RasterMs = phases.Raster, FreezeMs = phases.Freeze, RestoreMs = phases.Restore };
                 return null;
-
-            var dpi = VisualTreeHelper.GetDpi(root);
-            var captured = RenderAtDpi(root, sourceWidth, sourceHeight, dpi);
-            if (captured == null)
-                return null;
-
-            return blurRadius > 0.5
-                ? ApplyBlur(captured, blurRadius, dpi)
-                : captured;
-        }
-        catch
-        {
-            return null;
+            }
+            // Only Gaussian processing is serialized. Another owner cannot hold up this owner's arrival.
+            await BlurGate.WaitAsync(token); ownsWorkerGate = true;
+            var blurThread = 0; var blurTimer = new Stopwatch();
+            var captureDpi = new DpiScale(captured.DpiX / 96, captured.DpiY / 96);
+            var image = await Task.Run(() =>
+            {
+                token.ThrowIfCancellationRequested(); blurThread = Environment.CurrentManagedThreadId;
+                blurTimer.Start(); var result = SkiaBackdropBlur.Blur(captured, 18, captureDpi); blurTimer.Stop();
+                return result;
+            }, token);
+            token.ThrowIfCancellationRequested();
+            return await owner.Dispatcher.InvokeAsync(() =>
+            {
+                if (version != state.Version || state.Size != root.RenderSize
+                    || !state.Dpi.Equals(VisualTreeHelper.GetDpi(root))
+                    || !ReferenceEquals(state.Theme, root.TryFindResource("WindowBackground"))) return null;
+                state.Metrics = new(captureTimer.Elapsed.TotalMilliseconds, blurTimer.Elapsed.TotalMilliseconds, 0,
+                    captured.PixelWidth * captured.PixelHeight, image is not null,
+                    image is null ? "Gaussian blur failed" : null, captureThread, blurThread)
+                    { TraversalMs = phases.Traversal, RasterMs = phases.Raster, FreezeMs = phases.Freeze, RestoreMs = phases.Restore };
+                state.Image = image;
+                if (image is not null) { state.Reserved = reserved; reserved = 0; }
+                return image;
+            }, DispatcherPriority.Background, token);
         }
         finally
         {
-            RestoreEffects(suspendedEffects);
+            prepared.TrySetResult();
+            MotionCacheBudget.Release(reserved);
+            if (ownsWorkerGate) BlurGate.Release();
         }
     }
 
-    /// <summary>
-    /// DropShadow/Blur on large feature shells makes RenderTargetBitmap extremely expensive
-    /// under nested ShowDialog. Suspend effects for the capture pass only.
-    /// </summary>
-    private static List<(UIElement Element, Effect? Effect)> SuspendEffectsForCapture(DependencyObject root)
+    private static BitmapSource? CapturePage(FrameworkElement root, out CapturePhases phases)
     {
-        var suspended = new List<(UIElement, Effect?)>();
-        SuspendEffectsWalk(root, suspended);
-        return suspended;
-    }
-
-    private static void SuspendEffectsWalk(DependencyObject current, List<(UIElement Element, Effect? Effect)> suspended)
-    {
-        if (current is UIElement element && element.Effect is not null)
+        phases = default;
+        double traversal = 0, raster = 0, freeze = 0;
+        var phase = Stopwatch.StartNew();
+        var hidden = new List<(UIElement Element, Visibility Visibility)>();
+        var effects = new List<(UIElement Element, Effect Effect)>();
+        try
         {
-            suspended.Add((element, element.Effect));
-            element.Effect = null;
+            void Suspend(DependencyObject current)
+            {
+                if (current is UIElement element)
+                {
+                    if (element.Visibility != Visibility.Visible) return;
+                    // Chrome can wrap the original content. Exclude overlays at every nested
+                    // panel level, otherwise an About/dialog snapshot captures its own surface.
+                    if (!ReferenceEquals(element, root) && Panel.GetZIndex(element) >= 200
+                        && VisualTreeHelper.GetParent(element) is Panel)
+                    {
+                        hidden.Add((element, element.Visibility));
+                        element.SetCurrentValue(UIElement.VisibilityProperty, Visibility.Hidden);
+                        return;
+                    }
+                    if (element.Effect is { } effect) { effects.Add((element, effect)); element.SetCurrentValue(UIElement.EffectProperty, null); }
+                }
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(current); i++) Suspend(VisualTreeHelper.GetChild(current, i));
+            }
+            Suspend(root);
+            traversal = phase.Elapsed.TotalMilliseconds;
+            // This runs after layout at Background priority. Do not force another whole-window
+            // layout: newly opened hidden overlays would still measure their entire contents.
+            var size = root.RenderSize;
+            if (size.Width < 1 || size.Height < 1) return null;
+            var dpi = VisualTreeHelper.GetDpi(root);
+            var width = size.Width * dpi.DpiScaleX; var height = size.Height * dpi.DpiScaleY;
+            // The blurred material needs low frequencies, not a half-megapixel sharp image.
+            // Keep the same 18 DIP Gaussian while reducing the one-time UI raster cost.
+            var pixels = MotionPolicy.LightweightRendering ? 200_000d : 350_000d;
+            var reduction = Math.Min(1, Math.Min(1600 / Math.Max(width, height), Math.Sqrt(pixels / (width * height))));
+            var bitmap = new RenderTargetBitmap(Math.Max(1, (int)Math.Floor(width * reduction)),
+                Math.Max(1, (int)Math.Floor(height * reduction)), dpi.PixelsPerInchX * reduction,
+                dpi.PixelsPerInchY * reduction, PixelFormats.Pbgra32);
+            phase.Restart(); bitmap.Render(root); raster = phase.Elapsed.TotalMilliseconds;
+            phase.Restart(); bitmap.Freeze(); freeze = phase.Elapsed.TotalMilliseconds;
+            return bitmap;
         }
-
-        var count = VisualTreeHelper.GetChildrenCount(current);
-        for (var i = 0; i < count; i++)
-            SuspendEffectsWalk(VisualTreeHelper.GetChild(current, i), suspended);
+        catch (Exception error) { Debug.WriteLine($"Backdrop capture: {error.Message}"); return null; }
+        finally
+        {
+            phase.Restart();
+            foreach (var (element, effect) in effects) element.SetCurrentValue(UIElement.EffectProperty, effect);
+            foreach (var (element, visibility) in hidden) element.SetCurrentValue(UIElement.VisibilityProperty, visibility);
+            phases = new(traversal, raster, freeze, phase.Elapsed.TotalMilliseconds);
+        }
     }
 
-    private static void RestoreEffects(List<(UIElement Element, Effect? Effect)> suspended)
+    // Compatibility cache lookups never perform synchronous capture or processing.
+    public static BitmapSource? TryCaptureForDimAnimation(Window? window) => Cached(window);
+    public static BitmapSource? TryCaptureForDimAnimation(Window? window, double blurRadius) => Cached(window);
+    public static BitmapSource? TryCaptureBehindOverlays(Window? window) => Cached(window);
+    public static BitmapSource? TryCaptureBehindOverlays(Window? window, double blurRadius) => Cached(window);
+    public static BitmapSource? TryCaptureForDialog(Window? window) => Cached(window);
+    private static BitmapSource? Cached(Window? window)
     {
-        foreach (var (element, effect) in suspended)
-            element.Effect = effect;
+        if (!MotionPolicy.BackdropBlur || window?.Content is not FrameworkElement root
+            || !Snapshots.TryGetValue(window, out var state)) return null;
+        return state.Size == root.RenderSize && state.Dpi.Equals(VisualTreeHelper.GetDpi(root))
+            && ReferenceEquals(state.Theme, root.TryFindResource("WindowBackground")) ? state.Image : null;
     }
-
-    public static (int Width, int Height) GetScrimLogicalSize(double windowWidth, double windowHeight)
-        => (
-            Math.Max(1, (int)Math.Ceiling(windowWidth)),
-            Math.Max(1, (int)Math.Ceiling(windowHeight)));
-
-    public static double GetBlurRadius(Window? window)
-    {
-        var height = window?.ActualHeight ?? 720;
-        return Math.Clamp(height / 90.0, BlurMin, BlurMax);
-    }
-
-    private static BitmapSource RenderAtDpi(Visual root, double dipWidth, double dipHeight, DpiScale dpi)
-    {
-        var scaleX = dpi.DpiScaleX <= 0 ? 1 : dpi.DpiScaleX;
-        var scaleY = dpi.DpiScaleY <= 0 ? 1 : dpi.DpiScaleY;
-        var pixelWidth = Math.Max(1, (int)Math.Ceiling(dipWidth * scaleX));
-        var pixelHeight = Math.Max(1, (int)Math.Ceiling(dipHeight * scaleY));
-
-        var bitmap = new RenderTargetBitmap(
-            pixelWidth,
-            pixelHeight,
-            dpi.PixelsPerInchX,
-            dpi.PixelsPerInchY,
-            PixelFormats.Pbgra32);
-
-        bitmap.Render(root);
-        bitmap.Freeze();
-        return bitmap;
-    }
-
-    private static BitmapSource? ApplyBlur(BitmapSource source, double radius, DpiScale dpi)
-    {
-        // Replaced the second full-window RenderTargetBitmap pass (an Image arranged at the
-        // capture size with a BlurEffect, then RTB-rendered again) - the documented open
-        // latency cost under nested ShowDialog. Skia's CPU Gaussian produces the same scrim
-        // from the already-captured pixels, without the extra render pass.
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var result = Scriblucent.Rendering.SkiaBackdropBlur.Blur(source, radius, dpi);
-        stopwatch.Stop();
-        if (Scriblucent.Services.ScrollPerfDiag.Enabled)
-            Scriblucent.Services.ScrollPerfDiag.Log($"backdropBlur\t{stopwatch.Elapsed.TotalMilliseconds:F1}\tsize={source.PixelWidth}x{source.PixelHeight}");
-        return result;
-    }
+    public static double GetBlurRadius(Window? window) => 18;
+    public static (int Width, int Height) GetScrimLogicalSize(double width, double height)
+        => (Math.Max(1, (int)Math.Ceiling(width)), Math.Max(1, (int)Math.Ceiling(height)));
 }

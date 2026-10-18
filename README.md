@@ -3,116 +3,79 @@
 
 <h1>Scriblucent</h1>
 
-**Notes. Flashcards. Mind Maps. Quizzes.**
+**Write. Recite. Get it right.**
 
-![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?logo=windows)
-![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)
-![Language](https://img.shields.io/badge/Language-C%23-239120?logo=csharp)
-![AI](https://img.shields.io/badge/AI-LLamaSharp-FF6B35)
-![License](https://img.shields.io/badge/License-MIT-green)
+Learn offline at your own pace. Take notes, build flashcards, map ideas, and test yourself, all in one private space.
 </div>
 
----
+Scriblucent is a Windows desktop app for notes and study materials. Create and edit materials yourself, or use optional local AI to generate them from your notes. AI features require a model download; ordinary editing and study do not.
 
-**Scriblucent** is a modern Windows desktop application designed to help you study more effectively. Write notes and instantly convert them into flashcards, mind maps, or quizzes using a **local AI model** — no internet connection required after the initial download.
+## Features
 
-## Why Scriblucent?
+- **Notes:** rich text, images, linked notes, templates, version history, and autosave.
+- **Flashcards:** editable sets, study sessions, audio, and progress statistics.
+- **Mind maps:** connected ideas, multiple layouts, and node styling.
+- **Quizzes:** single-choice, multiple-choice, and true/false questions, with attempt history.
+- **Organization:** tags, groups, search, manual ordering, and bulk actions.
+- **Planning:** calendar reminders and a configurable first day of the week.
 
-Most learning tools either require an internet connection or charge extra for AI features. Scriblucent runs offline after the model is downloaded. All your data stays on your device. You get everything you need — from note-taking to AI-generated quizzes — in one clean, privacy-focused application.
+Light and dark themes are available in English and Lithuanian. Documents and settings are stored locally.
+
+## Get started
+
+Download Scriblucent from [Releases](https://github.com/ncyxie/Scriblucent/releases). The app runs on Windows 10/11.
+
+Create a note or study set from its dashboard. Edit materials directly, import existing files, or choose a local AI tool when generation is useful.
+
+### Optional local AI
+
+Choose a model in Settings: Qwen3.5-0.8B, Qwen3.5-2B, Qwen3.5-4B, or Qwen3.5-9B. Memory requirements depend on the selected model. Model files are downloaded when needed for an AI feature, rather than on app launch.
+
+Application data is stored under `%LocalAppData%\Scriblucent\`. Downloaded models are stored in `Models` beneath that folder. After downloading a model, generation runs locally without an internet connection.
+
+Attachments are stored in `NotesMedia` and `FlashcardMedia`; installed spell-check dictionaries use `Dictionaries`. Diagnostic logs are grouped under `Logs\AI` and `Logs\Dashboard`.
 
 ## Screenshots
 
-| Dark Theme | Light Theme |
-|------------|-------------|
-| <img src="Screenshots/main-window-dark.png"> | <img src="Screenshots/main-window-light.png"> |
+| Dark theme | Light theme |
+| --- | --- |
+| <img src="Screenshots/main-window-dark.png" alt="Dark dashboard"/> | <img src="Screenshots/main-window-light.png" alt="Light dashboard"/> |
 
-## Key Features
+## Build and test
 
-- **Notes** — Rich text editor with images, tags, groups, version history, and auto-save
-- **Flashcards** — AI generates question-answer cards directly from your notes
-- **Mind Maps** — AI creates hierarchical mind maps with 5 layout modes and rich node styling
-- **Quizzes** — AI generates quizzes (SingleChoice / MultipleChoice / TrueFalse) with timers, hints, and attempt history
-- **Light & Dark themes** with full English and Lithuanian language support
+Install the .NET 10 SDK on Windows. Run these commands from the repository root:
 
-## Supported AI Models
-
-Choose a local model in Settings:
-
-- **Qwen3.5-0.8B** — Basic
-- **Qwen3.5-2B** — Compact
-- **Qwen3.5-4B** — Recommended
-- **Qwen3.5-9B** — Advanced
-
-The selected model is downloaded the first time you use an AI feature, not on application launch.
-
-## Architecture
-
-Scriblucent follows the **MVVM** (Model–View–ViewModel) architecture:
-
-```
-View (XAML / WPF)
-    │ data binding
-    ▼
-ViewModel
-    │
-    ├── Models
-    │   NoteDocument · FlashcardSetDocument · MindMapDocument · QuizDocument
-    │
-    └── Services
-          ├── FlashcardConversionService ← AI → Flashcards
-          ├── MindMapConversionService  ← AI → Mind Maps
-          ├── QuizConversionService     ← AI → Quizzes
-          ├── BundledModelHostService   ← Local LLM (user-selected)
-          └── NoteFileService / AppSettingsService
-
-Local JSON Storage (%LocalAppData%\Scriblucent\)
-```
-
-All data is stored locally in: `%LocalAppData%\Scriblucent\`
-
-## Quick Start
-
-**Requirements:** Windows 10/11 (64-bit), .NET 10, ≥ 4 GB RAM (8 GB+ recommended for AI features)
-
-### Option 1: Download the executable (recommended)
-Download the latest `Scriblucent.exe` from the [Releases](https://github.com/ncyxie/Scriblucent/releases) page and run it.
-
-### Option 2: Build from source
-```bash
-git clone https://github.com/ncyxie/Scriblucent.git
-cd Scriblucent
+```powershell
+dotnet restore
+dotnet build Scriblucent/Scriblucent.csproj -c Release
 dotnet run --project Scriblucent
+dotnet test Scriblucent.Tests/Scriblucent.Tests.csproj -c Release --filter 'Category!=RealModel&Category!=AiBenchmark'
 ```
 
-## How to Use
+Real-model tests and AI benchmarks are opt-in and may require downloaded models. Build and test sequentially because the application and tool projects share intermediate output.
 
-1. Create a note and enter your content.
-2. Click **Flashcards**, **Mind Map**, or **Quiz** — the AI will generate the material automatically.
-3. During quizzes, use keyboard shortcuts: `1`–`9` to select an answer, `Enter` to proceed to the next question.
+In Debug builds, `SCRIBLUCENT_QWEN_MODEL_URL` can override the model download URL for local testing.
 
-For complete documentation, visit the **[Wiki](../../wiki)**.
+## Development
 
-## Testing
+Scriblucent uses WPF and MVVM. Views bind to view models; services handle persistence, scheduling, and local AI workers. Documents use local JSON storage.
 
-```bash
-dotnet test
-```
+- Editors share `EditorWorkspaceService` and use isolated working copies. Mark a document saved only after persistence succeeds; preserve dashboard-owned grouping, pinning, and reminders when saving.
+- Collection operations act on logical items, including items outside the realized viewport. Keep selection transient and preserve native text-editing shortcuts.
+- Dashboard rendering uses viewport virtualization and bounded caches. Avoid loading document content solely to populate hidden controls or previews.
+- Use the [design-system guide](Scriblucent/Themes/README.md) for shared controls and rendering rules, and the [runtime UI checks](tools/MotionAudit/README.md) for focused verification.
 
-## Team
+## Credits
 
-| First Name | Last Name  |
-|------------|------------|
-| Mantas     | Gaižutis   |
-| Jaunius    | Pigaga     |
-| Rapolas    | Turauskas  |
-| Deividas   | Kepenis    |
-| Gustas     | Valaika    |
-| Mantas     | Brūžė      |
+| First name | Last name |
+| --- | --- |
+| Mantas | Gaižutis |
+| Jaunius | Pigaga |
+| Rapolas | Turauskas |
+| Deividas | Kepenis |
+| Gustas | Valaika |
+| Mantas | Brūžė |
 
 ## License
 
-Distributed under the [MIT License](LICENSE).
-
----
-
-<div align="center"><i>Scriblucent – Dovydo Komanda, 2026</i></div>
+Scriblucent is distributed under the [MIT License](LICENSE). See [third-party notices](THIRD-PARTY-NOTICES.md) for component licenses.

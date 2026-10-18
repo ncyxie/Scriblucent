@@ -36,6 +36,7 @@ namespace Scriblucent
         private const double DashboardDragScrollMinStep = 16;
         private const double DashboardDragScrollMaxStep = 46;
         private const double TopSearchExpandedWidth = 320;
+        private bool _isTopSearchPanelOpen;
         private const double ClearSearchButtonWidth = 22;
         private const double ClearSearchButtonMargin = 4;
         private const double ClearSearchButtonHiddenScale = 0.84;
@@ -59,7 +60,8 @@ namespace Scriblucent
         private bool _ungroupedLayoutRefreshQueued;
 
         private bool _dashboardLayoutRefreshQueued;
-        private NoteEditorTabsWindow? _noteEditorTabsWindow;
+        private EditorWorkspaceService? _editorWorkspace;
+        public EditorWorkspaceService EditorWorkspace => _editorWorkspace ??= new EditorWorkspaceService(this);
         private Point _dashboardListingDragStart;
         private bool _suppressDashboardListingOpen;
         private const double UngroupedDropZoneCornerRadius = 16;
@@ -68,6 +70,7 @@ namespace Scriblucent
         private readonly Dictionary<Border, Thickness> _dropZoneOriginalBorderThicknesses = new();
         private readonly Dictionary<Border, CornerRadius> _dropZoneOriginalCornerRadius = new();
         private readonly Dictionary<Border, Brush?> _dropZoneOriginalBackgrounds = new();
+        private Border? _activeGroupDropBorder;
         private WeakReference<FrameworkElement>? _listingDropGlowHost;
         private DispatcherTimer? _dashboardDragScrollTimer;
         private ScrollViewer? _dashboardDragScrollViewer;
@@ -147,16 +150,11 @@ namespace Scriblucent
         private FrameworkElement? FlashcardDashboardGroupsSectionContainerElement => FindDashboardName("FlashcardDashboardGroupsSectionContainer") as FrameworkElement;
         private FrameworkElement? QuizDashboardGroupsSectionContainerElement => FindDashboardName("QuizDashboardGroupsSectionContainer") as FrameworkElement;
         private FrameworkElement? MindMapDashboardGroupsSectionContainerElement => FindDashboardName("MindMapDashboardGroupsSectionContainer") as FrameworkElement;
-        private FrameworkElement? MassSelectOverlayToolbarElement => FindDashboardName("MassSelectOverlayToolbar") as FrameworkElement;
-        private FrameworkElement? MassSelectMoreActionsPanelElement => FindDashboardName("MassSelectMoreActionsPanel") as FrameworkElement;
-        private FrameworkElement? MassSelectMoreActionsSeparatorElement => FindDashboardName("MassSelectMoreActionsSeparator") as FrameworkElement;
-        private Button? MassSelectMoreActionsToggleButtonElement => FindDashboardName("MassSelectMoreActionsToggleButton") as Button;
         private Popup? SortNotesPopupElement => FindDashboardName("SortNotesPopup") as Popup;
         private Popup? DashboardSectionsPopupElement => FindDashboardName("DashboardSectionsPopup") as Popup;
         private ColumnDefinition? SidebarColumnElement => FindDashboardName("SidebarColumn") as ColumnDefinition;
         private FrameworkElement? SidebarChromeElement => FindDashboardName("SidebarChrome") as FrameworkElement;
         private FrameworkElement? MainContentRootElement => FindDashboardName("MainContentRoot") as FrameworkElement;
-        private bool _isMassSelectMoreActionsExpanded;
 
         internal static bool IsNoteDragInProgress { get; private set; }
 
@@ -173,6 +171,7 @@ namespace Scriblucent
             _startupSettings = startupSettings;
             Scriblucent.Services.StartupProbe.Mark("windowCtorStart");
             InitializeComponent();
+            AddHandler(CalendarPlannerView.RequestEvent, new EventHandler<CalendarPlannerRequestEventArgs>(CalendarPlanner_Request));
             Scriblucent.Services.StartupProbe.Mark("windowInit");
             Scriblucent.Services.WindowThemeService.Register(this);
             ApplyCurrentLanguage();
@@ -180,9 +179,11 @@ namespace Scriblucent
             Loaded += MainWindow_Loaded;
             ContentRendered += MainWindow_ContentRendered;
             Unloaded += MainWindow_Unloaded;
+            Closed += (_, _) => (DataContext as MainViewModel)?.CancelPendingDashboardLoads();
             AttachDashboardPresenceHandlers();
             StateChanged += MainWindow_StateChanged;
             DataContextChanged += MainWindow_DataContextChanged;
+            PreviewKeyDown += DashboardSelection_PreviewKeyDown;
             InitializeShellViewModel();
             Scriblucent.Services.StartupProbe.Mark("windowShellVm");
 
@@ -256,17 +257,6 @@ namespace Scriblucent
             if (msg == WmSettingChange)
             {
                 ReducedMotionPreferences.Refresh();
-                if (IsLoadingDashboardActive)
-                {
-                    _dashboardLoadingClock.Restart();
-                    DashboardLoadingShell.StartWave(UiMotion.PrefersReducedMotion);
-                    if (UiMotion.PrefersReducedMotion)
-                    {
-                        _startupLoadingEntrancePending = false;
-                        DashboardLoadingShell.BeginAnimation(UIElement.OpacityProperty, null);
-                        DashboardLoadingShell.Opacity = 1;
-                    }
-                }
             }
 
             return IntPtr.Zero;
@@ -314,25 +304,6 @@ namespace Scriblucent
             DashboardShadowSuspender.TrySuspend(ListingShadowSuspendScope, RecentNotesScrollViewer);
         }
 
-        internal void BeginChildWindowOwnerMotion(ref CacheMode? savedMainContentCacheMode)
-        {
-            SuspendListingCardShadows();
-
-            if (MainContentRootElement is not { } root)
-                return;
-
-            savedMainContentCacheMode = root.CacheMode;
-            root.CacheMode = DpiAwareBitmapCache.Create(root, enableClearType: true);
-        }
-
-        internal void EndChildWindowOwnerMotion(CacheMode? savedMainContentCacheMode)
-        {
-            if (MainContentRootElement is { } root)
-                root.CacheMode = savedMainContentCacheMode;
-
-            DashboardShadowSuspender.TryResume(ListingShadowSuspendScope);
-        }
-
         private void SuspendDashboardShadowsForSidebarAnimation()
         {
             DashboardShadowSuspender.TryResume(SidebarAnimationShadowScope);
@@ -365,10 +336,10 @@ namespace Scriblucent
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            DashboardMotionTrace.Attach(this);
             ConfigurePopupAnimations();
             ApplySectionStateImmediately();
             EnsureAllDashboardContentHostsRestState();
-            StartStartupLoadingEntrance();
             if (DataContext is MainViewModel vm && vm.IsNotesDashboardReady)
                 OnNotesDashboardReady(vm, EventArgs.Empty);
             else
@@ -407,6 +378,7 @@ namespace Scriblucent
                 ReleaseDashboardMotionEngines();
                 _observedViewModel.MotionHost = null;
                 _observedViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+                _observedViewModel.QuickAddFailed -= DashboardQuickAddFailed;
                 _observedViewModel.Notes.CollectionChanged -= ViewModel_NotesCollectionChanged;
                 _observedViewModel.NoteGroups.CollectionChanged -= ViewModel_NoteGroupsCollectionChanged;
                 _observedViewModel.FlashcardSets.CollectionChanged -= ViewModel_DashboardCollectionChanged;
@@ -417,7 +389,9 @@ namespace Scriblucent
                 _observedViewModel.QuizGroups.CollectionChanged -= ViewModel_DashboardCollectionChanged;
             }
 
+            DashboardSelectionDock.Dispose();
             _observedViewModel = vm;
+            if (vm is not null) InitializeDashboardSelection(vm);
 
             if (_observedViewModel != null)
             {
@@ -427,6 +401,7 @@ namespace Scriblucent
                     OnNotesDashboardReady(_observedViewModel, EventArgs.Empty);
 
                 _observedViewModel.PropertyChanged += ViewModel_PropertyChanged;
+                _observedViewModel.QuickAddFailed += DashboardQuickAddFailed;
                 _observedViewModel.Notes.CollectionChanged += ViewModel_NotesCollectionChanged;
                 _observedViewModel.NoteGroups.CollectionChanged += ViewModel_NoteGroupsCollectionChanged;
                 _observedViewModel.FlashcardSets.CollectionChanged += ViewModel_DashboardCollectionChanged;
@@ -884,11 +859,6 @@ namespace Scriblucent
                 {
                     AnimateSidebarWidth(vm.SidebarWidth);
                 }
-                else if (e.PropertyName == nameof(MainViewModel.IsMassSelectMode))
-                {
-                    AnimateMassSelectOverlay(vm.IsMassSelectMode);
-                    MassSelectHighlightBehavior.ScheduleSyncAllDashboardGrids();
-                }
                 else if (e.PropertyName == nameof(MainViewModel.ActiveDashboard))
                 {
                     SyncDashboardLoadingState(vm);
@@ -938,112 +908,9 @@ namespace Scriblucent
             SetSectionVisibilityImmediately(MindMapDashboardGroupsSectionBodyElement, vm.IsMindMapDashboardGroupsSectionExpanded);
             SetSectionVisibilityImmediately(MindMapDashboardUngroupedSectionBodyElement, vm.IsMindMapDashboardUngroupedSectionExpanded);
             SetSidebarWidthImmediately(vm.SidebarWidth);
-            SetMassSelectOverlayStateImmediately(vm.IsMassSelectMode);
+            DashboardSelectionDock.Refresh();
             EnsureExpandedSectionsNotClipped(vm);
 
-        }
-
-        private void SetMassSelectOverlayStateImmediately(bool isVisible)
-        {
-            var overlay = MassSelectOverlayToolbarElement;
-            if (overlay is null)
-                return;
-
-            UiMotion.Stop(overlay);
-            UiMotion.Clear(overlay, UIElement.OpacityProperty);
-            var translate = UiMotion.EnsureTranslate(overlay);
-            UiMotion.Clear(translate, TranslateTransform.YProperty);
-
-            if (isVisible)
-            {
-                overlay.Visibility = Visibility.Visible;
-                overlay.Opacity = 1;
-                translate.Y = 0;
-                return;
-            }
-
-            overlay.Visibility = Visibility.Collapsed;
-            overlay.Opacity = 0;
-            translate.Y = -UiMotion.PanelLiftY;
-            SetMassSelectMoreActionsStateImmediately(false);
-        }
-
-        private void AnimateMassSelectOverlay(bool isVisible)
-        {
-            var overlay = MassSelectOverlayToolbarElement;
-            if (overlay is null)
-                return;
-
-            UiMotion.SlideFadePanel(
-                overlay,
-                isVisible,
-                durationMs: UiMotion.OpenMs,
-                offsetY: UiMotion.PanelLiftY,
-                onComplete: isVisible ? null : () => SetMassSelectMoreActionsStateImmediately(false));
-        }
-
-        private void SetMassSelectMoreActionsStateImmediately(bool isExpanded)
-        {
-            _isMassSelectMoreActionsExpanded = isExpanded;
-            UpdateMassSelectMoreActionsToggleIcon();
-
-            var panel = MassSelectMoreActionsPanelElement;
-            if (panel is null)
-                return;
-
-            UiMotion.Stop(panel);
-            UiMotion.Clear(panel, UIElement.OpacityProperty);
-            var scale = UiMotion.EnsureScale(panel, UiMotion.CollapsedScale);
-            UiMotion.Clear(scale, ScaleTransform.ScaleXProperty);
-            UiMotion.Clear(scale, ScaleTransform.ScaleYProperty);
-
-            if (MassSelectMoreActionsSeparatorElement is { } separator)
-                separator.Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed;
-
-            if (isExpanded)
-            {
-                panel.Visibility = Visibility.Visible;
-                panel.Opacity = 1;
-                scale.ScaleX = 1;
-                scale.ScaleY = 1;
-                return;
-            }
-
-            panel.Visibility = Visibility.Collapsed;
-            panel.Opacity = 0;
-            scale.ScaleX = UiMotion.CollapsedScale;
-            scale.ScaleY = UiMotion.CollapsedScale;
-        }
-
-        private void ToggleMassSelectMoreActionsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is not MainViewModel { IsMassSelectMode: true })
-                return;
-
-            AnimateMassSelectMoreActions(!_isMassSelectMoreActionsExpanded);
-        }
-
-        private void AnimateMassSelectMoreActions(bool expand)
-        {
-            _isMassSelectMoreActionsExpanded = expand;
-            UpdateMassSelectMoreActionsToggleIcon();
-
-            var panel = MassSelectMoreActionsPanelElement;
-            if (panel is null)
-                return;
-
-            if (MassSelectMoreActionsSeparatorElement is { } separator)
-                separator.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
-
-            UiMotion.ScaleFadePanel(panel, expand, durationMs: UiMotion.FastMs);
-        }
-
-        private void UpdateMassSelectMoreActionsToggleIcon()
-        {
-            if (MassSelectMoreActionsToggleButtonElement is not Button toggle)
-                return;
-
-            toggle.Content = _isMassSelectMoreActionsExpanded ? "‹" : "›";
         }
 
         private void SetSidebarWidthImmediately(double width)
@@ -1054,10 +921,15 @@ namespace Scriblucent
 
         private void AnimateSidebarWidth(double targetWidth)
         {
+            UiMotion.ClosePopup(SortNotesPopupElement);
+            UiMotion.ClosePopup(DashboardSectionsPopupElement);
+            UiMotion.ClosePopup(TagsFilterPopup);
             if (SidebarColumnElement is null)
                 return;
 
-            var currentWidth = SidebarColumnElement.ActualWidth;
+            var currentWidth = SidebarChromeElement is { } sidebar
+                ? SidebarResizeMotion.VisibleWidth(sidebar, SidebarColumnElement.ActualWidth)
+                : SidebarColumnElement.ActualWidth;
             if (currentWidth <= 0)
                 currentWidth = SidebarColumnElement.Width.Value;
 
@@ -1131,10 +1003,6 @@ namespace Scriblucent
 
         private static void AllowExpandedSectionContent(FrameworkElement section)
         {
-            UiMotion.Clear(section, FrameworkElement.MaxHeightProperty);
-            section.ClearValue(FrameworkElement.HeightProperty);
-            section.Clip = null;
-            section.MaxHeight = double.PositiveInfinity;
             section.ClipToBounds = false;
         }
 
@@ -1143,25 +1011,7 @@ namespace Scriblucent
             if (section is null)
                 return;
 
-            section.RenderTransformOrigin = new Point(0.5, 0);
-            var translate = UiMotion.EnsureTranslate(section);
-
-            if (isExpanded)
-            {
-                section.Visibility = Visibility.Visible;
-                section.Opacity = 1;
-                AllowExpandedSectionContent(section);
-                translate.Y = 0;
-                return;
-            }
-
-            section.ClipToBounds = true;
-            section.Visibility = Visibility.Collapsed;
-            section.Opacity = 0;
-            section.MaxHeight = 0;
-            section.ClearValue(FrameworkElement.HeightProperty);
-            section.Clip = null;
-            translate.Y = -8;
+            UiMotion.AnimateLayoutReveal(section, isExpanded, animate: false);
         }
 
         private void AnimateSectionVisibility(FrameworkElement? section, bool isExpanded, Action? onComplete = null)
@@ -1172,7 +1022,7 @@ namespace Scriblucent
                 return;
             }
 
-            UiMotion.AnimateClipReveal(section, isExpanded, UiMotion.SectionMs, onComplete: onComplete);
+            UiMotion.AnimateLayoutReveal(section, isExpanded, onComplete);
         }
 
         private void AnimateSharedDashboardSectionVisibility(
@@ -1497,7 +1347,7 @@ namespace Scriblucent
                 element,
                 new[]
                 {
-                    UiMotion.Track(UiMotion.ReflowMs, UiMotion.OutQuad, startOffset, 0, value => translate.Y = value)
+                    UiMotion.Track(UiMotion.ReflowMs, UiMotion.InOutCubic, startOffset, 0, value => translate.Y = value)
                 },
                 () =>
                 {
@@ -1506,19 +1356,9 @@ namespace Scriblucent
                 });
         }
 
-        internal void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (DataContext is not MainViewModel vm || sender is not System.Windows.Controls.Calendar calendar)
-                return;
-
-            if (calendar.SelectedDate.HasValue)
-                vm.CalendarSelectedDate = calendar.SelectedDate.Value.Date;
-        }
-
-
-
         internal void NotesScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
         {
+            if (Scriblucent.Behaviors.ItemReorderBehavior.IsDragging) return;
             if (!IsNoteDragInProgress || sender is not ScrollViewer scrollViewer)
                 return;
 
@@ -1547,6 +1387,7 @@ namespace Scriblucent
             NoteCardViewModel? draggedNote,
             NoteCardControl? dragSource)
         {
+            if (Scriblucent.Behaviors.ItemReorderBehavior.IsInsertionActive) { NoteCardControl.ClearDropGlowOwner(); return; }
             if (draggedNote is null)
                 return;
 
@@ -1573,6 +1414,7 @@ namespace Scriblucent
             object? draggedListing,
             FrameworkElement? dragSource)
         {
+            if (Scriblucent.Behaviors.ItemReorderBehavior.IsInsertionActive) { ClearDashboardListingDropVisuals(); return; }
             if (draggedListing is null)
                 return;
 
@@ -1637,6 +1479,7 @@ namespace Scriblucent
 
         private void ClearAllDropZoneBorderVisuals()
         {
+            ClearGroupDropVisual(animate: false);
             foreach (var border in _dropZoneOriginalBorderBrushes.Keys.ToList())
                 RestoreDropZoneBorderVisual(border);
         }
@@ -1690,6 +1533,7 @@ namespace Scriblucent
 
         internal void DashboardScrollViewer_PreviewDragOver(object sender, DragEventArgs e)
         {
+            if (Scriblucent.Behaviors.ItemReorderBehavior.IsDragging) return;
             if (sender is not ScrollViewer scrollViewer || !HasDashboardListingDragData(e))
                 return;
 
@@ -1821,22 +1665,30 @@ namespace Scriblucent
 
             _lastActiveDashboard = newDashboard;
             _dashboardTransitionActive = true;
+            UiMotion.SuppressChildEntrances = true;
 
             DashboardShadowSuspender.TrySuspend(DashboardTransitionShadowScope, outgoing);
             DashboardShadowSuspender.TrySuspend(DashboardTransitionShadowScope, incoming);
 
             incoming.Visibility = Visibility.Visible;
             incoming.Opacity = 0;
-            incoming.IsHitTestVisible = false;
+            incoming.IsHitTestVisible = true;
             outgoing.IsHitTestVisible = false;
 
             Dispatcher.BeginInvoke(() =>
             {
+                if (_lastActiveDashboard != newDashboard) return;
                 incoming.UpdateLayout();
                 outgoing.UpdateLayout();
 
-                if (_observedViewModel is { IsRecentSectionVisible: true, IsRecentSectionExpanded: true })
-                    RecentStripEnterMotionBehavior.TryPrepEnterHold(incoming);
+                if (ResolveDashboardMotionScope(newDashboard) is { } preparedScope)
+                {
+                    EnsureDashboardContentHostRestState(preparedScope);
+                    EnsureRecentSectionRestState(preparedScope);
+                }
+
+                if (ResolveDashboardMotionScope(newDashboard) is { } choreographyScope)
+                    PlayDashboardNavigationChoreography(choreographyScope);
 
                 UiMotion.CrossFadeDashboardPanelsComposited(
                     outgoing,
@@ -1856,12 +1708,10 @@ namespace Scriblucent
                         incoming.IsHitTestVisible = true;
                         outgoing.IsHitTestVisible = true;
                         _dashboardTransitionActive = false;
+                        UiMotion.SuppressChildEntrances = false;
                         DashboardShadowSuspender.TryResume(DashboardTransitionShadowScope);
 
-                        if (ResolveDashboardMotionScope(newDashboard) is { } incomingScope)
-                            PlayDashboardSwitchReveal(incomingScope);
-                        else
-                            QueueDashboardLayoutRefresh();
+                        QueueDashboardLayoutRefresh();
 
                         Dispatcher.BeginInvoke(EnsureActiveListingDashboardInteractive, DispatcherPriority.Loaded);
                     });
@@ -1870,6 +1720,7 @@ namespace Scriblucent
 
         private void SetDashboardViewImmediate(string dashboard)
         {
+            UiMotion.SuppressChildEntrances = false;
             foreach (var view in AllDashboardViews())
             {
                 if (view is null)
@@ -1983,7 +1834,7 @@ namespace Scriblucent
                     return;
 
                 UiMotion.Stop(panel);
-                if (UiMotion.ShouldSkipDashboardRevealMotion())
+                if (IsLoadingDashboardActive || UiMotion.ShouldSkipDashboardRevealMotion())
                 {
                     panel.Opacity = 1;
                     if (panel is Panel container)
@@ -2106,7 +1957,7 @@ namespace Scriblucent
 
         private void SidebarAddButton_Click(object sender, RoutedEventArgs e)
         {
-            if (DataContext is not MainViewModel vm)
+            if (DataContext is not MainViewModel { CanCreateDashboardItem: true } vm)
                 return;
 
             if (vm.IsFlashcardsView)
@@ -2127,11 +1978,13 @@ namespace Scriblucent
                 return;
             }
 
-            vm.AddNoteCommand.Execute(null);
+            CreateNoteButton_Click(sender, e);
         }
 
         private void CloseNotesDashboardChrome()
         {
+            foreach (var page in AllDashboardViews())
+                (page?.FindName("CreationMenu") as DashboardCreateMenu)?.CloseImmediately();
             CollapseTopSearchPanel();
 
             UiMotion.ClosePopup(SortNotesPopupElement);
@@ -2165,7 +2018,7 @@ namespace Scriblucent
 
         private void TopSearchButton_Click(object sender, RoutedEventArgs e)
         {
-            if (TopSearchPanel.Visibility == Visibility.Visible)
+            if (_isTopSearchPanelOpen)
             {
                 CollapseTopSearchPanel();
                 return;
@@ -2226,75 +2079,29 @@ namespace Scriblucent
         private void SyncClearSearchButton(bool animate)
         {
             var show = !string.IsNullOrEmpty(_observedViewModel?.ActiveSearchQuery);
-            if (show == _clearSearchButtonShown)
-                return;
-
+            if (show == _clearSearchButtonShown) return;
             _clearSearchButtonShown = show;
             var button = ClearSearchButton;
-            UiMotion.Stop(button);
-
-            if (!animate || UiMotion.PrefersReducedMotion)
-            {
-                ApplyClearSearchButtonRestState(button, show);
-                return;
-            }
-
-            button.RenderTransformOrigin = new Point(0.5, 0.5);
-            var scale = UiMotion.EnsureScale(button, show ? ClearSearchButtonHiddenScale : 1);
-            if (show)
-            {
-                button.Visibility = Visibility.Visible;
-                button.IsHitTestVisible = true;
-                button.Width = 0;
-                button.Margin = new Thickness(0);
-                button.Opacity = 0;
-                scale.ScaleX = ClearSearchButtonHiddenScale;
-                scale.ScaleY = ClearSearchButtonHiddenScale;
-            }
-            else
-            {
-                button.IsHitTestVisible = false;
-            }
-
-            var opacityFrom = button.Opacity;
-            var widthFrom = double.IsNaN(button.Width) ? (show ? 0 : ClearSearchButtonWidth) : button.Width;
-            var marginFrom = button.Margin.Left;
-            var scaleFrom = scale.ScaleX;
-            var duration = show ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
-            var easing = show ? ClearSearchShowEase : ClearSearchHideEase;
-
-            UiMotion.Run(
-                button,
-                new[]
-                {
-                    UiMotion.Track(duration, easing, opacityFrom, show ? 1.0 : 0.0, value => button.Opacity = value),
-                    UiMotion.Track(duration, easing, widthFrom, show ? ClearSearchButtonWidth : 0, value => button.Width = value),
-                    UiMotion.Track(duration, easing, marginFrom, show ? ClearSearchButtonMargin : 0, value => button.Margin = new Thickness(value, 0, 0, 0)),
-                    UiMotion.Track(duration, easing, scaleFrom, show ? 1.0 : ClearSearchButtonHiddenScale, value =>
-                    {
-                        scale.ScaleX = value;
-                        scale.ScaleY = value;
-                    })
-                },
-                () =>
-                {
-                    if (show != _clearSearchButtonShown)
-                        return;
-
-                    ApplyClearSearchButtonRestState(button, show);
-                });
+            button.Visibility = Visibility.Visible;
+            button.Width = ClearSearchButtonWidth;
+            button.Margin = new Thickness(ClearSearchButtonMargin, 0, 0, 0);
+            button.IsHitTestVisible = show;
+            UiMotion.EnsureScale(button, 1).ScaleX = 1;
+            UiMotion.EnsureScale(button, 1).ScaleY = 1;
+            if (animate) UiMotion.Fade(button, show ? 1 : 0, 120);
+            else ApplyClearSearchButtonRestState(button, show);
         }
 
         private static void ApplyClearSearchButtonRestState(Button button, bool show)
         {
-            var scale = UiMotion.EnsureScale(button, 1);
-            button.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            SurfaceMotion.Stop(button);
+            button.Visibility = Visibility.Visible;
             button.IsHitTestVisible = show;
             button.Opacity = show ? 1 : 0;
-            button.Width = show ? ClearSearchButtonWidth : 0;
-            button.Margin = show ? new Thickness(ClearSearchButtonMargin, 0, 0, 0) : new Thickness(0);
-            scale.ScaleX = show ? 1 : ClearSearchButtonHiddenScale;
-            scale.ScaleY = show ? 1 : ClearSearchButtonHiddenScale;
+            button.Width = ClearSearchButtonWidth;
+            button.Margin = new Thickness(ClearSearchButtonMargin, 0, 0, 0);
+            var scale = UiMotion.EnsureScale(button, 1);
+            scale.ScaleX = scale.ScaleY = 1;
         }
 
         private void ExpandTopSearchPanel()
@@ -2303,15 +2110,12 @@ namespace Scriblucent
             UiMotion.ClosePopup(SortNotesPopupElement);
             UiMotion.ClosePopup(DashboardSectionsPopupElement);
 
-            TopSearchPanel.IsHitTestVisible = true;
-            UiMotion.ExpandHorizontalPanel(
-                TopSearchPanel,
-                show: true,
-                TopSearchExpandedWidth,
-                UiMotion.SearchMs);
-
+            _isTopSearchPanelOpen = true;
+            TopSearchPanel.Width = TopSearchExpandedWidth;
+            UiMotion.AnimateLayoutReveal(TopSearchPanel, true, axis: Orientation.Horizontal, soften: true);
             Dispatcher.BeginInvoke(() =>
             {
+                if (!_isTopSearchPanelOpen) return;
                 TopSearchTextBox.Focus();
                 TopSearchTextBox.SelectAll();
             }, DispatcherPriority.Input);
@@ -2319,43 +2123,17 @@ namespace Scriblucent
 
         private void CollapseTopSearchPanel()
         {
-            if (TopSearchPanel.Visibility != Visibility.Visible)
+            if (!_isTopSearchPanelOpen)
                 return;
-
-            UiMotion.ExpandHorizontalPanel(
-                TopSearchPanel,
-                show: false,
-                TopSearchExpandedWidth,
-                UiMotion.SearchMs,
-                () => TopSearchPanel.IsHitTestVisible = false);
+            _isTopSearchPanelOpen = false;
+            if (TopSearchTextBox.IsKeyboardFocusWithin) TopSearchButton.Focus();
+            UiMotion.AnimateLayoutReveal(TopSearchPanel, false, axis: Orientation.Horizontal, soften: true);
         }
 
         // Open editor for a specific note card
         public void OpenNoteEditor(NoteCardViewModel noteViewModel)
         {
-            var openingNewWindow = _noteEditorTabsWindow == null || !_noteEditorTabsWindow.IsLoaded;
-            if (openingNewWindow)
-            {
-                _noteEditorTabsWindow = new NoteEditorTabsWindow
-                {
-                    Owner = this
-                };
-
-                _noteEditorTabsWindow.Closed += (_, _) =>
-                {
-                    _noteEditorTabsWindow = null;
-                    Activate();
-                };
-
-                _noteEditorTabsWindow.OpenOrFocusNote(noteViewModel, DataContext, animateContent: false);
-                _noteEditorTabsWindow.Show();
-                _noteEditorTabsWindow.Activate();
-                return;
-            }
-
-            var editorWindow = _noteEditorTabsWindow!;
-            editorWindow.OpenOrFocusNote(noteViewModel, DataContext);
-            editorWindow.Activate();
+            EditorWorkspace.OpenNote(noteViewModel);
         }
 
         public void OpenNoteSchedule(NoteCardViewModel noteViewModel)
@@ -2369,17 +2147,8 @@ namespace Scriblucent
 
         internal void CreateFlashcardsButton_Click(object sender, RoutedEventArgs e)
         {
-            if (DataContext is MainViewModel { IsMassSelectMode: true })
-                return;
-
-            if (DataContext is MainViewModel vm)
+            if (DataContext is MainViewModel { CanCreateDashboardItem: true } vm)
                 OpenFlashcardSetEditor(vm, null);
-        }
-
-        internal void FlashcardDashboardActionsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button { ContextMenu: { } menu } button)
-                UiMotion.OpenContextMenu(menu, button);
         }
 
         internal void OpenFlashcardCombineMenuItem_Click(object sender, RoutedEventArgs e)
@@ -2526,114 +2295,20 @@ namespace Scriblucent
 
         internal void CreateQuizButton_Click(object sender, RoutedEventArgs e)
         {
-            if (DataContext is MainViewModel { IsMassSelectMode: true })
-                return;
-
-            if (DataContext is MainViewModel vm)
+            if (DataContext is MainViewModel { CanCreateDashboardItem: true } vm)
                 OpenQuizEditor(vm, null);
         }
 
         internal void CreateMindMapButton_Click(object sender, RoutedEventArgs e)
         {
-            if (DataContext is MainViewModel { IsMassSelectMode: true })
-                return;
-
-            if (DataContext is not MainViewModel vm)
-                return;
-
-            // Create a blank root node with a default title
-            var rootNode = new MindMapNode { Text = "Central Topic", NodeShape = "Rounded" };
-
-            MindMapDocument? savedDocument = null;
-            Action saveNow = null!;
-
-            var editor = new MindMapPreviewWindow(
-                rootNode,
-                noteOptions: vm.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
-                modelDisplayName: null,
-                title: null,
-                tags: null,
-                layoutMode: null,
-                useManualPositions: false,
-                openNoteAction: noteId => OpenNoteById(vm, noteId))
-            {
-                Owner = this
-            };
-
-            editor.AiReviewNoticeDismissedPersistRequested += (_, _) => PersistAiReviewNoticeDismissal(savedDocument, vm.SaveMindMaps);
-
-            saveNow = () =>
-            {
-                var updatedDocument = editor.ToDocument(savedDocument);
-                savedDocument = vm.AddOrUpdateMindMap(updatedDocument).Document;
-                editor.MarkCurrentStateAutoSaved();
-            };
-
-            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
-
-            try
-            {
-                if (editor.ShowDialog() == true)
-                {
-                    var newDocument = editor.ToDocument(savedDocument);
-                    vm.AddOrUpdateMindMap(newDocument);
-                    vm.SaveMindMaps();
-                }
-            }
-            finally
-            {
-                StopEditorAutoSave(autoSaveTimer);
-            }
+            if (DataContext is MainViewModel { CanCreateDashboardItem: true })
+                EditorWorkspace.Create(EditorDocumentKind.MindMap);
         }
 
         private void OpenFlashcardSetEditor(MainViewModel vm, FlashcardSetViewModel? set)
         {
-            var document = set?.Document;
-            FlashcardSetDocument? savedDocument = document;
-            Action saveNow = null!;
-
-            var editor = new FlashcardsPreviewWindow(
-                document?.Cards ?? Enumerable.Empty<FlashcardItem>(),
-                vm.Notes.Select(note => new FlashcardsPreviewWindow.FlashcardNoteLinkOption(note.Document.Id, note.Document.Title)),
-                document?.AiModelDisplayName,
-                document?.Title,
-                document?.Tags,
-                document?.SetNames,
-                document?.StudySession,
-                document?.SourceNoteId,
-                noteId => OpenNoteById(vm, noteId),
-                document?.FlipDelayMilliseconds ?? 0,
-                document?.StudyDueCardsOnly ?? true,
-                isTagsPanelOpen: document?.IsEditorTagsPanelOpen,
-                aiReviewNoticeDismissed: document?.AiReviewNoticeDismissed ?? false)
-            {
-                Owner = this
-            };
-
-            editor.AiReviewNoticeDismissedPersistRequested += (_, _) =>
-            {
-                PersistAiReviewNoticeDismissal(savedDocument, vm.SaveFlashcardSets);
-                set?.NotifyChanged();
-            };
-
-            saveNow = () =>
-            {
-                var updatedDocument = editor.ToDocument(savedDocument);
-                savedDocument = vm.AddOrUpdateFlashcardSet(updatedDocument).Document;
-                editor.MarkCurrentStateAutoSaved();
-            };
-
-            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
-
-            try
-            {
-                if (editor.ShowDialog() == true)
-                    vm.AddOrUpdateFlashcardSet(editor.ToDocument(savedDocument));
-            }
-            finally
-            {
-                StopEditorAutoSave(autoSaveTimer);
-            }
+            if (set is null) EditorWorkspace.Create(EditorDocumentKind.Flashcards);
+            else EditorWorkspace.OpenFlashcards(set.Document);
         }
 
         internal void OpenFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
@@ -2644,66 +2319,8 @@ namespace Scriblucent
 
         private void OpenQuizEditor(MainViewModel vm, QuizViewModel? quiz)
         {
-            var document = quiz?.Document ?? new QuizDocument
-            {
-                Title = LocalizationService.GetString("QuizUntitled"),
-                Questions = new List<QuizQuestion>
-                {
-                    new()
-                    {
-                        Type = QuizQuestionType.SingleChoice,
-                        Question = LocalizationService.GetString("NewQuizQuestion"),
-                        Options = new List<QuizOption>
-                        {
-                            new() { Text = LocalizationService.GetString("NewQuizCorrectAnswer"), IsCorrect = true },
-                            new() { Text = LocalizationService.GetString("NewQuizWrongAnswer"), IsCorrect = false },
-                            new() { Text = LocalizationService.GetString("NewQuizWrongAnswer"), IsCorrect = false }
-                        }
-                    }
-                }
-            };
-
-            QuizDocument? savedDocument = quiz?.Document;
-            Action saveNow = null!;
-
-            var editor = new QuizPreviewWindow(
-                document,
-                vm.Notes.Select(note => new QuizPreviewWindow.QuizNoteLinkOption(note.Document.Id, note.Document.Title)),
-                document.AiModelDisplayName,
-                document.Title,
-                noteId => OpenNoteById(vm, noteId),
-                requestImmediateSave: () => saveNow())
-            {
-                Owner = this
-            };
-
-            editor.AiReviewNoticeDismissedPersistRequested += (_, _) =>
-            {
-                PersistAiReviewNoticeDismissal(savedDocument, vm.SaveQuizzes);
-                quiz?.NotifyChanged();
-            };
-
-            // Finishing (or abandoning mid-way) a quiz attempt calls this directly instead of
-            // waiting on the autosave timer below, so attempt history, per-question memory, and
-            // in-progress resume state are never lost to a short editor session.
-            saveNow = () =>
-            {
-                var updatedDocument = editor.ToDocument(savedDocument);
-                savedDocument = vm.AddOrUpdateQuiz(updatedDocument).Document;
-                editor.MarkCurrentStateAutoSaved();
-            };
-
-            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
-
-            try
-            {
-                if (editor.ShowDialog() == true)
-                    vm.AddOrUpdateQuiz(editor.ToDocument(savedDocument));
-            }
-            finally
-            {
-                StopEditorAutoSave(autoSaveTimer);
-            }
+            if (quiz is null) EditorWorkspace.Create(EditorDocumentKind.Quiz);
+            else EditorWorkspace.OpenQuiz(quiz.Document);
         }
 
         private void OpenQuizLibraryButton_Click(object sender, RoutedEventArgs e)
@@ -2717,22 +2334,6 @@ namespace Scriblucent
             };
 
             window.ShowDialog();
-        }
-
-        internal void QuizDashboardActionsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button { ContextMenu: { } menu } button)
-                UiMotion.OpenContextMenu(menu, button);
-        }
-
-        internal void OpenQuizLibraryMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            OpenQuizLibraryButton_Click(sender, e);
-        }
-
-        internal void OpenAttemptHistoryMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            OpenAttemptHistoryButton_Click(sender, e);
         }
 
         private void OpenAttemptHistoryButton_Click(object sender, RoutedEventArgs e)
@@ -2949,133 +2550,7 @@ namespace Scriblucent
 
         private void OpenMindMapEditor(MindMapViewModel mindMapVm)
         {
-            if (DataContext is not MainViewModel vm)
-                return;
-
-            MindMapDocument? savedDocument = mindMapVm.Document;
-            Action saveNow = null!;
-
-            var editor = new MindMapPreviewWindow(
-                mindMapVm.Document.Root,
-                vm.Notes.Select(note => new MindMapPreviewWindow.MindMapNoteLinkOption(note.Document.Id, note.Document.Title)),
-                mindMapVm.Document.AiModelDisplayName,
-                mindMapVm.Document.Title,
-                mindMapVm.Document.Tags,
-                mindMapVm.Document.LayoutMode,
-                mindMapVm.Document.UseManualPositions,
-                mindMapVm.Document.SourceNoteId,
-                noteId => OpenNoteById(vm, noteId),
-                isTagsPanelOpen: mindMapVm.Document.IsEditorTagsPanelOpen,
-                aiReviewNoticeDismissed: mindMapVm.Document.AiReviewNoticeDismissed)
-            {
-                Owner = this
-            };
-
-            editor.AiReviewNoticeDismissedPersistRequested += (_, _) =>
-            {
-                PersistAiReviewNoticeDismissal(savedDocument, vm.SaveMindMaps);
-                mindMapVm.NotifyChanged();
-            };
-
-            saveNow = () =>
-            {
-                var updatedDocument = editor.ToDocument(savedDocument);
-                savedDocument = vm.AddOrUpdateMindMap(updatedDocument).Document;
-                editor.MarkCurrentStateAutoSaved();
-            };
-
-            var autoSaveTimer = StartEditorAutoSave(editor.HasPendingAutoSaveChanges, saveNow);
-
-            try
-            {
-                if (editor.ShowDialog() == true)
-                    vm.AddOrUpdateMindMap(editor.ToDocument(savedDocument));
-            }
-            finally
-            {
-                StopEditorAutoSave(autoSaveTimer);
-            }
-        }
-
-        private static void PersistAiReviewNoticeDismissal(FlashcardSetDocument? document, Action save)
-        {
-            if (document is null)
-                return;
-
-            document.AiReviewNoticeDismissed = true;
-            save();
-        }
-
-        private static void PersistAiReviewNoticeDismissal(MindMapDocument? document, Action save)
-        {
-            if (document is null)
-                return;
-
-            document.AiReviewNoticeDismissed = true;
-            save();
-        }
-
-        private static void PersistAiReviewNoticeDismissal(QuizDocument? document, Action save)
-        {
-            if (document is null)
-                return;
-
-            document.AiReviewNoticeDismissed = true;
-            save();
-        }
-
-        private DispatcherTimer? StartEditorAutoSave(Func<bool> hasChanges, Action saveAction)
-        {
-            var settings = AppSettingsService.Load();
-            if (!settings.EnableAutoSave)
-                return null;
-
-            var intervalSeconds = Math.Clamp(settings.AutoSaveIntervalSeconds, 5, 86400);
-            var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-            {
-                Interval = TimeSpan.FromSeconds(intervalSeconds)
-            };
-
-            timer.Tick += (_, _) =>
-            {
-                if (!AppSettingsService.Load().EnableAutoSave)
-                {
-                    timer.Stop();
-                    return;
-                }
-
-                if (!hasChanges())
-                    return;
-
-                try
-                {
-                    saveAction();
-                }
-                catch
-                {
-                    // Auto-save should never interrupt editing.
-                }
-            };
-            timer.Start();
-            return timer;
-        }
-
-        private static void StopEditorAutoSave(DispatcherTimer? timer)
-        {
-            timer?.Stop();
-        }
-
-        private static bool IsWithinCalendarScheduleGearButton(DependencyObject? source)
-        {
-            while (source != null)
-            {
-                if (source is Button button && string.Equals(button.Name, "CalendarScheduleGearButton", StringComparison.Ordinal))
-                    return true;
-
-                source = VisualTreeHelper.GetParent(source);
-            }
-
-            return false;
+            EditorWorkspace.OpenMindMap(mindMapVm.Document);
         }
 
         // Settings menu button click handler
@@ -3112,58 +2587,6 @@ namespace Scriblucent
                 OpenQuizEditor(vm, quiz);
         }
 
-        internal void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (e.OriginalSource is DependencyObject source && IsWithinCalendarScheduleGearButton(source))
-                return;
-
-            if (sender is not Border { Tag: CalendarScheduledItemViewModel item })
-                return;
-
-            if (DataContext is not MainViewModel vm)
-                return;
-
-            switch (item.ItemType)
-            {
-                case ScheduledItemType.Note when item.Note != null:
-                    OpenNoteEditor(item.Note);
-                    break;
-                case ScheduledItemType.Flashcard when item.FlashcardSet != null:
-                    OpenFlashcardSetEditor(vm, item.FlashcardSet);
-                    break;
-                case ScheduledItemType.MindMap when item.MindMap != null:
-                    OpenMindMapEditor(item.MindMap);
-                    break;
-                case ScheduledItemType.Quiz when item.Quiz != null:
-                    OpenQuizEditor(vm, item.Quiz);
-                    break;
-            }
-        }
-
-        internal void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is Button { Tag: CalendarScheduledItemViewModel item })
-            {
-                switch (item.ItemType)
-                {
-                    case ScheduledItemType.Note when item.Note != null:
-                        OpenNoteSchedule(item.Note);
-                        break;
-                    case ScheduledItemType.Flashcard when item.FlashcardSet != null:
-                        OpenFlashcardSetSchedule(item.FlashcardSet);
-                        break;
-                    case ScheduledItemType.MindMap when item.MindMap != null:
-                        OpenMindMapSchedule(item.MindMap);
-                        break;
-                    case ScheduledItemType.Quiz when item.Quiz != null:
-                        OpenQuizSchedule(item.Quiz);
-                        break;
-                }
-            }
-
-            e.Handled = true;
-        }
-
         private void OpenFlashcardSetSchedule(FlashcardSetViewModel flashcardSet)
         {
             if (DataContext is not MainViewModel vm)
@@ -3173,7 +2596,7 @@ namespace Scriblucent
             var subtitle = $"{LocalizationService.GetString("FlashcardsDashboard")} · {flashcardSet.Document.Title}";
             schedulePanel?.ShowAnimated(vm, flashcardSet.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>(),
                 entries => vm.SetFlashcardSetSchedules(flashcardSet, entries),
-                LocalizationService.GetString("CalendarAssignMenu"), subtitle);
+                LocalizationService.GetString("CalendarScheduleHeading"), subtitle);
         }
 
         private void OpenMindMapSchedule(MindMapViewModel mindMap)
@@ -3185,7 +2608,7 @@ namespace Scriblucent
             var subtitle = $"{LocalizationService.GetString("MindMapsDashboard")} · {mindMap.Document.Title}";
             schedulePanel?.ShowAnimated(vm, mindMap.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>(),
                 entries => vm.SetMindMapSchedules(mindMap, entries),
-                LocalizationService.GetString("CalendarAssignMenu"), subtitle);
+                LocalizationService.GetString("CalendarScheduleHeading"), subtitle);
         }
 
         private void OpenQuizSchedule(QuizViewModel quiz)
@@ -3197,7 +2620,7 @@ namespace Scriblucent
             var subtitle = $"{LocalizationService.GetString("QuizzesDashboard")} · {quiz.Document.Title}";
             schedulePanel?.ShowAnimated(vm, quiz.Document.Schedules ?? Enumerable.Empty<NoteScheduleEntry>(),
                 entries => vm.SetQuizSchedules(quiz, entries),
-                LocalizationService.GetString("CalendarAssignMenu"), subtitle);
+                LocalizationService.GetString("CalendarScheduleHeading"), subtitle);
         }
 
         internal void ScheduleFlashcardSetMenuItem_Click(object sender, RoutedEventArgs e)
@@ -3653,12 +3076,6 @@ namespace Scriblucent
         internal void MoveMindMapDashboardUngroupedDownButton_Click(object sender, RoutedEventArgs e)
             => SwapMindMapDashboardGroupsAndUngrouped(groupsFirst: true);
 
-        private void ExitMassSelectButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainViewModel vm)
-                vm.ExitMassSelect();
-        }
-
         private void AddTagsToSelectedButton_Click(object sender, RoutedEventArgs e)
         {
             if (DataContext is not MainViewModel vm || !vm.IsMassSelectMode || vm.ActiveMassSelectedCount <= 0)
@@ -3711,13 +3128,13 @@ namespace Scriblucent
             switch (listing)
             {
                 case FlashcardSetViewModel set:
-                    vm.EnterMassSelect(set);
+                    vm.DashboardSelection.Begin(set.Document.Id);
                     break;
                 case MindMapViewModel map:
-                    vm.EnterMassSelect(map);
+                    vm.DashboardSelection.Begin(map.Document.Id);
                     break;
                 case QuizViewModel quiz:
-                    vm.EnterMassSelect(quiz);
+                    vm.DashboardSelection.Begin(quiz.Document.Id);
                     break;
             }
         }
@@ -3768,153 +3185,6 @@ namespace Scriblucent
             }
         }
 
-        internal void MoveSingleGroupUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button { Tag: NoteGroupViewModel group })
-                return;
-
-            if (DataContext is MainViewModel vm)
-                TryAnimateGroupMove(
-                    GroupsItemsControlElement,
-                    vm.NoteGroups,
-                    group,
-                    moveUp: true,
-                    DashboardMotionScope.Notes,
-                    () => vm.MoveGroupUp(group));
-        }
-
-        internal void MoveSingleGroupDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button { Tag: NoteGroupViewModel group })
-                return;
-
-            if (DataContext is MainViewModel vm)
-                TryAnimateGroupMove(
-                    GroupsItemsControlElement,
-                    vm.NoteGroups,
-                    group,
-                    moveUp: false,
-                    DashboardMotionScope.Notes,
-                    () => vm.MoveGroupDown(group));
-        }
-
-        private void TryAnimateGroupMove<T>(
-            ItemsControl? groupsList,
-            IList<T> groups,
-            T group,
-            bool moveUp,
-            DashboardMotionScope motionScope,
-            Func<bool> applyMove) where T : class
-        {
-            if (groupsList is null)
-            {
-                applyMove();
-                return;
-            }
-
-            var currentIndex = groups.IndexOf(group);
-            var swapIndex = moveUp ? currentIndex - 1 : currentIndex + 1;
-            if (currentIndex < 0 || swapIndex < 0 || swapIndex >= groups.Count)
-                return;
-
-            AnimateGroupPairSwap(
-                groupsList,
-                group,
-                groups[swapIndex],
-                motionScope,
-                applyMove);
-        }
-
-        private void AnimateGroupPairSwap(
-            ItemsControl groupsList,
-            object primaryItem,
-            object secondaryItem,
-            DashboardMotionScope motionScope,
-            Func<bool> applyMove)
-        {
-            if (ShouldApplyReorderMotionInstantly())
-            {
-                applyMove();
-                return;
-            }
-
-            groupsList.UpdateLayout();
-
-            var capturedBefore = TryResolveGroupContainers(
-                groupsList,
-                primaryItem,
-                secondaryItem,
-                out var primaryContainer,
-                out var secondaryContainer,
-                out var parent);
-
-            if (!capturedBefore || parent is null)
-            {
-                applyMove();
-                return;
-            }
-
-            var engine = EnsureDashboardMotionEngine(motionScope);
-            engine.BeginLayoutAnimation();
-
-            parent.UpdateLayout();
-            var primaryOldY = MeasureTopOffset(primaryContainer, parent);
-            var secondaryOldY = MeasureTopOffset(secondaryContainer, parent);
-
-            if (!applyMove())
-            {
-                engine.EndLayoutAnimation();
-                return;
-            }
-
-            Dispatcher.BeginInvoke(() =>
-            {
-                groupsList.UpdateLayout();
-                if (!TryResolveGroupContainers(groupsList, primaryItem, secondaryItem, out var primary, out var secondary, out var panel)
-                    || panel is null)
-                {
-                    engine.EndLayoutAnimation();
-                    return;
-                }
-
-                RunFlipPairAnimation(
-                    primary,
-                    secondary,
-                    panel,
-                    primaryOldY,
-                    secondaryOldY,
-                    engine,
-                    () => ScheduleReflowVirtualizationRefresh(motionScope));
-            }, DispatcherPriority.Render);
-        }
-
-        private static bool TryResolveGroupContainers(
-            ItemsControl groupsList,
-            object primaryItem,
-            object secondaryItem,
-            out FrameworkElement primaryContainer,
-            out FrameworkElement secondaryContainer,
-            out UIElement? parent)
-        {
-            primaryContainer = null!;
-            secondaryContainer = null!;
-            parent = null;
-
-            if (groupsList.ItemContainerGenerator.ContainerFromItem(primaryItem) is not FrameworkElement primary)
-                return false;
-
-            if (groupsList.ItemContainerGenerator.ContainerFromItem(secondaryItem) is not FrameworkElement secondary)
-                return false;
-
-            parent = VisualTreeHelper.GetParent(primary) as UIElement;
-            if (parent is null || !ReferenceEquals(VisualTreeHelper.GetParent(secondary), parent))
-                return false;
-
-            primaryContainer = primary;
-            secondaryContainer = secondary;
-            return true;
-        }
-
         internal void GroupBorder_DragOver(object sender, DragEventArgs e)
         {
             var canDrop = e.Data.GetData(typeof(NoteCardViewModel)) is NoteCardViewModel;
@@ -3941,7 +3211,10 @@ namespace Scriblucent
                     return;
 
                 if (DataContext is MainViewModel vm && vm.TryMoveNoteToGroup(draggedNote, targetGroup))
+                {
+                    ExpandDroppedGroup(targetGroup);
                     QueueNotesLayoutRefresh();
+                }
 
                 e.Handled = true;
             }
@@ -4012,6 +3285,7 @@ namespace Scriblucent
 
         internal void DashboardListing_PreviewMouseMove(object sender, MouseEventArgs e)
         {
+            if (Scriblucent.Behaviors.ItemReorderBehavior.IsDragging) return;
             if (DataContext is MainViewModel { IsMassSelectMode: true })
                 return;
 
@@ -4062,15 +3336,13 @@ namespace Scriblucent
             if (IsWithinListingContextMenuButton(e.OriginalSource as DependencyObject))
                 return;
 
-            if (DashboardMassSelectCheckBoxBehavior.IsMassSelectCheckBox(e.OriginalSource as DependencyObject))
+            if (CollectionSelectionToggle.IsSelectionToggle(e.OriginalSource as DependencyObject))
                 return;
 
             var listing = ResolveDashboardListingFromElement(sender as FrameworkElement);
             if (DataContext is MainViewModel { IsMassSelectMode: true } massSelectVm)
             {
-                massSelectVm.ToggleMassSelectForDashboardItem(listing);
-                if (sender is DependencyObject source)
-                    MassSelectHighlightBehavior.RequestVisualSync(source);
+                // The shared frame owns body selection and modifier ranges.
                 e.Handled = true;
                 return;
             }
@@ -4207,6 +3479,7 @@ namespace Scriblucent
 
                 if (changed)
                 {
+                    ExpandDroppedGroup(targetElement.Tag);
                     QueueDashboardLayoutRefresh();
                     e.Handled = true;
                 }
@@ -4431,80 +3704,6 @@ namespace Scriblucent
                        && dragged.Document.GroupId != target.GroupId,
                 _ => false
             };
-        }
-
-        internal void MoveDashboardGroupUpButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is not MainViewModel vm || sender is not Button { Tag: object group })
-                return;
-
-            switch (group)
-            {
-                case FlashcardSetGroupViewModel flashcardGroup:
-                    TryAnimateGroupMove(
-                        FlashcardDashboardGroupsItemsControlElement,
-                        vm.FlashcardSetGroups,
-                        flashcardGroup,
-                        moveUp: true,
-                        DashboardMotionScope.Flashcards,
-                        () => vm.MoveFlashcardSetGroupUp(flashcardGroup));
-                    break;
-                case MindMapGroupViewModel mindMapGroup:
-                    TryAnimateGroupMove(
-                        MindMapDashboardGroupsItemsControlElement,
-                        vm.MindMapGroups,
-                        mindMapGroup,
-                        moveUp: true,
-                        DashboardMotionScope.MindMaps,
-                        () => vm.MoveMindMapGroupUp(mindMapGroup));
-                    break;
-                case QuizGroupViewModel quizGroup:
-                    TryAnimateGroupMove(
-                        QuizDashboardGroupsItemsControlElement,
-                        vm.QuizGroups,
-                        quizGroup,
-                        moveUp: true,
-                        DashboardMotionScope.Quizzes,
-                        () => vm.MoveQuizGroupUp(quizGroup));
-                    break;
-            }
-        }
-
-        internal void MoveDashboardGroupDownButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is not MainViewModel vm || sender is not Button { Tag: object group })
-                return;
-
-            switch (group)
-            {
-                case FlashcardSetGroupViewModel flashcardGroup:
-                    TryAnimateGroupMove(
-                        FlashcardDashboardGroupsItemsControlElement,
-                        vm.FlashcardSetGroups,
-                        flashcardGroup,
-                        moveUp: false,
-                        DashboardMotionScope.Flashcards,
-                        () => vm.MoveFlashcardSetGroupDown(flashcardGroup));
-                    break;
-                case MindMapGroupViewModel mindMapGroup:
-                    TryAnimateGroupMove(
-                        MindMapDashboardGroupsItemsControlElement,
-                        vm.MindMapGroups,
-                        mindMapGroup,
-                        moveUp: false,
-                        DashboardMotionScope.MindMaps,
-                        () => vm.MoveMindMapGroupDown(mindMapGroup));
-                    break;
-                case QuizGroupViewModel quizGroup:
-                    TryAnimateGroupMove(
-                        QuizDashboardGroupsItemsControlElement,
-                        vm.QuizGroups,
-                        quizGroup,
-                        moveUp: false,
-                        DashboardMotionScope.Quizzes,
-                        () => vm.MoveQuizGroupDown(quizGroup));
-                    break;
-            }
         }
 
         internal void DashboardGroupColorButton_Click(object sender, RoutedEventArgs e)
@@ -4738,9 +3937,7 @@ namespace Scriblucent
             cardBorder.Child = null;
             host.Children.Add(content);
 
-            var padding = cardBorder.Padding;
             var glow = CreateListingDropGlowBorder(cardBorder);
-            glow.Margin = new Thickness(-padding.Left, -padding.Top, -padding.Right, -padding.Bottom);
             glow.HorizontalAlignment = HorizontalAlignment.Stretch;
             glow.VerticalAlignment = VerticalAlignment.Stretch;
             host.Children.Add(glow);
@@ -4786,8 +3983,9 @@ namespace Scriblucent
 
         private static Border CreateListingDropGlowBorder(Border cardBorder)
         {
-            var glow = new Border
+            var glow = new DropTargetSurface
             {
+                Surface = cardBorder,
                 Tag = DashboardDropGlowVisual.ListingGlowTag,
                 Background = Brushes.Transparent,
                 BorderBrush = DashboardDropGlowVisual.DropBorderBrush,
@@ -4839,8 +4037,25 @@ namespace Scriblucent
             if (border is null)
                 return;
 
+            if (!IsUngroupedDropZoneBorder(border))
+            {
+                if (isActive)
+                {
+                    if (ReferenceEquals(_activeGroupDropBorder, border)) return;
+                    ClearGroupDropVisual();
+                    foreach (var activeBorder in _dropZoneOriginalBorderBrushes.Keys.ToList())
+                        RestoreDropZoneBorderVisual(activeBorder);
+                    _activeGroupDropBorder = border;
+                    border.Unloaded += GroupDropTarget_Unloaded;
+                    AccentMotion.Set(border, true, TryFindResource("AccentRimBrush") as Brush, thickness: 2);
+                }
+                else if (ReferenceEquals(_activeGroupDropBorder, border)) ClearGroupDropVisual();
+                return;
+            }
+
             if (isActive)
             {
+                ClearGroupDropVisual();
                 if (_dropZoneOriginalBorderBrushes.ContainsKey(border))
                     return;
 
@@ -4859,19 +4074,37 @@ namespace Scriblucent
                 }
 
                 border.BorderBrush = GetDashboardDropBrush();
-                if (IsUngroupedDropZoneBorder(border))
-                {
-                    border.CornerRadius = new CornerRadius(UngroupedDropZoneCornerRadius);
-                    border.Background = GetUngroupedDropFillBrush();
-                }
-                else if (border.BorderThickness.Left < 0.5)
-                    border.CornerRadius = new CornerRadius(12);
-
+                border.CornerRadius = new CornerRadius(UngroupedDropZoneCornerRadius);
+                border.Background = GetUngroupedDropFillBrush();
                 AnimateBorderThickness(border, new Thickness(2), 150);
                 return;
             }
 
             RestoreDropZoneBorderVisual(border, animate: true);
+        }
+
+        internal static void ExpandDroppedGroup(object? group)
+        {
+            var disclosure = group switch
+            {
+                NoteGroupViewModel notes => notes.Disclosure,
+                FlashcardSetGroupViewModel flashcards => flashcards.Disclosure,
+                MindMapGroupViewModel maps => maps.Disclosure,
+                QuizGroupViewModel quizzes => quizzes.Disclosure,
+                _ => null
+            };
+            if (disclosure is not null) disclosure.IsExpanded = true;
+        }
+
+        private void GroupDropTarget_Unloaded(object sender, RoutedEventArgs e) => ClearGroupDropVisual(animate: false);
+
+        private void ClearGroupDropVisual(bool animate = true)
+        {
+            if (_activeGroupDropBorder is not { } border) return;
+            _activeGroupDropBorder = null;
+            border.Unloaded -= GroupDropTarget_Unloaded;
+            if (animate) AccentMotion.Set(border, false, TryFindResource("AccentRimBrush") as Brush);
+            else AccentMotion.Clear(border);
         }
 
         private void RestoreDropZoneBorderVisual(Border border, bool animate = false)

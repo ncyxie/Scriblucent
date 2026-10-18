@@ -27,12 +27,12 @@ internal static class DashboardMotionViewport
         return null;
     }
 
-    public static bool IntersectsViewport(FrameworkElement element, ScrollViewer? scrollViewer)
+    public static bool IntersectsViewport(FrameworkElement element, ScrollViewer? scrollViewer, bool includeTransparent = false)
     {
         if (scrollViewer is null)
             return true;
 
-        if (!element.IsVisible || element.Opacity <= 0.01)
+        if (!element.IsVisible || (!includeTransparent && element.Opacity <= 0.01))
             return false;
 
         if (element.ActualWidth <= 0 || element.ActualHeight <= 0)

@@ -11,8 +11,8 @@ namespace Scriblucent.Controls;
 /// </summary>
 public sealed class DashboardVirtualizedNoteCardGrid : DashboardVirtualizedCardGrid
 {
-    private const double GridCellWidth = 244;
-    private const double GridCellHeight = 164;
+    internal const double GridCellWidth = 244;
+    internal const double GridCellHeight = 164;
     private const int PageVirtualizedUniformThreshold = 48;
 
     public static readonly DependencyProperty IsListLayoutProperty = DependencyProperty.Register(
@@ -22,7 +22,7 @@ public sealed class DashboardVirtualizedNoteCardGrid : DashboardVirtualizedCardG
         new PropertyMetadata(false, OnIsListLayoutChanged));
 
     private NoteCardItemSizeProvider _sizeProvider = new(isListLayout: false);
-    private double _cachedExtentWidth = double.NaN;
+    private int _cachedExtentColumns = -1;
     private int _cachedExtentItemCount = -1;
     private double _cachedExtentHeight;
     private bool? _wrapPanelUniformMode;
@@ -128,8 +128,8 @@ public sealed class DashboardVirtualizedNoteCardGrid : DashboardVirtualizedCardG
         if (Items.Count == 0 || width <= 0)
             return 0;
 
-        if (!double.IsNaN(_cachedExtentWidth)
-            && Math.Abs(_cachedExtentWidth - width) < 0.5
+        var columns = IsListLayout ? 0 : Math.Max(1, (int)Math.Floor(width / GridCellWidth));
+        if (_cachedExtentColumns == columns
             && _cachedExtentItemCount == Items.Count)
             return _cachedExtentHeight;
 
@@ -174,7 +174,7 @@ public sealed class DashboardVirtualizedNoteCardGrid : DashboardVirtualizedCardG
             extent = rowHeights.Sum();
         }
 
-        _cachedExtentWidth = width;
+        _cachedExtentColumns = columns;
         _cachedExtentItemCount = Items.Count;
         _cachedExtentHeight = extent;
         return extent;
@@ -191,5 +191,11 @@ public sealed class DashboardVirtualizedNoteCardGrid : DashboardVirtualizedCardG
 
         base.OnItemsChanged(e);
         ScheduleWrapPanelConfiguration();
+    }
+
+    internal override void ResetVirtualizationLayoutCache()
+    {
+        _cachedExtentItemCount = -1;
+        base.ResetVirtualizationLayoutCache();
     }
 }

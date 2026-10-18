@@ -27,7 +27,6 @@ public sealed class BundledModelHostService
 
     public static BundledModelHostService Instance { get; } = new();
 
-    private const string CacheFolderName = "AiCache";
     private static readonly ConcurrentDictionary<string, ModelFileFingerprint> VerifiedModelFiles = new(
         StringComparer.OrdinalIgnoreCase);
 
@@ -156,26 +155,26 @@ public sealed class BundledModelHostService
 
     private static async Task EnsureModelAssetAsync(
         string modelsAssetsDir,
-        string modelsCacheDir,
+        string modelsDirectory,
         AiModelInfo selectedModel,
         IProgress<FlashcardProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var cacheModelPath = Path.Combine(modelsCacheDir, selectedModel.FileName);
+        var modelPath = Path.Combine(modelsDirectory, selectedModel.FileName);
         progress?.Report(new FlashcardProgress(ModelVerificationStatusKey));
-        if (await IsModelFileValidAsync(cacheModelPath, selectedModel, cancellationToken))
+        if (await IsModelFileValidAsync(modelPath, selectedModel, cancellationToken))
             return;
 
         var bundledModelPath = Path.Combine(modelsAssetsDir, selectedModel.FileName);
         if (await IsModelFileValidAsync(bundledModelPath, selectedModel, cancellationToken))
         {
-            await CopyToCacheAsync(bundledModelPath, cacheModelPath, cancellationToken);
-            if (await IsModelFileValidAsync(cacheModelPath, selectedModel, cancellationToken))
+            await CopyModelFileAsync(bundledModelPath, modelPath, cancellationToken);
+            if (await IsModelFileValidAsync(modelPath, selectedModel, cancellationToken))
                 return;
         }
 
         progress?.Report(new FlashcardProgress(selectedModel.DownloadStatusKey, 0));
-        await DownloadModelAsync(cacheModelPath, selectedModel, progress, cancellationToken);
+        await DownloadModelAsync(modelPath, selectedModel, progress, cancellationToken);
     }
 
     private static async Task DownloadModelAsync(
@@ -415,17 +414,12 @@ public sealed class BundledModelHostService
     }
 
 
-    private static string GetCacheRootDirectory()
+    public static string GetModelsDirectoryPath()
     {
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Scriblucent",
-            CacheFolderName);
-    }
-
-    public static string GetModelsDirectoryPath()
-    {
-        return Path.Combine(GetCacheRootDirectory(), "models");
+            "Models");
     }
 
     public static string? GetModelFilePath(string key)
@@ -452,12 +446,12 @@ public sealed class BundledModelHostService
         if (model is null)
             return;
 
-        var cachePath = Path.Combine(GetModelsDirectoryPath(), model.FileName);
+        var modelPath = Path.Combine(GetModelsDirectoryPath(), model.FileName);
         var bundledPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Models", model.FileName);
 
-        TryDeleteFile(cachePath);
+        TryDeleteFile(modelPath);
         TryDeleteFile(bundledPath);
-        VerifiedModelFiles.TryRemove(cachePath, out _);
+        VerifiedModelFiles.TryRemove(modelPath, out _);
         VerifiedModelFiles.TryRemove(bundledPath, out _);
 
         try
@@ -501,12 +495,12 @@ public sealed class BundledModelHostService
         {
             var baseDir = AppContext.BaseDirectory;
             var modelsAssetsDir = Path.Combine(baseDir, "Assets", "Models");
-            var modelsCacheDir = GetModelsDirectoryPath();
+            var modelsDirectory = GetModelsDirectoryPath();
 
             Directory.CreateDirectory(modelsAssetsDir);
-            Directory.CreateDirectory(modelsCacheDir);
+            Directory.CreateDirectory(modelsDirectory);
 
-            await EnsureModelAssetAsync(modelsAssetsDir, modelsCacheDir, selectedModel, progress, cancellationToken);
+            await EnsureModelAssetAsync(modelsAssetsDir, modelsDirectory, selectedModel, progress, cancellationToken);
         }
         finally
         {
@@ -514,16 +508,16 @@ public sealed class BundledModelHostService
         }
     }
 
-    private static async Task CopyToCacheAsync(string sourcePath, string cachePath, CancellationToken cancellationToken)
+    private static async Task CopyModelFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
     {
         try
         {
-            var cacheDir = Path.GetDirectoryName(cachePath);
-            if (!string.IsNullOrWhiteSpace(cacheDir))
-                Directory.CreateDirectory(cacheDir);
+            var destinationDirectory = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                Directory.CreateDirectory(destinationDirectory);
 
             await using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            await using var destination = new FileStream(cachePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await using var destination = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
             await source.CopyToAsync(destination, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

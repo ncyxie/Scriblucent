@@ -29,9 +29,9 @@ public partial class MindMapsDashboardPage : UserControl
         UpdateMindMapHoverPreviewPopupPosition(popup, target);
 
         if (TryGetHoverPreviewShadowPlate(child) is Border shadowPlate)
-            shadowPlate.CacheMode = DpiAwareBitmapCache.Create(shadowPlate, enableClearType: false);
+            UiMotion.BeginMotionPrep(shadowPlate, suppressEffect: false);
 
-        UiMotion.AnimatePopupOpenDeferred(child, popup);
+        UiMotion.AttachPopupOpenAnimation(popup);
     }
 
     private void MindMapHoverPreviewPopup_Closed(object? sender, EventArgs e)
@@ -41,7 +41,7 @@ public partial class MindMapsDashboardPage : UserControl
         if (sender is Popup { Child: FrameworkElement child })
         {
             if (TryGetHoverPreviewShadowPlate(child) is Border shadowPlate)
-                shadowPlate.CacheMode = null;
+                UiMotion.EndMotionPrep(shadowPlate);
 
             UiMotion.PreparePopupOpenVisual(child);
         }
@@ -146,14 +146,8 @@ public partial class MindMapsDashboardPage : UserControl
 
     private MainWindow? Host => Window.GetWindow(this) as MainWindow;
 
-    private void CalendarScheduleGearButton_Click(object sender, RoutedEventArgs e)
-        => Host?.CalendarScheduleGearButton_Click(sender, e);
-    private void CalendarScheduledItemCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        => Host?.CalendarScheduledItemCard_MouseLeftButtonUp(sender, e);
     private void CreateMindMapButton_Click(object sender, RoutedEventArgs e)
         => Host?.CreateMindMapButton_Click(sender, e);
-    private void DashboardCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
-        => Host?.DashboardCalendar_SelectedDatesChanged(sender, e);
     private void DashboardGroupBorder_PreviewDragLeave(object sender, DragEventArgs e)
         => Host?.DashboardGroupBorder_PreviewDragLeave(sender, e);
     private void DashboardGroupBorder_PreviewDragOver(object sender, DragEventArgs e)
@@ -212,10 +206,6 @@ public partial class MindMapsDashboardPage : UserControl
         => Host?.MoveDashboardContentDownButton_Click(sender, e);
     private void MoveDashboardContentUpButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveDashboardContentUpButton_Click(sender, e);
-    private void MoveDashboardGroupDownButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveDashboardGroupDownButton_Click(sender, e);
-    private void MoveDashboardGroupUpButton_Click(object sender, RoutedEventArgs e)
-        => Host?.MoveDashboardGroupUpButton_Click(sender, e);
     private void MoveMindMapDashboardGroupsDownButton_Click(object sender, RoutedEventArgs e)
         => Host?.MoveMindMapDashboardGroupsDownButton_Click(sender, e);
     private void MoveMindMapDashboardGroupsUpButton_Click(object sender, RoutedEventArgs e)

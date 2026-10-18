@@ -161,6 +161,8 @@ public sealed class NoteWrapLayoutEngine : IDisposable
     private double _pushSpacerHeight;
     private ScrollViewer? _scrollViewer;
     private bool _isApplying;
+    /// <summary>Transient flow/layout changes must not be recorded as authored edits by the host.</summary>
+    internal bool IsApplying => _isApplying;
     /// <summary>TextChanged events from outside the engine's own passes - a settled re-apply is
     /// one where <see cref="_externalTextChangeVersion"/> matches <see cref="_lastAppliedTextChangeVersion"/>
     /// (see <see cref="OnEditorTextChangedExternal"/>).</summary>
@@ -252,6 +254,14 @@ public sealed class NoteWrapLayoutEngine : IDisposable
 
     /// <summary>Restores every modified paragraph margin (before save/export).</summary>
     public void Clear()
+    {
+        var wasApplying = _isApplying;
+        _isApplying = true;
+        try { ClearCore(); }
+        finally { _isApplying = wasApplying; }
+    }
+
+    private void ClearCore()
     {
         foreach (var (paragraph, original) in _originalMargins)
         {
@@ -380,6 +390,14 @@ public sealed class NoteWrapLayoutEngine : IDisposable
         if (snapshot is null || _disposed || _editor.Document is null)
             return false;
 
+        var wasApplying = _isApplying;
+        _isApplying = true;
+        try { return RestoreWrapStateCore(snapshot); }
+        finally { _isApplying = wasApplying; }
+    }
+
+    private bool RestoreWrapStateCore(WrapStateSnapshot snapshot)
+    {
         var restored = false;
         foreach (var (paragraph, applied, original) in snapshot.Margins)
         {

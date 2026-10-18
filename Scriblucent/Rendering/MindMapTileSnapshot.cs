@@ -1,5 +1,3 @@
-using Scriblucent.Icons;
-
 namespace Scriblucent.Rendering;
 
 /// <summary>
@@ -9,6 +7,7 @@ namespace Scriblucent.Rendering;
 /// </summary>
 public sealed class MindMapTileSnapshot
 {
+    public required Guid MapId;
     public required int Revision;
     public required double CanvasWidthDip;
     public required double CanvasHeightDip;
@@ -19,22 +18,34 @@ public sealed class MindMapTileSnapshot
 public sealed class MindMapTileNode
 {
     public required double X, Y, Width, Height;
-    public required bool IsRoot;
-    public required string Shape;
     public required uint Background;
     public required uint Border;
-    public required double BorderThickness;
-    public required string Title;
+    public uint BorderTop, BorderBottom;
+    public required string OuterContour, BorderContour;
+    public string? RimContour;
+    public uint RimTop, RimBody, RimBottom;
+    public MindMapTileText? Title;
+    public required IReadOnlyList<MindMapTileGlyph> Glyphs;
+    public required IReadOnlyList<MindMapTileText> Metadata;
+}
+
+public sealed class MindMapTileText
+{
+    public required double X, Y, Width, Height;
+    public required string Text;
     public required string FontFamily;
     public required float FontSizeDip;
     public required int FontWeight;
     public required bool Italic;
-    public required uint TitleColor;
-    public required bool HasChevron;
-    public required bool Folded;
-    public required IReadOnlyList<string> IconPaths;
-    public required uint IconColor;
-    public required int IconOverflow;
+    public required uint Color;
+    public int MaxLines = 1;
+}
+
+public sealed class MindMapTileGlyph
+{
+    public required double X, Y, Width, Height;
+    public required string Path;
+    public required uint Color;
 }
 
 public sealed class MindMapTileEdge

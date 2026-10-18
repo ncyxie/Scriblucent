@@ -1,4 +1,8 @@
 using System.Windows;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("Scriblucent.Tests")]
+[assembly: InternalsVisibleTo("Scriblucent.MotionAudit")]
 
 [assembly: ThemeInfo(
     ResourceDictionaryLocation.None,            //where theme specific resource dictionaries are located

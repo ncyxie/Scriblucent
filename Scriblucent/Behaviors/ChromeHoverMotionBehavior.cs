@@ -11,12 +11,11 @@ namespace Scriblucent.Behaviors;
 public enum ChromeHoverMotionProfile
 {
     RecentCard,
-    Fab,
-    FloatingSecondary
+    Fab
 }
 
 /// <summary>
-/// Hover and press scale/shadow motion for compact chrome surfaces (recent items, FABs).
+/// Small lifts and baked shadow feedback for compact chrome surfaces (recent items, FABs).
 /// </summary>
 public static class ChromeHoverMotionBehavior
 {
@@ -31,6 +30,8 @@ public static class ChromeHoverMotionBehavior
         public MouseEventHandler? MouseLeaveHandler;
         public MouseButtonEventHandler? MouseDownHandler;
         public MouseButtonEventHandler? MouseUpHandler;
+        public KeyEventHandler? KeyDownHandler, KeyUpHandler;
+        public KeyboardFocusChangedEventHandler? LostFocusHandler;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -126,15 +127,35 @@ public static class ChromeHoverMotionBehavior
 
             state.IsPressed = false;
             PlayPress(element, isPressed: false);
-            PlayHover(element, element.IsMouseOver);
+        };
+        state.KeyDownHandler = (_, e) =>
+        {
+            if (e.Key is not (Key.Space or Key.Enter) || e.IsRepeat || !element.IsEnabled) return;
+            state.IsPressed = true;
+            PlayPress(element, true);
+        };
+        state.KeyUpHandler = (_, e) =>
+        {
+            if (e.Key is not (Key.Space or Key.Enter) || !state.IsPressed) return;
+            state.IsPressed = false;
+            PlayPress(element, false);
+        };
+        state.LostFocusHandler = (_, _) =>
+        {
+            if (!state.IsPressed) return;
+            state.IsPressed = false;
+            PlayPress(element, false);
         };
 
         element.Loaded += state.LoadedHandler;
-        element.Unloaded += (_, _) => Detach(element);
+        element.Unloaded += OnUnloaded;
         element.MouseEnter += state.MouseEnterHandler;
         element.MouseLeave += state.MouseLeaveHandler;
         element.PreviewMouseLeftButtonDown += state.MouseDownHandler;
         element.PreviewMouseLeftButtonUp += state.MouseUpHandler;
+        element.PreviewKeyDown += state.KeyDownHandler;
+        element.PreviewKeyUp += state.KeyUpHandler;
+        element.LostKeyboardFocus += state.LostFocusHandler;
         state.IsAttached = true;
 
         if (element.IsLoaded)
@@ -143,6 +164,7 @@ public static class ChromeHoverMotionBehavior
 
     private static void Detach(FrameworkElement element)
     {
+        element.Unloaded -= OnUnloaded;
         if (element.GetValue(StateProperty) is not State state || !state.IsAttached)
             return;
 
@@ -156,10 +178,20 @@ public static class ChromeHoverMotionBehavior
             element.PreviewMouseLeftButtonDown -= state.MouseDownHandler;
         if (state.MouseUpHandler != null)
             element.PreviewMouseLeftButtonUp -= state.MouseUpHandler;
+        element.PreviewKeyDown -= state.KeyDownHandler;
+        element.PreviewKeyUp -= state.KeyUpHandler;
+        element.LostKeyboardFocus -= state.LostFocusHandler;
 
         UiMotion.Cleanup(element);
         state.IsAttached = false;
         state.IsPressed = false;
+    }
+
+    private static void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element) return;
+        UiMotion.Cleanup(ResolveMotionHost(element));
+        if (GetState(element) is { } state) state.IsPressed = false;
     }
 
     /// <summary>
@@ -183,18 +215,22 @@ public static class ChromeHoverMotionBehavior
 
         var host = ResolveMotionHost(element);
         var profile = GetProfile(element);
-        UiMotion.Stop(host);
+        UiMotion.Stop(UiMotion.Channel(host, MotionChannel.Interaction));
+        SurfaceLight.Reset(host);
+        // Shared button faces also own a hover-fill track. Cancelling their motion
+        // must clear that paint, rather than freeze a partially faded tint into the scroll cache.
+        if (host is InteractionSurface interactive) interactive.AnimateState(false, false, false);
 
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+        var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
+
         translate.X = 0;
         translate.Y = 0;
 
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
         {
             UiMotion.Stop(bakedShadow);
-            bakedShadow.Opacity = RestBakedOpacity(profile);
+            bakedShadow.Opacity = profile == ChromeHoverMotionProfile.RecentCard ? .72 : RestBakedOpacity(profile);
+            if (bakedShadow is CardShadowLayer { FollowsFace: true }) return;
             bakedShadow.RenderTransformOrigin = new Point(0.5, 0.5);
             var (shadowScale, shadowTranslate) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
             shadowScale.ScaleX = 1;
@@ -217,6 +253,7 @@ public static class ChromeHoverMotionBehavior
         }
 
         var host = ResolveMotionHost(element);
+        SurfaceLight.Reset(host);
         var profile = GetProfile(element);
         var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
 
@@ -227,7 +264,8 @@ public static class ChromeHoverMotionBehavior
 
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
         {
-            bakedShadow.Opacity = RestBakedOpacity(profile);
+            bakedShadow.Opacity = profile == ChromeHoverMotionProfile.RecentCard ? .72 : RestBakedOpacity(profile);
+            if (bakedShadow is CardShadowLayer { FollowsFace: true }) return;
             bakedShadow.RenderTransformOrigin = new Point(0.5, 0.5);
             var (shadowScale, shadowTranslate) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
             shadowScale.ScaleX = 1;
@@ -237,14 +275,12 @@ public static class ChromeHoverMotionBehavior
             return;
         }
 
-        var shadow = ResolveDropShadowTarget(element, host, profile);
-        shadow.Opacity = GetRestShadowOpacity(profile);
-        shadow.BlurRadius = GetRestShadowBlur(profile);
+        // Existing effects stay static; templates with baked shadow layers own feedback.
     }
 
     private static void PlayHover(FrameworkElement element, bool isEnter)
     {
-        if (ShouldSuppressShadowMotion(element))
+        if (ShouldSuppressShadowMotion(element) || !MotionPolicy.Spatial)
             return;
 
         if (GetState(element)?.IsPressed == true && isEnter)
@@ -254,77 +290,31 @@ public static class ChromeHoverMotionBehavior
         var profile = GetProfile(element);
         var durationMs = isEnter ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
         var targetLift = isEnter ? GetHoverLiftY(profile) : 0.0;
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
-        var liftFrom = translate.Y;
+        var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
 
+        var tracks = new List<NativeMotionTrack> { new(translate, TranslateTransform.YProperty, targetLift, true) };
+        // Recent items are content cards: use exactly the same wash, edge and
+        // timing as CardSurfaceMotionBehavior, rather than a command-button light.
+        if (profile == ChromeHoverMotionProfile.RecentCard || CommandLightBehavior.LightFor(element) is null)
+            SurfaceLight.AddTracks(host, tracks, isEnter);
+        else SurfaceLight.Reset(host);
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
-        {
-            bakedShadow.RenderTransformOrigin = new Point(0.5, 0.5);
-            var (shadowScale, _) = UiMotion.EnsureScaleTranslateGroup(bakedShadow);
-            shadowScale.ScaleX = 1;
-            shadowScale.ScaleY = 1;
-            var lift = UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value);
-            var tracks = profile is ChromeHoverMotionProfile.Fab or ChromeHoverMotionProfile.FloatingSecondary
-                ? new[]
-                {
-                    lift,
-                    UiMotion.Track(
-                        durationMs,
-                        UiMotion.OutCubic,
-                        bakedShadow.Opacity,
-                        isEnter ? GetHoverShadowOpacity(profile) : GetRestShadowOpacity(profile),
-                        value => bakedShadow.Opacity = value)
-                }
-                : new[] { lift };
-
-            UiMotion.Stop(host);
-            UiMotion.Run(host, tracks);
-            return;
-        }
-
-        var shadow = ResolveDropShadowTarget(element, host, profile);
-        var opacityFromEffect = shadow.Opacity;
-        var opacityToEffect = isEnter ? GetHoverShadowOpacity(profile) : GetRestShadowOpacity(profile);
-
-        if (isEnter)
-            shadow.BlurRadius = GetHoverShadowBlur(profile);
-
-        var effectTracks = new[]
-        {
-            UiMotion.Track(durationMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value),
-            UiMotion.Track(durationMs, UiMotion.OutCubic, opacityFromEffect, opacityToEffect, value => shadow.Opacity = value)
-        };
-
-        UiMotion.Stop(host);
-        UiMotion.Run(
-            host,
-            effectTracks,
-            onComplete: isEnter
-                ? null
-                : () => shadow.BlurRadius = GetRestShadowBlur(profile));
+            tracks.Add(new(bakedShadow, UIElement.OpacityProperty,
+                profile == ChromeHoverMotionProfile.RecentCard ? isEnter ? 1 : .72 :
+                isEnter ? GetHoverShadowOpacity(profile) : GetRestShadowOpacity(profile)));
+        UiMotion.Stop(UiMotion.Channel(host, MotionChannel.Interaction));
+        SurfaceMotion.AnimateTracks(host, MotionChannel.Interaction, tracks, durationMs, UiMotion.OutCubic);
     }
 
     private static void PlayPress(FrameworkElement element, bool isPressed)
     {
-        var profile = GetProfile(element);
+        if (!MotionPolicy.Spatial) return;
         var host = ResolveMotionHost(element);
-        var targetLift = isPressed
-            ? UiMotion.PressNudgeY
-            : element.IsMouseOver
-                ? GetHoverLiftY(profile)
-                : 0.0;
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(host);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
-        var liftFrom = translate.Y;
-        var tracks = new[]
-        {
-            UiMotion.Track(UiMotion.QuickMs, UiMotion.OutCubic, liftFrom, targetLift, value => translate.Y = value)
-        };
-
-        UiMotion.Run(host, tracks);
+        var target = isPressed ? UiMotion.PressNudgeY : element.IsMouseOver ? GetHoverLiftY(GetProfile(element)) : 0;
+        var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
+        UiMotion.Stop(UiMotion.Channel(host, MotionChannel.Interaction));
+        SurfaceMotion.AnimateTracks(host, MotionChannel.Interaction,
+            [new(translate, TranslateTransform.YProperty, target, true)], isPressed ? 80 : 120, UiMotion.OutCubic);
     }
 
     private static bool TryResolveBakedShadowLayer(FrameworkElement element, out FrameworkElement bakedShadow)
@@ -333,8 +323,7 @@ public static class ChromeHoverMotionBehavior
 
         var profile = GetProfile(element);
         if (profile is not (ChromeHoverMotionProfile.RecentCard
-                or ChromeHoverMotionProfile.Fab
-                or ChromeHoverMotionProfile.FloatingSecondary)
+                or ChromeHoverMotionProfile.Fab)
             || element is not Control control)
             return false;
 
@@ -350,49 +339,10 @@ public static class ChromeHoverMotionBehavior
         return false;
     }
 
-    private static DropShadowEffect ResolveDropShadowTarget(
-        FrameworkElement element,
-        FrameworkElement host,
-        ChromeHoverMotionProfile profile)
-    {
-        if (ShouldSuppressShadowMotion(element))
-        {
-            if (DashboardScrollRenderGate.ResolveShadowHost(element) is { Effect: DropShadowEffect existing }
-                && !existing.IsFrozen)
-                return existing;
 
-            if (host.Effect is DropShadowEffect direct && !direct.IsFrozen)
-                return direct;
-
-            return ScrollShadowDiscard;
-        }
-
-        if (profile != ChromeHoverMotionProfile.RecentCard
-            || element is not Control control)
-        {
-            // Menus and other chrome that still use a live effect. Fab and the floating
-            // secondary button resolve a baked layer before this and never get here.
-            host.CacheMode ??= new BitmapCache();
-            return UiMotion.EnsureShadow(host);
-        }
-
-        control.ApplyTemplate();
-        var shadowName = GetMotionHostName(element);
-        if (!string.IsNullOrWhiteSpace(shadowName)
-            && control.Template.FindName(shadowName, control) is FrameworkElement shadowHost)
-            return UiMotion.EnsureShadow(shadowHost);
-
-        return UiMotion.EnsureShadow(host);
-    }
 
     private static FrameworkElement ResolveMotionHost(FrameworkElement element)
     {
-        if (GetProfile(element) == ChromeHoverMotionProfile.RecentCard)
-        {
-            element.RenderTransformOrigin = new Point(0.5, 0.5);
-            return element;
-        }
-
         if (element is not Control control)
             return element;
 
@@ -410,7 +360,7 @@ public static class ChromeHoverMotionBehavior
     }
 
     private static double RestBakedOpacity(ChromeHoverMotionProfile profile)
-        => profile is ChromeHoverMotionProfile.Fab or ChromeHoverMotionProfile.FloatingSecondary
+        => profile == ChromeHoverMotionProfile.Fab
             ? GetRestShadowOpacity(profile)
             : BakedShadowOpacityRest;
 
@@ -418,7 +368,6 @@ public static class ChromeHoverMotionBehavior
         => profile switch
         {
             ChromeHoverMotionProfile.Fab => -3.0,
-            ChromeHoverMotionProfile.FloatingSecondary => -3.0,
             ChromeHoverMotionProfile.RecentCard => UiMotion.CardHoverLiftY,
             _ => 0.0
         };
@@ -427,7 +376,6 @@ public static class ChromeHoverMotionBehavior
         => profile switch
         {
             ChromeHoverMotionProfile.Fab => 0.20,
-            ChromeHoverMotionProfile.FloatingSecondary => 0.20,
             _ => UiMotion.ShadowOpacityRest
         };
 
@@ -435,33 +383,9 @@ public static class ChromeHoverMotionBehavior
         => profile switch
         {
             ChromeHoverMotionProfile.Fab => 0.30,
-            ChromeHoverMotionProfile.FloatingSecondary => 0.28,
             ChromeHoverMotionProfile.RecentCard => UiMotion.ShadowOpacityHover,
             _ => UiMotion.ShadowOpacityHover
         };
-
-    private static double GetRestShadowBlur(ChromeHoverMotionProfile profile)
-        => profile switch
-        {
-            ChromeHoverMotionProfile.Fab => 16,
-            ChromeHoverMotionProfile.FloatingSecondary => 16,
-            _ => 6
-        };
-
-    private static double GetHoverShadowBlur(ChromeHoverMotionProfile profile)
-        => profile switch
-        {
-            ChromeHoverMotionProfile.Fab => 22,
-            ChromeHoverMotionProfile.FloatingSecondary => 20,
-            _ => UiMotion.ShadowBlurHover
-        };
-
-    private static DropShadowEffect ScrollShadowDiscard { get; } = new()
-    {
-        Opacity = 0,
-        BlurRadius = 0,
-        ShadowDepth = 0
-    };
 
     private static bool ShouldSuppressShadowMotion(FrameworkElement element)
         => DashboardScrollRenderGate.IsSmoothScrollRendering(element);

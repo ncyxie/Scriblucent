@@ -58,7 +58,7 @@ namespace Scriblucent.Views
             set
             {
                 _questionImageFileName = value;
-                UpdateImagePanelState(QuestionImageEmptyPanel, QuestionImageAttachedPanel, QuestionImagePreview, value);
+                UpdateImagePanelState(QuestionAttachmentsHost, QuestionImageEmptyPanel, QuestionImageAttachedPanel, QuestionImagePreview, value);
             }
         }
 
@@ -68,7 +68,7 @@ namespace Scriblucent.Views
             set
             {
                 _questionAudioFileName = value;
-                UpdateAudioPanelState(QuestionAudioEmptyPanel, QuestionAudioAttachedPanel, value);
+                UpdateAudioPanelState(QuestionAttachmentsHost, QuestionAudioEmptyPanel, QuestionAudioAttachedPanel, value);
             }
         }
 
@@ -78,7 +78,7 @@ namespace Scriblucent.Views
             set
             {
                 _answerImageFileName = value;
-                UpdateImagePanelState(AnswerImageEmptyPanel, AnswerImageAttachedPanel, AnswerImagePreview, value);
+                UpdateImagePanelState(AnswerAttachmentsHost, AnswerImageEmptyPanel, AnswerImageAttachedPanel, AnswerImagePreview, value);
             }
         }
 
@@ -88,7 +88,7 @@ namespace Scriblucent.Views
             set
             {
                 _answerAudioFileName = value;
-                UpdateAudioPanelState(AnswerAudioEmptyPanel, AnswerAudioAttachedPanel, value);
+                UpdateAudioPanelState(AnswerAttachmentsHost, AnswerAudioEmptyPanel, AnswerAudioAttachedPanel, value);
             }
         }
 
@@ -108,6 +108,8 @@ namespace Scriblucent.Views
             _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
             Scriblucent.Services.WindowThemeService.Register(this);
             DataContext = this;
+            QuestionTextBox.TextChanged += (_, _) => { if (!string.IsNullOrWhiteSpace(Question)) QuestionValidation.Hide(); };
+            AnswerTextBox.TextChanged += (_, _) => { if (!string.IsNullOrWhiteSpace(Answer)) AnswerValidation.Hide(); };
             Loaded += EditFlashcardDialog_Loaded;
             Closed += (_, _) => _audioPlayer?.Dispose();
         }
@@ -132,13 +134,13 @@ namespace Scriblucent.Views
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(Question) || string.IsNullOrWhiteSpace(Answer))
+            bool missingQuestion = string.IsNullOrWhiteSpace(Question);
+            bool missingAnswer = string.IsNullOrWhiteSpace(Answer);
+            QuestionValidation.IsError = missingQuestion;
+            AnswerValidation.IsError = missingAnswer;
+            if (missingQuestion || missingAnswer)
             {
-                ModernMessageBox.Show(
-                    LocalizationService.GetString("FlashcardEditEmptyError"),
-                    LocalizationService.GetString("EditFlashcard"),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                (missingQuestion ? QuestionTextBox : AnswerTextBox).Focus();
                 return;
             }
 
@@ -287,19 +289,31 @@ namespace Scriblucent.Views
                 MessageBoxImage.Warning);
         }
 
-        private static void UpdateImagePanelState(StackPanel emptyPanel, StackPanel attachedPanel, Image previewImage, string? fileName)
+        private static void UpdateImagePanelState(LayoutRevealHost row, StackPanel emptyPanel, StackPanel attachedPanel, Image previewImage, string? fileName)
         {
             var hasImage = !string.IsNullOrWhiteSpace(fileName);
-            emptyPanel.Visibility = hasImage ? Visibility.Collapsed : Visibility.Visible;
-            attachedPanel.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
-            previewImage.Source = hasImage ? FlashcardMediaStorageService.LoadImage(fileName, 144) : null;
+            var source = hasImage ? FlashcardMediaStorageService.LoadImage(fileName, 144) : null;
+            SwapAttachmentPanels(row, emptyPanel, attachedPanel, hasImage, () => previewImage.Source = source);
         }
 
-        private static void UpdateAudioPanelState(StackPanel emptyPanel, StackPanel attachedPanel, string? fileName)
+        private static void UpdateAudioPanelState(LayoutRevealHost row, StackPanel emptyPanel, StackPanel attachedPanel, string? fileName)
+            => SwapAttachmentPanels(row, emptyPanel, attachedPanel, !string.IsNullOrWhiteSpace(fileName));
+
+        private static void SwapAttachmentPanels(LayoutRevealHost row, StackPanel emptyPanel, StackPanel attachedPanel,
+            bool attached, Action? updatePreview = null)
         {
-            var hasAudio = !string.IsNullOrWhiteSpace(fileName);
-            emptyPanel.Visibility = hasAudio ? Visibility.Collapsed : Visibility.Visible;
-            attachedPanel.Visibility = hasAudio ? Visibility.Visible : Visibility.Collapsed;
+            bool changed = (attachedPanel.Visibility == Visibility.Visible) != attached;
+            UiMotion.Stop(emptyPanel);
+            UiMotion.Stop(attachedPanel);
+            var incoming = attached ? attachedPanel : emptyPanel;
+            row.ChangeContent(() =>
+            {
+                updatePreview?.Invoke();
+                emptyPanel.Visibility = attached ? Visibility.Collapsed : Visibility.Visible;
+                attachedPanel.Visibility = attached ? Visibility.Visible : Visibility.Collapsed;
+                incoming.Opacity = changed && row.IsLoaded ? 0 : 1;
+            });
+            if (changed) UiMotion.Fade(incoming, 1, MotionTokens.InteractionIn, UiMotion.InOutSine);
         }
 
         protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)

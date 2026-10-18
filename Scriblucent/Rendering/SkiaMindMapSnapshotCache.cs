@@ -14,155 +14,127 @@ internal static class SkiaMindMapSnapshotCache
 {
     private const int MaxEntries = 48;
 
+    private const long MaxBytes = 64 * 1024 * 1024;
+    private readonly record struct CacheKey(Guid MapId, int Revision, float Zoom, float Dpi,
+        string Theme, double Width, double Height);
     private sealed class TileRequest
     {
+        public required CacheKey Key;
         public required MindMapTileSnapshot Snapshot;
-        public required float Zoom;
-        public required float Dpi;
-        public required Action<SnapshotResult>? Completed;
+        public required System.Windows.Threading.Dispatcher Dispatcher;
+        public readonly List<Action<SnapshotResult?>> Callbacks = new();
+        public volatile bool Superseded;
     }
-
     public sealed class SnapshotResult
     {
-        public required SKBitmap Bitmap;
+        public required System.Windows.Media.Imaging.BitmapSource Image;
         public required float RenderScale;
+        internal long Bytes => (long)Image.PixelWidth * Image.PixelHeight * 4;
     }
-
-    private static readonly Dictionary<(int Revision, string ZoomKey, string DpiKey, string Theme), (SKBitmap Bitmap, float RenderScale)> Cache = new();
-    private static readonly Queue<(int, string, string, string)> Order = new();
-    private static readonly ConcurrentQueue<TileRequest> Pending = new();
-    private static readonly ConcurrentDictionary<(int Revision, string ZoomKey, string Theme), byte> InFlight = new();
+    // Cache and subscribers belong to the requesting UI dispatcher. Workers receive immutable data.
+    private static readonly Dictionary<CacheKey, SnapshotResult> Cache = new();
+    private static readonly Queue<CacheKey> Order = new();
+    private static readonly Dictionary<CacheKey, TileRequest> InFlight = new();
+    private static readonly Dictionary<Guid, TileRequest> Latest = new();
+    private static readonly BlockingCollection<TileRequest> Pending = new();
+    private static long _cacheBytes;
     private static int _workersStarted;
 
     public static void Clear()
     {
-        foreach (var (bitmap, _) in Cache.Values)
-            bitmap.Dispose();
-        Cache.Clear();
-        Order.Clear();
+        Cache.Clear(); Order.Clear(); _cacheBytes = 0;
+        var requests = InFlight.Values.ToArray();
+        InFlight.Clear(); Latest.Clear();
+        foreach (var request in requests) Cancel(request);
     }
 
-    public static void Request(MindMapTileSnapshot snapshot, float zoom, float dpi, Action<SnapshotResult>? completed)
+    internal static void Release(Guid mapId)
     {
-        var zoomKey = zoom.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-        var dpiKey = dpi.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
-        var key = (snapshot.Revision, zoomKey, dpiKey, theme);
+        if (Latest.Remove(mapId, out var request))
+        { InFlight.Remove(request.Key); Cancel(request); }
+        foreach (var key in Cache.Keys.Where(key => key.MapId == mapId).ToArray())
+            if (Cache.Remove(key, out var image)) _cacheBytes -= image.Bytes;
+        var retained = Order.Where(Cache.ContainsKey).ToArray();
+        Order.Clear(); foreach (var key in retained) Order.Enqueue(key);
+    }
 
-        if (Cache.TryGetValue(key, out var cached))
+    public static void Request(MindMapTileSnapshot snapshot, float zoom, float dpi, Action<SnapshotResult?>? completed)
+    {
+        var key = new CacheKey(snapshot.MapId, snapshot.Revision, zoom, dpi,
+            ThemeManager.CurrentTheme ?? string.Empty, snapshot.CanvasWidthDip, snapshot.CanvasHeightDip);
+        if (Latest.TryGetValue(snapshot.MapId, out var previous) && previous.Key != key)
         {
-            completed?.Invoke(new SnapshotResult { Bitmap = cached.Bitmap, RenderScale = cached.RenderScale });
-            return;
+            InFlight.Remove(previous.Key); Latest.Remove(snapshot.MapId); Cancel(previous);
         }
-
-        // De-dupe in-flight renders; a null callback still warms the cache off-thread.
-        if (InFlight.TryAdd((snapshot.Revision, zoomKey, theme), 0))
+        if (Cache.TryGetValue(key, out var cached)) { completed?.Invoke(cached); return; }
+        if (!InFlight.TryGetValue(key, out var request))
         {
-            Pending.Enqueue(new TileRequest
-            {
-                Snapshot = snapshot,
-                Zoom = zoom,
-                Dpi = dpi,
-                Completed = completed,
-            });
+            request = new TileRequest { Key = key, Snapshot = snapshot,
+                Dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher };
+            InFlight.Add(key, request); Latest[snapshot.MapId] = request;
+            Pending.Add(request);
             EnsureWorkers();
         }
+        if (completed is not null) request.Callbacks.Add(completed);
     }
 
+    private static void Cancel(TileRequest request)
+    {
+        request.Superseded = true;
+        Notify(request, null);
+    }
+    private static void Notify(TileRequest request, SnapshotResult? result)
+    {
+        var callbacks = request.Callbacks.ToArray(); request.Callbacks.Clear();
+        foreach (var callback in callbacks)
+        {
+            try { callback(result); }
+            catch (Exception error) { System.Diagnostics.Debug.WriteLine(error); }
+        }
+    }
     private static void EnsureWorkers()
     {
-        if (Interlocked.Exchange(ref _workersStarted, 1) == 1)
-            return;
-
+        if (Interlocked.Exchange(ref _workersStarted, 1) == 1) return;
         for (var i = 0; i < 2; i++)
-        {
-            var worker = new Thread(RenderWorker)
-            {
-                IsBackground = true,
-                Name = $"SkiaMindMapWorker-{i}",
-                Priority = ThreadPriority.BelowNormal
-            };
-            worker.Start();
-        }
+            new Thread(RenderWorker) { IsBackground = true, Name = $"SkiaMindMapWorker-{i}",
+                Priority = ThreadPriority.BelowNormal }.Start();
     }
-
     private static void RenderWorker()
     {
-        while (true)
+        // Blocking consumption sleeps between requests; there is no idle polling loop.
+        foreach (var request in Pending.GetConsumingEnumerable())
         {
-            if (!Pending.TryDequeue(out var request))
-            {
-                Thread.Sleep(4);
-                continue;
-            }
-
-            SKBitmap bitmap;
-            float renderScale;
+            if (request.Superseded) continue;
+            SnapshotResult? result = null;
             try
             {
-                bitmap = SkiaMindMapRenderer.RenderFull(request.Snapshot, request.Zoom, request.Dpi, out renderScale);
+                using var bitmap = SkiaMindMapRenderer.RenderFull(request.Snapshot, request.Key.Zoom,
+                    request.Key.Dpi, out var scale);
+                if (!request.Superseded)
+                    result = new SnapshotResult { Image = ToBitmapSource(bitmap, request.Key.Dpi), RenderScale = scale };
             }
-            catch
-            {
-                InFlight.TryRemove(KeyFor(request), out _);
-                continue;
-            }
-
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher is null || dispatcher.HasShutdownStarted)
-            {
-                bitmap.Dispose();
-                InFlight.TryRemove(KeyFor(request), out _);
-                continue;
-            }
-
-            var zoomKey = request.Zoom.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-            var dpiKey = request.Dpi.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-            var theme = ThemeManager.CurrentTheme ?? string.Empty;
-            var revision = request.Snapshot.Revision;
-
-            dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
-            {
-                try
-                {
-                    var key = (revision, zoomKey, dpiKey, theme);
-                    if (Cache.TryGetValue(key, out var existing))
-                        existing.Bitmap.Dispose();
-                    else
-                        Order.Enqueue(key);
-
-                    Cache[key] = (bitmap, renderScale);
-
-                    while (Order.Count > MaxEntries)
-                    {
-                        var oldest = Order.Dequeue();
-                        if (Cache.Remove(oldest, out var evicted))
-                            evicted.Bitmap.Dispose();
-                    }
-                }
-                catch
-                {
-                    bitmap.Dispose();
-                }
-                finally
-                {
-                    InFlight.TryRemove(KeyFor(request), out _);
-                }
-
-                request.Completed?.Invoke(new SnapshotResult { Bitmap = bitmap, RenderScale = renderScale });
-            }));
+            catch (Exception error) { System.Diagnostics.Debug.WriteLine(error); }
+            if (!request.Dispatcher.HasShutdownStarted)
+                request.Dispatcher.BeginInvoke(() => Complete(request, result));
         }
     }
-
-    private static (int, string, string) KeyFor(TileRequest request)
+    private static void Complete(TileRequest request, SnapshotResult? result)
     {
-        var zoomKey = request.Zoom.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-        var theme = ThemeManager.CurrentTheme ?? string.Empty;
-        return (request.Snapshot.Revision, zoomKey, theme);
+        if (request.Superseded) return;
+        InFlight.Remove(request.Key);
+        if (Latest.TryGetValue(request.Key.MapId, out var latest) && ReferenceEquals(latest, request))
+            Latest.Remove(request.Key.MapId);
+        if (result is not null)
+        {
+            Cache[request.Key] = result; Order.Enqueue(request.Key); _cacheBytes += result.Bytes;
+            while (Order.Count > MaxEntries || _cacheBytes > MaxBytes && Order.Count > 1)
+                if (Cache.Remove(Order.Dequeue(), out var old)) _cacheBytes -= old.Bytes;
+        }
+        Notify(request, result);
     }
 
     /// <summary>Marshal an SKBitmap (premultiplied BGRA) into a frozen WPF BitmapSource on the
-    /// UI thread. <paramref name="dpiScale"/> is WPF's PixelsPerDip.</summary>
+    /// requesting thread and freeze it for WPF. <paramref name="dpiScale"/> is PixelsPerDip.</summary>
     public static System.Windows.Media.Imaging.BitmapSource ToBitmapSource(SKBitmap bitmap, float dpiScale)
     {
         var dpi = 96.0 * dpiScale;
@@ -173,7 +145,8 @@ internal static class SkiaMindMapSnapshotCache
             dpi,
             System.Windows.Media.PixelFormats.Pbgra32,
             null,
-            bitmap.Bytes,
+            bitmap.GetPixels(),
+            checked(bitmap.RowBytes * bitmap.Height),
             bitmap.RowBytes);
         source.Freeze();
         return source;

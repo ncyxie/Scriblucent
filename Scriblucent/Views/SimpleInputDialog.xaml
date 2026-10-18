@@ -31,16 +31,13 @@
 
         <controls:OverlayDialogShell.Body>
             <StackPanel>
-                <Border Style="{StaticResource ChromeFieldBorderStyle}"
-                        Background="{DynamicResource WindowBackground}"
-                        Margin="0,0,0,14">
+                <Border Style="{StaticResource ChromeInsetFieldBorderStyle}"
+                        Margin="{StaticResource Field.RowMargin}">
                     <TextBox x:Name="InputBox"
                              Style="{StaticResource EmbeddedFieldTextBoxStyle}"
-                             FontSize="{StaticResource Type.Meta}"/>
+                             FontSize="{StaticResource Type.Control.Form}"/>
                 </Border>
-                <TextBlock x:Name="ValidationText" Visibility="Collapsed"
-                           Foreground="{DynamicResource AccentDanger}" TextWrapping="Wrap"
-                           FontSize="{StaticResource Type.Caption}" Margin="0,0,0,12"/>
+                <controls:InlineValidationPresenter x:Name="ValidationText" Margin="0,0,0,12"/>
             </StackPanel>
         </controls:OverlayDialogShell.Body>
 

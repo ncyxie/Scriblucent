@@ -1,24 +1,28 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:controls="clr-namespace:Scriblucent.Controls">
     <!--
       Structural design tokens (theme-invariant); theme colors live in LightTheme.xaml/DarkTheme.xaml.
       Contract:
-        - Surfaces: SidebarBackground (frame) · WindowBackground / CardBackground (content) · InputSurface (fields)
-        - Accent: AccentPrimary family for focus, selection, primary CTAs
+        - Surfaces: SidebarBackground (navigation only) · WindowBackground (canvas) · CardBackground (raised content)
+        - Nested groups: ContentInsetSurface + Raised material, no separate elevation
+        - Fields: InputSurface on canvas/recessed groups; InputSurfaceInset on raised content, never a window/navigation fill
+        - MediaCanvasSurface: neutral thumbnail backing; image pixels and authored colours are never tinted
+        - Accent: AccentPrimary for fills/text; AccentRimBrush for focus, selection and drop feedback
         - Inputs: Chrome*BorderStyle + EmbeddedFieldTextBoxStyle (no local TextBox templates)
         - Buttons: Dialog* / ToolbarIcon / FAB only; implicit Button is theme-aware
         - Dialogs: OverlayDialogShell · Feature windows: FeatureWindowShell
-        - Headers: DialogHeader or WindowChromeHeader (ChromePanelBorderStyle)
+        - Headers: open canvas headings; composite tool groups use neutral content surfaces
         - Color → DynamicResource · Geometry/Type/Space → StaticResource
       Stroke contract (soft-first — background/elevation before hairlines; hairline only for affordance or dark-mode edges):
         A Filled action     · no stroke — filled buttons, toolbar icons, FAB
         B Soft chip / tag   · no stroke — fill only
-        C Form control      · InputRestBorder rest + AccentPrimary focus (a11y)
+        C Form control      · flat InputSurface + stable InputRestBorder; paint-only AccentRimBrush focus (2 DIP)
         D Content card      · shadow/elevation; NoteCardBorder transparent in light, soft in dark
-        E Section / nested  · no stroke — surface contrast (+ optional Elevation.Field)
+        E Section / nested  · CardBackground on canvas; ContentInsetSurface inside cards; shared Raised lighting, no independent shadow
         F Floating surface  · Elevation.* primary; no rest hairline when elevation is present
-        G Emphasis/select   · NoteCardSelectionBorder / AccentPrimary (1–2px)
+        G Emphasis/select   · AccentRimBrush family (existing 1–2 DIP); drop rim 2.5 DIP + wash
         H Separator         · SidebarSeparator as a 1px line, not a box border
         I Status glyph chip · optional Accent*SubtleBorder
         Keep stroke: checkbox/radio, color swatches, drop-target glow. Domain exception: mind-map node
@@ -35,11 +39,39 @@
     <sys:Double x:Key="Type.SectionTitle">15</sys:Double>
     <sys:Double x:Key="Type.Body">14</sys:Double>
     <sys:Double x:Key="Type.CardTitle">14.5</sys:Double>
+    <sys:Double x:Key="Type.CardTitle.Large">16</sys:Double>
     <sys:Double x:Key="Type.Meta">13</sys:Double>
     <sys:Double x:Key="Type.EmptyState">17</sys:Double>
     <sys:Double x:Key="Type.Chip">11</sys:Double>
     <sys:Double x:Key="Type.Caption">12</sys:Double>
     <sys:Double x:Key="Type.BlockTitle">16</sys:Double>
+
+    <sys:Double x:Key="Type.Calendar.Day">13</sys:Double>
+    <sys:Double x:Key="Type.Tab">14</sys:Double>
+    <sys:Double x:Key="Type.Metric.Primary">32</sys:Double>
+    <sys:Double x:Key="Type.Metric.Secondary">28</sys:Double>
+
+    <!-- Control density roles: interactive text 14, helpers 13, true captions/badges 12.
+         Authored document typography and compact icon-like labels remain independent. -->
+    <sys:Double x:Key="Type.Control.Toolbar">14</sys:Double>
+    <sys:Double x:Key="Type.Control.Form">14</sys:Double>
+    <sys:Double x:Key="Type.Control.Action">14</sys:Double>
+    <sys:Double x:Key="Type.Control.Inline">14</sys:Double>
+    <sys:Double x:Key="Type.Control.Helper">13</sys:Double>
+    <sys:Double x:Key="Type.Control.Badge">12</sys:Double>
+    <sys:Double x:Key="Control.Height.Toolbar">32</sys:Double>
+    <sys:Double x:Key="Control.Width.LinkedNote">180</sys:Double>
+    <sys:Double x:Key="Control.Width.FontFamily">180</sys:Double>
+    <sys:Double x:Key="Control.Height.Form">36</sys:Double>
+    <sys:Double x:Key="Control.Height.Action">40</sys:Double>
+    <sys:Double x:Key="Control.Height.Inline">32</sys:Double>
+
+    <sys:Double x:Key="Type.Control.Menu">14</sys:Double>
+    <sys:Double x:Key="Control.Height.Menu">36</sys:Double>
+    <!-- Shared by live dashboard chrome and its retained loading drawing. -->
+    <sys:Double x:Key="Control.Size.Reorder">24</sys:Double>
+    <sys:Double x:Key="Control.Size.Section">28</sys:Double>
+    <sys:Double x:Key="Control.Size.Creation">52</sys:Double>
 
     <!-- Geometry -->
     <CornerRadius x:Key="Radius.Control">10</CornerRadius>
@@ -48,9 +80,17 @@
     <CornerRadius x:Key="Radius.Overlay">18</CornerRadius>
     <CornerRadius x:Key="Radius.Chip">7</CornerRadius>
 
-    <!-- Field focus ring drawn by FieldFocusRingBehavior (adorner). Slightly thicker than 1px so the accent edge is less pixelated.
+    <!-- Focus/selection: 2 DIP on the actual resting contour. AccentRim is in-tree for native fields; wrapped fields retain a tracked adorner.
          Rest thickness is theme token Field.RestBorderThickness and never changes on focus. -->
     <Thickness x:Key="Field.FocusBorderThickness">2</Thickness>
+    <!-- Standard inputs share one padding. Wrapped fields put it on the shell;
+         standalone TextBoxView owns TextBox.Padding. Never apply both. -->
+    <Thickness x:Key="Field.ContentPadding">10,0</Thickness>
+    <Thickness x:Key="Field.MultilinePadding">10,8</Thickness>
+    <Thickness x:Key="Field.LabelMargin">0,0,0,6</Thickness>
+    <Thickness x:Key="Field.InlineLabelMargin">0,0,8,0</Thickness>
+    <Thickness x:Key="Field.SectionLabelMargin">0,16,0,6</Thickness>
+    <Thickness x:Key="Field.RowMargin">0,0,0,16</Thickness>
 
     <!-- Spacing scale (px) -->
     <sys:Double x:Key="Space.1">4</sys:Double>
@@ -61,11 +101,13 @@
     <sys:Double x:Key="Space.6">24</sys:Double>
 
     <Thickness x:Key="Shell.DashboardPadding">20,6,20,20</Thickness>
+    <!-- One resting 52 DIP creation button, 36 DIP bottom inset, and 24 DIP card clearance. -->
+    <Thickness x:Key="Shell.DashboardScrollClearance">0,0,0,112</Thickness>
     <Thickness x:Key="Shell.RecentPadding">20,14,20,4</Thickness>
+    <Thickness x:Key="Shell.RecentStripInsets">17,14,17,17</Thickness>
     <Thickness x:Key="Shell.TopBarPadding">20,12,20,12</Thickness>
     <!-- Slightly more top air so the title row clears the stage rounded edge. -->
-    <Thickness x:Key="Shell.FeatureInset">10,14,10,10</Thickness>
-    <Thickness x:Key="Shell.FeatureTitleRowPadding">20,16,20,4</Thickness>
+    <Thickness x:Key="Shell.FeatureTitleRowPadding">24,16,24,4</Thickness>
     <Thickness x:Key="Shell.DialogPadding">24</Thickness>
 
     <!-- Dashboard card metrics -->
@@ -75,13 +117,16 @@
     <sys:Double x:Key="Dashboard.UngroupedCardHeight">204</sys:Double>
     <sys:Double x:Key="Dashboard.MindMapUngroupedCardWidth">360</sys:Double>
     <sys:Double x:Key="Dashboard.MindMapUngroupedCardHeight">224</sys:Double>
-    <sys:Double x:Key="Dashboard.CalendarHeight">220</sys:Double>
+    <sys:Double x:Key="Dashboard.CalendarHeight">288</sys:Double>
 
     <!--
       Elevation contract (x:Shared=False so each consumer gets its own effect instance):
         Thumb  · small drag grabbers (slider thumb, resize handles)
         Popup  · sort/filter menus, ComboBox lists, ContextMenu (must read on light chrome)
-        Field, Button, and Dialog elevations are baked nine-slices (BakedElevationLayer), not live blurs.
+        Raised cards use CardShadowLayer (radius 14). Floating dialogs use baked Dialog (radius 18).
+        Action buttons have no rest shadow; their close Button elevation appears only on hover.
+        Fields, toolbars, nested sections and list rows stay flat. Never add a field elevation.
+        Button and Dialog elevations are baked nine-slices (BakedElevationLayer), not live blurs.
       Pick the tier by role, not by eye - do not hand-roll a new DropShadowEffect inline.
       Never put RoundedClipBehavior on the same Border as Effect — clip eats the shadow.
     -->
@@ -104,6 +149,15 @@
                       RenderingBias="Quality"/>
 
 
-    <!-- Overlay scrim (fixed; works on both themes) -->
-    <SolidColorBrush x:Key="OverlayScrim" Color="#66000000"/>
+    <!-- Overlay scrim colors are defined by LightTheme/DarkTheme. -->
+    <!-- One softly lit workspace frame for the dashboard and every feature window. -->
+    <Thickness x:Key="Workspace.FrameInset">10,6,10,10</Thickness>
+    <Style x:Key="WorkspaceFrameStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Workspace"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Overlay}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
+    </Style>
 </ResourceDictionary>

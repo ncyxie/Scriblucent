@@ -1,8 +1,77 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
                     xmlns:icons="clr-namespace:Scriblucent.Icons"
-                    xmlns:controls="clr-namespace:Scriblucent.Controls">
+                    xmlns:controls="clr-namespace:Scriblucent.Controls"
+                    xmlns:converters="clr-namespace:Scriblucent.Converters">
+
+    <converters:GroupAccentConverter x:Key="GroupAccentConverter"/>
+    <converters:DashboardSectionMoveConverter x:Key="DashboardSectionMoveConverter"/>
+    <Style x:Key="GroupDisclosureButtonStyle" TargetType="Button" BasedOn="{StaticResource DashboardDisclosureButtonStyle}">
+        <Setter Property="Width" Value="{StaticResource Control.Size.Reorder}"/>
+        <Setter Property="Height" Value="{StaticResource Control.Size.Reorder}"/>
+        <Setter Property="Margin" Value="0,0,2,0"/>
+        <Setter Property="ToolTip" Value="{Binding [CollapseGroup], Source={StaticResource Loc}}"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsExpanded, RelativeSource={RelativeSource AncestorType=controls:DashboardGroupHeader}}" Value="False">
+                <Setter Property="ToolTip" Value="{Binding [ExpandGroup], Source={StaticResource Loc}}"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="DashboardGroupHeaderStyle" TargetType="controls:DashboardGroupHeader">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Background" Value="{DynamicResource ContentInsetSurface}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimary}"/>
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.SectionTitle}"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:DashboardGroupHeader">
+                    <controls:DashboardGroupHeaderPanel>
+                        <Border x:Name="GroupActionsTray" Style="{StaticResource ReorderControlTrayStyle}" VerticalAlignment="Center">
+                            <ContentPresenter ContentSource="Content" VerticalAlignment="Center"/>
+                        </Border>
+                        <controls:DashboardGroupTitlePanel x:Name="TitleArea" Title="{TemplateBinding Header}" ItemCount="{TemplateBinding ItemCount}">
+                            <Border x:Name="TitleWash" IsHitTestVisible="False" CornerRadius="{StaticResource Radius.Control}">
+                                <Border.Background>
+                                    <MultiBinding Converter="{StaticResource GroupAccentConverter}" ConverterParameter="Wash">
+                                        <Binding Path="GroupBrush" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                        <Binding Path="Background" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                        <Binding Path="BorderBrush" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    </MultiBinding>
+                                </Border.Background>
+                            </Border>
+                            <Grid x:Name="TitleContent" Margin="8,0" UseLayoutRounding="False">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="4"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Height="18" CornerRadius="2" VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <Border.Background>
+                                        <MultiBinding Converter="{StaticResource GroupAccentConverter}">
+                                            <Binding Path="GroupBrush" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                            <Binding Path="Background" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                            <Binding Path="BorderBrush" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                        </MultiBinding>
+                                    </Border.Background>
+                                </Border>
+                                <TextBlock x:Name="GroupName" Grid.Column="2" Text="{TemplateBinding Header}"
+                                           FontWeight="SemiBold" Foreground="{TemplateBinding Foreground}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{TemplateBinding Header}"/>
+                                <TextBlock x:Name="GroupCount" Grid.Column="3" Text="{Binding ItemCount, RelativeSource={RelativeSource TemplatedParent}}"
+                                           FontSize="{StaticResource Type.Meta}" Foreground="{DynamicResource TextColorSecondary}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </Grid>
+                        </controls:DashboardGroupTitlePanel>
+                    </controls:DashboardGroupHeaderPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <Style x:Key="DashboardRevealIconStyle" TargetType="{x:Type icons:AppIcon}">
         <Setter Property="behaviors:IndicatorRevealMotionBehavior.IsEnabled" Value="True"/>
@@ -21,51 +90,11 @@
         <Setter Property="Kind" Value="Schedule"/>
     </Style>
 
-    <!-- Level 1 form control: rest stroke (R) like App CheckBox; fill communicates checked. -->
-    <Style x:Key="DashboardMassSelectCheckBoxStyle" TargetType="CheckBox">
-        <Setter Property="Width" Value="22"/>
-        <Setter Property="Height" Value="22"/>
-        <Setter Property="Visibility" Value="Collapsed"/>
-        <Setter Property="behaviors:DashboardMassSelectCheckBoxBehavior.IsEnabled" Value="True"/>
-        <Setter Property="behaviors:CheckBoxCheckMotionBehavior.IsEnabled" Value="True"/>
-        <Setter Property="IsHitTestVisible" Value="True"/>
-        <Setter Property="Focusable" Value="False"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="CheckBox">
-                    <Border x:Name="SelectionBox"
-                            Background="{DynamicResource MassSelectBoxBackground}"
-                            BorderBrush="{DynamicResource BorderColor}"
-                            BorderThickness="1"
-                            CornerRadius="7">
-                        <Path x:Name="CheckGlyph"
-                              Data="M 2,5.5 L 5.5,9 L 12,2.5"
-                              Stroke="{DynamicResource MassSelectBoxGlyph}"
-                              StrokeThickness="1.75"
-                              StrokeStartLineCap="Round"
-                              StrokeEndLineCap="Round"
-                              StrokeLineJoin="Round"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              Opacity="0"
-                              StrokeDashArray="{StaticResource CheckGlyphDashArray}"
-                              StrokeDashOffset="{StaticResource CheckGlyphPathLength}"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="SelectionBox" Property="Background" Value="{DynamicResource MassSelectBoxCheckedBackground}"/>
-                            <Setter TargetName="SelectionBox" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
     <Style x:Key="DashboardTagChipStyle" TargetType="Border">
         <Setter Property="Margin" Value="0,10,0,0"/>
         <Setter Property="Padding" Value="8,4"/>
         <Setter Property="Background" Value="{DynamicResource TagChipBackground}"/>
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="CornerRadius" Value="{StaticResource Radius.Chip}"/>
@@ -82,89 +111,8 @@
         <Setter Property="TextWrapping" Value="NoWrap"/>
     </Style>
 
-    <Style x:Key="DashboardSectionToggleButtonStyle" TargetType="Button">
-        <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-        <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="ToggleBorder"/>
-        <Setter Property="OverridesDefaultStyle" Value="True"/>
-        <Setter Property="Width" Value="30"/>
-        <Setter Property="Height" Value="30"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
-		<Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="ToggleBorder"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent"
-                            BorderThickness="0"
-                            CornerRadius="{StaticResource Radius.Control}">
-                        <icons:AppIcon Kind="ChevronDown"
-                                       Width="12"
-                                       Height="12"
-                                       Foreground="{TemplateBinding Foreground}"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
-                            <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
-                            <Setter TargetName="ToggleBorder" Property="Opacity" Value="0.65"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <Style x:Key="DashboardSectionToggleButtonStyle" TargetType="Button" BasedOn="{StaticResource DashboardDisclosureButtonStyle}"/>
 
-    <Style x:Key="DashboardSectionMoveButtonStyle" TargetType="Button">
-        <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
-        <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="MoveBorder"/>
-        <Setter Property="OverridesDefaultStyle" Value="True"/>
-        <Setter Property="Width" Value="28"/>
-        <Setter Property="Height" Value="28"/>
-        <Setter Property="Padding" Value="0"/>
-		<Setter Property="FontSize" Value="{StaticResource Type.Caption}"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{DynamicResource IconButtonForeground}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="MoveBorder"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent"
-                            BorderThickness="0"
-                            CornerRadius="{StaticResource Radius.Control}">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          RecognizesAccessKey="True"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="MoveBorder" Property="Background" Value="{DynamicResource IconButtonHoverBackground}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="MoveBorder" Property="Background" Value="{DynamicResource IconButtonPressedBackground}"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
 
     <Style x:Key="SortOptionRadioButtonStyle" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -183,7 +131,7 @@
                             <ColumnDefinition Width="18"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Border x:Name="RadioButtonBorder"
+                        <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Neutral" x:Name="RadioButtonBorder"
                                 Grid.Column="0"
                                 Width="18"
                                 Height="18"
@@ -198,7 +146,7 @@
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"
                                      Opacity="0"/>
-                        </Border>
+                        </controls:SurfaceMaterialBorder>
                         <ContentPresenter Grid.Column="1"
                                           Margin="6,0,0,0"
                                           VerticalAlignment="Center"
@@ -222,7 +170,7 @@
     </Style>
     <!-- moved from MainWindow: RecentItemsStripPanelTemplate -->
 <ItemsPanelTemplate x:Key="RecentItemsStripPanelTemplate">
-            <StackPanel Orientation="Horizontal" Margin="0,2,0,2"/>
+            <StackPanel Orientation="Horizontal" Margin="{StaticResource Shell.RecentStripInsets}"/>
         </ItemsPanelTemplate>
 
     <!-- moved from MainWindow: RecentStripItemsStyle -->
@@ -232,13 +180,15 @@
 
     <!-- moved from MainWindow: RecentItemsStripScrollViewerStyle -->
     <Style x:Key="RecentItemsStripScrollViewerStyle" TargetType="ScrollViewer">
-            <Setter Property="behaviors:ScrollTileBehavior.IsEnabled" Value="True"/>
+            <!-- Compact recent cards stay live: the separately drawn scroll tiles differ
+                 from their content-sized WPF templates and visibly resize on handoff. -->
+            <Setter Property="behaviors:ScrollTileBehavior.IsEnabled" Value="False"/>
             <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="True"/>
             <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
             <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
-            <Setter Property="CanContentScroll" Value="True"/>
+            <Setter Property="CanContentScroll" Value="False"/>
             <Setter Property="PanningMode" Value="HorizontalOnly"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="ClipToBounds" Value="False"/>
@@ -261,6 +211,9 @@
 
     <!-- Level 4 D: CardShadowLayer + NoteCardBorder R(theme); focus A (2px). -->
     <Style x:Key="RecentNoteCardStyle" TargetType="Button">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
+        <Setter Property="behaviors:CommandLightBehavior.Role" Value="Item"/>
+        <Setter Property="behaviors:CommandLightBehavior.IsEnabled" Value="False"/>
 			<Setter Property="FocusVisualStyle" Value="{x:Null}"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="RecentCard"/>
@@ -281,29 +234,25 @@
 					<ControlTemplate TargetType="Button">
 						<Grid ClipToBounds="False">
 							<controls:CardShadowLayer x:Name="CardShadow"/>
-							<Border x:Name="CardBorder"
+							<controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" x:Name="CardBorder"
 									Background="{TemplateBinding Background}"
+									PressedBackground="{DynamicResource SelectionBackground}"
 									BorderBrush="{DynamicResource NoteCardBorder}"
 									BorderThickness="1"
 									CornerRadius="{StaticResource Radius.Control}"
-									Padding="{TemplateBinding Padding}"
-									behaviors:RoundedClipBehavior.IsEnabled="True">
+									Padding="{TemplateBinding Padding}">
 								<ContentPresenter Content="{TemplateBinding Content}"
 												  ContentTemplate="{TemplateBinding ContentTemplate}"
 												  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
 												  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
-							</Border>
+							</controls:InteractionSurface>
 						</Grid>
 						<ControlTemplate.Triggers>
-							<Trigger Property="IsMouseOver" Value="True">
-								<Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource HoverBackground}"/>
-							</Trigger>
 							<Trigger Property="IsPressed" Value="True">
-								<Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+								<Setter TargetName="CardBorder" Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
 							</Trigger>
 							<Trigger Property="IsKeyboardFocused" Value="True">
-								<Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource NoteCardSelectionBorder}"/>
-								<Setter TargetName="CardBorder" Property="BorderThickness" Value="2"/>
+								<Setter TargetName="CardBorder" Property="behaviors:SelectionRimBehavior.IsSelected" Value="True"/>
 							</Trigger>
 						</ControlTemplate.Triggers>
 					</ControlTemplate>
@@ -320,8 +269,10 @@
     <!-- Nested calendar-rail event cards (inside rounded/clipped tray):
          no DropShadow — parent RoundedClip/ClipToBounds was clipping Elevation.Card unevenly
          so some rows looked raised and others flat. Lift comes from CardBackground on the tray
-         (+ theme NoteCardBorder on dark). Hover + press match chrome buttons (nudge + wash). -->
+         (+ theme NoteCardBorder on dark). Hover uses the shared item wash and pointer light; press stays compact. -->
     <Style x:Key="CalendarScheduledItemCardStyle" TargetType="Border">
+        <Setter Property="controls:SurfaceMaterial.Kind" Value="Raised"/>
+        <Setter Property="behaviors:StateSurfaceMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="Background" Value="{DynamicResource CardBackground}"/>
 			<Setter Property="BorderBrush" Value="{DynamicResource NoteCardBorder}"/>
 			<Setter Property="BorderThickness" Value="1"/>
@@ -333,15 +284,11 @@
 			<Setter Property="Effect" Value="{x:Null}"/>
 			<Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="behaviors:ButtonPressMotionBehavior.PressedBackground" Value="{DynamicResource CalendarPressedBackground}"/>
-			<Style.Triggers>
-				<Trigger Property="IsMouseOver" Value="True">
-					<Setter Property="Background" Value="{DynamicResource CalendarHoverBackground}"/>
-				</Trigger>
-			</Style.Triggers>
 		</Style>
 
     <!-- moved from MainWindow: FabStyle -->
 <Style x:Key="FabStyle" TargetType="Button">
+    <Setter Property="controls:SurfaceMaterial.Kind" Value="Neutral"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.IsEnabled" Value="True"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.Profile" Value="Fab"/>
 			<Setter Property="behaviors:ChromeHoverMotionBehavior.MotionHostName" Value="FabBorder"/>
@@ -355,8 +302,8 @@
 			<Setter Property="Background" Value="{DynamicResource IconButtonBackground}"/>
 			<Setter Property="BorderBrush" Value="Transparent"/>
 			<Setter Property="BorderThickness" Value="0"/>
-			<Setter Property="Width" Value="52"/>
-			<Setter Property="Height" Value="52"/>
+			<Setter Property="Width" Value="{StaticResource Control.Size.Creation}"/>
+			<Setter Property="Height" Value="{StaticResource Control.Size.Creation}"/>
 			<Setter Property="Margin" Value="0,0,40,36"/>
 			<Setter Property="HorizontalContentAlignment" Value="Center"/>
 			<Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -365,7 +312,7 @@
 					<ControlTemplate TargetType="{x:Type Button}">
 						<Grid x:Name="FabBorder">
 							<controls:BakedElevationLayer x:Name="FabShadow" Kind="ButtonCard" Opacity="0.20"/>
-							<Border x:Name="FabFace"
+							<controls:InteractionSurface Role="Compact" controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" x:Name="FabFace"
 									Background="{TemplateBinding Background}"
 									BorderBrush="Transparent"
 									BorderThickness="0"
@@ -373,7 +320,7 @@
 								<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
 												  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
 												  RecognizesAccessKey="True"/>
-							</Border>
+							</controls:InteractionSurface>
 						</Grid>
 						<ControlTemplate.Triggers>
 							<Trigger Property="IsMouseOver" Value="True">
@@ -385,6 +332,7 @@
 						   <Trigger Property="IsEnabled" Value="False">
 								<Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
 								<Setter TargetName="FabFace" Property="Background" Value="{DynamicResource SelectionBackground}"/>
+								<Setter TargetName="FabFace" Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
 								<Setter TargetName="FabBorder" Property="Opacity" Value="0.62"/>
 							</Trigger>
 						</ControlTemplate.Triggers>

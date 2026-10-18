@@ -3,7 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              IsHitTestVisible="False"
              Focusable="False">
-    <Grid x:Name="Slices">
+    <!-- The face owns layout. Constrain the slice grid to the layer's arranged size;
+         its unconstrained image measurements must not push the lower corners down. -->
+    <Grid x:Name="Slices"
+          Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+          Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=UserControl}}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="LeftColumn" Width="30"/>
             <ColumnDefinition Width="*"/>

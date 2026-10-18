@@ -1,0 +1,9 @@
+<UserControl x:Class="Scriblucent.Controls.CalendarPlannerActions"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:controls="clr-namespace:Scriblucent.Controls" xmlns:behaviors="clr-namespace:Scriblucent.Behaviors">
+ <StackPanel Orientation="Horizontal" behaviors:CommandLightBehavior.IsScope="True">
+  <Button Content="{Binding [PremiumToday], Source={StaticResource Loc}}" Style="{StaticResource CalendarHeaderButtonStyle}"
+   Background="{DynamicResource IconButtonBackground}" controls:SurfaceMaterial.Kind="Neutral" Click="Today_Click"/>
+  <Button Content="{Binding [CalendarAddSchedule], Source={StaticResource Loc}}" Style="{StaticResource DialogPrimaryButtonStyle}" Click="Add_Click" Padding="12,0" MinHeight="36" Margin="8,0,0,0"/>
+ </StackPanel>
+</UserControl>

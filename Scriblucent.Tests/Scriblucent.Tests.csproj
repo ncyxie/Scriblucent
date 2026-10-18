@@ -35,6 +35,9 @@
          same LibreOffice/dictionaries source SpellCheckDictionaryService fetches from at runtime,
          committed here so tests are deterministic and don't need network access. -->
     <None Include="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Scriblucent\Views\NoteEditorTabsWindow.xaml"
+          Link="TestData\Production\NoteEditorTabsWindow.xaml"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The app's worker project is a deployment-only reference, so its managed entry assembly

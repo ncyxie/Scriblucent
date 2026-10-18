@@ -1,4 +1,4 @@
-﻿using Scriblucent.Models;
+using Scriblucent.Models;
 using Scriblucent.Services;
 using Scriblucent.Localization;
 using Scriblucent;
@@ -19,7 +19,7 @@ using Scriblucent.ViewModels;
 
 namespace Scriblucent.Views;
 
-public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
+public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, Scriblucent.Services.IHostedDocumentEditor
 {
     private const double StudyProgressBarFallbackWidth = 316;
 
@@ -59,6 +59,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private bool _isStudyMode;
     private bool _isStudyModeCardAnimating;
     private bool _studyCompletionDialogShown;
+    private DispatcherTimer? _studyCompletionTimer;
     private bool _studyCelebrationShown;
     private int _studyModeIndex;
     private int _studyHistoryPosition = -1;
@@ -73,18 +74,15 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private DispatcherTimer? _editedIndicatorDebounceTimer;
     private DispatcherTimer? _searchFilterDebounceTimer;
     private bool _isInitializing = true;
-    private bool _isFlashingTitleStatus;
     private bool _studyModeLayoutVisible;
     private bool _allowCloseWithoutPrompt;
     private bool _isApplyingFlipSpeed;
     private bool _isOptionsPanelOpen;
-    private int _optionsPanelAnimationVersion;
 
     // Tags panel is independent of the Options panel above (different row, no visual overlap) so
     // it does not participate in mutual exclusion, and its state is persisted per-document.
     private bool _isTagsPanelOpen;
     private bool _lastSavedTagsPanelOpen;
-    private int _tagsPanelAnimationVersion;
     private FlashcardStudySession? _pendingStudySession;
     private FlashcardNoteLinkOption? _selectedLinkedNote;
     private bool _dueOnly = true;
@@ -103,6 +101,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private bool _isCramMode;
     private const int CramStepsToMaster = 2;
     private readonly Dictionary<Guid, int> _cramStepsRemaining = new();
+    private readonly Dictionary<Guid, Guid?> _cardNoteLinks = new();
     private int _cramLapNumber = 1;
     private int _cramCardsReviewed;
     private AudioClipPlayer? _audioPlayer;
@@ -149,6 +148,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                 _noteLinkOptions.Add(option);
         }
         _selectedLinkedNote = _noteLinkOptions.FirstOrDefault(option => option.Id == sourceNoteId);
+        items = items.ToList();
+        foreach (var sourceCard in items) _cardNoteLinks[sourceCard.Id] = sourceCard.LinkedNoteId;
         _allItems = items
             .Select(i => new FlashcardPreviewItem(
                 i.Id,
@@ -212,8 +213,16 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         _studyModeLayoutVisible = _isStudyMode && _items.Count > 0;
         _isInitializing = false;
         MarkCurrentStateSaved();
+        InitializeBulkSelection();
         PreviewKeyDown += FlashcardsPreviewWindow_PreviewKeyDown;
-        Closed += (_, _) => _audioPlayer?.Dispose();
+        Closed += (_, _) => { _audioPlayer?.Dispose(); CancelStudyCompletionTimer(); StudyCelebration.Stop(CelebrationOverlay); };
+        void MotionChanged()
+        {
+            if (_studyCompletionTimer is { } timer && !MotionPolicy.Spatial)
+                timer.Interval = TimeSpan.FromMilliseconds(1);
+        }
+        MotionPolicy.Changed += MotionChanged;
+        Closed += (_, _) => MotionPolicy.Changed -= MotionChanged;
         WindowContentEnterHelper.AnimateOnLoaded(this);
     }
 
@@ -285,6 +294,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             .Select(item => new FlashcardItem
             {
                 Id = item.Id,
+                LinkedNoteId = _cardNoteLinks.GetValueOrDefault(item.Id),
                 Question = item.Question,
                 Answer = item.Answer,
                 Category = item.Category,
@@ -409,19 +419,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void ShowAutoSaveIndicator()
     {
-        if (EditedIndicatorText is null)
-            return;
-
-        _isFlashingTitleStatus = true;
-        UiMotion.FlashInlineStatus(
-            EditedIndicatorText,
-            LocalizationService.GetString("AutoSaving"),
-            () =>
-            {
-                _isFlashingTitleStatus = false;
-                UpdateEditedIndicator();
-            });
+        EditedIndicatorText?.ShowSaved(UpdateEditedIndicator);
     }
+
+    public void ReportWorkspaceSaveFailure() => EditedIndicatorText?.ShowFailure();
 
     private bool HasUnsavedChanges()
     {
@@ -433,11 +434,12 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void UpdateEditedIndicator()
     {
-        if (_isInitializing || EditedIndicatorText is null || _isFlashingTitleStatus)
+        if (_bulkFlashcardEdit) return;
+        WorkspaceStateChanged?.Invoke();
+        if (_isInitializing || EditedIndicatorText is null)
             return;
 
-        EditedIndicatorText.Text = LocalizationService.GetString("EditedIndicator");
-        UiMotion.AnimateInlineReveal(EditedIndicatorText, HasUnsavedChanges());
+        EditedIndicatorText.SetEdited(HasUnsavedChanges());
     }
 
     private string GetEditorSnapshot()
@@ -490,7 +492,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
         var documentTitle = ResolveEditorTitleForPrompt();
         var result = ModernDialog.Show(
-            this,
+            WorkspaceOwner,
             LocalizationService.GetString("UnsavedChanges"),
             string.Format(LocalizationService.GetString("UnsavedChangesConfirmationFormat"), documentTitle),
             ModernDialogTone.Warning,
@@ -518,6 +520,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void SaveAndClose()
     {
+        if (_workspaceSave is not null) { _workspaceSave(); return; }
         MarkCurrentStateSaved();
         _allowCloseWithoutPrompt = true;
         WindowContentEnterHelper.CloseWithDialogResult(this, true);
@@ -532,13 +535,13 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             AiGeneratedInfoBadge.ToolTip = null;
             if (_isInitializing)
             {
-                AiGeneratedInfoBadge.Visibility = Visibility.Collapsed;
-                AiReviewNotice.Visibility = Visibility.Collapsed;
+                UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, false, axis: Orientation.Horizontal, animate: false);
+                UiMotion.AnimateLayoutReveal(AiReviewNotice, false, animate: false);
                 return;
             }
 
-            UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, false);
-            UiMotion.AnimateInlineReveal(AiReviewNotice, false);
+            UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, false, axis: Orientation.Horizontal);
+            UiMotion.AnimateLayoutReveal(AiReviewNotice, false);
             return;
         }
 
@@ -549,13 +552,13 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
         if (_isInitializing)
         {
-            AiGeneratedInfoBadge.Visibility = Visibility.Visible;
-            AiReviewNotice.Visibility = _aiReviewNoticeDismissed ? Visibility.Collapsed : Visibility.Visible;
+            UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, true, axis: Orientation.Horizontal, animate: false);
+            UiMotion.AnimateLayoutReveal(AiReviewNotice, !_aiReviewNoticeDismissed, animate: false);
             return;
         }
 
-        UiMotion.AnimateInlineReveal(AiGeneratedInfoBadge, true);
-        UiMotion.AnimateInlineReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
+        UiMotion.AnimateLayoutReveal(AiGeneratedInfoBadge, true, axis: Orientation.Horizontal);
+        UiMotion.AnimateLayoutReveal(AiReviewNotice, !_aiReviewNoticeDismissed);
     }
 
     public event EventHandler? AiReviewNoticeDismissedPersistRequested;
@@ -672,6 +675,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void FlashcardsPreviewWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (BulkSelectionBar.HandleOperationKey(e)) return;
+        if (EditorSelectionInput.HandleKey(e, BulkSelection, ConfirmDeleteSelectedFlashcards)) return;
         if (e.Key == Key.F11)
         {
             ToggleFullscreenMode();
@@ -841,16 +846,15 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     /// without also resetting _studyModeIndex/history, which would break resuming later.</summary>
     private void ApplyFilters(bool preserveStudyPosition = false)
     {
+        if (_bulkFlashcardEdit) return;
         var filteredItems = GetItemsMatchingNonDueFilters();
 
         List<FlashcardPreviewItem> orderedItems;
         if (_dueOnly && !_isCramMode)
         {
             var now = DateTime.Now;
-            orderedItems = filteredItems
-                .Where(item => FlashcardReviewScheduler.IsDue(item.DueDate, now))
-                .OrderBy(item => item.DueDate ?? DateTime.MinValue)
-                .ToList();
+            var due = filteredItems.Where(item => FlashcardReviewScheduler.IsDue(item.DueDate, now));
+            orderedItems = (_isStudyMode ? due.OrderBy(item => item.DueDate ?? DateTime.MinValue) : due).ToList();
         }
         else
         {
@@ -858,6 +862,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         }
 
         _items.ReplaceAll(orderedItems);
+        BulkSelection.SetItems(orderedItems.Select(item => item.Id));
 
         UpdateQuestionAnswerToggleButton();
         UpdateEmptyGridState();
@@ -1004,7 +1009,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         var window = new FlashcardStudyHistoryWindow(() => ToDocument(), ResetStudyStatusesForAllSets)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         window.ShowDialog();
@@ -1015,7 +1020,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         var window = new FlashcardStatisticsWindow(() => ToDocument())
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         window.ShowDialog();
@@ -1032,7 +1037,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             Title = LocalizationService.GetString("FlashcardImportCardsDialogTitle")
         };
 
-        if (openFileDialog.ShowDialog(this) != true)
+        if (openFileDialog.ShowDialog(WorkspaceOwner) != true)
             return;
 
         try
@@ -1053,9 +1058,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             }
 
             var targetSetIndex = GetSelectedSetIndex() ?? _currentSetIndex;
-            foreach (var card in result.Document.Cards)
-            {
-                _allItems.Add(new FlashcardPreviewItem(
+            InsertCardsAtStart(targetSetIndex, result.Document.Cards.Select(card => new FlashcardPreviewItem(
                     Guid.NewGuid(),
                     card.Question,
                     card.Answer,
@@ -1063,8 +1066,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                     card.Category,
                     isKnown: false,
                     isUnknown: false,
-                    hint: card.Hint));
-            }
+                    hint: card.Hint)));
 
             ApplySetFilter(targetSetIndex);
             UpdateEditedIndicator();
@@ -1102,7 +1104,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             OverwritePrompt = true
         };
 
-        if (saveDialog.ShowDialog(this) != true)
+        if (saveDialog.ShowDialog(WorkspaceOwner) != true)
             return;
 
         try
@@ -1179,14 +1181,14 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         e.Handled = true;
         if (ResolveFlashcardFromElement(sender) is { } flashcard)
-            ShowImageViewer(flashcard.QuestionImageFileName);
+            ShowImageViewer(flashcard.QuestionImageFileName, sender as FrameworkElement);
     }
 
     private void AnswerImage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
         if (ResolveFlashcardFromElement(sender) is { } flashcard)
-            ShowImageViewer(flashcard.AnswerImageFileName);
+            ShowImageViewer(flashcard.AnswerImageFileName, sender as FrameworkElement);
     }
 
     private static FlashcardPreviewItem? ResolveFlashcardFromElement(object sender)
@@ -1293,17 +1295,24 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     /// <summary>Cards render images small and downscaled (see FlashcardPreviewItem's cached,
     /// low-res decode), so this loads the same file fresh at full stored resolution - only when
     /// actually zooming, not for every card on screen.</summary>
-    private void ShowImageViewer(string? fileName)
+    private bool _imageViewerOpening;
+    private async void ShowImageViewer(string? fileName, FrameworkElement? thumbnail)
     {
-        var fullResolutionImage = FlashcardMediaStorageService.LoadImage(fileName, decodePixelWidth: 0);
-        if (fullResolutionImage is null)
-            return;
-
-        var viewer = new FlashcardImageViewerWindow(fullResolutionImage)
+        if (_imageViewerOpening) return;
+        _imageViewerOpening = true;
+        try
         {
-            Owner = this
+        var sourceItem = thumbnail?.DataContext;
+        var fullResolutionImage = await Task.Run(() => FlashcardMediaStorageService.LoadImage(fileName, decodePixelWidth: 0));
+        if (fullResolutionImage is null || !ContentRoot.IsLoaded || !ContentRoot.IsVisible) return;
+        if (!ReferenceEquals(sourceItem, thumbnail?.DataContext)) thumbnail = null;
+        var viewer = new FlashcardImageViewerWindow(fullResolutionImage, thumbnail)
+        {
+            Owner = WorkspaceOwner
         };
         viewer.ShowDialog();
+        }
+        finally { _imageViewerOpening = false; }
     }
 
     private void MoveToStudyItem(FlashcardPreviewItem item, bool appendToHistory)
@@ -1424,14 +1433,14 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             : "StudyModeFullscreenTooltip");
     }
 
-    private bool IsStudyFullscreen => ShellWindowChrome.IsFullscreenSuspended(this);
+    private bool IsStudyFullscreen => ShellWindowChrome.IsFullscreenSuspended(WorkspaceOwner);
 
     private void ToggleFullscreenMode()
     {
         if (IsStudyFullscreen)
-            ShellWindowChrome.ResumeFromFullscreen(this);
+            ShellWindowChrome.ResumeFromFullscreen(WorkspaceOwner);
         else
-            ShellWindowChrome.SuspendForFullscreen(this);
+            ShellWindowChrome.SuspendForFullscreen(WorkspaceOwner);
 
         UpdateStudyModeFullscreenButton();
     }
@@ -1447,8 +1456,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void SetOptionsPanelOpen(bool isOpen)
     {
         _isOptionsPanelOpen = isOpen;
-        _optionsPanelAnimationVersion++;
-        AnimateChromePanel(FlashcardsOptionsPanel, isOpen, _optionsPanelAnimationVersion, () => _isOptionsPanelOpen, () => _optionsPanelAnimationVersion);
+        UiMotion.AnimateLayoutReveal(FlashcardsOptionsPanel, isOpen);
     }
 
     private void TagsPanelToggleButton_Click(object sender, RoutedEventArgs e)
@@ -1457,64 +1465,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void SetTagsPanelOpen(bool isOpen, bool animate = true)
     {
         _isTagsPanelOpen = isOpen;
-
-        if (!animate)
-        {
-            UiMotion.Stop(FlashcardsTagsBorder);
-            UiMotion.Clear(FlashcardsTagsBorder, UIElement.OpacityProperty);
-            UiMotion.Clear(EnsureChromePanelTransform(FlashcardsTagsBorder), TranslateTransform.YProperty);
-            FlashcardsTagsBorder.Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
-            FlashcardsTagsBorder.Opacity = isOpen ? 1 : 0;
-            EnsureChromePanelTransform(FlashcardsTagsBorder).Y = isOpen ? 0 : -6;
-            return;
-        }
-
-        _tagsPanelAnimationVersion++;
-        AnimateChromePanel(FlashcardsTagsBorder, isOpen, _tagsPanelAnimationVersion, () => _isTagsPanelOpen, () => _tagsPanelAnimationVersion);
-    }
-
-    private void AnimateChromePanel(Border panel, bool show, int animationVersion, Func<bool> isStillOpen, Func<int> latestVersion)
-    {
-        if (UiMotion.PrefersReducedMotion)
-        {
-            UiMotion.Stop(panel);
-            panel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            panel.Opacity = show ? 1 : 0;
-            EnsureChromePanelTransform(panel).Y = show ? 0 : -6;
-            return;
-        }
-
-        var transform = EnsureChromePanelTransform(panel);
-        var easing = show ? UiMotion.OutQuad : UiMotion.InQuad;
-        var opacityFrom = panel.Opacity;
-        var yFrom = transform.Y;
-
-        if (show)
-            panel.Visibility = Visibility.Visible;
-
-        UiMotion.Stop(panel);
-        UiMotion.RunComposited(
-            panel,
-            new[]
-            {
-                UiMotion.Track(UiMotion.FastMs, easing, opacityFrom, show ? 1 : 0, value => panel.Opacity = value),
-                UiMotion.Track(UiMotion.FastMs, easing, yFrom, show ? 0 : -6, value => transform.Y = value)
-            },
-            () =>
-            {
-                if (!show && animationVersion == latestVersion() && !isStillOpen())
-                    panel.Visibility = Visibility.Collapsed;
-            });
-    }
-
-    private static TranslateTransform EnsureChromePanelTransform(Border panel)
-    {
-        if (panel.RenderTransform is TranslateTransform existing)
-            return existing;
-
-        var transform = new TranslateTransform(0, -6);
-        panel.RenderTransform = transform;
-        return transform;
+        UiMotion.AnimateLayoutReveal(FlashcardsTagsBorder, isOpen, animate: animate);
     }
 
     private void ShuffleModeButton_Click(object sender, RoutedEventArgs e)
@@ -1524,6 +1475,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
         var shuffled = _items.OrderBy(_ => _random.Next()).ToList();
         _items.ReplaceAll(shuffled);
+        BulkSelection.SetItems(_items.Select(item => item.Id));
 
         _studyModeIndex = 0;
         ResetStudyHistory();
@@ -1661,7 +1613,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             LocalizationService.GetString("RenameFlashcardSetPrompt"),
             selectedSet.DisplayName)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         if (dialog.ShowDialog() != true)
@@ -1696,7 +1648,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     private void DeleteSet(FlashcardSetOption selectedSet)
     {
         var confirmed = ModernDialog.ConfirmDanger(
-            this,
+            WorkspaceOwner,
             LocalizationService.GetString("DeleteFlashcardSet"),
             string.Format(LocalizationService.GetString("DeleteFlashcardSetConfirmationFormat"), selectedSet.DisplayName),
             LocalizationService.GetString("Confirm"));
@@ -1771,7 +1723,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             SetSelectorComboBox.SelectedIndex = 0;
     }
 
-    private bool TryCreateSet(out FlashcardSetOption createdSet, bool selectSet)
+    private bool TryCreateSet(out FlashcardSetOption createdSet, bool selectSet, bool markEdited = true)
     {
         var nextSetIndex = GetNextSetIndex();
         var defaultName = string.Format(LocalizationService.GetString("FlashcardSetFormat"), nextSetIndex);
@@ -1781,7 +1733,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             LocalizationService.GetString("CreateFlashcardSetPrompt"),
             defaultName)
         {
-            Owner = this
+            Owner = WorkspaceOwner
         };
 
         if (dialog.ShowDialog() != true)
@@ -1795,7 +1747,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             : dialog.InputText.Trim();
 
         createdSet = AddSetOption(nextSetIndex, setName, selectSet);
-        UpdateEditedIndicator();
+        if (markEdited) UpdateEditedIndicator();
         return true;
     }
 
@@ -1940,7 +1892,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
         var dialog = new EditFlashcardDialog(true, GetCategoryOptions())
         {
-            Owner = this,
+            Owner = WorkspaceOwner,
             Question = string.Empty,
             Answer = string.Empty,
             Category = string.Empty,
@@ -1963,7 +1915,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             questionAudioFileName: dialog.QuestionAudioFileName,
             answerImageFileName: dialog.AnswerImageFileName,
             answerAudioFileName: dialog.AnswerAudioFileName);
-        _allItems.Add(flashcard);
+        InsertCardsAtStart(normalizedSetIndex, [flashcard]);
 
         var selectedSetIndex = GetSelectedSetIndex() ?? _currentSetIndex;
         ApplySetFilter(selectedSetIndex);
@@ -2021,6 +1973,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         _sessionCardsReviewed = 0;
         _sessionStartedAt = DateTime.Now;
         _isStudyMode = true;
+        var resumeCard = _studyModeIndex >= 0 && _studyModeIndex < _items.Count ? _items[_studyModeIndex] : null;
+        ApplyFilters(preserveStudyPosition: true);
+        if (startDecision != StudyStartDecision.Restart && resumeCard is not null && _items.Contains(resumeCard))
+            _studyModeIndex = _items.IndexOf(resumeCard);
         ApplyStudyModeState();
     }
 
@@ -2092,7 +2048,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             return false;
 
         var result = ModernDialog.Show(
-            this,
+            WorkspaceOwner,
             LocalizationService.GetString("StudyModeAllCaughtUpTitle"),
             LocalizationService.GetString("StudyModeAllCaughtUpMessage"),
             ModernDialogTone.Question,
@@ -2111,7 +2067,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         if (!_dueOnly && AreAllStudyItemsKnown())
         {
             var result = ModernDialog.Show(
-                this,
+                WorkspaceOwner,
                 LocalizationService.GetString("StudyModeResumeTitle"),
                 LocalizationService.GetString("StudyModeCompletedRestartMessage"),
                 ModernDialogTone.Question,
@@ -2127,7 +2083,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             return StudyStartDecision.Restart;
 
         var resumeResult = ModernDialog.Show(
-            this,
+            WorkspaceOwner,
             LocalizationService.GetString("StudyModeResumeTitle"),
             LocalizationService.GetString("StudyModeResumeMessage"),
             ModernDialogTone.Question,
@@ -2161,21 +2117,29 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         FlipCurrentStudyCard();
     }
 
-    private void StudyHintPrompt_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private void StudyHintPrompt_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: FlashcardPreviewItem item })
+        {
+            var hint = (sender as FrameworkElement)?.Parent is Panel parent
+                ? parent.Children.OfType<TextBlock>().FirstOrDefault() : null;
+            if (hint is not null) hint.Opacity = 0;
             item.IsHintRevealed = true;
+            if (hint is not null) UiMotion.Fade(hint, 1, 140);
+        }
 
         e.Handled = true;
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_workspaceClose is not null) { _workspaceClose(); return; }
         switch (GetCloseDecision())
         {
             case UnsavedCloseDecision.Cancel:
                 return;
             case UnsavedCloseDecision.SaveAndClose:
+                if (_workspaceSave is not null) { if (_workspaceSave()) _workspaceClose?.Invoke(); return; }
                 SaveAndClose();
                 return;
             case UnsavedCloseDecision.LeaveWithoutSaving:
@@ -2192,6 +2156,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void FlashcardsPreviewWindow_Closing(object? sender, CancelEventArgs e)
     {
+        if (_workspaceDisposed) return;
         if (IsStudyFullscreen)
             ToggleFullscreenMode();
 
@@ -2302,8 +2267,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     // so both containers carry extra Padding for the plate bleed and lift.
     private void FlashcardStudyCardSurface_MouseEnter(object sender, MouseEventArgs e)
     {
-        if (sender is not FrameworkElement surface)
+        if (!MotionPolicy.Spatial || sender is not FrameworkElement surface || Scriblucent.Behaviors.ScrollTileBehavior.GetIsScrolling(surface))
             return;
+
+        if (CollectionSelectionFrame.For(surface) is { } selectionFrame) { selectionFrame.SyncHover(); return; }
 
         ClearStudyCardLiveShadow(surface);
 
@@ -2311,33 +2278,40 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             return;
 
         cardRoot.RenderTransformOrigin = new Point(0.5, 0.5);
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(cardRoot);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+        var translate = UiMotion.ChannelTranslate(cardRoot, MotionChannel.Interaction);
+
         var liftFrom = translate.Y;
-        UiMotion.Stop(cardRoot);
-        UiMotion.Run(cardRoot, new[]
+        UiMotion.Stop(UiMotion.Channel(cardRoot, MotionChannel.Interaction));
+        UiMotion.Run(cardRoot, MotionChannel.Interaction, new[]
         {
             UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, liftFrom, UiMotion.CardHoverLiftY, value => translate.Y = value)
         });
     }
 
+    internal void RestoreGridCardHover(DependencyObject root)
+    {
+        if (root is SurfaceMaterialBorder { IsMouseOver: true, IsVisible: true } surface && surface.ActualWidth >= 300 && surface.ActualHeight >= 200)
+            FlashcardStudyCardSurface_MouseEnter(surface, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount));
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++) RestoreGridCardHover(VisualTreeHelper.GetChild(root, i));
+    }
+
     private void FlashcardStudyCardSurface_MouseLeave(object sender, MouseEventArgs e)
     {
-        if (sender is not FrameworkElement surface)
+        if (!MotionPolicy.Spatial || sender is not FrameworkElement surface || Scriblucent.Behaviors.ScrollTileBehavior.GetIsScrolling(surface))
             return;
+
+        if (CollectionSelectionFrame.For(surface) is { } selectionFrame) { selectionFrame.SyncHover(); return; }
 
         ClearStudyCardLiveShadow(surface);
 
         if (surface.Parent is not FrameworkElement cardRoot)
             return;
 
-        var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(cardRoot);
-        scale.ScaleX = 1;
-        scale.ScaleY = 1;
+        var translate = UiMotion.ChannelTranslate(cardRoot, MotionChannel.Interaction);
+
         var liftFrom = translate.Y;
-        UiMotion.Stop(cardRoot);
-        UiMotion.Run(cardRoot, new[]
+        UiMotion.Stop(UiMotion.Channel(cardRoot, MotionChannel.Interaction));
+        UiMotion.Run(cardRoot, MotionChannel.Interaction, new[]
         {
             UiMotion.Track(UiMotion.HoverOutMs, UiMotion.OutCubic, liftFrom, 0, value => translate.Y = value)
         });
@@ -2448,6 +2422,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         CramModeBanner.Visibility = _isStudyMode && _isCramMode ? Visibility.Visible : Visibility.Collapsed;
         UpdateQuestionAnswerToggleButton();
         UpdateStudyModeFullscreenButton();
+        if (!_isInitializing) SyncBulkSelectionChrome();
 
         if (!_isStudyMode || _items.Count == 0)
             return;
@@ -2577,12 +2552,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             return;
         }
 
-        var targetWidth = GetStudyProgressTrackWidth() * Math.Clamp((double)knownCount / totalCount, 0, 1);
-        var currentWidth = StudyModeProgressFill.Width;
-        if (double.IsNaN(currentWidth) || currentWidth < 0)
-            currentWidth = 0;
-
-        UiMotion.AnimateWidth(StudyModeProgressFill, currentWidth, targetWidth, UiMotion.FastMs, UiMotion.OutCubic);
+        UiMotion.AnimateProgress(StudyModeProgressFill, GetStudyProgressTrackWidth(), (double)knownCount / totalCount);
     }
 
     private void SetStudyProgressComplete()
@@ -2640,7 +2610,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         if (StudyModeProgressFill is null)
             return;
 
-        StudyModeProgressFill.Width = width;
+        var fullWidth = GetStudyProgressTrackWidth();
+        UiMotion.AnimateProgress(StudyModeProgressFill, fullWidth, fullWidth > 0 ? width / fullWidth : 0, animate: false);
         StudyModeProgressFill.Height = 4;
     }
 
@@ -2700,7 +2671,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         if (OptionsPanelToggleButton is not null)
             OptionsPanelToggleButton.Visibility = chromeVisibility;
         if (FlashcardsOptionsPanel is not null && !_isOptionsPanelOpen)
-            FlashcardsOptionsPanel.Visibility = Visibility.Collapsed;
+            UiMotion.AnimateLayoutReveal(FlashcardsOptionsPanel, false, animate: false);
     }
 
     private void ShowStudyModeCompletionText()
@@ -2711,6 +2682,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
         StudyModeProgressText.Visibility = Visibility.Collapsed;
         StudyModeCompletionText.Visibility = Visibility.Visible;
+        StudyModeFlipHost.Visibility = Visibility.Hidden;
+        StudyCompletionEmblem.Visibility = Visibility.Visible;
 
         if (_studyCelebrationShown)
             return;
@@ -2719,13 +2692,17 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
         Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
         {
             if (CelebrationOverlay != null)
-                StudyCelebration.PlayConfetti(CelebrationOverlay);
+                StudyCelebration.PlayConfetti(CelebrationOverlay, origin: StudyCompletionEmblem);
+            StudyCompletionEmblem.Play();
             StudyCelebration.RevealScore(StudyModeCompletionText);
         });
     }
 
     private void HideStudyModeCompletionText()
     {
+        CancelStudyCompletionTimer();
+        StudyModeFlipHost.Visibility = Visibility.Visible;
+        StudyCompletionEmblem.Visibility = Visibility.Collapsed;
         if (StudyModeCompletionText.Visibility != Visibility.Visible)
         {
             StudyModeProgressText.Visibility = Visibility.Visible;
@@ -2749,13 +2726,17 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
 
     private void ShowStudyCompletionDialog()
     {
-        var dialogTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(3400) };
+        CancelStudyCompletionTimer();
+        var dialogTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(MotionPolicy.Spatial ? 1800 : 1) };
+        _studyCompletionTimer = dialogTimer;
         dialogTimer.Tick += (_, _) =>
         {
             dialogTimer.Stop();
+            _studyCompletionTimer = null;
+            if (!ContentRoot.IsLoaded || !_isStudyMode || !_studyCompletionDialogShown) return;
             StudyCelebration.Stop(CelebrationOverlay);
             ModernDialog.ShowSuccess(
-                this,
+                WorkspaceOwner,
                 LocalizationService.GetString("StudyModeCompleteTitle"),
                 BuildStudyCompletionSummary());
 
@@ -2767,6 +2748,12 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
             ApplyFilters();
         };
         dialogTimer.Start();
+    }
+
+    private void CancelStudyCompletionTimer()
+    {
+        _studyCompletionTimer?.Stop();
+        _studyCompletionTimer = null;
     }
 
     /// <summary>
@@ -3421,8 +3408,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
                     StudyModeCard,
                     new[]
                     {
-                        UiMotion.Track(UiMotion.FastMs, UiMotion.OutCubic, 0, 1, value => StudyModeCard.Opacity = value),
-                        UiMotion.Track(UiMotion.FastMs, UiMotion.OutCubic, enterOffset, 0, value => translate.X = value)
+                        UiMotion.Track(160, UiMotion.OutSine, 0, 1, value => StudyModeCard.Opacity = value),
+                        UiMotion.Track(160, UiMotion.InOutSine, enterOffset, 0, value => translate.X = value)
                     },
                     () =>
                     {
@@ -3450,7 +3437,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged
     {
         var dialog = new EditFlashcardDialog(categoryOptions: GetCategoryOptions())
         {
-            Owner = this,
+            Owner = WorkspaceOwner,
             Question = flashcard.Question,
             Answer = flashcard.Answer,
             Category = flashcard.Category,

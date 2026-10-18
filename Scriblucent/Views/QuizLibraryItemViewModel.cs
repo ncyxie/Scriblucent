@@ -17,6 +17,7 @@ public sealed class QuizLibraryItemViewModel : ViewModelBase
     public QuizDocument Document => Model.Document;
     public string Title => Model.Title;
     public string QuestionCountText => Model.QuestionCountText;
+    public string ItemCountText => CombineWorkspacePresentation.ContentCount(false, Document.Questions?.Count ?? 0);
     public bool HasTags => Model.HasTags;
     public string TagsDisplay => Model.TagsDisplay;
 

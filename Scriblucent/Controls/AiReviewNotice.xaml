@@ -1,4 +1,4 @@
-<UserControl x:Class="Scriblucent.Controls.AiReviewNotice"
+<UserControl xmlns:controls="clr-namespace:Scriblucent.Controls" x:Class="Scriblucent.Controls.AiReviewNotice"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
@@ -7,7 +7,7 @@
              UseLayoutRounding="True">
     <!-- Role I status banner: amber fill + optional status stroke, matching CramModeBanner
          and the quiz hint chip, with a warning glyph so the line is readable at a glance. -->
-    <Border Background="{DynamicResource AccentWarningSubtle}"
+    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Tinted" Background="{DynamicResource AccentWarningSubtle}"
             BorderBrush="{DynamicResource AccentWarningSubtleBorder}"
             BorderThickness="1"
             CornerRadius="{StaticResource Radius.Control}"
@@ -19,7 +19,9 @@
                     Height="22"
                     Margin="8,0,0,0"
                     Padding="0"
-                    Style="{x:Null}"
+                    Style="{StaticResource ToolbarIconButtonStyle}"
+                    Focusable="True"
+                    MinHeight="0" MinWidth="0"
                     Background="Transparent"
                     BorderThickness="0"
                     Cursor="Hand"
@@ -45,5 +47,5 @@
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"/>
         </DockPanel>
-    </Border>
+    </controls:SurfaceMaterialBorder>
 </UserControl>

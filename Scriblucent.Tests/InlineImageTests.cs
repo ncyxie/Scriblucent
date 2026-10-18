@@ -908,9 +908,11 @@ public class InlineImageTests
     public void ImagePosition_RoundTripsExactly()
         => RunOnSta(RunPositionRoundTripScenario);
 
-    [Fact]
-    public void ImagePosition_OutOfViewWidth_SnapsIntoReachableArea()
-        => RunOnSta(RunOutOfViewWidthScenario);
+    [Theory]
+    [InlineData(9000)]
+    [InlineData(-9000)]
+    public void ImagePosition_OutOfViewWidth_SnapsIntoReachableArea(double storedLeft)
+        => RunOnSta(() => RunOutOfViewWidthScenario(storedLeft));
 
     [Fact]
     public void ImagePosition_DeepInDocument_KeepsY()
@@ -1231,21 +1233,29 @@ public class InlineImageTests
         Assert.Equal(300 + 16, Canvas.GetTop(widget), precision: 2); // padding.Top
     }
 
-    private static void RunOutOfViewWidthScenario()
+    private static void RunOutOfViewWidthScenario(double storedLeft)
     {
         using var harness = CreateHarness();
 
-        // A stored X far beyond the reachable area must snap to its edge - visibly findable,
+        // A stored X beyond either side of the reachable area must snap to its edge - visibly findable,
         // with the size unchanged.
         harness.Coordinator.Clear(raiseChanged: false);
-        harness.Coordinator.Restore(new[] { BuildAttachment(9000, 300) });
+        harness.Coordinator.Restore(new[] { BuildAttachment(storedLeft, 300) });
         harness.Editor.UpdateLayout();
 
         var widget = harness.Overlay.Children.OfType<NoteImageWidget>().Single();
         var reachableWidth = Math.Max(FindEditorScrollViewer(harness.Editor).ViewportWidth, FindEditorScrollViewer(harness.Editor).ExtentWidth);
-        Assert.Equal(Math.Max(0, reachableWidth - 200) + 18, Canvas.GetLeft(widget), precision: 2);
+        double recoveredLeft = storedLeft < 0 ? 0 : Math.Max(0, reachableWidth - 200);
+        Assert.Equal(recoveredLeft + 18, Canvas.GetLeft(widget), precision: 2);
         Assert.Equal(200, widget.Width, precision: 2); // size untouched
         Assert.Equal(150, widget.Height, precision: 2);
+        var recovered = harness.Coordinator.BuildAttachments().Single();
+        Assert.Equal(recoveredLeft, recovered.Left, precision: 2);
+        Assert.Equal(300, recovered.Top, precision: 2);
+        harness.Coordinator.Clear(raiseChanged: false);
+        harness.Coordinator.Restore(new[] { recovered });
+        harness.Editor.UpdateLayout();
+        Assert.Equal(recovered.Left, harness.Coordinator.BuildAttachments().Single().Left, precision: 2);
     }
 
     private static void RunDeepYScenario()

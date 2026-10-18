@@ -100,5 +100,6 @@ public enum AppIconKind
     Bookmark,
     Ban,
     Cut,
-    GripVertical
+    GripVertical,
+    ChevronLeft
 }

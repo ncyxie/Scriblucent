@@ -118,14 +118,9 @@ internal static class ShellWindowChrome
     public static ShellChromeKind GetChromeKind(Window window)
         => window is null ? ShellChromeKind.None : (ShellChromeKind)window.GetValue(ChromeKindProperty);
 
-    /// <summary>
-    /// Caption/root brush: Main shell uses Sidebar; feature Client chrome matches FeatureFrameBackground.
-    /// </summary>
+    /// <summary>All client workspaces share the canvas; main navigation owns the outer frame.</summary>
     public static string GetShellFrameBackgroundKey(Window window)
-        => GetChromeKind(window) == ShellChromeKind.Client
-            ? "FeatureFrameBackground"
-            : "SidebarBackground";
-
+        => GetChromeKind(window) == ShellChromeKind.Client ? "WorkspaceBackdrop" : "SidebarBackground";
 
     /// <summary>
     /// Removes the caption host (if any) and returns the window body for reparenting.
@@ -392,14 +387,18 @@ internal static class ShellWindowChrome
         if (window.Content is not UIElement content)
             return;
 
+        // Resolve before detaching: while Content is null the workspace cannot be discovered.
+        var frameKey = GetShellFrameBackgroundKey(window);
         window.Content = null;
 
         var root = new Grid();
-        root.SetResourceReference(Panel.BackgroundProperty, GetShellFrameBackgroundKey(window));
+        root.SetResourceReference(Panel.BackgroundProperty, frameKey);
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(CaptionHeight) });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var caption = CreateCaptionBar(window);
+        caption.SetResourceReference(Border.BackgroundProperty, frameKey);
+        caption.SetResourceReference(Border.BorderBrushProperty, frameKey);
         Grid.SetRow(caption, 0);
         root.Children.Add(caption);
 
