@@ -26,33 +26,29 @@ Windows desktop · Local storage · Optional local AI
 
 Start with an idea. Keep your notes and study materials together, then move between them in a shared tabbed workspace.
 
-- **Notes.** Give ideas room to grow with rich text, images, linked notes, and templates. Autosave and version history help you pick up where you left off.
-- **Flashcards.** Turn key ideas into recall practice. Build sets with text, images, and audio, review with spaced repetition, and follow your progress.
-- **Mind maps.** See how ideas connect. Branch out, choose a layout, style your nodes, and link them back to your notes.
-- **Quizzes.** Check what you know with choice, true/false, and written questions. Review attempts and return to the questions you missed.
+### Notes
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <p><strong>Notes</strong></p>
-      <a href="Screenshots/editor-note.png"><img src="Screenshots/editor-note.png" alt="Rich-text note editor with connected tabs for notes and study materials" width="640"></a>
-    </td>
-    <td width="50%" valign="top">
-      <p><strong>Flashcards</strong></p>
-      <a href="Screenshots/editor-flashcards.png"><img src="Screenshots/editor-flashcards.png" alt="Flashcard editor showing a grid of cards for recall practice" width="640"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <p><strong>Mind maps</strong></p>
-      <a href="Screenshots/editor-mindmap.png"><img src="Screenshots/editor-mindmap.png" alt="Mind map connecting retrieval, spaced practice, and related ideas" width="640"></a>
-    </td>
-    <td width="50%" valign="top">
-      <p><strong>Quizzes</strong></p>
-      <a href="Screenshots/editor-quiz.png"><img src="Screenshots/editor-quiz.png" alt="Quiz editor with editable questions, answer choices, and explanations" width="640"></a>
-    </td>
-  </tr>
-</table>
+Give ideas room to grow with rich text, images, linked notes, and templates. Autosave and version history help you pick up where you left off.
+
+[![Rich-text note editor with connected tabs for notes and study materials](Screenshots/editor-note.png)](Screenshots/editor-note.png)
+
+### Flashcards
+
+Turn key ideas into recall practice. Build sets with text, images, and audio, review with spaced repetition, and follow your progress.
+
+[![Flashcard editor showing a grid of cards for recall practice](Screenshots/editor-flashcards.png)](Screenshots/editor-flashcards.png)
+
+### Mind maps
+
+See how ideas connect. Branch out, choose a layout, style your nodes, and link them back to your notes.
+
+[![Mind map connecting retrieval, spaced practice, and related ideas](Screenshots/editor-mindmap.png)](Screenshots/editor-mindmap.png)
+
+### Quizzes
+
+Check what you know with choice, true/false, and written questions. Review attempts and return to the questions you missed.
+
+[![Quiz editor with editable questions, answer choices, and explanations](Screenshots/editor-quiz.png)](Screenshots/editor-quiz.png)
 
 ## Keep your next step in sight
 
