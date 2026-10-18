@@ -347,7 +347,6 @@
 			<ColumnDefinition Width="*"/>
 		</Grid.ColumnDefinitions>
 
-		<Border Grid.ColumnSpan="2" Margin="64,10,10,10" Background="{DynamicResource WindowBackground}" CornerRadius="{StaticResource Radius.Overlay}" IsHitTestVisible="False"/>
         <!-- Level 3 sidebar: soft fill selection; separators are L (SidebarSeparator). -->
      <controls:SidebarChrome x:Name="SidebarChrome" motion:SidebarResizeMotion.IsEnabled="True" Panel.ZIndex="2"
 				Grid.Column="0"
