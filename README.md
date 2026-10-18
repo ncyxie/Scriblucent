@@ -73,9 +73,9 @@ When you want a starting point, optional local AI can generate flashcards, mind 
 
 ## Get started
 
-1. Download the Windows build for your computer from [Releases](https://github.com/ncyxie/Scriblucent/releases).
-2. Extract the portable download and launch `Scriblucent.exe`. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0#desktop-runtime) if prompted, matching your build's x64 or ARM64 architecture.
-3. Create your first note or study set using the **+** button, or import existing materials.
+1. Download the Windows setup installer for your computer from [Releases](https://github.com/ncyxie/Scriblucent/releases).
+2. Run the installer and follow the setup steps. If prompted, install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0#desktop-runtime) for your computer's architecture.
+3. Open Scriblucent and create your first note or study set using the **+** button, or import existing materials.
 
 Scriblucent is currently in beta. If something gets in your way, [report an issue](https://github.com/ncyxie/Scriblucent/issues) with the steps to reproduce it.
 
