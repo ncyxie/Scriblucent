@@ -148,7 +148,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
 $installer = Join-Path $outputDir "Scriblucent-$Version-win-$Architecture-Setup.exe"
 if (!(Test-Path -LiteralPath $installer)) { throw 'Installer output is missing.' }
 $setupInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($installer)
-if ($setupInfo.CompanyName -cne 'ncyxie') { throw 'The installer has incorrect publisher metadata.' }
+# Inno Setup reserves 60 characters for this resource and pads the value with spaces.
+if ($setupInfo.CompanyName.Trim() -cne 'ncyxie') { throw 'The installer has incorrect publisher metadata.' }
 $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $([IO.Path]::GetFileName($installer))" | Set-Content -LiteralPath "$installer.sha256" -Encoding ascii
 Write-Host "Installer ready: $installer"
