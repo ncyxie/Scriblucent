@@ -132,8 +132,10 @@ foreach ($relative in @('Scriblucent.exe', 'coreclr.dll', 'libSkiaSharp.dll', 'A
     $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
     if ([BitConverter]::ToUInt16($bytes, $peOffset + 4) -ne $expectedMachine) { throw "Incorrect architecture: $relative" }
 }
-$actualVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $publishDir 'Scriblucent.dll')).ProductVersion.Split('+')[0]
+$appInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $publishDir 'Scriblucent.dll'))
+$actualVersion = $appInfo.ProductVersion.Split('+')[0]
 if ($actualVersion -cne $Version) { throw "Packaged app version $actualVersion does not match $Version." }
+if ($appInfo.CompanyName -cne 'ncyxie') { throw 'The packaged app has incorrect publisher metadata.' }
 $unwanted = @(Get-ChildItem -LiteralPath $publishDir -Recurse -File | Where-Object {
     $_.Extension -in '.pdb', '.gguf', '.db', '.ps1', '.cs', '.csproj' -or
     $_.Name -match '^(settings\.json|appsettings\.json|\.env)$'
@@ -145,6 +147,8 @@ if ($unwanted.Count) { throw "Unexpected files in installer: $($unwanted.Name -j
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
 $installer = Join-Path $outputDir "Scriblucent-$Version-win-$Architecture-Setup.exe"
 if (!(Test-Path -LiteralPath $installer)) { throw 'Installer output is missing.' }
+$setupInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($installer)
+if ($setupInfo.CompanyName -cne 'ncyxie') { throw 'The installer has incorrect publisher metadata.' }
 $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $([IO.Path]::GetFileName($installer))" | Set-Content -LiteralPath "$installer.sha256" -Encoding ascii
 Write-Host "Installer ready: $installer"

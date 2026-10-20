@@ -94,11 +94,11 @@ dotnet run --project Scriblucent -c Release
 <details>
 <summary><strong>Create a release</strong></summary>
 
-In GitHub Actions, select **Windows release → Run workflow**, enter a version such as `1.0.0-beta.1`, and run it. Alternatively, push a matching version tag:
+Add an entry for the version to [CHANGELOG.md](CHANGELOG.md) for curated release notes. In GitHub Actions, select **Windows release → Run workflow**, enter a version such as `1.0.0-beta.2`, and run it. Alternatively, push a matching version tag:
 
 ```powershell
-git tag v1.0.0-beta.1
-git push origin v1.0.0-beta.1
+git tag v1.0.0-beta.2
+git push origin v1.0.0-beta.2
 ```
 
 Both methods build and check x64 and ARM64 setup installers, then attach them and SHA-256 checksums to a GitHub release. Versions containing a suffix such as `-beta.1` are marked as prereleases. Clear **Publish a GitHub release** in the manual workflow to build installers without publishing. Ordinary commits do not trigger releases.
@@ -107,4 +107,4 @@ Both methods build and check x64 and ARM64 setup installers, then attach them an
 
 ---
 
-[MIT License](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
+[Changelog](CHANGELOG.md) · [MIT License](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
