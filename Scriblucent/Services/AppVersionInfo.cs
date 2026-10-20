@@ -1,6 +1,11 @@
+using System.Reflection;
+
 namespace Scriblucent.Services;
 
 public static class AppVersionInfo
 {
-    public const string DisplayVersion = "1.0.0-beta.1";
+    public static string DisplayVersion { get; } =
+        (typeof(AppVersionInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? typeof(AppVersionInfo).Assembly.GetName().Version?.ToString()
+            ?? "0.0.0").Split('+')[0];
 }

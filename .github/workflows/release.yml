@@ -1,0 +1,160 @@
+name: Windows release
+run-name: Windows release ${{ inputs.version || github.ref_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, e.g. 1.0.0-beta.1 (without v)'
+        required: true
+        type: string
+      publish:
+        description: 'Publish a GitHub release after both installers pass checks'
+        required: true
+        default: true
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+# Serialize manual and tag-triggered releases; ordinary branch pushes never run this workflow.
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  prepare:
+    runs-on: windows-2025
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $version = if ($env:GITHUB_EVENT_NAME -eq 'push') { $env:GITHUB_REF_NAME.Substring(1) } else { $env:INPUT_VERSION }
+          if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:[0-9A-Za-z-]+\.)*[0-9A-Za-z-]+))?$') {
+            throw 'Use a semantic version such as 1.0.0 or 1.0.0-beta.1, without v.'
+          }
+          $tag = "v$version"
+          $existing = @(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}")
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify the release tag.' }
+          if ($existing.Count) {
+            git fetch --depth=1 origin "refs/tags/${tag}:refs/tags/$tag"
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot fetch the release tag.' }
+            $tagCommit = git rev-parse "$tag^{commit}"
+            if ($tagCommit -cne $env:GITHUB_SHA) { throw 'This version tag already points to a different commit. Use a new version.' }
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x64
+            runner: windows-2025
+          - architecture: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build self-contained installer
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_ARCH: ${{ matrix.architecture }}
+        run: ./packaging/windows/Build-Installer.ps1 -Architecture $env:RELEASE_ARCH -Version $env:RELEASE_VERSION
+      - name: Verify installer can install and uninstall
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_ARCH: ${{ matrix.architecture }}
+        run: |
+          $installer = Resolve-Path "artifacts/installers/$env:RELEASE_VERSION/win-$env:RELEASE_ARCH/setup/*-Setup.exe"
+          $destination = Join-Path $env:RUNNER_TEMP 'Scriblucent-install-check'
+          $log = Join-Path $env:RUNNER_TEMP 'Scriblucent-install-check.log'
+          $process = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$destination`" /LOG=`"$log`"" -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { Get-Content $log; throw "Setup failed: $($process.ExitCode)" }
+          if (!(Test-Path "$destination/Scriblucent.exe") -or !(Test-Path "$destination/AIWorker/coreclr.dll")) { throw 'Installed files are incomplete.' }
+          # Disable machine runtimes for the worker smoke check: the installed copy must be self-contained.
+          $env:DOTNET_ROOT = Join-Path $env:RUNNER_TEMP 'no-global-dotnet'
+          $pipeName = 'scriblucent-ai-worker-' + [guid]::NewGuid().ToString('N')
+          $worker = Start-Process -FilePath "$destination/AIWorker/Scriblucent.AI.Worker.exe" -ArgumentList "--pipe $pipeName --backend cpu" -WindowStyle Hidden -PassThru
+          $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [IO.Pipes.PipeDirection]::InOut)
+          try { $pipe.Connect(15000) }
+          finally {
+            $pipe.Dispose()
+            if (!$worker.HasExited) { Stop-Process -Id $worker.Id -Force }
+          }
+          $app = Start-Process -FilePath "$destination/Scriblucent.exe" -WindowStyle Hidden -PassThru
+          try {
+            if (!$app.WaitForInputIdle(20000) -or $app.HasExited) { throw 'Installed application did not reach an idle UI.' }
+          } finally {
+            if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
+          $uninstall = Start-Process -FilePath "$destination/unins000.exe" -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -WindowStyle Hidden -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstall failed: $($uninstall.ExitCode)" }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: setup-${{ matrix.architecture }}
+          path: artifacts/installers/${{ needs.prepare.outputs.version }}/win-${{ matrix.architecture }}/setup/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  release:
+    needs: [prepare, build]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: setup-*
+          merge-multiple: true
+          path: installers
+      - name: Publish release with both installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          foreach ($arch in @('x64', 'arm64')) {
+            $installer = "installers/Scriblucent-$env:RELEASE_VERSION-win-$arch-Setup.exe"
+            $expected = (Get-Content "$installer.sha256").Split(' ')[0]
+            if ((Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expected) { throw "Checksum mismatch: $arch" }
+          }
+          $assets = @(Get-ChildItem installers -File | ForEach-Object FullName)
+          if ($assets.Count -ne 4) { throw 'Expected exactly two installers and two checksum files.' }
+          # gh creates a draft, uploads every asset, then publishes. Existing releases are never overwritten.
+          $arguments = @('release', 'create', $env:RELEASE_TAG) + $assets + @(
+            '--target', $env:GITHUB_SHA, '--title', "Scriblucent $env:RELEASE_VERSION", '--generate-notes')
+          if ($env:GITHUB_EVENT_NAME -eq 'push') { $arguments += '--verify-tag' }
+          if ($env:PRERELEASE -eq 'true') { $arguments += '--prerelease', '--latest=false' }
+          else { $arguments += '--latest' }
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed. Existing releases will not be replaced.' }

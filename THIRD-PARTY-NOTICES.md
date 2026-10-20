@@ -11,12 +11,14 @@ Scriblucent uses the following third-party software. The links below identify ea
 | llama.cpp | MIT | https://github.com/ggml-org/llama.cpp/blob/master/LICENSE |
 | MahApps.Metro.IconPacks | MIT | https://github.com/MahApps/MahApps.Metro.IconPacks/blob/develop/LICENSE |
 | Microsoft.Bcl and Microsoft.Extensions support assemblies | MIT | https://github.com/dotnet/runtime |
+| .NET runtime and Windows Desktop runtime | MIT and third-party notices | `Licenses` directory in the installed application |
+| Microsoft Visual C++ runtime and OpenMP libraries | Microsoft Visual Studio redistribution terms | https://learn.microsoft.com/visualstudio/releases/2022/redistribution |
 | NAudio | MIT | https://github.com/naudio/NAudio/blob/master/license.txt |
 | SharpVectors | BSD 3-Clause | https://github.com/ElinamLLC/SharpVectors/blob/master/LICENSE.md |
 | SkiaSharp and SkiaSharp.HarfBuzz | MIT | https://github.com/mono/SkiaSharp/blob/main/LICENSE.md |
 | System.Interactive.Async and System.Linq.Async | MIT | https://github.com/dotnet/reactive |
 | System.Numerics.Tensors | MIT | https://github.com/dotnet/runtime |
 | WeCantSpell.Hunspell | MIT | https://github.com/aarondandy/WeCantSpell.Hunspell/blob/master/LICENSE |
-| VirtualizingWrapPanel | MIT | `LICENSE-VirtualizingWrapPanel` (included in the portable package) |
+| VirtualizingWrapPanel | MIT | `LICENSE-VirtualizingWrapPanel` (included in the installation) |
 
-Model files are downloaded on demand from the URLs in the model manifest and are not included in Scriblucent's source repository or portable packages.
+Model files are downloaded on demand from the URLs in the model manifest and are not included in Scriblucent's source repository or setup installers.

@@ -74,7 +74,7 @@ When you want a starting point, optional local AI can generate flashcards, mind 
 ## Get started
 
 1. Download the Windows setup installer for your computer from [Releases](https://github.com/ncyxie/Scriblucent/releases).
-2. Run the installer and follow the setup steps. If prompted, install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0#desktop-runtime) for your computer's architecture.
+2. Choose **x64** for most Windows PCs or **ARM64** for Windows on Arm, then run the installer. The .NET runtime is included.
 3. Open Scriblucent and create your first note or study set using the **+** button, or import existing materials.
 
 Scriblucent is currently in beta. If something gets in your way, [report an issue](https://github.com/ncyxie/Scriblucent/issues) with the steps to reproduce it.
@@ -88,6 +88,20 @@ On Windows, install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/downloa
 dotnet restore Scriblucent/Scriblucent.csproj
 dotnet run --project Scriblucent -c Release
 ```
+
+</details>
+
+<details>
+<summary><strong>Create a release</strong></summary>
+
+In GitHub Actions, select **Windows release → Run workflow**, enter a version such as `1.0.0-beta.1`, and run it. Alternatively, push a matching version tag:
+
+```powershell
+git tag v1.0.0-beta.1
+git push origin v1.0.0-beta.1
+```
+
+Both methods build and check x64 and ARM64 setup installers, then attach them and SHA-256 checksums to a GitHub release. Versions containing a suffix such as `-beta.1` are marked as prereleases. Clear **Publish a GitHub release** in the manual workflow to build installers without publishing. Ordinary commits do not trigger releases.
 
 </details>
 
