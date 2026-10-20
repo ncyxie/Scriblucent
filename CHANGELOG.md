@@ -18,11 +18,15 @@
 
 Scriblucent builds on the original NoteCards project with a substantial rewrite of its interface and everyday workflows. Bring notes, recall practice, connected ideas, and self-testing into one Windows workspace. Your materials stay local, and AI is optional.
 
+<div align="center">
+<a href="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.2/Screenshots/dashboard-light.png">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.2/Screenshots/dashboard-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.2/Screenshots/dashboard-light.png">
-  <img src="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.2/Screenshots/dashboard-light.png" width="1280" alt="Scriblucent dashboard with grouped notes and a planning calendar">
+  <img src="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.2/Screenshots/dashboard-light.png" width="680" alt="Scriblucent dashboard with grouped notes and a planning calendar. Click to view at full resolution.">
 </picture>
+</a>
+</div>
 
 ### Four tools, one connected workspace
 
