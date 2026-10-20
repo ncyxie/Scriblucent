@@ -101,7 +101,7 @@ git tag v1.0.0-beta.2
 git push origin v1.0.0-beta.2
 ```
 
-Both methods build and check x64 and ARM64 setup installers, then attach them and SHA-256 checksums to a GitHub release. Versions containing a suffix such as `-beta.1` are marked as prereleases. Clear **Publish a GitHub release** in the manual workflow to build installers without publishing. Ordinary commits do not trigger releases.
+Both methods build and check x64 and ARM64 setup installers, then attach them and SHA-256 checksums to a GitHub release. Versions containing a suffix such as `-beta.2` are marked as prereleases. Clear **Publish a GitHub release** in the manual workflow to build installers without publishing. Ordinary commits do not trigger releases.
 
 </details>
 

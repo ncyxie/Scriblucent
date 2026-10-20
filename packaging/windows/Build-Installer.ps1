@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 
 # Keep tags, assembly versions, installer metadata and filenames in agreement.
 if ($Version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:[0-9A-Za-z-]+\.)*[0-9A-Za-z-]+))?$') {
-    throw 'Use a version such as 1.0.0 or 1.0.0-beta.1, without a v prefix.'
+    throw 'Use a version such as 1.0.0 or 1.0.0-beta.2, without a v prefix.'
 }
 $versionParts = $Version.Split('-')[0].Split('.')
 if (@($versionParts | Where-Object { [long]$_ -gt 65534 }).Count) {

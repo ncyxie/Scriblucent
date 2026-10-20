@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, e.g. 1.0.0-beta.1 (without v)'
+        description: 'Release version, e.g. 1.0.0-beta.2 (without v)'
         required: true
         type: string
       publish:
@@ -47,7 +47,7 @@ jobs:
         run: |
           $version = if ($env:GITHUB_EVENT_NAME -eq 'push') { $env:GITHUB_REF_NAME.Substring(1) } else { $env:INPUT_VERSION }
           if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:[0-9A-Za-z-]+\.)*[0-9A-Za-z-]+))?$') {
-            throw 'Use a semantic version such as 1.0.0 or 1.0.0-beta.1, without v.'
+            throw 'Use a semantic version such as 1.0.0 or 1.0.0-beta.2, without v.'
           }
           $tag = "v$version"
           $existing = @(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}")
