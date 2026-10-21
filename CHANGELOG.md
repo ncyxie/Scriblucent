@@ -5,6 +5,7 @@
 - Smaller Windows installations with only English and Lithuanian language resources, clean AI worker publishing, and complete third-party notices.
 - Optional native file associations: opening an exported note, flashcard set, mind map, or quiz imports a library copy and opens its editor without modifying the original file.
 - Single-instance library protection and file handoff to the running app.
+- Opening a written-answer quiz no longer falsely marks it as edited or triggers an unnecessary save prompt.
 - Safer legacy data migration, upgrade and downgrade handling, and remembered setup choices.
 - Setup follows Windows light/dark mode, retains user libraries and models during uninstall, and verifies the AI CPU backend on x64 and ARM64.
 

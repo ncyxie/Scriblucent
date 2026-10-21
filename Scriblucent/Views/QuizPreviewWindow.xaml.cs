@@ -1179,7 +1179,9 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged, Scriblu
         if (!Enum.TryParse(item.Tag.ToString(), out QuizQuestionType type))
             return;
 
-        var oldType = question.Type;
+        // Loaded also selects the existing type; initializing the dropdown is not an edit.
+        if (question.Type == type)
+            return;
         question.Type = type;
 
         if (type == QuizQuestionType.PlainText)
