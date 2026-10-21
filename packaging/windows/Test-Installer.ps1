@@ -66,7 +66,7 @@ $noteFile = Join-Path $logs 'Import Žinios.scribnote'
 $mapFile = Join-Path $logs 'Import mind map.scribmap'
 $flashFile = Join-Path $logs 'Import flashcards.scribflash'
 $quizFile = Join-Path $logs 'Import quiz.scribquiz'
-@{ FormatVersion=1; Document=@{Id=[guid]::NewGuid().ToString();Title='Installer import note';Content=''} } | ConvertTo-Json -Depth 5 | Set-Content $noteFile -Encoding utf8
+@{ FormatVersion=1; Document=@{Id=[guid]::NewGuid().ToString();Title='Installer import note';Content=[Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('{\rtf1\ansi Installer test note}'))} } | ConvertTo-Json -Depth 5 | Set-Content $noteFile -Encoding utf8
 @{ FormatVersion=1; Document=@{Id=[guid]::NewGuid().ToString();Title='Installer import map';Root=@{Id=[guid]::NewGuid().ToString();Text='Planning';Children=@()}} } | ConvertTo-Json -Depth 6 | Set-Content $mapFile -Encoding utf8
 $flashManifest = @{ FormatVersion=1; Document=@{Id=[guid]::NewGuid().ToString();Title='Installer import flashcards';Cards=@(@{Id=[guid]::NewGuid().ToString();Question='Question';Answer='Answer'})} } | ConvertTo-Json -Depth 8
 $archive = [IO.Compression.ZipFile]::Open($flashFile, [IO.Compression.ZipArchiveMode]::Create)
@@ -89,7 +89,35 @@ try {
     Invoke-Setup $installer '' $false
     Invoke-Setup "$destination/unins000.exe" '' $false
     Assert-Condition (!$app.HasExited) 'Setup terminated the running application.'
-    Assert-Condition ($app.CloseMainWindow()) 'Could not request a graceful application close.'
+    # Process.MainWindowHandle can select an editor or helper window. Close the named dashboard instead.
+    Add-Type @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class InstallerAppWindows {
+    public delegate bool EnumProc(IntPtr handle, IntPtr parameter);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr parameter);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int capacity);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
+}
+'@
+    $script:dashboardHandle = [IntPtr]::Zero
+    [InstallerAppWindows+EnumProc]$findDashboard = {
+        param($handle, $parameter)
+        [uint32]$windowProcess = 0
+        [void][InstallerAppWindows]::GetWindowThreadProcessId($handle, [ref]$windowProcess)
+        if ($windowProcess -eq $app.Id) {
+            $title = [Text.StringBuilder]::new(512)
+            [void][InstallerAppWindows]::GetWindowText($handle, $title, $title.Capacity)
+            Write-Host "Application window: $title"
+            if ($title.ToString() -ceq 'Scriblucent') { $script:dashboardHandle = $handle }
+        }
+        return $true
+    }
+    [void][InstallerAppWindows]::EnumWindows($findDashboard, [IntPtr]::Zero)
+    Assert-Condition ($script:dashboardHandle -ne [IntPtr]::Zero) 'Could not locate the dashboard window.'
+    [void][InstallerAppWindows]::PostMessage($script:dashboardHandle, 0x10, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Condition ($app.WaitForExit(20000)) 'Application did not close gracefully.'
 } finally {
     if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }

@@ -31,6 +31,7 @@ function Read-AsciiZ([byte[]]$Bytes, [int]$Offset) {
 
 $checked = 0
 $importGraph = @{}
+$incorrectArchitectures = @{}
 $crtPattern = '^(msvcp140(?:_[0-9]+|_atomic_wait|_codecvt_ids)?|vcruntime140(?:_1)?|concrt140|vcomp140)\.dll$'
 foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object Extension -In '.dll','.exe') {
     $bytes = [IO.File]::ReadAllBytes($file.FullName)
@@ -46,7 +47,7 @@ foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object
         $ilOnly = ([BitConverter]::ToUInt32($bytes, $cliOffset + 16) -band 1) -ne 0
     }
     if ($machine -ne $expectedMachine -and !($machine -eq 0x14c -and $ilOnly)) {
-        throw "Incorrect PE architecture: $($file.FullName)"
+        $incorrectArchitectures[$file.FullName] = $machine
     }
     # Pure managed assemblies use the CLR loader; check native and mixed/R2R images below.
     if ($ilOnly -and $machine -eq 0x14c) { continue }
@@ -121,5 +122,10 @@ if ($PruneUnusedRedistributables) {
         }
     }
     Write-Host "Removed $removed unreferenced app-local VC redistributable copies."
+}
+foreach ($entry in $incorrectArchitectures.GetEnumerator()) {
+    if (Test-Path -LiteralPath $entry.Key) {
+        throw ('Incorrect PE architecture 0x{0:X4} (expected 0x{1:X4}): {2}' -f $entry.Value, $expectedMachine, $entry.Key)
+    }
 }
 Write-Host "Verified architecture and native imports for $checked binaries ($Architecture). Vulkan requires a compatible installed graphics driver."
