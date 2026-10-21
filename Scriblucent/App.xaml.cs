@@ -9,6 +9,9 @@ namespace Scriblucent;
 
 public partial class App : Application
 {
+    private AppInstanceCoordinator? _instance;
+    private bool _settingsInitialized;
+    private readonly LaunchImportQueue _launchImports = new();
     private static readonly string[] ElevationTokenKeys =
     {
         "Elevation.Thumb", "Elevation.Popup"
@@ -16,6 +19,38 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        LocalizationService.SetCulture(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+        string[] paths;
+        try { paths = LaunchImportQueue.ParseArguments(e.Args); }
+        catch (Exception ex) when (ex is ArgumentException or System.IO.IOException or NotSupportedException)
+        {
+            MessageBox.Show(LocalizationService.GetString("LaunchArgumentsInvalid"), "Scriblucent");
+            Shutdown(1);
+            return;
+        }
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        _instance = new AppInstanceCoordinator(System.IO.Path.Combine(localAppData, "Scriblucent"));
+        if (!_instance.IsOwner)
+        {
+            var forwarded = _instance.ForwardAsync(paths).GetAwaiter().GetResult();
+            if (!forwarded)
+                MessageBox.Show(LocalizationService.GetString("LaunchHandoffFailed"), "Scriblucent");
+            Shutdown(forwarded ? 0 : 1);
+            return;
+        }
+        _launchImports.Add(paths);
+        var migration = LegacyDataMigration.Run(localAppData);
+        if (migration == LegacyMigrationResult.Failed)
+        {
+            MessageBox.Show(LocalizationService.GetString("LegacyMigrationFailed"), "Scriblucent");
+            Shutdown(1);
+            return;
+        }
+        _instance.Listen(request => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _launchImports.Add(request);
+            if (MainWindow is MainWindow main) main.ProcessLaunchImports(_launchImports);
+        })));
         Scriblucent.Services.StartupProbe.Mark("onStartup");
         PopupScrollDragBehavior.Register();
         SmoothCaretBehavior.Register();
@@ -68,9 +103,8 @@ public partial class App : Application
             }
         };
 
-        AppSettingsService.MigrateLegacyDataFolder();
-
         var settings = AppSettingsService.Load();
+        _settingsInitialized = true;
         Scriblucent.Services.StartupProbe.Mark("settings");
 
         // Best-effort cleanup of old diagnostic and crash logs
@@ -98,6 +132,15 @@ public partial class App : Application
         MainWindow = window;
         WindowThemeService.ApplyThemeWhenReady(window, ThemeManager.CurrentTheme);
         window.ContentRendered += (_, _) => Scriblucent.Services.StartupProbe.Mark("shown");
+        window.ContentRendered += OnFirstContentRendered;
+        void OnFirstContentRendered(object? sender, EventArgs args)
+        {
+            window.ContentRendered -= OnFirstContentRendered;
+            if (migration == LegacyMigrationResult.Conflict)
+                ModernMessageBox.Show(LocalizationService.GetString("LegacyMigrationConflict"), "Scriblucent",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            window.ProcessLaunchImports(_launchImports);
+        }
         window.Show();
 
         // Startup probe: the first true idle after the library applied marks the moment the UI's
@@ -210,7 +253,12 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // No-op: Stop() was removed in Stage 14 cleanup
+        if (_instance?.IsOwner != true || !_settingsInitialized)
+        {
+            _instance?.Dispose();
+            base.OnExit(e);
+            return;
+        }
 
         // Give a still-in-flight/queued notes save a bounded chance to finish before the process
         // tears down - otherwise a relaunch soon after can race the old instance's still-writing
@@ -223,5 +271,6 @@ public partial class App : Application
 
         base.OnExit(e);
         AppSettingsService.Flush();
+        _instance.Dispose();
     }
 }

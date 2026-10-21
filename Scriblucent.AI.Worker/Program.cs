@@ -12,7 +12,8 @@ internal static class Program
     {
         var pipeName = GetPipeName(args);
         var requestedBackend = GetArgument(args, "--backend") ?? "cpu";
-        if (string.IsNullOrWhiteSpace(pipeName))
+        var selfTest = args.Contains("--self-test", StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(pipeName) && !selfTest)
         {
             Console.Error.WriteLine("Usage: Scriblucent.AI.Worker.exe --pipe <pipeName>");
             return 1;
@@ -28,6 +29,14 @@ internal static class Program
 
         try
         {
+            if (selfTest)
+            {
+                // Invoking NativeApi loads and initializes the real native backend, unlike a pipe handshake.
+                var information = Marshal.PtrToStringUTF8(NativeApi.llama_print_system_info());
+                if (string.IsNullOrWhiteSpace(information)) throw new InvalidOperationException("Native system information is empty.");
+                Console.WriteLine($"Native backend OK ({RuntimeInformation.ProcessArchitecture}, {(useVulkan ? "Vulkan" : "CPU")}): {information}");
+                return 0;
+            }
             await RunPipeServerAsync(pipeName, useVulkan);
             return 0;
         }

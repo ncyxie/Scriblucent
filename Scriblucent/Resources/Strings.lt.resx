@@ -1413,4 +1413,10 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="CalendarFriday" xml:space="preserve"><value>Penktadienis</value></data>
   <data name="CalendarSaturday" xml:space="preserve"><value>Šeštadienis</value></data>
   <data name="CalendarSunday" xml:space="preserve"><value>Sekmadienis</value></data>
+  <data name="LaunchArgumentsInvalid" xml:space="preserve"><value>Scriblucent failams importuoti naudokite Scriblucent.exe --import &quot;kelias&quot;.</value></data>
+  <data name="LaunchFileMissing" xml:space="preserve"><value>Failo nebėra arba jo negalima pasiekti.</value></data>
+  <data name="LaunchFileUnsupported" xml:space="preserve"><value>Pasirinkite .scribnote, .scribflash, .scribmap arba .scribquiz failą.</value></data>
+  <data name="LaunchHandoffFailed" xml:space="preserve"><value>Scriblucent jau veikia, bet neatsakė. Šiek tiek palaukite ir bandykite dar kartą.</value></data>
+  <data name="LegacyMigrationConflict" xml:space="preserve"><value>NoteCards ir Scriblucent duomenų aplankuose yra failų. Naudojama dabartinė Scriblucent biblioteka. NoteCards aplankas išsaugotas vietiniame AppData aplanke; niekas neperrašyta.</value></data>
+  <data name="LegacyMigrationFailed" xml:space="preserve"><value>Nepavyko perkelti NoteCards duomenų į Scriblucent. Pradinis aplankas liko vietiniame AppData aplanke. Uždarykite kitas programos kopijas ir patikrinkite aplanko teises.</value></data>
 </root>

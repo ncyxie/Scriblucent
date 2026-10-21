@@ -62,6 +62,24 @@ jobs:
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test application
+        run: dotnet test Scriblucent.Tests/Scriblucent.Tests.csproj -c Release -p:PublishReadyToRun=false --filter "Category!=RealModel&Category!=AiBenchmark" --blame-hang --blame-hang-timeout 90s --blame-hang-dump-type none --logger "trx;LogFileName=tests.trx"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: application-tests
+          path: '**/TestResults/*'
+          retention-days: 7
   build:
     needs: prepare
     strategy:
@@ -86,35 +104,12 @@ jobs:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           RELEASE_ARCH: ${{ matrix.architecture }}
         run: ./packaging/windows/Build-Installer.ps1 -Architecture $env:RELEASE_ARCH -Version $env:RELEASE_VERSION
-      - name: Verify installer can install and uninstall
+      - name: Verify installation lifecycle and user-data preservation
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           RELEASE_ARCH: ${{ matrix.architecture }}
-        run: |
-          $installer = Resolve-Path "artifacts/installers/$env:RELEASE_VERSION/win-$env:RELEASE_ARCH/setup/*-Setup.exe"
-          $destination = Join-Path $env:RUNNER_TEMP 'Scriblucent-install-check'
-          $log = Join-Path $env:RUNNER_TEMP 'Scriblucent-install-check.log'
-          $process = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$destination`" /LOG=`"$log`"" -WindowStyle Hidden -Wait -PassThru
-          if ($process.ExitCode -ne 0) { Get-Content $log; throw "Setup failed: $($process.ExitCode)" }
-          if (!(Test-Path "$destination/Scriblucent.exe") -or !(Test-Path "$destination/AIWorker/coreclr.dll")) { throw 'Installed files are incomplete.' }
-          # Disable machine runtimes for the worker smoke check: the installed copy must be self-contained.
-          $env:DOTNET_ROOT = Join-Path $env:RUNNER_TEMP 'no-global-dotnet'
-          $pipeName = 'scriblucent-ai-worker-' + [guid]::NewGuid().ToString('N')
-          $worker = Start-Process -FilePath "$destination/AIWorker/Scriblucent.AI.Worker.exe" -ArgumentList "--pipe $pipeName --backend cpu" -WindowStyle Hidden -PassThru
-          $pipe = [IO.Pipes.NamedPipeClientStream]::new('.', $pipeName, [IO.Pipes.PipeDirection]::InOut)
-          try { $pipe.Connect(15000) }
-          finally {
-            $pipe.Dispose()
-            if (!$worker.HasExited) { Stop-Process -Id $worker.Id -Force }
-          }
-          $app = Start-Process -FilePath "$destination/Scriblucent.exe" -WindowStyle Hidden -PassThru
-          try {
-            if (!$app.WaitForInputIdle(20000) -or $app.HasExited) { throw 'Installed application did not reach an idle UI.' }
-          } finally {
-            if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
-          }
-          $uninstall = Start-Process -FilePath "$destination/unins000.exe" -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -WindowStyle Hidden -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw "Uninstall failed: $($uninstall.ExitCode)" }
+        run: ./packaging/windows/Test-Installer.ps1 -Version $env:RELEASE_VERSION -Architecture $env:RELEASE_ARCH
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: setup-${{ matrix.architecture }}
@@ -123,8 +118,17 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: verification-${{ matrix.architecture }}
+          path: |
+            artifacts/installers/${{ needs.prepare.outputs.version }}/win-${{ matrix.architecture }}/package-inventory.json
+            ${{ runner.temp }}/Scriblucent-setup-tests/*.log
+            **/TestResults/*.trx
+          retention-days: 7
   release:
-    needs: [prepare, build]
+    needs: [prepare, test, build]
     if: github.event_name == 'push' || inputs.publish
     runs-on: windows-2025
     permissions:

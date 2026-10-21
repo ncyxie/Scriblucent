@@ -101,7 +101,8 @@ public partial class MainViewModel : ViewModelBase
     private const int TrashRetentionDays = 30;
     public event EventHandler? NotesDashboardReady;
 
-    public bool IsActiveDashboardReady => _activeDashboard switch
+    public bool IsActiveDashboardReady => IsDashboardReadyForImport(_activeDashboard);
+    internal bool IsDashboardReadyForImport(string dashboard) => dashboard switch
     {
         DashboardNotes => _isNotesDashboardReady,
         DashboardFlashcards => _isFlashcardsDashboardReady,
@@ -111,6 +112,8 @@ public partial class MainViewModel : ViewModelBase
     };
     public bool IsActiveDashboardLoadFailed => _dashboardLoadFailures.Contains(_activeDashboard)
         && !_dashboardLoadRetriesInProgress.Contains(_activeDashboard);
+    internal bool HasDashboardImportLoadFailed(string dashboard) => _dashboardLoadFailures.Contains(dashboard)
+        && !_dashboardLoadRetriesInProgress.Contains(dashboard);
 
     public bool IsNotesDashboardReady => _isNotesDashboardReady;
     public bool IsNotesDashboardLoading => IsNotesView && !_isNotesDashboardReady;

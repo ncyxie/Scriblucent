@@ -68,6 +68,15 @@ if (!$VcRedistPath) {
 }
 if (!$VcRedistPath) { throw "Install the Visual Studio C++ $Architecture redistributable components, or pass -VcRedistPath." }
 
+& $CompilerPath '/Qp' "/DOutputDir=$buildRoot/version-tests" (Join-Path $PSScriptRoot 'Test-VersionComparison.iss')
+if ($LASTEXITCODE -ne 0) { throw 'Installer version tests did not compile.' }
+$versionResult = Join-Path $buildRoot 'version-tests/result.txt'
+$versionTests = Start-Process -FilePath (Join-Path $buildRoot 'version-tests/VersionComparisonTests.exe') `
+    -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /ResultFile=`"$versionResult`"" -WindowStyle Hidden -Wait -PassThru
+if (!(Test-Path -LiteralPath $versionResult) -or [IO.File]::ReadAllText($versionResult) -cne 'passed') {
+    throw 'Installer semantic-version tests failed.'
+}
+
 & dotnet publish (Join-Path $repository 'Scriblucent/Scriblucent.csproj') -c Release -r "win-$Architecture" `
     --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false "-p:Version=$Version" -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
@@ -85,7 +94,7 @@ $required = @(
     'Scriblucent.exe', 'Scriblucent.dll', 'Scriblucent.deps.json', 'Scriblucent.runtimeconfig.json',
     'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll', 'PresentationFramework.dll',
     'libSkiaSharp.dll', 'libHarfBuzzSharp.dll', 'msvcp140.dll', 'vcruntime140.dll',
-    'LICENSE', 'LICENSE-VirtualizingWrapPanel', 'THIRD-PARTY-NOTICES.md',
+    'LICENSE', 'LICENSE-VirtualizingWrapPanel', 'THIRD-PARTY-NOTICES.md', 'Licenses/ThirdPartyNotices.txt',
     'AIWorker/Scriblucent.AI.Worker.exe', 'AIWorker/Scriblucent.AI.Worker.dll',
     'AIWorker/Scriblucent.AI.Worker.deps.json', 'AIWorker/Scriblucent.AI.Worker.runtimeconfig.json',
     'AIWorker/coreclr.dll', 'AIWorker/hostfxr.dll', 'AIWorker/hostpolicy.dll',
@@ -141,6 +150,18 @@ $unwanted = @(Get-ChildItem -LiteralPath $publishDir -Recurse -File | Where-Obje
     $_.Name -match '^(settings\.json|appsettings\.json|\.env)$'
 })
 if ($unwanted.Count) { throw "Unexpected files in installer: $($unwanted.Name -join ', ')" }
+
+& (Join-Path $PSScriptRoot 'Test-PublishedDependencies.ps1') -PublishDirectory $publishDir -Architecture $Architecture -PruneUnusedRedistributables
+if ($Architecture -eq [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()) {
+    & (Join-Path $publishDir 'AIWorker/Scriblucent.AI.Worker.exe') --self-test --backend cpu
+    if ($LASTEXITCODE -ne 0) { throw 'The packaged CPU backend failed its native self-test.' }
+}
+
+$payloadFiles = @(Get-ChildItem -LiteralPath $publishDir -Recurse -File)
+$payloadBytes = ($payloadFiles | Measure-Object Length -Sum).Sum
+$inventory = [ordered]@{ version=$Version; architecture=$Architecture; files=$payloadFiles.Count; bytes=$payloadBytes }
+$inventory | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'package-inventory.json') -Encoding utf8
+Write-Host "Payload: $($payloadFiles.Count) files, $([Math]::Round($payloadBytes / 1MB, 1)) MiB."
 
 & $CompilerPath "/DAppVersion=$Version" "/DNumericVersion=$($versionParts -join '.').0" `
     "/DTargetArch=$Architecture" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" (Join-Path $PSScriptRoot 'Scriblucent.iss')

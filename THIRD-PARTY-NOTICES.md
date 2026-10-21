@@ -1,6 +1,6 @@
 # Third-party notices
 
-Scriblucent uses the following third-party software. The links below identify each project and its license; those licenses apply only to the corresponding third-party components.
+Scriblucent uses the following third-party software. Complete component copyright, license and native dependency notices are included in [ThirdPartyNotices.txt](packaging/windows/ThirdPartyNotices.txt), installed under `Licenses`. Runtime-specific notices are also included there. These terms apply only to the corresponding third-party components.
 
 | Component | License | Project/license source |
 |---|---|---|
@@ -10,6 +10,7 @@ Scriblucent uses the following third-party software. The links below identify ea
 | LLamaSharp and LLamaSharp backends | MIT | https://github.com/SciSharp/LLamaSharp/blob/master/LICENSE |
 | llama.cpp | MIT | https://github.com/ggml-org/llama.cpp/blob/master/LICENSE |
 | MahApps.Metro.IconPacks | MIT | https://github.com/MahApps/MahApps.Metro.IconPacks/blob/develop/LICENSE |
+| Lucide and Feather icon artwork | ISC and MIT | https://github.com/lucide-icons/lucide/blob/main/LICENSE |
 | Microsoft.Bcl and Microsoft.Extensions support assemblies | MIT | https://github.com/dotnet/runtime |
 | .NET runtime and Windows Desktop runtime | MIT and third-party notices | `Licenses` directory in the installed application |
 | Microsoft Visual C++ runtime and OpenMP libraries | Microsoft Visual Studio redistribution terms | https://learn.microsoft.com/visualstudio/releases/2022/redistribution |
@@ -18,7 +19,7 @@ Scriblucent uses the following third-party software. The links below identify ea
 | SkiaSharp and SkiaSharp.HarfBuzz | MIT | https://github.com/mono/SkiaSharp/blob/main/LICENSE.md |
 | System.Interactive.Async and System.Linq.Async | MIT | https://github.com/dotnet/reactive |
 | System.Numerics.Tensors | MIT | https://github.com/dotnet/runtime |
-| WeCantSpell.Hunspell | MIT | https://github.com/aarondandy/WeCantSpell.Hunspell/blob/master/LICENSE |
+| WeCantSpell.Hunspell | MPL 1.1 (upstream also offers GPL/LGPL alternatives) | https://github.com/aarondandy/WeCantSpell.Hunspell/tree/ab5709d95b2d23541984d22baa0ab2d1e783582f |
 | VirtualizingWrapPanel | MIT | `LICENSE-VirtualizingWrapPanel` (included in the installation) |
 
 Model files are downloaded on demand from the URLs in the model manifest and are not included in Scriblucent's source repository or setup installers.

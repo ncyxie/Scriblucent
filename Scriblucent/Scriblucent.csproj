@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>1.0.0-beta.2</Version>
+    <Version>1.0.0-beta.3</Version>
     <Authors>ncyxie</Authors>
     <Company>ncyxie</Company>
     <Product>Scriblucent</Product>
@@ -14,6 +14,7 @@
     <ApplicationIcon>logo.ico</ApplicationIcon>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <SatelliteResourceLanguages>en;lt</SatelliteResourceLanguages>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
     <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
   </PropertyGroup>
@@ -27,6 +28,7 @@
   <ItemGroup>
     <None Include="..\LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\packaging\windows\ThirdPartyNotices.txt" Link="Licenses\ThirdPartyNotices.txt" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Panels\VirtualizingWrapPanel\LICENSE" Link="LICENSE-VirtualizingWrapPanel" CopyToPublishDirectory="PreserveNewest" />
     <None Include="Assets\Models\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -86,14 +88,13 @@
           UseHardlinksIfPossible="false" />
   </Target>
 
-  <Target Name="CopyAiWorkerPublishOutput" AfterTargets="Publish" DependsOnTargets="CopyAiWorkerBuildOutput">
-    <ItemGroup>
-      <AiWorkerPublishOutputFiles Include="$(AiWorkerOutputPath)**\*"
-                                  Exclude="$(AiWorkerOutputExcludes)" />
-    </ItemGroup>
-    <Copy SourceFiles="@(AiWorkerPublishOutputFiles)"
-          DestinationFolder="$(PublishDir)AIWorker\%(RecursiveDir)"
-          SkipUnchangedFiles="true" />
+  <Target Name="CopyAiWorkerPublishOutput" AfterTargets="Publish">
+    <PropertyGroup>
+      <AiWorkerPublishDirectory>$([System.IO.Path]::GetFullPath('$(PublishDir)AIWorker\'))</AiWorkerPublishDirectory>
+    </PropertyGroup>
+    <RemoveDir Directories="$(AiWorkerPublishDirectory)" />
+    <MSBuild Projects="..\Scriblucent.AI.Worker\Scriblucent.AI.Worker.csproj" Targets="Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(AiWorkerPublishDirectory);PublishSingleFile=false;PublishTrimmed=false" />
   </Target>
 
   <Target Name="ValidateAiWorkerPublish" AfterTargets="CopyAiWorkerPublishOutput">

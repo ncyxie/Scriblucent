@@ -1891,7 +1891,7 @@ namespace Scriblucent
 
                 if (NoteFileService.IsNotePackagePath(path))
                 {
-                    OpenNoteEditor(vm.AddNoteFromDocument(NoteFileService.LoadNotePackage(path)));
+                    ImportNativeNote(path, vm);
                     return;
                 }
 
@@ -2199,13 +2199,18 @@ namespace Scriblucent
             if (openFileDialog.ShowDialog() != true)
                 return;
 
+            ImportFlashcardsFiles(openFileDialog.FileNames);
+        }
+
+        private void ImportFlashcardsFiles(string[] fileNames, bool openEditor = false)
+        {
             if (DataContext is not MainViewModel vm)
                 return;
 
             // Ask once for the whole batch, and only if at least one selected file could actually
             // carry progress data - CSV/TXT can never represent it, so they never trigger this.
             var keepProgress = false;
-            var progressCapableFiles = openFileDialog.FileNames
+            var progressCapableFiles = fileNames
                 .Where(FlashcardFileService.IsScribFlashPath)
                 .ToList();
 
@@ -2253,7 +2258,7 @@ namespace Scriblucent
 
             var imported = new List<FlashcardSetDocument>();
             var warnings = new List<string>();
-            foreach (var filePath in openFileDialog.FileNames)
+            foreach (var filePath in fileNames)
             {
                 try
                 {
@@ -2281,6 +2286,12 @@ namespace Scriblucent
             // Single batch add so a multi-file import pays one save, not one per file - see
             // MainViewModel.AddImportedFlashcardSets for the same reasoning AddImportedQuizzes documents.
             vm.AddImportedFlashcardSets(imported);
+
+            if (openEditor)
+            {
+                foreach (var document in imported) EditorWorkspace.OpenFlashcards(document);
+                if (warnings.Count == 0) return;
+            }
 
             var summary = string.Format(LocalizationService.GetString("FlashcardImportSuccessCount"), imported.Count);
             if (warnings.Count > 0)
@@ -4431,11 +4442,16 @@ namespace Scriblucent
             if (openFileDialog.ShowDialog() != true)
                 return;
 
+            ImportMindMapFiles(openFileDialog.FileNames);
+        }
+
+        private void ImportMindMapFiles(string[] fileNames, bool openEditor = false)
+        {
             if (DataContext is not MainViewModel vm)
                 return;
 
             var imported = new List<MindMapDocument>();
-            foreach (var filePath in openFileDialog.FileNames)
+            foreach (var filePath in fileNames)
             {
                 try
                 {
@@ -4460,6 +4476,12 @@ namespace Scriblucent
             // get the same protection Notes' import gets from QueueSaveNotes' debounce.
             vm.AddImportedMindMaps(imported);
 
+            if (openEditor)
+            {
+                foreach (var document in imported) EditorWorkspace.OpenMindMap(document);
+                return;
+            }
+
             ModernMessageBox.Show(
                 string.Format(LocalizationService.GetString("MindMapImportSuccessCount"), imported.Count),
                 LocalizationService.GetString("MindMapImport"),
@@ -4479,13 +4501,18 @@ namespace Scriblucent
             if (openFileDialog.ShowDialog() != true)
                 return;
 
+            ImportQuizFiles(openFileDialog.FileNames);
+        }
+
+        private void ImportQuizFiles(string[] fileNames, bool openEditor = false)
+        {
             if (DataContext is not MainViewModel vm)
                 return;
 
             // Ask once for the whole batch, and only if at least one selected file could actually
             // carry progress data - GIFT/CSV can never represent it, so they never trigger this.
             var keepProgress = false;
-            var progressCapableFiles = openFileDialog.FileNames
+            var progressCapableFiles = fileNames
                 .Where(path => QuizFileService.IsScribQuizPath(path) || QuizFileService.IsLegacyJsonPath(path))
                 .ToList();
 
@@ -4533,7 +4560,7 @@ namespace Scriblucent
 
             var imported = new List<QuizDocument>();
             var warnings = new List<string>();
-            foreach (var filePath in openFileDialog.FileNames)
+            foreach (var filePath in fileNames)
             {
                 try
                 {
@@ -4561,6 +4588,12 @@ namespace Scriblucent
             // Single batch add so a multi-file import pays one save, not one per file - see
             // MainViewModel.AddImportedQuizzes for the same reasoning AddImportedMindMaps documents.
             vm.AddImportedQuizzes(imported);
+
+            if (openEditor)
+            {
+                foreach (var document in imported) EditorWorkspace.OpenQuiz(document);
+                if (warnings.Count == 0) return;
+            }
 
             var summary = string.Format(LocalizationService.GetString("QuizImportSuccessCount"), imported.Count);
             if (warnings.Count > 0)

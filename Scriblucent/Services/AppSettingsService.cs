@@ -25,23 +25,6 @@ public static class AppSettingsService
         return Path.Combine(dir, "settings.json");
     }
 
-    public static void MigrateLegacyDataFolder()
-    {
-        try
-        {
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var legacyDir = Path.Combine(localAppData, "NoteCards");
-            var currentDir = Path.Combine(localAppData, "Scriblucent");
-
-            if (Directory.Exists(legacyDir) && !Directory.Exists(currentDir))
-                Directory.Move(legacyDir, currentDir);
-        }
-        catch
-        {
-            // Best-effort migration only; the app will start fresh if this fails.
-        }
-    }
-
     /// <summary>Returns the shared in-memory settings instance, reading from disk only on first call per process.</summary>
     public static AppSettings Load()
     {
