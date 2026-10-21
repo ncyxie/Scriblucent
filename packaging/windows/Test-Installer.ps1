@@ -118,7 +118,28 @@ public static class InstallerAppWindows {
     [void][InstallerAppWindows]::EnumWindows($findDashboard, [IntPtr]::Zero)
     Assert-Condition ($script:dashboardHandle -ne [IntPtr]::Zero) 'Could not locate the dashboard window.'
     [void][InstallerAppWindows]::PostMessage($script:dashboardHandle, 0x10, [IntPtr]::Zero, [IntPtr]::Zero)
-    Assert-Condition ($app.WaitForExit(20000)) 'Application did not close gracefully.'
+    if (!$app.WaitForExit(20000)) {
+        # Capture only this disposable test application's controls, never the runner desktop.
+        $captureScript = Join-Path $logs 'Capture-AppControls.ps1'
+        @'
+param([int]$ApplicationProcessId, [string]$OutputFile)
+Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
+$condition = [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ProcessIdProperty, $ApplicationProcessId)
+$controls = [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Descendants, $condition)
+$lines = foreach ($control in $controls) {
+    try {
+        $state = $control.Current
+        if ($state.Name) { "$($state.ControlType.ProgrammaticName): $($state.Name)" }
+    } catch { }
+}
+[IO.File]::WriteAllLines($OutputFile, [string[]]$lines, [Text.UTF8Encoding]::new($false))
+'@ | Set-Content -LiteralPath $captureScript -Encoding utf8
+        $output = Join-Path $logs 'application-controls.log'
+        $capture = Start-Process -FilePath "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" `
+            -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$captureScript`" -ApplicationProcessId $($app.Id) -OutputFile `"$output`"" -WindowStyle Hidden -PassThru
+        if ($capture.WaitForExit(15000) -and (Test-Path $output)) { Get-Content $output }
+        throw 'Application did not close gracefully.'
+    }
 } finally {
     if (!$app.HasExited) { Stop-Process -Id $app.Id -Force }
 }
