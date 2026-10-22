@@ -80,9 +80,11 @@ if (!(Test-Path -LiteralPath $versionResult) -or [IO.File]::ReadAllText($version
 & $CompilerPath '/Qp' "/DOutputDir=$buildRoot/shortcut-tests" (Join-Path $PSScriptRoot 'Test-ShortcutCleanup.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Installer shortcut tests did not compile.' }
 $shortcutResult = Join-Path $buildRoot 'shortcut-tests/result.txt'
+$shortcutLog = Join-Path $buildRoot 'shortcut-tests/setup.log'
 $shortcutTests = Start-Process -FilePath (Join-Path $buildRoot 'shortcut-tests/ShortcutCleanupTests.exe') `
-    -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /ResultFile=`"$shortcutResult`"" -WindowStyle Hidden -Wait -PassThru
+    -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /ResultFile=`"$shortcutResult`" /LOG=`"$shortcutLog`"" -WindowStyle Hidden -Wait -PassThru
 if (!(Test-Path -LiteralPath $shortcutResult) -or [IO.File]::ReadAllText($shortcutResult) -cne 'passed') {
+    if (Test-Path -LiteralPath $shortcutLog) { Get-Content -LiteralPath $shortcutLog }
     throw 'Installer Unicode shortcut cleanup tests failed.'
 }
 
