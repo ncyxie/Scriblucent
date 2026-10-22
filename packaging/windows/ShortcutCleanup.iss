@@ -15,7 +15,8 @@ begin
   Item := Unassigned;
   Folder := Unassigned;
   Shell := Unassigned;
-  if CompareText(Target, ExpectedTarget) <> 0 then begin
+  { Shell may expand an 8.3 directory such as RUNNER~1 to its long name. }
+  if CompareText(GetShortName(Target), GetShortName(ExpectedTarget)) <> 0 then begin
     Log('Preserving shortcut with another target: ' + ShortcutPath + ' -> ' + Target);
     exit;
   end;

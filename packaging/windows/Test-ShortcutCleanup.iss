@@ -28,6 +28,9 @@ begin
   if not FileExists(ShortcutPath) then RaiseException('Removed another application shortcut');
   RemoveOwnedShortcut(ShortcutPath, Target);
   if FileExists(ShortcutPath) then RaiseException('Retained the owned Unicode shortcut');
+  CreateShellLink(ShortcutPath, '', Target, '', Directory, '', 0, SW_SHOWNORMAL);
+  RemoveOwnedShortcut(ShortcutPath, GetShortName(Target));
+  if FileExists(ShortcutPath) then RaiseException('Retained the owned short-path shortcut');
   RemoveOwnedShortcut(ShortcutPath, Target); { Already absent is harmless. }
   if not SaveStringToFile(ExpandConstant('{param:ResultFile}'), 'passed', False) then
     RaiseException('Could not save shortcut test result');
