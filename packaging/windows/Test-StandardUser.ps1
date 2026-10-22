@@ -1,12 +1,12 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$InstallationDirectory, [Parameter(Mandatory)][string]$OutputDirectory)
+param([string]$InstallationDirectory, [Parameter(Mandatory)][string]$OutputDirectory, [switch]$ProfileOnly)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run account-isolation checks only on disposable CI runners.' }
+if (!$ProfileOnly -and !(Test-Path -LiteralPath $InstallationDirectory -PathType Container)) { throw 'Installation directory is required.' }
 $name = 'ScribSetup' + [guid]::NewGuid().ToString('N').Substring(0,8)
 $password = ConvertTo-SecureString ([guid]::NewGuid().ToString('N') + 'aA1!') -AsPlainText -Force
 $account = New-LocalUser -Name $name -Password $password -Description 'Disposable installer verification account'
-$credential = [pscredential]::new("$env:COMPUTERNAME\$name", $password)
 $shared = Join-Path ([Environment]::GetFolderPath('CommonDocuments')) $name
 New-Item -ItemType Directory -Path $shared, $OutputDirectory -Force | Out-Null
 $sid = $account.SID.Value
@@ -14,7 +14,7 @@ $sid = $account.SID.Value
 if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare standard-user test workspace.' }
 $script = Join-Path $shared 'Verify-Installation.ps1'
 $body = @'
-param([string]$InstallationDirectory, [string]$OutputDirectory)
+param([string]$InstallationDirectory, [string]$OutputDirectory, [switch]$ProfileOnly)
 $ErrorActionPreference = 'Stop'
 $app = $null
 try {
@@ -23,9 +23,14 @@ try {
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'The test account is elevated.' }
     # This account has never signed in through Explorer. Initialize its Windows known folder first.
     $localData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData, [Environment+SpecialFolderOption]::Create)
-    $profile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-    if (!$localData -or !$profile -or !$localData.StartsWith($profile.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Windows did not initialize a separate Local AppData folder for the test account.'
+    $testProfilePath = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    $registeredProfile = (Get-ItemProperty -LiteralPath ("HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\" + $identity.User.Value)).ProfileImagePath
+    if (!$localData -or !$testProfilePath -or $testProfilePath -ine $registeredProfile -or !$localData.StartsWith($testProfilePath.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Windows did not initialize the test account's profile: user=$($identity.Name), registered=$registeredProfile, known=$testProfilePath, local=$localData, environment=$env:USERPROFILE."
+    }
+    if ($ProfileOnly) {
+        [IO.File]::WriteAllText((Join-Path $OutputDirectory 'passed.txt'), 'Passed: disposable standard account has its own Windows profile and Local AppData folder.')
+        exit 0
     }
     $denied = $false
     try { $stream = [IO.File]::Open((Join-Path $InstallationDirectory 'LICENSE'), [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite); $stream.Dispose() }
@@ -84,8 +89,20 @@ public static class StandardUserWindows {
 '@
 [IO.File]::WriteAllText($script, $body, [Text.UTF8Encoding]::new($true))
 try {
-    $process = Start-Process -FilePath "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe" -Credential $credential -LoadUserProfile `
-        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -InstallationDirectory `"$InstallationDirectory`" -OutputDirectory `"$shared`"" -WindowStyle Hidden -PassThru
+    # Leave Environment untouched so Windows creates the new account's environment instead of inheriting the runner's.
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = "$env:WINDIR/System32/WindowsPowerShell/v1.0/powershell.exe"
+    $start.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -OutputDirectory `"$shared`""
+    if ($ProfileOnly) { $start.Arguments += ' -ProfileOnly' }
+    else { $start.Arguments += " -InstallationDirectory `"$InstallationDirectory`"" }
+    $start.UseShellExecute = $false
+    $start.UserName = $name
+    $start.Domain = $env:COMPUTERNAME
+    $start.Password = $password
+    $start.LoadUserProfile = $true
+    $start.CreateNoWindow = $true
+    $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $process = [Diagnostics.Process]::Start($start)
     if (!$process.WaitForExit(180000)) { Stop-Process -Id $process.Id -Force; throw 'Standard-user verification timed out.' }
     foreach ($file in Get-ChildItem $shared -File | Where-Object Extension -eq '.log') { Copy-Item -LiteralPath $file.FullName -Destination $OutputDirectory }
     if ($process.ExitCode -ne 0 -or !(Test-Path "$shared/passed.txt")) {

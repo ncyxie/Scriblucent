@@ -44,6 +44,7 @@ if (!$CompilerPath) {
 }
 if (!(Test-Path -LiteralPath $CompilerPath -PathType Leaf)) { throw 'Install Inno Setup 6 or pass -CompilerPath.' }
 & (Join-Path $PSScriptRoot 'Test-InstallerLanguages.ps1') -EnglishCatalog (Join-Path (Split-Path $CompilerPath) 'Default.isl')
+if ($env:GITHUB_ACTIONS -eq 'true') { & (Join-Path $PSScriptRoot 'Test-StandardUser.ps1') -ProfileOnly -OutputDirectory (Join-Path $buildRoot 'profile-tests') }
 & (Join-Path $PSScriptRoot 'Build-SetupHelper.ps1') -Architecture $Architecture -OutputDirectory (Join-Path $buildRoot 'helper')
 $helperPath = Join-Path $buildRoot 'helper/SetupHelper.exe'
 & (Join-Path $PSScriptRoot 'Test-SetupHelper.ps1') -HelperPath $helperPath -OutputDirectory (Join-Path $buildRoot 'helper-tests')
