@@ -103,7 +103,9 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
           RELEASE_ARCH: ${{ matrix.architecture }}
-        run: ./packaging/windows/Build-Installer.ps1 -Architecture $env:RELEASE_ARCH -Version $env:RELEASE_VERSION
+        run: |
+          $compiler = ./packaging/windows/Get-InnoSetup.ps1 -Destination "$env:RUNNER_TEMP/Scriblucent-compiler"
+          ./packaging/windows/Build-Installer.ps1 -Architecture $env:RELEASE_ARCH -Version $env:RELEASE_VERSION -CompilerPath $compiler
       - name: Verify installation lifecycle and user-data preservation
         env:
           GH_TOKEN: ${{ github.token }}
@@ -124,7 +126,7 @@ jobs:
           name: verification-${{ matrix.architecture }}
           path: |
             artifacts/installers/${{ needs.prepare.outputs.version }}/win-${{ matrix.architecture }}/package-inventory.json
-            ${{ runner.temp }}/Scriblucent-setup-tests/*.log
+            ${{ runner.temp }}/Scriblucent-setup-tests/**/*.log
             **/TestResults/*.trx
           retention-days: 7
   release:

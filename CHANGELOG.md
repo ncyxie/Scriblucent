@@ -2,6 +2,8 @@
 
 ## 1.0.0-beta.3
 
+- Windows setup now installs for all users in Program Files, safely converts existing per-user installations, and provides English and Lithuanian setup text.
+- Upgrade recovery restores program files and Windows integration after cancellation or failure, with retained recovery state for interrupted installs.
 - Smaller Windows installations with only English and Lithuanian language resources, clean AI worker publishing, and complete third-party notices.
 - Optional native file associations: opening an exported note, flashcard set, mind map, or quiz imports a library copy and opens its editor without modifying the original file.
 - Single-instance library protection and file handoff to the running app.

@@ -8,10 +8,10 @@ Set-StrictMode -Version Latest
 # Lifecycle tests run only on disposable CI users; never replace a developer's installation or library.
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run installer lifecycle tests on a disposable GitHub Actions runner.' }
 $data = Join-Path $env:LOCALAPPDATA 'Scriblucent'
-$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A225-1F0D-43A6-9AF9-C6A8F8CAAA72}_is1'
+$uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A225-1F0D-43A6-9AF9-C6A8F8CAAA72}_is1'
 if ((Test-Path $data) -or (Test-Path $uninstallKey)) { throw 'The runner already contains Scriblucent user data or an installation.' }
 $installer = (Resolve-Path "artifacts/installers/$Version/win-$Architecture/setup/*-Setup.exe").Path
-$destination = Join-Path $env:RUNNER_TEMP 'Scriblucent setup Žinių biblioteka'
+$destination = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Scriblucent'
 $logs = Join-Path $env:RUNNER_TEMP 'Scriblucent-setup-tests'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 $script:sequence = 0
@@ -50,12 +50,13 @@ function Assert-DataPreserved {
     }
 }
 
-Invoke-Setup $installer "/DIR=`"$destination`" /TASKS=`"`""
-$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'Scriblucent.lnk'
-$desktop = Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Scriblucent.lnk'
+Invoke-Setup $installer '/TASKS="" /LANG=english'
+$startMenu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Scriblucent.lnk'
+$desktop = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Scriblucent.lnk'
+Assert-Condition ((Get-ItemProperty $uninstallKey).InstallLocation.TrimEnd('\') -eq $destination.TrimEnd('\')) 'Fresh install did not use Program Files.'
 Assert-Condition (Test-Path $startMenu) 'Start menu shortcut is missing.'
 Assert-Condition (!(Test-Path $desktop)) 'Desktop shortcut should be opt-in.'
-Assert-Condition (!(Test-Path 'HKCU:\Software\Classes\Scriblucent.Note')) 'File associations should be opt-in.'
+Assert-Condition (!(Test-Path 'HKLM:\Software\Classes\Scriblucent.Note')) 'File associations should be opt-in.'
 Assert-Condition (Test-Path "$destination/AIWorker/coreclr.dll") 'Worker is not self-contained.'
 $env:DOTNET_ROOT = Join-Path $env:RUNNER_TEMP 'no-global-dotnet'
 & "$destination/AIWorker/Scriblucent.AI.Worker.exe" --self-test --backend cpu
@@ -154,14 +155,14 @@ $script:dataHashes = @{}
 Get-ChildItem $data -Recurse -File | ForEach-Object { $script:dataHashes[$_.FullName] = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
 
 # Reinstall with optional integrations, preserving a different application's existing default.
-New-Item 'HKCU:\Software\Classes\.scribnote' -Force | Out-Null
-Set-Item 'HKCU:\Software\Classes\.scribnote' -Value 'AnotherApplication.Note'
+New-Item 'HKLM:\Software\Classes\.scribnote' -Force | Out-Null
+Set-Item 'HKLM:\Software\Classes\.scribnote' -Value 'AnotherApplication.Note'
 Invoke-Setup $installer '/TASKS="desktopicon,fileassociations"'
 Assert-Condition (Test-Path $desktop) 'Requested desktop shortcut is missing.'
-$associationCommand = (Get-Item 'HKCU:\Software\Classes\Scriblucent.Note\shell\open\command').GetValue('')
+$associationCommand = (Get-Item 'HKLM:\Software\Classes\Scriblucent.Note\shell\open\command').GetValue('')
 Assert-Condition ($associationCommand -ceq "`"$destination\Scriblucent.exe`" --import `"%1`"") 'Association command is not correctly quoted.'
-Assert-Condition ((Get-Item 'HKCU:\Software\Classes\.scribnote').GetValue('') -eq 'AnotherApplication.Note') 'Setup replaced another application default.'
-foreach ($type in @('Flashcards','MindMap','Quiz')) { Assert-Condition (Test-Path "HKCU:\Software\Classes\Scriblucent.$type\shell\open\command") "Missing association: $type" }
+Assert-Condition ((Get-Item 'HKLM:\Software\Classes\.scribnote').GetValue('') -eq 'AnotherApplication.Note') 'Setup replaced another application default.'
+foreach ($type in @('Flashcards','MindMap','Quiz')) { Assert-Condition (Test-Path "HKLM:\Software\Classes\Scriblucent.$type\shell\open\command") "Missing association: $type" }
 Assert-DataPreserved
 
 # Simulate an installed stable version to exercise the new installer's semantic downgrade guard.
@@ -170,16 +171,44 @@ try { Invoke-Setup $installer '' $false }
 finally { Set-ItemProperty $uninstallKey -Name DisplayVersion -Value $Version }
 Invoke-Setup $installer
 Assert-Condition (Test-Path $desktop) 'Upgrade did not retain the desktop shortcut choice.'
-Assert-Condition (Test-Path 'HKCU:\Software\Classes\Scriblucent.Note') 'Upgrade did not retain association choice.'
+Assert-Condition (Test-Path 'HKLM:\Software\Classes\Scriblucent.Note') 'Upgrade did not retain association choice.'
 Invoke-Setup $installer '/TASKS=""'
-Assert-Condition (!(Test-Path 'HKCU:\Software\Classes\Scriblucent.Note')) 'Disabling associations did not remove owned registrations.'
+Assert-Condition (!(Test-Path 'HKLM:\Software\Classes\Scriblucent.Note')) 'Disabling associations did not remove owned registrations.'
 Assert-Condition (!(Test-Path $desktop)) 'Disabling the desktop shortcut did not remove it.'
+
+# Exercise real replacement, cancellation and abrupt termination with a non-distributable test installer.
+$recoveryInstaller = (Resolve-Path "artifacts/installers/$Version/win-$Architecture/recovery-tests/RecoveryTestSetup.exe").Path
+$sentinel = Join-Path $destination 'setup-recovery-fixture.txt'
+[IO.File]::WriteAllText($sentinel, 'Preserve files that were present before an upgrade.')
+$programHashes = @{}
+Get-ChildItem $destination -Recurse -File | ForEach-Object { $programHashes[$_.FullName] = (Get-FileHash $_.FullName).Hash }
+function Assert-ProgramRestored {
+    foreach ($entry in $programHashes.GetEnumerator()) {
+        Assert-Condition ((Test-Path -LiteralPath $entry.Key) -and (Get-FileHash -LiteralPath $entry.Key).Hash -eq $entry.Value) "Failed to restore program file: $($entry.Key)"
+    }
+    Assert-Condition ((Get-ItemProperty $uninstallKey).DisplayVersion -eq $Version) 'Failed to restore installed version.'
+    Assert-Condition ((Get-Item 'HKLM:\Software\Classes\.scribnote').GetValue('') -eq 'AnotherApplication.Note') 'Rollback changed another file handler.'
+    Assert-DataPreserved
+}
+foreach ($fault in @('cancel','failure')) {
+    Invoke-Setup $recoveryInstaller "/RecoveryTestFault=$fault /TASKS=`"desktopicon,fileassociations`"" $false
+    Assert-ProgramRestored
+}
+Invoke-Setup $recoveryInstaller '/RecoveryTestFault=crash' $false
+Assert-Condition (Test-Path "$env:ProgramData/Scriblucent/InstallerRecovery/state.ini") 'Interrupted setup did not retain its recovery journal.'
+Invoke-Setup $recoveryInstaller '/RecoveryTestFault=after-recovery' $false
+Assert-ProgramRestored
+Assert-Condition (!(Test-Path "$env:ProgramData/Scriblucent/InstallerRecovery")) 'Recovered setup retained its backup.'
+Remove-Item -LiteralPath $sentinel
+
+& (Join-Path $PSScriptRoot 'Test-StandardUser.ps1') -InstallationDirectory $destination -OutputDirectory (Join-Path $logs 'standard-user')
+Assert-DataPreserved
 Invoke-Setup "$destination/unins000.exe"
 Assert-Condition (!(Test-Path $startMenu)) 'Uninstall retained its Start menu shortcut.'
-Assert-Condition ((Get-Item 'HKCU:\Software\Classes\.scribnote').GetValue('') -eq 'AnotherApplication.Note') 'Uninstall removed another application registration.'
+Assert-Condition ((Get-Item 'HKLM:\Software\Classes\.scribnote').GetValue('') -eq 'AnotherApplication.Note') 'Uninstall removed another application registration.'
 Assert-DataPreserved
 
-# Verify upgrade from the actual published beta.2, with no changes to that public release.
+# Convert the actual beta.2 and the pinned previous beta.3 per-user installer.
 $previous = Join-Path $logs 'previous'
 New-Item -ItemType Directory -Path $previous | Out-Null
 & gh release download v1.0.0-beta.2 --repo ncyxie/Scriblucent --pattern "*-win-$Architecture-Setup.exe*" --dir $previous
@@ -187,12 +216,26 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not download the published upgrade basel
 $oldInstaller = (Get-ChildItem $previous -Filter '*-Setup.exe').FullName
 $expected = ([IO.File]::ReadAllText("$oldInstaller.sha256")).Split(' ')[0]
 Assert-Condition ((Get-FileHash $oldInstaller -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expected) 'Baseline checksum failed.'
-Invoke-Setup $oldInstaller "/DIR=`"$destination`" /TASKS=`"`""
-Invoke-Setup $installer
-Assert-Condition ((Get-ItemProperty $uninstallKey).InstallLocation.TrimEnd('\') -eq $destination.TrimEnd('\')) 'Upgrade changed the installation directory.'
-Assert-Condition (!(Test-Path "$destination/cs/PresentationFramework.resources.dll")) 'Upgrade retained obsolete language resources.'
-Assert-DataPreserved
-Invoke-Setup "$destination/unins000.exe"
-Assert-DataPreserved
-Write-Host 'Passed: install, native CPU loading, shell imports, instance handoff, running-app guards, reinstall, upgrade, downgrade rejection, optional integrations, and user-data preservation.'
+$legacyBeta3 = (Get-ChildItem "artifacts/installers/$Version/win-$Architecture/legacy-tests" -Filter '*-Setup.exe').FullName
+$legacyKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A225-1F0D-43A6-9AF9-C6A8F8CAAA72}_is1'
+$legacyIndex = 0
+foreach ($baseline in @($oldInstaller, $legacyBeta3)) {
+    $legacyIndex++
+    $legacyDestination = Join-Path $env:RUNNER_TEMP "Scriblucent legacy Žinių biblioteka $legacyIndex"
+    Invoke-Setup $baseline "/DIR=`"$legacyDestination`" /TASKS=`"desktopicon,fileassociations`""
+    Assert-Condition (Test-Path $legacyKey) 'Legacy fixture did not create a per-user installation.'
+    Invoke-Setup $installer '/LANG=lithuanian'
+    Assert-Condition ((Get-ItemProperty $uninstallKey).InstallLocation.TrimEnd('\') -eq $destination.TrimEnd('\')) 'Conversion did not use Program Files.'
+    Assert-Condition (!(Test-Path $legacyKey)) 'Conversion retained the per-user uninstall registration.'
+    Wait-For { !(Test-Path "$legacyDestination/Scriblucent.exe") } 'legacy binary removal'
+    Assert-Condition (!(Test-Path (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Scriblucent.lnk'))) 'Conversion retained the personal desktop shortcut.'
+    Assert-Condition (Test-Path $desktop) 'Conversion did not preserve the selected desktop shortcut option.'
+    foreach ($type in @('Note','Flashcards','MindMap','Quiz')) {
+        Assert-Condition (!(Test-Path "HKCU:\Software\Classes\Scriblucent.$type")) 'Conversion retained a per-user file handler.'
+    }
+    Assert-DataPreserved
+    Invoke-Setup "$destination/unins000.exe"
+    Assert-DataPreserved
+}
+Write-Host 'Passed: all-users install, native CPU loading, shell imports, instance handoff, running-app guards, reinstall, rollback, interrupted-upgrade recovery, per-user conversion, downgrade rejection, optional integrations, and user-data preservation.'
 Write-Host 'These are hosted-runner checks, not a clean-Windows virtual machine certification.'

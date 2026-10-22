@@ -43,6 +43,11 @@ if (!$CompilerPath) {
     else { $CompilerPath = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe' }
 }
 if (!(Test-Path -LiteralPath $CompilerPath -PathType Leaf)) { throw 'Install Inno Setup 6 or pass -CompilerPath.' }
+& (Join-Path $PSScriptRoot 'Test-InstallerLanguages.ps1') -EnglishCatalog (Join-Path (Split-Path $CompilerPath) 'Default.isl')
+& (Join-Path $PSScriptRoot 'Build-SetupHelper.ps1') -Architecture $Architecture -OutputDirectory (Join-Path $buildRoot 'helper')
+$helperPath = Join-Path $buildRoot 'helper/SetupHelper.exe'
+& (Join-Path $PSScriptRoot 'Test-SetupHelper.ps1') -HelperPath $helperPath -OutputDirectory (Join-Path $buildRoot 'helper-tests')
+& (Join-Path $PSScriptRoot 'Build-RecoveryTest.ps1') -CompilerPath $CompilerPath -HelperPath $helperPath -Architecture $Architecture -Version $Version -OutputDirectory (Join-Path $buildRoot 'recovery-tests')
 
 if (!$VcRedistPath) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -91,8 +96,9 @@ if (!(Test-Path -LiteralPath $shortcutResult) -or [IO.File]::ReadAllText($shortc
 & dotnet publish (Join-Path $repository 'Scriblucent/Scriblucent.csproj') -c Release -r "win-$Architecture" `
     --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false "-p:Version=$Version" -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
+& (Join-Path $PSScriptRoot 'Build-LegacyTest.ps1') -CompilerPath $CompilerPath -Architecture $Architecture -PublishedApp (Join-Path $publishDir 'Scriblucent.exe') -OutputDirectory (Join-Path $buildRoot 'legacy-tests')
 
-# App-local deployment keeps setup per-user and offline, including the worker's OpenMP dependency.
+# App-local runtimes keep setup offline, including the worker's OpenMP dependency.
 $crt = @(Get-ChildItem -LiteralPath $VcRedistPath -Directory -Filter '*.CRT')
 $openMp = @(Get-ChildItem -LiteralPath $VcRedistPath -Directory -Filter '*.OpenMP')
 if ($crt.Count -ne 1 -or $openMp.Count -ne 1) { throw 'Expected one CRT and one OpenMP redistributable directory.' }
@@ -169,13 +175,19 @@ if ($Architecture -eq [Runtime.InteropServices.RuntimeInformation]::ProcessArchi
 }
 
 $payloadFiles = @(Get-ChildItem -LiteralPath $publishDir -Recurse -File)
+$manifest = Join-Path $buildRoot 'payload.sha256'
+$manifestLines = @($payloadFiles | Sort-Object FullName | ForEach-Object {
+    $relative = $_.FullName.Substring($publishDir.Length + 1)
+    (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() + '|' + $relative
+})
+[IO.File]::WriteAllLines($manifest, $manifestLines, [Text.UTF8Encoding]::new($false))
 $payloadBytes = ($payloadFiles | Measure-Object Length -Sum).Sum
 $inventory = [ordered]@{ version=$Version; architecture=$Architecture; files=$payloadFiles.Count; bytes=$payloadBytes }
 $inventory | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'package-inventory.json') -Encoding utf8
 Write-Host "Payload: $($payloadFiles.Count) files, $([Math]::Round($payloadBytes / 1MB, 1)) MiB."
 
 & $CompilerPath "/DAppVersion=$Version" "/DNumericVersion=$($versionParts -join '.').0" `
-    "/DTargetArch=$Architecture" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" (Join-Path $PSScriptRoot 'Scriblucent.iss')
+    "/DTargetArch=$Architecture" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" "/DHelperPath=$helperPath" "/DManifestPath=$manifest" (Join-Path $PSScriptRoot 'Scriblucent.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
 $installer = Join-Path $outputDir "Scriblucent-$Version-win-$Architecture-Setup.exe"
 if (!(Test-Path -LiteralPath $installer)) { throw 'Installer output is missing.' }
