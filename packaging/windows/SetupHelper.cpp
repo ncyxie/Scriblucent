@@ -113,6 +113,12 @@ static std::wstring Quote(const std::wstring& value) {
     return result + L'"';
 }
 static void Privilege(const wchar_t* name);
+static void UserTrace(const fs::path& state, const wchar_t* stage) {
+    HANDLE file = CreateFileW(state.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return;
+    std::wstring line = L"Trace=" + std::to_wstring(GetCurrentProcessId()) + L":" + stage + L"\r\n";
+    DWORD written = 0; WriteFile(file, line.data(), static_cast<DWORD>(line.size() * sizeof(wchar_t)), &written, nullptr); CloseHandle(file);
+}
 static DWORD Run(const fs::path& executable, const std::wstring& arguments, HANDLE token = nullptr) {
     std::wstring command = Quote(executable.wstring()) + L" " + arguments;
     STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
@@ -138,6 +144,7 @@ static DWORD Run(const fs::path& executable, const std::wstring& arguments, HAND
     CloseHandle(process.hProcess); Require(wait == WAIT_OBJECT_0, "Setup operation did not finish within two minutes"); return code;
 }
 static int AsUser(int argc, wchar_t** argv) {
+    UserTrace(argv[2], L"checking token");
     if (!Elevated()) return -1;
     HANDLE token = nullptr; TOKEN_LINKED_TOKEN linked{}; DWORD size = 0;
     Require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT, &token) != FALSE, "Cannot read process token");
@@ -158,6 +165,7 @@ static int AsUser(int argc, wchar_t** argv) {
     CloseHandle(token);
     if (!ok || (argc > 3 && std::wstring(argv[3]) == L"--linked")) { if (linked.LinkedToken) CloseHandle(linked.LinkedToken); return 10; }
     std::wstring arguments = Quote(argv[1]) + L" " + Quote(argv[2]) + L" --linked";
+    UserTrace(argv[2], L"starting limited child");
     DWORD result = Run(Module(), arguments, linked.LinkedToken); CloseHandle(linked.LinkedToken); return static_cast<int>(result);
 }
 static bool Running(const fs::path& root) {
@@ -411,11 +419,14 @@ static void Prune(const fs::path& target, const fs::path& manifest) {
     }
 }
 int wmain(int argc, wchar_t** argv) {
+    if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user" || std::wstring(argv[1]) == L"launch-user")) UserTrace(argv[2], L"entered helper");
     HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED); int result = 0;
+    if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user" || std::wstring(argv[1]) == L"launch-user")) UserTrace(argv[2], L"COM initialized");
     try {
         Require(argc >= 2, "Missing setup operation"); std::wstring operation(argv[1]);
         if (operation == L"probe-user" || operation == L"remove-user" || operation == L"launch-user") {
             Require(argc >= 3, "Missing setup result path"); int user = AsUser(argc, argv);
+            UserTrace(argv[2], L"resolved user context");
             // A directly elevated fresh install has no per-user work. Never remove a legacy copy elevated.
             if (user == 10 && operation == L"probe-user" && ReadString(HKEY_CURRENT_USER, UninstallKey, L"InstallLocation").empty()) UserResult(argv[2], {});
             else if (user >= 0) result = user;
@@ -438,7 +449,7 @@ int wmain(int argc, wchar_t** argv) {
     } catch (const std::exception& error) {
         std::cerr << error.what() << " (Windows error " << GetLastError() << ")\n"; result = 1;
         if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user" || std::wstring(argv[1]) == L"launch-user")) {
-            try { std::string text(error.what()); UserResult(argv[2], {{L"Error",std::wstring(text.begin(),text.end())}}, 1); } catch (...) { }
+            try { std::wcerr << Ini(argv[2], L"Trace") << L'\n'; UserTrace(argv[2], L"operation failed"); Ini(argv[2], L"Result", L"1"); std::string text(error.what()); Ini(argv[2], L"Error", std::wstring(text.begin(),text.end())); } catch (...) { }
         }
     }
     if (SUCCEEDED(com)) CoUninitialize(); return result;

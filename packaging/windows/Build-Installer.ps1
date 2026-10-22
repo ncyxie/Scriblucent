@@ -49,6 +49,16 @@ $helperPath = Join-Path $buildRoot 'helper/SetupHelper.exe'
 & (Join-Path $PSScriptRoot 'Test-SetupHelper.ps1') -HelperPath $helperPath -OutputDirectory (Join-Path $buildRoot 'helper-tests')
 if ($env:GITHUB_ACTIONS -eq 'true') { & (Join-Path $PSScriptRoot 'Test-OriginalUser.ps1') -HelperPath $helperPath }
 & (Join-Path $PSScriptRoot 'Build-RecoveryTest.ps1') -CompilerPath $CompilerPath -HelperPath $helperPath -Architecture $Architecture -Version $Version -OutputDirectory (Join-Path $buildRoot 'recovery-tests')
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    $contextResult = Join-Path $buildRoot 'recovery-tests/context.txt'
+    $contextLog = Join-Path $buildRoot 'recovery-tests/context.log'
+    $contextTest = Start-Process -FilePath (Join-Path $buildRoot 'recovery-tests/RecoveryTestSetup.exe') -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LANG=english /ContextTestResult=`"$contextResult`" /LOG=`"$contextLog`"" -WindowStyle Hidden -PassThru
+    if (!$contextTest.WaitForExit(150000)) { Stop-Process -Id $contextTest.Id -Force; throw 'Installer user-context verification timed out.' }
+    if (!(Test-Path $contextResult) -or [IO.File]::ReadAllText($contextResult) -cne 'passed') {
+        Get-Content $contextLog
+        throw 'Installer original-user handoff failed.'
+    }
+}
 
 if (!$VcRedistPath) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'

@@ -134,12 +134,14 @@ end;
 function RunUserHelper(Operation: String): Boolean;
 var
   Code: Integer;
+  Diagnostic: AnsiString;
 begin
   Result := ExecAsOriginalUser(BridgeDirectory + '\SetupHelper.exe', Operation + ' "' + UserState + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Result := Result and (Code = 0) and (GetIniString('Setup', 'Result', '', UserState) = '0');
   if not Result then begin
     Log('Original-user setup operation failed: ' + Operation + ' (exit ' + IntToStr(Code) + ')');
     Log(GetIniString('Setup', 'Error', 'No user-helper diagnostic available', UserState));
+    if LoadStringFromFile(UserState, Diagnostic) then Log(String(Diagnostic));
   end;
 end;
 
@@ -194,6 +196,12 @@ begin
   if not RunHelper('prepare-bridge "' + BridgeDirectory + '"') then RaiseException(CustomMessage('PreparationFailed'));
   UserState := BridgeDirectory + '\user.ini';
   if not RunUserHelper('probe-user') then RaiseException(CustomMessage('OriginalUserRequired'));
+#ifdef RecoveryTests
+  if ExpandConstant('{param:ContextTestResult|}') <> '' then begin
+    SaveStringToFile(ExpandConstant('{param:ContextTestResult}'), 'passed', False);
+    RaiseException('User-context verification completed before installation');
+  end;
+#endif
   LegacyPath := GetIniString('Setup', 'LegacyPath', '', UserState);
   CheckVersion(GetIniString('Setup', 'LegacyVersion', '', UserState));
   if (LegacyPath <> '') and not RegKeyExists(HKLM64, UninstallKey) and (ExpandConstant('{param:TASKS|unspecified}') = 'unspecified') then begin
