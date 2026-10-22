@@ -118,7 +118,12 @@ begin
     TerminateTestSetup(77);
   if (Current > Maximum div 3) and not RecoveryFaultTriggered and (ExpandConstant('{param:RecoveryTestFault|}') = 'cancel') then begin
     RecoveryFaultTriggered := True;
+    { Inno ignores Cancel while the wizard is hidden. Exercise the real UI path off-screen. }
+    WizardForm.Left := -WizardForm.Width - 100;
+    WizardForm.Top := -WizardForm.Height - 100;
+    WizardForm.Visible := True;
     WizardForm.CancelButton.OnClick(WizardForm.CancelButton);
+    WizardForm.Visible := False;
   end;
 end;
 
