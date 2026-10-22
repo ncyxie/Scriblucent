@@ -86,7 +86,7 @@ Name: "{autoprograms}\Scriblucent"; Filename: "{app}\Scriblucent.exe"
 Name: "{autodesktop}\Scriblucent"; Filename: "{app}\Scriblucent.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Scriblucent.exe"; Description: "{cm:OpenApplication}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{code:UserHelperPath}"; Parameters: "launch-user ""{code:UserResultPath}"""; Description: "{cm:OpenApplication}"; Flags: postinstall skipifsilent runasoriginaluser; Check: CanLaunchApplication; AfterInstall: ApplicationLaunchFinished
 
 [Code]
 #include "VersionComparison.iss"
@@ -141,6 +141,27 @@ begin
     Log('Original-user setup operation failed: ' + Operation + ' (exit ' + IntToStr(Code) + ')');
     Log(GetIniString('Setup', 'Error', 'No user-helper diagnostic available', UserState));
   end;
+end;
+
+function UserHelperPath(Param: String): String;
+begin
+  Result := BridgeDirectory + '\SetupHelper.exe';
+end;
+
+function UserResultPath(Param: String): String;
+begin
+  Result := UserState;
+end;
+
+function CanLaunchApplication: Boolean;
+begin
+  Result := InstallationCommitted and not ConversionIncomplete;
+end;
+
+procedure ApplicationLaunchFinished;
+begin
+  if GetIniString('Setup', 'Result', '', UserState) <> '0' then
+    SuppressibleMsgBox(CustomMessage('LaunchFailed'), mbError, MB_OK, IDOK);
 end;
 
 procedure CheckVersion(Version: String);
@@ -201,6 +222,15 @@ begin
     end else
       WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 + CustomMessage('RetainedData');
   end;
+end;
+
+function UpdateReadyMemo(Space, NewLine, UserInfo, DirectoryInfo, TypeInfo, ComponentsInfo, GroupInfo, TasksInfo: String): String;
+begin
+  Result := DirectoryInfo;
+  if TasksInfo <> '' then Result := Result + NewLine + NewLine + TasksInfo;
+  if LegacyPath <> '' then
+    Result := Result + NewLine + NewLine + FmtMessage(CustomMessage('MigrationNote'), [LegacyPath]);
+  Result := Result + NewLine + NewLine + CustomMessage('RetainedData');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

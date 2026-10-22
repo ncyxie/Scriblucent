@@ -47,6 +47,7 @@ if (!(Test-Path -LiteralPath $CompilerPath -PathType Leaf)) { throw 'Install Inn
 & (Join-Path $PSScriptRoot 'Build-SetupHelper.ps1') -Architecture $Architecture -OutputDirectory (Join-Path $buildRoot 'helper')
 $helperPath = Join-Path $buildRoot 'helper/SetupHelper.exe'
 & (Join-Path $PSScriptRoot 'Test-SetupHelper.ps1') -HelperPath $helperPath -OutputDirectory (Join-Path $buildRoot 'helper-tests')
+if ($env:GITHUB_ACTIONS -eq 'true') { & (Join-Path $PSScriptRoot 'Test-OriginalUser.ps1') -HelperPath $helperPath }
 & (Join-Path $PSScriptRoot 'Build-RecoveryTest.ps1') -CompilerPath $CompilerPath -HelperPath $helperPath -Architecture $Architecture -Version $Version -OutputDirectory (Join-Path $buildRoot 'recovery-tests')
 
 if (!$VcRedistPath) {

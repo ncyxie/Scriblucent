@@ -221,7 +221,7 @@ $legacyKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A22
 $legacyIndex = 0
 foreach ($baseline in @($oldInstaller, $legacyBeta3)) {
     $legacyIndex++
-    $legacyDestination = Join-Path $env:RUNNER_TEMP "Scriblucent legacy Žinių biblioteka $legacyIndex"
+    $legacyDestination = Join-Path $env:LOCALAPPDATA "Programs/Scriblucent legacy Žinių biblioteka $legacyIndex"
     Invoke-Setup $baseline "/DIR=`"$legacyDestination`" /TASKS=`"desktopicon,fileassociations`""
     Assert-Condition (Test-Path $legacyKey) 'Legacy fixture did not create a per-user installation.'
     Invoke-Setup $installer '/LANG=lithuanian'

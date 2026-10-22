@@ -21,6 +21,7 @@
 #include <vector>
 #include <stdexcept>
 #include <set>
+#include <system_error>
 
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -111,13 +112,27 @@ static std::wstring Quote(const std::wstring& value) {
     for (size_t i = value.size(); i && value[i - 1] == L'\\'; --i) result += L'\\';
     return result + L'"';
 }
+static void Privilege(const wchar_t* name);
 static DWORD Run(const fs::path& executable, const std::wstring& arguments, HANDLE token = nullptr) {
     std::wstring command = Quote(executable.wstring()) + L" " + arguments;
     STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
     PROCESS_INFORMATION process{};
-    BOOL ok = token ? CreateProcessWithTokenW(token, LOGON_WITH_PROFILE, executable.c_str(), command.data(), CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)
-                    : CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
-    Require(ok != FALSE, "Cannot start setup operation"); CloseHandle(process.hThread);
+    LPVOID environment = nullptr;
+    if (token) Require(CreateEnvironmentBlock(&environment, token, FALSE) != FALSE, "Cannot load the original user's environment");
+    BOOL ok = FALSE;
+    if (token) {
+        // The original interactive account's profile is already loaded. Loading it again can require additional service privileges.
+        try { Privilege(SE_IMPERSONATE_NAME); } catch (...) { }
+        ok = CreateProcessWithTokenW(token, 0, executable.c_str(), command.data(), CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, nullptr, &startup, &process);
+        if (!ok) {
+            try { Privilege(SE_INCREASE_QUOTA_NAME); } catch (...) { }
+            command = Quote(executable.wstring()) + L" " + arguments;
+            ok = CreateProcessAsUserW(token, executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, nullptr, &startup, &process);
+        }
+    } else ok = CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+    DWORD error = GetLastError(); if (environment) DestroyEnvironmentBlock(environment); SetLastError(error);
+    if (!ok) throw std::system_error(static_cast<int>(error), std::system_category(), "Cannot start setup operation");
+    CloseHandle(process.hThread);
     DWORD wait = WaitForSingleObject(process.hProcess, 120000), code = 1;
     if (wait == WAIT_OBJECT_0) GetExitCodeProcess(process.hProcess, &code);
     CloseHandle(process.hProcess); Require(wait == WAIT_OBJECT_0, "Setup operation did not finish within two minutes"); return code;
@@ -184,7 +199,7 @@ static void UserResult(const fs::path& state, const std::vector<std::pair<std::w
 }
 static void ProbeUser(const fs::path& state) {
     auto root = ReadString(HKEY_CURRENT_USER, UninstallKey, L"InstallLocation");
-    UserResult(state, {{L"LegacyPath",root},{L"LegacyVersion",ReadString(HKEY_CURRENT_USER, UninstallKey, L"DisplayVersion")},
+    UserResult(state, {{L"Context",L"Unelevated"},{L"LegacyPath",root},{L"LegacyVersion",ReadString(HKEY_CURRENT_USER, UninstallKey, L"DisplayVersion")},
         {L"Tasks",ReadString(HKEY_CURRENT_USER, UninstallKey, L"Inno Setup: Selected Tasks")}, {L"Running",!root.empty() && Running(root) ? L"1" : L"0"}});
 }
 static void RemoveUser(const fs::path& state) {
@@ -205,12 +220,25 @@ static void RemoveUser(const fs::path& state) {
     Require(ReadString(HKEY_CURRENT_USER, UninstallKey, L"InstallLocation").empty(), "Legacy registration remains; conversion can be retried");
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr); UserResult(state, {});
 }
+static void LaunchUser(const fs::path& state) {
+    auto root = ReadString(HKEY_LOCAL_MACHINE, UninstallKey, L"InstallLocation");
+    Require(!root.empty(), "The machine installation is not registered");
+    fs::path executable = fs::path(root) / L"Scriblucent.exe";
+    std::wstring command = Quote(executable.wstring()); STARTUPINFOW startup{}; startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+    Require(CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr, root.c_str(), &startup, &process) != FALSE, "Cannot open Scriblucent");
+    CloseHandle(process.hThread); CloseHandle(process.hProcess); UserResult(state, {});
+}
 static void Bridge(const fs::path& directory) {
     auto parent = fs::path(Known(FOLDERID_ProgramData)) / L"Scriblucent" / L"SetupBridge";
     Require(Inside(directory, parent) && Same(directory.parent_path(), parent), "Invalid setup bridge path");
     SecureDirectory(parent.parent_path(), true); SecureDirectory(parent, true);
     SecureDirectory(directory, true);
     fs::copy_file(Module(), directory / L"SetupHelper.exe", fs::copy_options::overwrite_existing);
+    PSECURITY_DESCRIPTOR executableDescriptor = nullptr;
+    Require(ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;BU)", SDDL_REVISION_1, &executableDescriptor, nullptr), "Cannot create helper permissions");
+    BOOL executableAccess = SetFileSecurityW((directory / L"SetupHelper.exe").c_str(), DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION, executableDescriptor);
+    LocalFree(executableDescriptor); Require(executableAccess != FALSE, "Cannot grant read-only access to the setup helper");
     auto state = directory / L"user.ini"; NewIni(state);
     PSECURITY_DESCRIPTOR descriptor = nullptr;
     Require(ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGW;;;BU)", SDDL_REVISION_1, &descriptor, nullptr), "Cannot create setup result permissions");
@@ -386,11 +414,14 @@ int wmain(int argc, wchar_t** argv) {
     HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED); int result = 0;
     try {
         Require(argc >= 2, "Missing setup operation"); std::wstring operation(argv[1]);
-        if (operation == L"probe-user" || operation == L"remove-user") {
+        if (operation == L"probe-user" || operation == L"remove-user" || operation == L"launch-user") {
             Require(argc >= 3, "Missing setup result path"); int user = AsUser(argc, argv);
             // A directly elevated fresh install has no per-user work. Never remove a legacy copy elevated.
             if (user == 10 && operation == L"probe-user" && ReadString(HKEY_CURRENT_USER, UninstallKey, L"InstallLocation").empty()) UserResult(argv[2], {});
-            else if (user >= 0) result = user; else if (operation == L"probe-user") ProbeUser(argv[2]); else RemoveUser(argv[2]);
+            else if (user >= 0) result = user;
+            else if (operation == L"probe-user") ProbeUser(argv[2]);
+            else if (operation == L"remove-user") RemoveUser(argv[2]);
+            else LaunchUser(argv[2]);
         } else if (operation == L"verify") {
             Require(argc == 4, "Missing payload manifest"); Verify(argv[2], argv[3]);
         } else {
@@ -406,7 +437,7 @@ int wmain(int argc, wchar_t** argv) {
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << " (Windows error " << GetLastError() << ")\n"; result = 1;
-        if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user")) {
+        if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user" || std::wstring(argv[1]) == L"launch-user")) {
             try { std::string text(error.what()); UserResult(argv[2], {{L"Error",std::wstring(text.begin(),text.end())}}, 1); } catch (...) { }
         }
     }
