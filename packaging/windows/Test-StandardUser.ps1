@@ -21,6 +21,12 @@ try {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'The test account is elevated.' }
+    # This account has never signed in through Explorer. Initialize its Windows known folder first.
+    $localData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData, [Environment+SpecialFolderOption]::Create)
+    $profile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+    if (!$localData -or !$profile -or !$localData.StartsWith($profile.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Windows did not initialize a separate Local AppData folder for the test account.'
+    }
     $denied = $false
     try { $stream = [IO.File]::Open((Join-Path $InstallationDirectory 'LICENSE'), [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite); $stream.Dispose() }
     catch [UnauthorizedAccessException] { $denied = $true }
@@ -32,7 +38,7 @@ try {
     @{FormatVersion=1;Document=@{Id=[guid]::NewGuid().ToString();Title='Standard user library';Content=[Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes('{\rtf1\ansi Standard user note}'))}} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $note -Encoding utf8
     $app = Start-Process -FilePath "$InstallationDirectory/Scriblucent.exe" -ArgumentList "--import `"$note`"" -WindowStyle Hidden -PassThru
     if (!$app.WaitForInputIdle(45000)) { throw 'The standard-user application did not start.' }
-    $library = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Scriblucent/notes.json'
+    $library = Join-Path $localData 'Scriblucent/notes.json'
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
     while ([DateTime]::UtcNow -lt $deadline) {
         if ((Test-Path -LiteralPath $library) -and [IO.File]::ReadAllText($library).Contains('Standard user library')) { break }
