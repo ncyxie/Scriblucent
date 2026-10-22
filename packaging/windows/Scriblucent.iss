@@ -178,6 +178,8 @@ var
   Note: TNewStaticText;
   BridgeId: TGUID;
 begin
+  WizardForm.ReadyMemo.WordWrap := True;
+  WizardForm.ReadyMemo.ScrollBars := ssVertical;
   ExtractTemporaryFile('SetupHelper.exe');
   ExtractTemporaryFile('payload.sha256');
   Helper := ExpandConstant('{tmp}\SetupHelper.exe');

@@ -123,19 +123,21 @@ static DWORD Run(const fs::path& executable, const std::wstring& arguments, HAND
     std::wstring command = Quote(executable.wstring()) + L" " + arguments;
     STARTUPINFOW startup{}; startup.cb = sizeof(startup); startup.dwFlags = STARTF_USESHOWWINDOW; startup.wShowWindow = SW_HIDE;
     PROCESS_INFORMATION process{};
+    // Inno's protected temporary working directory is not accessible to a limited token.
+    auto workingDirectory = executable.parent_path();
     LPVOID environment = nullptr;
     if (token) Require(CreateEnvironmentBlock(&environment, token, FALSE) != FALSE, "Cannot load the original user's environment");
     BOOL ok = FALSE;
     if (token) {
         // The original interactive account's profile is already loaded. Loading it again can require additional service privileges.
         try { Privilege(SE_IMPERSONATE_NAME); } catch (...) { }
-        ok = CreateProcessWithTokenW(token, 0, executable.c_str(), command.data(), CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, nullptr, &startup, &process);
+        ok = CreateProcessWithTokenW(token, 0, executable.c_str(), command.data(), CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, workingDirectory.c_str(), &startup, &process);
         if (!ok) {
             try { Privilege(SE_INCREASE_QUOTA_NAME); } catch (...) { }
             command = Quote(executable.wstring()) + L" " + arguments;
-            ok = CreateProcessAsUserW(token, executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, nullptr, &startup, &process);
+            ok = CreateProcessAsUserW(token, executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, workingDirectory.c_str(), &startup, &process);
         }
-    } else ok = CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+    } else ok = CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, workingDirectory.c_str(), &startup, &process);
     DWORD error = GetLastError(); if (environment) DestroyEnvironmentBlock(environment); SetLastError(error);
     if (!ok) throw std::system_error(static_cast<int>(error), std::system_category(), "Cannot start setup operation");
     CloseHandle(process.hThread);
@@ -419,6 +421,7 @@ static void Prune(const fs::path& target, const fs::path& manifest) {
     }
 }
 int wmain(int argc, wchar_t** argv) {
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user" || std::wstring(argv[1]) == L"launch-user")) UserTrace(argv[2], L"entered helper");
     HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED); int result = 0;
     if (argc >= 3 && (std::wstring(argv[1]) == L"probe-user" || std::wstring(argv[1]) == L"remove-user" || std::wstring(argv[1]) == L"launch-user")) UserTrace(argv[2], L"COM initialized");
