@@ -126,6 +126,7 @@ jobs:
           name: verification-${{ matrix.architecture }}
           path: |
             artifacts/installers/${{ needs.prepare.outputs.version }}/win-${{ matrix.architecture }}/package-inventory.json
+            artifacts/installers/${{ needs.prepare.outputs.version }}/win-${{ matrix.architecture }}/recovery-tests/*.log
             ${{ runner.temp }}/Scriblucent-setup-tests/**/*.log
             **/TestResults/*.trx
           retention-days: 7

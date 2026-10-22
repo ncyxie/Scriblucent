@@ -98,7 +98,11 @@ const
 
 var
   Helper, Manifest, BridgeDirectory, UserState, LegacyPath: String;
-  BackupStarted, InstallationCommitted, ConversionIncomplete: Boolean;
+  BackupStarted, InstallationCommitted, ConversionIncomplete, InstallationFailed: Boolean;
+  FailureMessage: String;
+#ifdef RecoveryTests
+  RecoveryFaultTriggered: Boolean;
+#endif
 
 function CreateGUID(var Guid: TGUID): Integer;
   external 'CoCreateGuid@ole32.dll stdcall';
@@ -112,7 +116,15 @@ procedure CurInstallProgressChanged(Current, Maximum: Integer);
 begin
   if (Current > Maximum div 3) and (ExpandConstant('{param:RecoveryTestFault|}') = 'crash') then
     TerminateTestSetup(77);
-  if (Current > Maximum div 3) and (ExpandConstant('{param:RecoveryTestFault|}') = 'cancel') then Abort;
+  if (Current > Maximum div 3) and not RecoveryFaultTriggered and (ExpandConstant('{param:RecoveryTestFault|}') = 'cancel') then begin
+    RecoveryFaultTriggered := True;
+    WizardForm.CancelButton.OnClick(WizardForm.CancelButton);
+  end;
+end;
+
+procedure CancelButtonClick(CurPageID: Integer; var Cancel, Confirm: Boolean);
+begin
+  if ExpandConstant('{param:RecoveryTestFault|}') = 'cancel' then begin Cancel := True; Confirm := False; end;
 end;
 #endif
 
@@ -134,14 +146,12 @@ end;
 function RunUserHelper(Operation: String): Boolean;
 var
   Code: Integer;
-  Diagnostic: AnsiString;
 begin
   Result := ExecAsOriginalUser(BridgeDirectory + '\SetupHelper.exe', Operation + ' "' + UserState + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Result := Result and (Code = 0) and (GetIniString('Setup', 'Result', '', UserState) = '0');
   if not Result then begin
     Log('Original-user setup operation failed: ' + Operation + ' (exit ' + IntToStr(Code) + ')');
     Log(GetIniString('Setup', 'Error', 'No user-helper diagnostic available', UserState));
-    if LoadStringFromFile(UserState, Diagnostic) then Log(String(Diagnostic));
   end;
 end;
 
@@ -157,7 +167,7 @@ end;
 
 function CanLaunchApplication: Boolean;
 begin
-  Result := InstallationCommitted and not ConversionIncomplete;
+  Result := InstallationCommitted and not ConversionIncomplete and not InstallationFailed;
 end;
 
 procedure ApplicationLaunchFinished;
@@ -225,8 +235,9 @@ end;
 procedure CurPageChanged(Page: Integer);
 begin
   if Page = wpFinished then begin
-    if ConversionIncomplete then begin
-      WizardForm.FinishedLabel.Caption := CustomMessage('ConversionIncomplete');
+    if ConversionIncomplete or InstallationFailed then begin
+      if InstallationFailed then WizardForm.FinishedLabel.Caption := FailureMessage
+      else WizardForm.FinishedLabel.Caption := CustomMessage('ConversionIncomplete');
       WizardForm.RunList.Enabled := False;
       if WizardForm.RunList.Items.Count > 0 then WizardForm.RunList.Checked[0] := False;
     end else
@@ -302,6 +313,7 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
+    try
     if not RunHelper('verify "' + ExpandConstant('{app}') + '" "' + Manifest + '"') then
       RaiseException(CustomMessage('VerificationFailed'));
     if not RunHelper('prune "' + ExpandConstant('{app}') + '" "' + Manifest + '"') then
@@ -320,12 +332,26 @@ begin
       WizardForm.FinishedLabel.Caption := CustomMessage('ConversionIncomplete');
       SuppressibleMsgBox(CustomMessage('ConversionIncomplete'), mbError, MB_OK, IDOK);
     end;
+    except
+      { Inno reports post-install callback exceptions without failing setup. Handle the transaction explicitly. }
+      Log('Installation finalization failed: ' + GetExceptionMessage);
+      if InstallationCommitted then begin
+        ConversionIncomplete := True;
+        FailureMessage := CustomMessage('ConversionIncomplete');
+      end else begin
+        InstallationFailed := True;
+        if RunHelper('restore') then FailureMessage := CustomMessage('InstallationRolledBack')
+        else FailureMessage := CustomMessage('RecoveryFailed');
+      end;
+      SuppressibleMsgBox(FailureMessage, mbError, MB_OK, IDOK);
+    end;
   end;
 end;
 
 function GetCustomSetupExitCode: Integer;
 begin
-  if ConversionIncomplete then Result := 20 else Result := 0;
+  if InstallationFailed then Result := 21
+  else if ConversionIncomplete then Result := 20 else Result := 0;
 end;
 
 procedure DeinitializeSetup;
