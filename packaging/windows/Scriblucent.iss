@@ -100,6 +100,7 @@ var
   Helper, Manifest, BridgeDirectory, UserState, LegacyPath: String;
   BackupStarted, InstallationCommitted, ConversionIncomplete, InstallationFailed: Boolean;
   FailureMessage: String;
+  FinishNote: TNewStaticText;
 #ifdef RecoveryTests
   RecoveryFaultTriggered: Boolean;
 #endif
@@ -235,19 +236,27 @@ begin
   Note.WordWrap := True;
   Note.Caption := CustomMessage('OptionsNote');
   WizardForm.TasksList.Height := WizardForm.TasksList.Height - ScaleY(74);
+  FinishNote := TNewStaticText.Create(WizardForm);
+  FinishNote.Parent := WizardForm.FinishedPage;
+  FinishNote.Left := WizardForm.FinishedLabel.Left;
+  FinishNote.Width := WizardForm.FinishedLabel.Width;
+  FinishNote.Top := WizardForm.FinishedPage.Height - ScaleY(82);
+  FinishNote.Height := ScaleY(82);
+  FinishNote.Anchors := [akLeft, akRight, akBottom];
+  FinishNote.AutoSize := False;
+  FinishNote.WordWrap := True;
+  FinishNote.Caption := CustomMessage('RetainedData');
 end;
 
-procedure CurPageChanged(Page: Integer);
+procedure ShowFinishFailure(Message: String);
 begin
-  if Page = wpFinished then begin
-    if ConversionIncomplete or InstallationFailed then begin
-      if InstallationFailed then WizardForm.FinishedLabel.Caption := FailureMessage
-      else WizardForm.FinishedLabel.Caption := CustomMessage('ConversionIncomplete');
-      WizardForm.RunList.Enabled := False;
-      if WizardForm.RunList.Items.Count > 0 then WizardForm.RunList.Checked[0] := False;
-    end else
-      WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 + CustomMessage('RetainedData');
-  end;
+  { Inno fills its own finished label after the page event. Keep our outcome in a separate control. }
+  WizardForm.FinishedLabel.Visible := False;
+  FinishNote.Top := WizardForm.FinishedLabel.Top;
+  FinishNote.Height := WizardForm.FinishedPage.Height - FinishNote.Top - ScaleY(20);
+  FinishNote.Caption := Message;
+  WizardForm.RunList.Enabled := False;
+  if WizardForm.RunList.Items.Count > 0 then WizardForm.RunList.Checked[0] := False;
 end;
 
 function UpdateReadyMemo(Space, NewLine, UserInfo, DirectoryInfo, TypeInfo, ComponentsInfo, GroupInfo, TasksInfo: String): String;
@@ -334,7 +343,7 @@ begin
     InstallationCommitted := True;
     if (LegacyPath <> '') and not RunUserHelper('remove-user') then begin
       ConversionIncomplete := True;
-      WizardForm.FinishedLabel.Caption := CustomMessage('ConversionIncomplete');
+      ShowFinishFailure(CustomMessage('ConversionIncomplete'));
       SuppressibleMsgBox(CustomMessage('ConversionIncomplete'), mbError, MB_OK, IDOK);
     end;
     except
@@ -348,6 +357,7 @@ begin
         if RunHelper('restore') then FailureMessage := CustomMessage('InstallationRolledBack')
         else FailureMessage := CustomMessage('RecoveryFailed');
       end;
+      ShowFinishFailure(FailureMessage);
       SuppressibleMsgBox(FailureMessage, mbError, MB_OK, IDOK);
     end;
   end;
