@@ -111,6 +111,7 @@ Filename: "{app}\Scriblucent.exe"; Description: "Open Scriblucent"; Flags: nowai
 
 [Code]
 #include "VersionComparison.iss"
+#include "ShortcutCleanup.iss"
 
 const
   UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A225-1F0D-43A6-9AF9-C6A8F8CAAA72}_is1';
@@ -169,21 +170,11 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  Shell, Shortcut: Variant;
-  ShortcutPath: String;
 begin
   if CurStep = ssPostInstall then begin
     ConfigureAssociations(WizardIsTaskSelected('fileassociations'));
-    if not WizardIsTaskSelected('desktopicon') then begin
-      ShortcutPath := ExpandConstant('{autodesktop}\Scriblucent.lnk');
-      if FileExists(ShortcutPath) then begin
-        Shell := CreateOleObject('WScript.Shell');
-        Shortcut := Shell.CreateShortcut(ShortcutPath);
-        if CompareText(Shortcut.TargetPath, ExpandConstant('{app}\Scriblucent.exe')) = 0 then
-          DeleteFile(ShortcutPath);
-      end;
-    end;
+    if not WizardIsTaskSelected('desktopicon') then
+      RemoveOwnedShortcut(ExpandConstant('{autodesktop}\Scriblucent.lnk'), ExpandConstant('{app}\Scriblucent.exe'));
   end;
 end;
 

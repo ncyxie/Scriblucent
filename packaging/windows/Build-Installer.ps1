@@ -77,6 +77,15 @@ if (!(Test-Path -LiteralPath $versionResult) -or [IO.File]::ReadAllText($version
     throw 'Installer semantic-version tests failed.'
 }
 
+& $CompilerPath '/Qp' "/DOutputDir=$buildRoot/shortcut-tests" (Join-Path $PSScriptRoot 'Test-ShortcutCleanup.iss')
+if ($LASTEXITCODE -ne 0) { throw 'Installer shortcut tests did not compile.' }
+$shortcutResult = Join-Path $buildRoot 'shortcut-tests/result.txt'
+$shortcutTests = Start-Process -FilePath (Join-Path $buildRoot 'shortcut-tests/ShortcutCleanupTests.exe') `
+    -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /ResultFile=`"$shortcutResult`"" -WindowStyle Hidden -Wait -PassThru
+if (!(Test-Path -LiteralPath $shortcutResult) -or [IO.File]::ReadAllText($shortcutResult) -cne 'passed') {
+    throw 'Installer Unicode shortcut cleanup tests failed.'
+}
+
 & dotnet publish (Join-Path $repository 'Scriblucent/Scriblucent.csproj') -c Release -r "win-$Architecture" `
     --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false "-p:Version=$Version" -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
