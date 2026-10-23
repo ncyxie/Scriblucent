@@ -55,8 +55,10 @@ public class EditorSmoothScrollTests
         });
     }
 
-    [Fact]
-    public void Editor_scroll_commits_each_eased_position_without_moving_the_document_view()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Document_scroll_commits_each_eased_position_without_moving_the_view(bool readOnlyReader)
     {
         RunSta(() =>
         {
@@ -67,7 +69,10 @@ public class EditorSmoothScrollTests
             for (var i = 0; i < 80; i++)
                 document.Blocks.Add(new Paragraph(new Run($"Line {i}")));
 
-            var editor = new RichTextBox { Document = document, Width = 400, Height = 180 };
+            Control editor = readOnlyReader
+                ? new FlowDocumentScrollViewer { Document = document, IsToolBarVisible = false, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
+                : new RichTextBox { Document = document };
+            editor.Width = 400; editor.Height = 180;
             editor.Measure(new Size(400, 180));
             editor.Arrange(new Rect(0, 0, 400, 180));
             editor.UpdateLayout();

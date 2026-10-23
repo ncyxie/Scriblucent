@@ -68,6 +68,15 @@ public static class SmoothScrollBehavior
     public static bool GetIsEnabled(DependencyObject element)
         => (bool)element.GetValue(IsEnabledProperty);
 
+    // FlowDocument content routes wheel input through its owning reader rather than the
+    // internal ScrollViewer. Let that owner use the same controller as ordinary scrollers.
+    internal static void HandleMouseWheel(ScrollViewer viewer, MouseWheelEventArgs args)
+    {
+        SetIsEnabled(viewer, true);
+        if (GetOrCreateState(viewer) is { } state)
+            OnPreviewMouseWheel(state, args);
+    }
+
     /// <summary>Category navigation shares the wheel controller and can be interrupted by normal input.</summary>
     internal static void ScrollTo(ScrollViewer viewer, double verticalOffset)
     {

@@ -21,7 +21,7 @@ internal static class ReleaseNotesDocumentBuilder
         .UsePipeTables().UseEmphasisExtras().UseAutoLinks().DisableHtml().Build();
     private static readonly Regex Comments = Pattern(@"<!--.*?-->");
     private static readonly Regex NonProse = Pattern(@"<(?<tag>script|style|picture|svg)\b[^>]*>.*?</\k<tag>\s*>");
-    private static readonly Regex Tags = Pattern("<(?<close>/)?(?<tag>[a-z][a-z0-9:-]*)\\b(?<attributes>(?:[^\"'<>]|\"[^\"]*\"|'[^']*')*)>");
+    private static readonly Regex Tags = Pattern("<(?<close>/)?(?<tag>[a-z][a-z0-9:-]*)(?=\\s|/?>)(?<attributes>(?:[^\"'<>]|\"[^\"]*\"|'[^']*')*)>");
     private static readonly Regex Anchors = Pattern(@"<a\b(?<attributes>[^>]+)>(?<label>.*?)</a\s*>");
     private static readonly Regex Href = Pattern("\\bhref\\s*=\\s*(?:\"(?<url>[^\"]*)\"|'(?<url>[^']*)'|(?<url>[^\\s>]+))");
 
@@ -29,7 +29,7 @@ internal static class ReleaseNotesDocumentBuilder
     {
         var document = new FlowDocument
         {
-            PagePadding = new Thickness(0), ColumnWidth = double.PositiveInfinity,
+            PagePadding = new Thickness(6, 4, 6, 4), ColumnWidth = double.PositiveInfinity,
             FontSize = 14, LineHeight = 20, TextAlignment = TextAlignment.Left
         };
         document.SetResourceReference(TextElement.FontFamilyProperty, "FontFamily.UI");
@@ -219,7 +219,9 @@ internal static class ReleaseNotesDocumentBuilder
     private static string NormalizeHtml(string html)
     {
         var text = NonProse.Replace(Comments.Replace(html, string.Empty), string.Empty);
-        text = Anchors.Replace(text, match => $"[{match.Groups["label"].Value}](<{Href.Match(match.Groups["attributes"].Value).Groups["url"].Value}>)");
+        text = Anchors.Replace(text, match => string.IsNullOrWhiteSpace(match.Groups["label"].Value)
+            ? string.Empty
+            : $"[{match.Groups["label"].Value}](<{Href.Match(match.Groups["attributes"].Value).Groups["url"].Value}>)");
         return Tags.Replace(text, match =>
         {
             var name = match.Groups["tag"].Value.ToLowerInvariant();

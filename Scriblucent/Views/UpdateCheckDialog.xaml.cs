@@ -1,4 +1,5 @@
 using Scriblucent.Animations;
+using Scriblucent.Behaviors;
 using Scriblucent.Icons;
 using Scriblucent.Localization;
 using Scriblucent.Services;
@@ -6,6 +7,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Documents;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 using Scriblucent.Controls;
 
@@ -118,6 +121,20 @@ namespace Scriblucent.Views
             ApplyOwnerBounds();
             UiMotion.ConfigurePopupsForWindow(this);
             _overlayAnimator.BeginOpen();
+        }
+
+        private void ReleaseNotesViewer_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Like the note editor, this document view only draws its current viewport.
+            // Commit each eased position instead of translating it between commits.
+            if (ReleaseNotesViewer.Template?.FindName("PART_ContentHost", ReleaseNotesViewer) is ScrollViewer scroller)
+                SmoothScrollCompositor.SetDirectOffsetMode(scroller, true);
+        }
+
+        private void ReleaseNotesViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (ReleaseNotesViewer.Template?.FindName("PART_ContentHost", ReleaseNotesViewer) is ScrollViewer scroller)
+                SmoothScrollBehavior.HandleMouseWheel(scroller, e);
         }
 
         private void OpenReleasesButton_Click(object sender, RoutedEventArgs e)

@@ -58,6 +58,7 @@ internal static partial class Program
                     else if (args.Contains("--manual-order")) ProbeManualOrder(args.FirstOrDefault(a => a.StartsWith("--case="))?["--case=".Length..], args.Contains("--editors-only"));
                     else if (args.Contains("--combine-workspace")) ProbeCombineWorkspace(args.FirstOrDefault(a => a.StartsWith("--case="))?["--case=".Length..]);
                     else if (args.Contains("--update-dialog-shadow")) ProbeUpdateDialogShadow();
+                    else if (args.Contains("--update-dialog-scroll")) ProbeUpdateDialogScroll();
                     else if (args.Contains("--wrapped-note-save")) ProbeWrappedNoteSave();
                     else if (args.Contains("--closed-dropdowns")) ProbeClosedDropdowns();
                     else if (args.Contains("--field-spacing")) ProbeFieldSpacing();

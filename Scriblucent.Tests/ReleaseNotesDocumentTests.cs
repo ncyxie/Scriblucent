@@ -12,6 +12,8 @@ public class ReleaseNotesDocumentTests
     [InlineData(null)]
     [InlineData(" \r\n ")]
     [InlineData("<div><img src='logo.svg' width='240'></div>")]
+    [InlineData("<div><a href='https://example.com/preview.png'><picture><img src='preview.png'></picture></a></div>")]
+    [InlineData("<div><a href='https://example.com/preview.png'><img src='preview.png'></a></div>")]
     [InlineData("![Preview](https://example.com/image.png)")]
     [InlineData("<!-- hidden --><style>p {color:red}</style><script>hidden()</script>")]
     public void Empty_or_decorative_notes_do_not_create_a_visible_document(string? body) => Sta(() =>
@@ -46,6 +48,14 @@ public class ReleaseNotesDocumentTests
         Assert.Equal(FontWeights.Bold, Runs(document).Single(run => run.Text == "Bold").FontWeight);
         Assert.Equal(FontStyles.Italic, Runs(document).Single(run => run.Text == "italic").FontStyle);
         Assert.DoesNotContain('<', Text(document));
+    });
+
+    [Fact]
+    public void Html_links_keep_their_destination_after_markup_is_normalized() => Sta(() =>
+    {
+        var document = ReleaseNotesDocumentBuilder.Build("<div><a href='https://example.com/release(v2)'>Release details</a></div>");
+        Assert.Equal("Release details", Text(document).Trim());
+        Assert.Equal("https://example.com/release(v2)", Assert.Single(Elements<Hyperlink>(document)).NavigateUri.AbsoluteUri);
     });
 
     [Fact]
@@ -118,12 +128,15 @@ public class ReleaseNotesDocumentTests
         var text = Text(document);
         Assert.Contains("Write. Recite. Get it right.", text);
         Assert.Contains("Four tools, one connected workspace", text);
-        Assert.Contains("Scriblucent builds on the original NoteCards project", text);
-        Assert.Contains("Explore Scriblucent", text);
+        Assert.Contains("FSRS-6", text);
+        Assert.Contains("checklists", text);
+        Assert.Contains(Elements<Hyperlink>(document), link =>
+            link.NavigateUri == new Uri("https://github.com/ncyxie/Scriblucent#readme"));
         Assert.Single(Elements<Table>(document));
         Assert.DoesNotContain("<div", text);
         Assert.DoesNotContain("<picture", text);
         Assert.DoesNotContain("srcset", text);
+        Assert.DoesNotContain("]()", text);
         Assert.DoesNotContain("**", text);
     });
 
