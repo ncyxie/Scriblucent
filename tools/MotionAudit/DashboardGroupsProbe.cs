@@ -99,7 +99,7 @@ internal static partial class Program
                         window.Width = 920; Pump(40); window.UpdateLayout();
                         var size = face.RenderSize; var padding = face.Padding; var radius = face.CornerRadius; var frame = face.BorderThickness;
                         var namePosition = name.TranslatePoint(new(), face);
-                        MotionPolicy.Configure(MotionPreference.Automatic, false); Drop(face, true); Pump(180); window.UpdateLayout();
+                        MotionPolicy.Configure(MotionPreference.Full, false); Drop(face, true); Pump(180); window.UpdateLayout();
                         Require(face.RenderSize == size && face.Padding == padding && face.CornerRadius == radius && face.BorderThickness == frame
                             && name.TranslatePoint(new(), face) == namePosition, "Group drop feedback changed layout or contour.");
                         SaveControlCapture(scene, $"groups-{dashboard}-{theme}-drop");
@@ -113,9 +113,9 @@ internal static partial class Program
                         Require(scale.ScaleX == 1 && scale.ScaleY == 1, "Group entrance scaled its contents.");
                         foreach (var mode in new[] { MotionPreference.Reduced, MotionPreference.Off })
                         {
-                            MotionPolicy.Configure(mode, false); CardSurfaceMotionBehavior.PlayGroupEnter(face);
+                            MotionPolicy.Configure(mode, false); CardSurfaceMotionBehavior.PlayGroupEnter(face); Pump(300);
                             Require(face.Opacity == 1 && scale.ScaleX == 1 && scale.ScaleY == 1 && UiMotion.EnsureScaleTranslateGroup(face).Translate.Y == 0,
-                                "Reduced/Off retained group entrance displacement.");
+                                "Group entrance did not settle at rest.");
                         }
                         checks.Add($"PASS {dashboard}/{theme}: actual group template, 9 colours, live count/name, compact actions, 4-scale captures, fixed drop contour, unload cleanup, and motion preferences.");
                         Console.WriteLine(checks[^1]);

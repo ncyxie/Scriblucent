@@ -68,7 +68,7 @@ internal static partial class Program
         window.Loaded += (_, _) => { animator = shell.BindAnimator(window); animator.BeginOpen(); };
         window.Closing += (_, args) =>
         {
-            if (closing || UiMotion.PrefersReducedMotion) return;
+            if (closing || UiMotion.IsMotionDisabled) return;
             args.Cancel = true; closing = true; animator?.BeginClose(window.Close);
         };
         return (window, shell);
@@ -118,7 +118,7 @@ internal static partial class Program
         scene.Empty.Visibility = Visibility.Visible;
         SaveGif(Capture(scene.Root, () => UiMotion.AnimateEmptyDashboardEnter(scene.Empty), 200), $"reduced-empty-{suffix}.gif");
         scene.Empty.Visibility = Visibility.Collapsed;
-        ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+        ReducedMotionPreferences.Configure(MotionPreference.Full);
         if (MotionCacheBudget.ReservedPixels != 0 || RenderTransitionClock.IsAnyRunning)
             throw new InvalidOperationException("Third-pass window or material cleanup left activity or a texture lease behind.");
     }

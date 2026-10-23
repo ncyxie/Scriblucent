@@ -14,13 +14,14 @@ namespace Scriblucent.Tests;
 [Collection("Layout reveal")]
 public class SmoothCaretTests
 {
+    [ThreadStatic] private static Window? _pumpWindow;
     private static void Sta(Action action)
     {
         Exception? failure = null;
         var thread = new Thread(() =>
         {
             var preference = MotionPolicy.Preference;
-            try { SmoothCaretBehavior.Register(); MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { SmoothCaretBehavior.Register(); MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception e) { failure = e; }
             finally { MotionPolicy.Configure(preference, false); }
         });
@@ -35,7 +36,12 @@ public class SmoothCaretTests
         // Keep native WPF clocks receiving dispatcher turns while observing the
         // same wall-clock deadline; transparent fixture windows can otherwise idle.
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Min(16, milliseconds)) };
-        timer.Tick += (_, _) => { if (elapsed.ElapsedMilliseconds < milliseconds) return; timer.Stop(); frame.Continue = false; };
+        timer.Tick += (_, _) =>
+        {
+            if (_pumpWindow is { IsLoaded: true } window) window.InvalidateVisual();
+            if (elapsed.ElapsedMilliseconds < milliseconds) return;
+            timer.Stop(); frame.Continue = false;
+        };
         timer.Start(); Dispatcher.PushFrame(frame);
     }
     private static void Drain() => Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -46,6 +52,7 @@ public class SmoothCaretTests
         {
             Window = new Window { Width = 640, Height = 360, ShowInTaskbar = false, Opacity = 0,
                 Content = new AdornerDecorator { Child = new Grid { Children = { box } } } };
+            _pumpWindow = Window;
             foreach (var name in new[] { "Tokens", "LightTheme", "Generic", "Controls/Shared", "Controls/Chrome", "Controls/Buttons" })
                 Window.Resources.MergedDictionaries.Add(ControlTestResources.Load(name));
             box.Margin = new Thickness(24); box.VerticalAlignment = VerticalAlignment.Top;
@@ -53,7 +60,7 @@ public class SmoothCaretTests
             Assert.True(box.IsKeyboardFocused);
             Assert.True(SmoothCaretBehavior.Inspect(box).Tracking);
         }
-        public void Dispose() { Window.Close(); Pump(25); }
+        public void Dispose() { Window.Close(); Pump(25); _pumpWindow = null; }
     }
     private static TextBoxBase Field(bool rich)
     {
@@ -137,14 +144,15 @@ public class SmoothCaretTests
 
     [Theory]
     [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
-    public void Reduced_and_off_use_native_caret_and_runtime_policy_change_cancels_motion(MotionPreference preference) => Sta(() =>
+    public void Switching_motion_sets_cancels_old_caret_motion_and_reduced_retains_new_glides(MotionPreference preference) => Sta(() =>
     {
         var box = new TextBox { Text = "Text" }; using var host = new Host(box); End(box);
         Type(box, "a"); Drain(); Assert.True(SmoothCaretBehavior.Inspect(box).Moving);
         MotionPolicy.Configure(preference, false);
         Assert.False(SmoothCaretBehavior.Inspect(box).NativeHidden);
         Type(box, "b"); Drain();
-        Assert.Equal("Textab", box.Text); Assert.False(SmoothCaretBehavior.Inspect(box).Moving);
+        Assert.Equal("Textab", box.Text);
+        Assert.Equal(preference == MotionPreference.Reduced, SmoothCaretBehavior.Inspect(box).Moving);
     });
 
     [Fact]

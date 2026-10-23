@@ -46,7 +46,7 @@ internal static partial class Program
             OverlayBackdropCapture.Measured += value => MaterialMeasurements.Add(value);
             LoadResources("Dark");
             Scriblucent.Rendering.SkiaBackdropBlur.BeginWarmup();
-            ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+            ReducedMotionPreferences.Configure(MotionPreference.Full);
             _app.Dispatcher.BeginInvoke(() =>
             {
                 var exitCode = 0;
@@ -279,7 +279,7 @@ internal static partial class Program
         {
             LoadResources(theme);
             using var s = new Scene();
-            foreach (var preference in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            foreach (var preference in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             {
                 ReducedMotionPreferences.Configure(preference); Pump(120);
                 Measure($"{theme}/{preference}/about-open", s, () => s.About.ShowAnimated(), 420);
@@ -320,8 +320,8 @@ internal static partial class Program
                 BenchmarkFifthPass(s, theme, preference);
             }
             s.Window.WindowState = WindowState.Maximized; Pump(220);
-            ReducedMotionPreferences.Configure(MotionPreference.Automatic);
-            Measure($"{theme}/Automatic/maximized-about", s, () => s.About.ShowAnimated(), 450);
+            ReducedMotionPreferences.Configure(MotionPreference.Full);
+            Measure($"{theme}/Full/maximized-about", s, () => s.About.ShowAnimated(), 450);
             s.About.HideAnimated(); Pump(200);
             RasterProbe(s, theme);
         }
@@ -398,7 +398,7 @@ internal static partial class Program
         var results = new List<object>();
         var available = true;
         LoadResources("Dark"); using var scene = new Scene();
-        ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+        ReducedMotionPreferences.Configure(MotionPreference.Full);
         scene.About.ShowAnimated(); Pump(800); scene.About.HideAnimated(); Pump(250);
         void MeasureVisible(string name, FrameworkElement region, Action start, int duration)
         {
@@ -423,7 +423,7 @@ internal static partial class Program
         {
             LoadResources(theme);
             using var scene = new Scene();
-            ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+            ReducedMotionPreferences.Configure(MotionPreference.Full);
             var frames = Capture(scene.Root, () => scene.About.ShowAnimated(), 650);
             SaveGif(frames, $"about-{theme.ToLowerInvariant()}.gif");
             var logo = (FrameworkElement)scene.About.FindName("BrandLogoHost");

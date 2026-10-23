@@ -14,7 +14,7 @@ internal static partial class Program
     {
         _wake16 = true;
         LoadNativeControlResources(theme); ThemeManager.SetTheme(theme);
-        var (window, model, _) = LoadingWindow(theme, MotionPreference.Automatic, 0);
+        var (window, model, _) = LoadingWindow(theme, MotionPreference.Full, 0);
         var report = new List<string>();
         try
         {

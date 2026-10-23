@@ -113,7 +113,7 @@ public partial class App : Application
         Task.Run(() => DiagnosticCleanup.CleanupOldLogs());
 
         ReducedMotionPreferences.Configure(settings.AnimationPreference ?? (settings.ReduceAnimations
-            ? MotionPreference.Reduced : MotionPreference.Automatic));
+            ? MotionPreference.Reduced : MotionPreference.Full));
         ReducedMotionPreferences.Refresh();
         Scriblucent.Rendering.SkiaBackdropBlur.BeginWarmup();
         LocalizationService.SetCulture(settings.Language);

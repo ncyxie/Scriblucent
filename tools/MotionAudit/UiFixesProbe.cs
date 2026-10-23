@@ -26,7 +26,7 @@ internal static partial class Program
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme); LocalizationService.SetCulture("en");
             // The audit executable is a different entry assembly from the application.
             _app.Resources["BrandLogoSvg"] = new Uri($"pack://application:,,,/Scriblucent;component/Assets/brand-logo-{(theme == "Dark" ? "light" : "dark")}.svg");
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             var settings = new SettingsPanel();
             typeof(SettingsPanel).GetField("_isApplyingSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(settings, true);
             settings.DataContext = new SettingsProbeModel { EnableScrollbar = false };

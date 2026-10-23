@@ -113,7 +113,7 @@ public partial class FlashcardFlipHost : UserControl
         finally { _preparingFaces = false; }
 
         var targetFlipped = !IsFlipped;
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             CommitFlipState(targetFlipped);
             onComplete?.Invoke();
@@ -159,6 +159,7 @@ public partial class FlashcardFlipHost : UserControl
             targetFlipped ? Visibility.Visible : Visibility.Hidden);
         FrontHost.ApplyAnimationClock(UIElement.VisibilityProperty, frontVisibilityClock);
         BackFace.ApplyAnimationClock(UIElement.VisibilityProperty, backVisibilityClock);
+        if (!MotionPolicy.ExpressiveExtras) return;
         AnimationClock DepthClock(double rest, double middle)
         {
             var animation = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };

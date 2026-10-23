@@ -524,7 +524,7 @@ public sealed class DashboardMotionEngine
         CapturePositions(ungroupedOnly: false);
 
         var layoutRoot = FindLayoutRootById(itemId);
-        if (layoutRoot is null || UiMotion.PrefersReducedMotion)
+        if (layoutRoot is null || UiMotion.IsMotionDisabled)
         {
             CommitDeleteBatch(commitDelete, afterMotion);
             return;
@@ -550,7 +550,7 @@ public sealed class DashboardMotionEngine
         CapturePositions(ungroupedOnly: false);
         ArmDeleteBatchSafety(commitDelete, afterMotion);
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             CommitDeleteBatch(commitDelete, afterMotion);
             return;
@@ -570,8 +570,8 @@ public sealed class DashboardMotionEngine
             cards.Add((layoutRoot, DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope)));
         }
 
-        if (cards.Count > UiMotion.MaxBulkAnimatedExits)
-            cards.RemoveRange(UiMotion.MaxBulkAnimatedExits, cards.Count - UiMotion.MaxBulkAnimatedExits);
+        if (cards.Count > MotionPolicy.PresenceItemBudget)
+            cards.RemoveRange(MotionPolicy.PresenceItemBudget, cards.Count - MotionPolicy.PresenceItemBudget);
 
         if (cards.Count == 0)
         {
@@ -621,11 +621,11 @@ public sealed class DashboardMotionEngine
         if (_moveBatchCommitted)
             return;
 
-        RealizeItemsForIds(ids);
+        if (MotionPolicy.ExpressiveExtras) RealizeItemsForIds(ids);
         CapturePositions(ungroupedOnly: false, freezeViewport: true);
         ArmMoveBatchSafety(ids, commitMove, afterMotion);
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             CommitMoveAfterExit(ids, commitMove, afterMotion);
             return;
@@ -635,6 +635,7 @@ public sealed class DashboardMotionEngine
         var resolvedIds = new HashSet<Guid>();
         foreach (var itemId in ids)
         {
+            if (!MotionPolicy.ExpressiveExtras && exitTargets.Count >= MotionPolicy.PresenceItemBudget) break;
             if (!resolvedIds.Add(itemId))
                 continue;
 
@@ -645,6 +646,9 @@ public sealed class DashboardMotionEngine
                 continue;
 
             // Do not cull by viewport — drag-time opacity/hit-test quirks falsely skip on-screen cards.
+            // The reduced set can cull by geometry, explicitly including dimmed drag sources.
+            if (!MotionPolicy.ExpressiveExtras && !DashboardMotionViewport.IntersectsViewport(layoutRoot, _scrollViewer, includeTransparent: true))
+                continue;
             exitTargets.Add((layoutRoot, DashboardMotionCardCatalog.ResolveMotionSurface(layoutRoot, _scope)));
         }
 
@@ -954,7 +958,7 @@ public sealed class DashboardMotionEngine
             return;
         }
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             FinalizePendingEntersWithoutMotion(enterItemIds);
             FinishReflow();
@@ -1060,7 +1064,7 @@ public sealed class DashboardMotionEngine
         {
             TryPlayEnterForItem(enterItemId, () => RetireEnter(enterItemId), enterDelay);
             if (animatedEnterIds.Contains(enterItemId))
-                enterDelay = Math.Min(enterDelay + UiMotion.ReflowStaggerMs, UiMotion.ReflowStaggerCapMs);
+                enterDelay = MotionPolicy.StaggerDelay(Math.Min(enterDelay + UiMotion.ReflowStaggerMs, UiMotion.ReflowStaggerCapMs));
         }
     }
 
@@ -1090,13 +1094,13 @@ public sealed class DashboardMotionEngine
         if (enterItemIds.Count == 0)
             return enterItemIds;
 
-        if (enterItemIds.All(_relocatingItemIds.Contains))
+        if (MotionPolicy.ExpressiveExtras && enterItemIds.All(_relocatingItemIds.Contains))
             return enterItemIds;
 
         var scrollViewer = _scrollViewer ?? DashboardMotionViewport.FindScrollViewer(_dashboardRoot);
         var contentOffsetY = ResolveSectionRelativeViewportTop();
         var metrics = ResolvePrimaryGridMetrics();
-        var animated = new List<Guid>(Math.Min(enterItemIds.Count, UiMotion.MaxBulkAnimatedEnters));
+        var animated = new List<Guid>(Math.Min(enterItemIds.Count, MotionPolicy.PresenceItemBudget));
 
         // Instant/off-screen entries still share the same visible-card budget.
         // One instant entry must never make the rest of a burst bypass that budget.
@@ -1109,7 +1113,7 @@ public sealed class DashboardMotionEngine
                 && DashboardMotionViewport.IntersectsViewport(layoutRoot, scrollViewer))
             {
                 animated.Add(itemId);
-                if (animated.Count >= UiMotion.MaxBulkAnimatedEnters)
+                if (animated.Count >= MotionPolicy.PresenceItemBudget)
                     break;
             }
         }
@@ -1128,7 +1132,7 @@ public sealed class DashboardMotionEngine
                     continue;
 
                 animated.Add(itemId);
-                if (animated.Count >= UiMotion.MaxBulkAnimatedEnters)
+                if (animated.Count >= MotionPolicy.PresenceItemBudget)
                     break;
             }
         }
@@ -1364,7 +1368,7 @@ public sealed class DashboardMotionEngine
 
         // Keep adjacent cards moving together during insertions; stagger belongs to
         // entrances, where it cannot compress the spacing between existing cards.
-        var useStagger = !isAddReflow && candidates.Count <= UiMotion.ReflowStaggerMaxItems;
+        var useStagger = MotionPolicy.ExpressiveExtras && !isAddReflow && candidates.Count <= UiMotion.ReflowStaggerMaxItems;
         var tracks = new List<RenderTransitionClock.Track>(candidates.Count * 2);
         var animatedRoots = new List<FrameworkElement>(candidates.Count);
 
@@ -2177,7 +2181,7 @@ public sealed class DashboardMotionEngine
             onComplete?.Invoke();
         }
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             FinalizeExitedCard(layoutRoot, motionSurface);
             onComplete?.Invoke();

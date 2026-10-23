@@ -17,7 +17,7 @@ internal static partial class Program
     {
         var checks = new List<string>();
         foreach (var theme in new[] { "Light", "Dark" })
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             if (only is not null && !only.StartsWith($"{theme}/{mode}")) continue;
             LoadNativeControlResources(theme);
@@ -95,19 +95,19 @@ internal static partial class Program
                         Require(first.IsItemSelected && first.FaceMargin == margin && feedback.ActualWidth > 100 && toggle.IsVisible,
                             "Note selection disappeared or moved while using cached scroll paint.");
                         Require(first.RenderSize == liveFrameSize, $"Cached note paint changed its frame size: {liveFrameSize} to {first.RenderSize}.");
-                        if (mode == MotionPreference.Automatic && theme == "Light") SaveControlCapture((FrameworkElement)window.Content, "note-selection-cached-paint");
+                        if (mode == MotionPreference.Full && theme == "Light") SaveControlCapture((FrameworkElement)window.Content, "note-selection-cached-paint");
                         card.IsBitmapMode = false;
                     }
                     else
                     {
                         var tile = ControlTree(first).OfType<DashboardTileHost>().Single();
-                        if (mode == MotionPreference.Automatic)
+                        if (mode == MotionPreference.Full)
                         {
                             tile.QueueWarm(); WaitLoading(() => tile.HasCachedScrollTile);
                         }
                         tile.IsBitmapMode = true; Pump(100);
                         Require(first.IsItemSelected && toggle.IsVisible && feedback.Progress > .99, "Cached listing paint covered selection.");
-                        if (mode == MotionPreference.Automatic)
+                        if (mode == MotionPreference.Full)
                         {
                             Require(tile.HasReadyScrollTile, "The warmed listing did not use its exact cached drawing.");
                             var image = (Image)tile.Template.FindName("BitmapLayer", tile);
@@ -115,7 +115,7 @@ internal static partial class Program
                             vm.DashboardSelection.Toggle(first.ItemId); vm.DashboardSelection.Toggle(first.ItemId);
                             Require(tile.HasReadyScrollTile && ReferenceEquals(paint, image.Source), "Selection rebuilt the cached card image.");
                         }
-                        if (mode == MotionPreference.Automatic && theme == "Light")
+                        if (mode == MotionPreference.Full && theme == "Light")
                         {
                             var ungrouped = frames.First(frame => !frame.FaceName.StartsWith("Grouped"));
                             var ungroupedTile = ControlTree(ungrouped).OfType<DashboardTileHost>().Single();
@@ -129,7 +129,7 @@ internal static partial class Program
                     Require(vm.DashboardSelection.Count == 48 && ((CheckBox)dock.FindName("AllToggle")).IsChecked == true, "Select all ignored offscreen items.");
                     vm.DashboardSelection.SelectAll(); Require(vm.DashboardSelection.Count == 48, "Repeated select all cleared selection.");
                     Require(ControlTree(page).OfType<CollectionSelectionFrame>().Count() < 48, "Select all realized the entire collection.");
-                    if (mode == MotionPreference.Automatic) SaveControlCapture((FrameworkElement)window.Content, $"dashboard-selection-{kind}-{theme}");
+                    if (mode == MotionPreference.Full) SaveControlCapture((FrameworkElement)window.Content, $"dashboard-selection-{kind}-{theme}");
                     viewer.ScrollToEnd(); Pump(180);
                     viewer.ScrollToTop(); Pump(220);
                     WaitLoading(() => ControlTree(page).OfType<CollectionSelectionFrame>().Where(f => f.IsVisible).All(f => f.IsItemSelected));

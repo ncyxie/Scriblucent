@@ -352,7 +352,7 @@ public static class CardSurfaceMotionBehavior
             return;
         }
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             PlayEnterImmediate(element);
             onComplete?.Invoke();
@@ -462,8 +462,19 @@ public static class CardSurfaceMotionBehavior
         if (state.IsAttached)
             return;
 
-        state.LoadedHandler = (_, _) => OnCardLoaded(element);
-        state.UnloadedHandler = (_, _) => Cleanup(element);
+        state.PolicyChanged = () =>
+        {
+            if (!element.Dispatcher.CheckAccess()) return;
+            ForceRestHoverState(element);
+            SyncPointerState(element);
+        };
+        state.LoadedHandler = (_, _) =>
+        {
+            MotionPolicy.Changed -= state.PolicyChanged;
+            MotionPolicy.Changed += state.PolicyChanged;
+            OnCardLoaded(element);
+        };
+        state.UnloadedHandler = (_, _) => { MotionPolicy.Changed -= state.PolicyChanged; Cleanup(element); };
         state.MouseEnterHandler = (_, _) => PlayHover(element, isEnter: true);
         state.MouseLeaveHandler = (_, _) => PlayHover(element, isEnter: false);
 
@@ -527,6 +538,7 @@ public static class CardSurfaceMotionBehavior
     {
         if (element.GetValue(StateProperty) is not State state || !state.IsAttached)
             return;
+        MotionPolicy.Changed -= state.PolicyChanged;
 
         if (state.LoadedHandler != null)
             element.Loaded -= state.LoadedHandler;
@@ -547,7 +559,7 @@ public static class CardSurfaceMotionBehavior
 
     private static bool IsNewlyAddedCard(FrameworkElement element)
     {
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
             return false;
 
         if (_lastAddedNoteId is not { } lastAddedId)
@@ -562,7 +574,7 @@ public static class CardSurfaceMotionBehavior
 
     private static bool ShouldUseBurstEnter()
     {
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
             return true;
 
         return _rapidAddCount > 2
@@ -727,7 +739,7 @@ public static class CardSurfaceMotionBehavior
         var durationMs = isEnter ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
         // Lift instead of scale: RenderTransform scale upscales already-drawn ClearType
         // glyphs and inevitably softens text/icons. A translate pop stays pixel-sharp.
-        var targetLift = isEnter ? UiMotion.CardHoverLiftY : 0.0;
+        var targetLift = isEnter && MotionPolicy.ExpressiveExtras ? UiMotion.CardHoverLiftY : 0.0;
         var translate = UiMotion.ChannelTranslate(hoverTarget, MotionChannel.Interaction);
         // Rest size is always 1 (0.88 is enter start only). Hover animates lift, not scale.
 
@@ -737,7 +749,8 @@ public static class CardSurfaceMotionBehavior
         ClearLiveShadowEffect(hoverTarget);
 
         if (!isEnter && translate.Y == 0
-            && !NativeSurfaceMotion.IsRunning(hoverTarget, MotionChannel.Interaction))
+            && !NativeSurfaceMotion.IsRunning(hoverTarget, MotionChannel.Interaction)
+            && !SurfaceLight.HasHighlight(hoverTarget))
         {
             // Recycling/visibility repair often synchronizes a card already at rest.
             // Establish its shadow directly instead of starting an empty hover-out clock.
@@ -745,16 +758,20 @@ public static class CardSurfaceMotionBehavior
             return;
         }
 
-        var tracks = new List<NativeMotionTrack> { new(translate, TranslateTransform.YProperty, targetLift, true) };
+        var tracks = new List<NativeMotionTrack>();
+        if (MotionPolicy.ExpressiveExtras) tracks.Add(new(translate, TranslateTransform.YProperty, targetLift, true));
+        else translate.Y = 0;
         SurfaceLight.AddTracks(hoverTarget, tracks, isEnter);
         if (TryResolveBakedShadowPlate(hoverTarget, element, out var plate))
         {
-            tracks.Add(new(plate, UIElement.OpacityProperty, isEnter ? 1 : .72));
+            if (MotionPolicy.ExpressiveExtras) tracks.Add(new(plate, UIElement.OpacityProperty, isEnter ? 1 : .72));
+            else plate.Opacity = .72;
             if (plate is not CardShadowLayer { FollowsFace: true } && !IsVisualDescendantOf(plate, hoverTarget))
             {
                 UiMotion.Stop(UiMotion.Channel(plate, MotionChannel.Interaction));
                 var plateTranslate = UiMotion.ChannelTranslate(plate, MotionChannel.Interaction);
-                tracks.Add(new(plateTranslate, TranslateTransform.YProperty, targetLift, true));
+                if (MotionPolicy.ExpressiveExtras) tracks.Add(new(plateTranslate, TranslateTransform.YProperty, targetLift, true));
+                else plateTranslate.Y = 0;
             }
         }
         UiMotion.Stop(UiMotion.Channel(hoverTarget, MotionChannel.Interaction));
@@ -865,5 +882,6 @@ public static class CardSurfaceMotionBehavior
         public RoutedEventHandler? UnloadedHandler;
         public MouseEventHandler? MouseEnterHandler;
         public MouseEventHandler? MouseLeaveHandler;
+        public Action? PolicyChanged;
     }
 }

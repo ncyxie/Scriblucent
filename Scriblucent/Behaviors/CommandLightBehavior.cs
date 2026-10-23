@@ -210,6 +210,7 @@ public static class CommandLightBehavior
         private Point _point;
         private bool _inside, _pointerWithinRoot, _pressed, _pulsing, _disposed;
         private bool _reconcileQueued;
+        private bool _pointerEventsAttached;
         private bool _readPointerOnReconcile;
         private Border? _pressedHeader;
         private readonly HashSet<Border> _tactileHeaders = new();
@@ -220,7 +221,7 @@ public static class CommandLightBehavior
         {
             Root = root;
             if (root.ReadLocalValue(LightColorProperty) == DependencyProperty.UnsetValue) root.SetResourceReference(LightColorProperty, "CommandSurfaceLightColor");
-            root.MouseEnter += Entered; root.MouseMove += Moved; root.MouseLeave += Left;
+            UpdatePointerEvents();
             root.PreviewMouseLeftButtonDown += Down; root.PreviewMouseLeftButtonUp += Up;
             root.LostMouseCapture += CaptureLost;
             root.PreviewKeyDown += KeyDown; root.PreviewKeyUp += KeyUp;
@@ -249,19 +250,22 @@ public static class CommandLightBehavior
         }
         internal void QueueReconcile()
         {
-            if (_disposed || _reconcileQueued) return;
+            if (_disposed || _reconcileQueued || !MotionPolicy.ExpressiveExtras) return;
             _reconcileQueued = true;
             Root.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() =>
             {
                 _reconcileQueued = false;
-                if (_disposed) return;
+                if (_disposed || !MotionPolicy.ExpressiveExtras) return;
                 if (_readPointerOnReconcile)
                 { _readPointerOnReconcile = false; _point = Mouse.GetPosition(Root); _pointerWithinRoot = Root.IsMouseOver; }
                 RefreshMetrics(); Apply(false);
             }));
         }
         private void Moved(object sender, MouseEventArgs args)
-        { if (_pressedHeader is not null && Mouse.Captured is TabItem) Press(null, false); Pointer(args.GetPosition(Root), true); }
+        {
+            if (_pressedHeader is not null && Mouse.Captured is TabItem) Press(null, false);
+            if (MotionPolicy.ExpressiveExtras) Pointer(args.GetPosition(Root), true);
+        }
         private void Entered(object sender, MouseEventArgs args) => Pointer(args.GetPosition(Root), true);
         private void Left(object sender, MouseEventArgs args) => Pointer(_point, false);
         private void Down(object sender, MouseButtonEventArgs args) => Press(args.OriginalSource as DependencyObject, true);
@@ -274,18 +278,35 @@ public static class CommandLightBehavior
         private void Deactivated(object? sender, EventArgs args) { Press(null, false); Pointer(_point, false); }
         private void Closed(object? sender, EventArgs args) => Dispose();
         private void Unload(object sender, RoutedEventArgs args) => Dispose();
+        private void UpdatePointerEvents()
+        {
+            // A held tab still needs capture handoff when dragging starts, even without light.
+            var attach = !_disposed && (MotionPolicy.ExpressiveExtras || _pressedHeader is not null);
+            if (_pointerEventsAttached == attach) return;
+            _pointerEventsAttached = attach;
+            if (attach) { Root.MouseEnter += Entered; Root.MouseMove += Moved; Root.MouseLeave += Left; }
+            else { Root.MouseEnter -= Entered; Root.MouseMove -= Moved; Root.MouseLeave -= Left; }
+        }
         private void PolicyChanged()
         {
             if (!Root.Dispatcher.CheckAccess() || _disposed) return;
             SurfaceMotion.Stop(Root, MotionChannel.CommandLight); SurfaceMotion.Stop(Root, MotionChannel.CommandPress);
             _pulsing = false; ResetPress();
-            foreach (var target in _targets) target.PointAt(_point, MotionPolicy.Spatial);
+            UpdatePointerEvents();
+            if (!MotionPolicy.ExpressiveExtras)
+            {
+                _inside = _pointerWithinRoot = false;
+                foreach (var target in _targets) target.Hit = false;
+            }
+            foreach (var target in _targets) target.PointAt(_point, MotionPolicy.ExpressiveExtras);
             Apply(false);
+            if (MotionPolicy.ExpressiveExtras) { _readPointerOnReconcile = true; QueueReconcile(); }
         }
         internal void Pointer(Point point, bool inside)
         {
+            if (_disposed || !MotionPolicy.ExpressiveExtras) return;
+            _readPointerOnReconcile = false;
             using var timing = Scriblucent.Rendering.FlashcardScrollTrace.Measure(Scriblucent.Rendering.FlashcardScrollTrace.Kind.Lighting, Root);
-            if (_disposed) return;
             _pointerWithinRoot = inside;
             var active = inside && _targets.Any(target => !target.IsScrollSuspended && target.Contains(point));
             var changed = _inside != active;
@@ -295,16 +316,16 @@ public static class CommandLightBehavior
             {
                 if (target.IsScrollSuspended) continue;
                 var hit = active && target.Contains(point);
-                if ((!MotionPolicy.Spatial || target.Role == CommandLightRole.Item) && hit != target.Hit) changed = true;
-                target.Hit = hit; target.PointAt(point, MotionPolicy.Spatial);
+                if ((!MotionPolicy.ExpressiveExtras || target.Role == CommandLightRole.Item) && hit != target.Hit) changed = true;
+                target.Hit = hit; target.PointAt(point, MotionPolicy.ExpressiveExtras);
             }
             UpdateFootprint();
             if (changed) Apply(true);
         }
         internal void RefreshMetrics()
         {
+            if (_disposed || !MotionPolicy.ExpressiveExtras) return;
             using var timing = Scriblucent.Rendering.FlashcardScrollTrace.Measure(Scriblucent.Rendering.FlashcardScrollTrace.Kind.Lighting, Root);
-            if (_disposed) return;
             _footprintTarget = null;
             var changed = false;
             foreach (var target in _targets)
@@ -313,7 +334,7 @@ public static class CommandLightBehavior
                 var hit = _pointerWithinRoot && target.Contains(_point);
                 if (hit != target.Hit) changed = true;
                 target.Hit = hit;
-                if (!_pulsing) target.PointAt(_point, MotionPolicy.Spatial);
+                if (!_pulsing) target.PointAt(_point, MotionPolicy.ExpressiveExtras);
             }
             _inside = _targets.Any(target => !target.IsScrollSuspended && target.Hit); UpdateFootprint();
             if (changed && !_pulsing) Apply(true);
@@ -347,12 +368,18 @@ public static class CommandLightBehavior
             QueueReconcile();
         }
         private double Rest(Target target) => target.ScrollSuspended || ScrollTileBehavior.GetIsScrolling(target.Host)
-            || MotionPolicy.Quality == MotionQuality.Off || !target.Face.IsVisible || !target.Face.IsEnabled ? 0
-            : _inside && (target.Role != CommandLightRole.Item || target.Hit)
-                ? (MotionPolicy.Spatial ? MotionPolicy.Quality == MotionQuality.Lightweight ? .55 : .7 : target.Contains(_point) ? .22 : 0)
-                    * (target.Role == CommandLightRole.Item ? .6 : target.Role == CommandLightRole.Navigation && !MotionPolicy.Spatial ? .85 : 1) : 0;
+            || !MotionPolicy.ExpressiveExtras || !target.Face.IsVisible || !target.Face.IsEnabled ? 0
+            : _inside && (MotionPolicy.ExpressiveExtras && target.Role != CommandLightRole.Item || target.Hit)
+                ? (MotionPolicy.LightweightRendering ? .55 : .7)
+                    * (target.Role == CommandLightRole.Item ? .6 : 1) : 0;
         private void Apply(bool animate)
         {
+            if (!MotionPolicy.ExpressiveExtras)
+            {
+                SurfaceMotion.Stop(Root, MotionChannel.CommandLight);
+                foreach (var target in _targets) target.Light.Strength = 0;
+                return;
+            }
             var tracks = _targets.Select(target => new NativeMotionTrack(target.Light, CommandSurfaceLight.StrengthProperty, Rest(target) * (_pressed ? .55 : 1))).ToArray();
             if (animate) SurfaceMotion.AnimateTracks(Root, MotionChannel.CommandLight, tracks, _inside ? 140 : 180, UiMotion.OutSine);
             else { SurfaceMotion.Stop(Root, MotionChannel.CommandLight); foreach (var track in tracks) track.Target.SetCurrentValue(track.Property, track.To); }
@@ -367,7 +394,7 @@ public static class CommandLightBehavior
                 if (button is null && tab?.Template.FindName("HeaderBorder", tab) is Border header)
                 { _pressedHeader = header; _tactileHeaders.Add(header); }
             }
-            if (_pressed == pressed) return;
+            if (_pressed == pressed) { UpdatePointerEvents(); return; }
             _pressed = pressed; _pulsing = false;
             var tracks = new List<NativeMotionTrack>();
             if (_pressedHeader is { } face)
@@ -381,11 +408,12 @@ public static class CommandLightBehavior
             }
             SurfaceMotion.AnimateTracks(Root, MotionChannel.CommandPress, tracks, pressed ? 70 : 180, UiMotion.OutSine);
             if (!pressed) _pressedHeader = null;
+            UpdatePointerEvents();
             Apply(true);
         }
         internal void Settle(Point from, Point to)
         {
-            if (_disposed || !MotionPolicy.Spatial || _targets.Count == 0) return;
+            if (_disposed || !MotionPolicy.ExpressiveExtras || _targets.Count == 0) return;
             SurfaceMotion.Stop(Root, MotionChannel.CommandLight);
             var tracks = new List<NativeMotionTrack>();
             foreach (var target in _targets)
@@ -398,7 +426,7 @@ public static class CommandLightBehavior
             }
             _pulsing = true;
             SurfaceMotion.AnimateTracks(Root, MotionChannel.CommandLight, tracks, 260, UiMotion.OutSine, () =>
-            { _pulsing = false; foreach (var target in _targets) target.PointAt(_point, MotionPolicy.Spatial); });
+            { _pulsing = false; foreach (var target in _targets) target.PointAt(_point, MotionPolicy.ExpressiveExtras); });
         }
         private void ResetPress()
         {
@@ -413,7 +441,7 @@ public static class CommandLightBehavior
             Press(null, false); _disposed = true;
             SurfaceMotion.Stop(Root, MotionChannel.CommandLight); SurfaceMotion.Stop(Root, MotionChannel.CommandPress);
             ResetPress(); _tactileHeaders.Clear();
-            Root.MouseEnter -= Entered; Root.MouseMove -= Moved; Root.MouseLeave -= Left;
+            UpdatePointerEvents();
             Root.PreviewMouseLeftButtonDown -= Down; Root.PreviewMouseLeftButtonUp -= Up; Root.LostMouseCapture -= CaptureLost;
             Root.PreviewKeyDown -= KeyDown; Root.PreviewKeyUp -= KeyUp; Root.IsKeyboardFocusWithinChanged -= FocusChanged; Root.Unloaded -= Unload;
             MotionPolicy.Changed -= PolicyChanged; MotionPolicy.DecorationBudgetChanged -= PolicyChanged;

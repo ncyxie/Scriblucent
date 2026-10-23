@@ -34,7 +34,7 @@ internal static partial class Program
         _app.MainWindow = window;
         try
         {
-            window.Show(); Pump(650); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            window.Show(); Pump(650); MotionPolicy.Configure(MotionPreference.Full, false);
             var page = (FrameworkElement)window.FindName("NotesDashboardView");
             var root = (FrameworkElement)page.FindName("UngroupedSectionBody");
             var viewer = (ScrollViewer)page.FindName("NotesScrollViewer");
@@ -47,7 +47,7 @@ internal static partial class Program
                 if (useLibraryCopy) root.BringIntoView();
                 else viewer.ScrollToVerticalOffset(300);
                 Pump(650);
-                ReducedMotionPreferences.Configure(MotionPreference.Automatic); Pump(700);
+                ReducedMotionPreferences.Configure(MotionPreference.Full); Pump(700);
                 var reports = new List<string>();
                 var layoutOffsets = (ConditionalWeakTable<FrameworkElement, TranslateTransform>)typeof(DashboardMotionEngine)
                     .GetField("ReflowTranslations", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
@@ -185,7 +185,7 @@ internal static partial class Program
                 for (var index = 0; index < 12; index++)
                     vm.AddNoteFromDocument(new NoteDocument { Title = $"Existing {index + 1}" });
                 Pump(800); viewer.ScrollToVerticalOffset(300); Pump(650);
-                ReducedMotionPreferences.Configure(MotionPreference.Automatic); Pump(700);
+                ReducedMotionPreferences.Configure(MotionPreference.Full); Pump(700);
                 var spamChecks = new List<string>();
                 foreach (var interval in new[] { 20, 60, 0 })
                 {
@@ -221,7 +221,7 @@ internal static partial class Program
                             var playing = (HashSet<Guid>)typeof(DashboardMotionEngine).GetField("_playingEnterIds", flags)!.GetValue(engine)!;
                             Console.WriteLine($"  {settling.ElapsedMilliseconds}ms: {issue}; pending={pending.Count}; playing={playing.Count}; scheduled={typeof(DashboardMotionEngine).GetField("_reflowScheduled", flags)!.GetValue(engine)}");
                             if (interval == 0)
-                                Require(playing.Count <= UiMotion.MaxBulkAnimatedEnters, "Coalesced spam bypassed the entrance budget.");
+                                Require(playing.Count <= MotionPolicy.PresenceItemBudget, "Coalesced spam bypassed the entrance budget.");
                             nextSample += 200;
                         }
                     } while (issue is not null && settling.ElapsedMilliseconds < 1800);
@@ -242,7 +242,7 @@ internal static partial class Program
                 for (var index = 0; index < 12; index++)
                     vm.AddNoteFromDocument(new NoteDocument { Title = $"Existing {index + 1}" });
                 Pump(800); viewer.ScrollToVerticalOffset(300); Pump(650);
-                ReducedMotionPreferences.Configure(MotionPreference.Automatic); Pump(700);
+                ReducedMotionPreferences.Configure(MotionPreference.Full); Pump(700);
                 var surface = (FrameworkElement)window.Content;
                 var poses = new List<string>();
                 var frames = CaptureFeedback(surface,
@@ -287,8 +287,8 @@ internal static partial class Program
             }
             var checks = new List<string>();
             foreach (var (preference, interval) in new[] {
-                (MotionPreference.Automatic, 35), (MotionPreference.Automatic, 90),
-                (MotionPreference.Automatic, 160), (MotionPreference.Automatic, 350),
+                (MotionPreference.Full, 35), (MotionPreference.Full, 90),
+                (MotionPreference.Full, 160), (MotionPreference.Full, 350),
                 (MotionPreference.Reduced, 35), (MotionPreference.Off, 35) })
             {
                 ReducedMotionPreferences.Configure(preference);

@@ -23,7 +23,7 @@ internal static partial class Program
             .SetValue(null, new AppSettings { EnableAutoSave = false, EnableAiFeatures = false });
         var checks = new List<string>();
         foreach (var theme in new[] { "Light", "Dark" })
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             if (only is not null && !only.StartsWith($"{theme}/{mode}")) continue;
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme);
@@ -210,7 +210,7 @@ internal static partial class Program
             viewer.ScrollToTop(); Pump(150);
             window.SetWorkspaceActive(false); window.SetWorkspaceActive(true);
             Require(window.BulkSelection.Count == 160, "Temporarily inactive flashcards lost selection.");
-            if (mode == MotionPreference.Automatic) SaveControlCapture((FrameworkElement)window.Content, $"flashcard-selection-{theme}");
+            if (mode == MotionPreference.Full) SaveControlCapture((FrameworkElement)window.Content, $"flashcard-selection-{theme}");
             var category = (ComboBox)window.FindName("CategoryFilterComboBox");
             category.IsDropDownOpen = true; Pump(40);
             Require(SelectionKey(category, window, Key.Escape).Handled && !category.IsDropDownOpen && window.BulkSelection.IsActive,
@@ -251,7 +251,7 @@ internal static partial class Program
             var headerButtons = ControlTree(questionFrame).OfType<Button>().Where(button => button.IsVisible && button.Name == "DeleteQuestionButton").ToArray();
             var selector = ControlTree(questionFrame).OfType<CollectionSelectionToggle>().Single();
             double selectorY = selector.TranslatePoint(new Point(0, selector.ActualHeight / 2), questionFrame).Y;
-            if (mode == MotionPreference.Automatic) SaveControlCapture((FrameworkElement)window.Content, $"quiz-header-{theme}");
+            if (mode == MotionPreference.Full) SaveControlCapture((FrameworkElement)window.Content, $"quiz-header-{theme}");
             Require(headerButtons.Length == 1 && headerButtons.All(button => button.ActualHeight == 32 && Math.Abs(button.TranslatePoint(new Point(0, button.ActualHeight / 2), questionFrame).Y - selectorY) < 1), "Quiz header button/checkbox have unequal size or vertical centers.");
             window.BulkSelection.Toggle(original[1].Id); window.BulkSelection.Toggle(original[2].Id); window.BulkSelection.Toggle(original[6].Id);
             Require(((ContextMenu)RemainingCall(window, "BuildQuestionSelectionMenu")!).Items.OfType<MenuItem>().Any(item => Equals(item.Header, LocalizationService.GetString("SelectionExportSelected"))), "Quiz More menu has no selected export.");
@@ -278,7 +278,7 @@ internal static partial class Program
             Require(copies.Length == 3 && copies.All(question => question.LastAttemptCorrect is null && question.Hint == "Hint" &&
                 (question.Type == QuizQuestionType.PlainText ? question.PlainTextAnswer == "Expected" && question.PlainTextCharLimit == 77 && question.PlainTextMatchCase && question.PlainTextIgnorePunctuation : question.Options[0].IsCorrect)), "Quiz copies lost authored content or inherited results.");
             Require(window.BulkSelection.SelectedIds.ToHashSet().SetEquals(copies.Select(question => question.Id)), "Quiz copies were not selected.");
-            if (mode == MotionPreference.Automatic)
+            if (mode == MotionPreference.Full)
             {
                 var questionViewer = ControlTree((ItemsControl)window.FindName("QuestionsItemsControl")).OfType<ScrollViewer>().First();
                 questionViewer.ScrollToVerticalOffset(900); Pump(180);

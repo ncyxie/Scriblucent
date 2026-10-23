@@ -55,7 +55,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var dashboard in new[] { "Notes", "MindMaps", "Flashcards", "Quizzes" })
         {
-            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Full, false);
             var source = XDocument.Load($"Scriblucent/Views/Dashboards/{dashboard}DashboardPage.xaml");
             var body = source.Descendants().Single(e => ((string?)e.Attribute(x + "Name"))?.EndsWith("RecentSectionBody") == true);
             var wrapper = new XElement(wpf + "Grid", new XAttribute("Margin", "20"),
@@ -138,17 +138,17 @@ internal static partial class Program
                 foreach (var mode in new[] { MotionPreference.Reduced, MotionPreference.Off })
                 {
                     MotionPolicy.Configure(mode, false);
-                    fixture.Clear(); Pump(50);
+                    fixture.Clear(); Pump(350);
                     Require(section.Visibility == Visibility.Collapsed, "Reduced/Off retained empty Recents.");
-                    fixture.Fill(firstWide: true); Pump(50);
+                    fixture.Fill(firstWide: true); Pump(350);
                     Require(section.IsVisible && !NativeSurfaceMotion.IsRunning(section, MotionChannel.Layout),
-                        "Reduced/Off animated section layout or failed to restore Recents.");
+                        "The recent section did not settle after restoring content.");
                     var button = ControlTree(root).OfType<Button>().First(b => ChromeHoverMotionBehavior.GetIsEnabled(b) && ChromeHoverMotionBehavior.GetProfile(b) == ChromeHoverMotionProfile.RecentCard);
                     var face = (FrameworkElement)button.Template.FindName("CardBorder", button);
-                    button.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseEnterEvent }); Pump(50);
-                    Require(ControlTree(face).OfType<SurfacePaint>().Where(p => p.GetType().Name == "Light").All(p => p.Opacity == 0 || !p.IsVisible),
-                        "Reduced/Off retained an animated card wash.");
-                    Require(!NativeSurfaceMotion.IsRunning(face, MotionChannel.Interaction), "Reduced/Off retained card travel.");
+                    button.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseEnterEvent }); Pump(240);
+                    Require(ControlTree(face).OfType<SurfacePaint>().Where(p => p.GetType().Name == "Light").All(p => mode == MotionPreference.Off ? p.Opacity == 0 || !p.IsVisible : p.Opacity == 1 && p.IsVisible),
+                        "Reduced lost its card tint or Off retained it.");
+                    Require(!NativeSurfaceMotion.IsRunning(face, MotionChannel.Interaction), "The recent-card hover did not settle.");
                     button.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseLeaveEvent });
                 }
                 Console.WriteLine($"PASS production {dashboard}/{theme}: empty/disabled Recents, first-item reveal, refresh coalescing, reduced motion, shared tint, scrolling and edge mask.");

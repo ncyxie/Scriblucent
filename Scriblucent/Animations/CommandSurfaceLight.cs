@@ -46,7 +46,7 @@ internal sealed class CommandSurfaceLight : Animatable
     }
     internal void Draw(DrawingContext drawing, Geometry contour, Geometry? rim, Point origin = default)
     {
-        if (Strength <= .001 || !_owner.TryGetTarget(out var owner)) return;
+        if (!MotionPolicy.ExpressiveExtras || Strength <= .001 || !_owner.TryGetTarget(out var owner)) return;
         var color = CommandLightBehavior.GetLightColor(owner);
         var compact = MotionPolicy.Spatial && owner is InteractionSurface
             && SurfaceMaterial.GetKind(owner) != SurfaceMaterialKind.Filled

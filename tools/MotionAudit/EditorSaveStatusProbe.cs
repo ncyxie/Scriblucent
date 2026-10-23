@@ -42,7 +42,7 @@ internal static partial class Program
             var blockedPath = Path.Combine(store, "blocked-store"); File.WriteAllText(blockedPath, "fixture");
             try
             {
-                foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+                foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
                 {
                     MotionPolicy.Configure(mode, false);
                     foreach (var session in window.Sessions)
@@ -100,6 +100,6 @@ internal static partial class Program
         }
         Require(typeof(AppSettingsService).GetField("_pendingJson", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) is null,
             "The probe queued a preferences write.");
-        File.WriteAllText(Path.Combine(_output, "README.txt"), "Compiled editor save feedback: all four editors, Light/Dark, EN/LT, Automatic/Reduced/Off. Writes use generated isolated stores. PNGs are raster captures at 100/125/150/200 percent; these are not physical-monitor DPI or FPS measurements.\n");
+        File.WriteAllText(Path.Combine(_output, "README.txt"), "Compiled editor save feedback: all four editors, Light/Dark, EN/LT, Full/Reduced/Off. Writes use generated isolated stores. PNGs are raster captures at 100/125/150/200 percent; these are not physical-monitor DPI or FPS measurements.\n");
     }
 }

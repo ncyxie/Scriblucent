@@ -1118,7 +1118,7 @@ public partial class QuizModeWindow : Window
         if (FindName("TimerText") is TextBlock tt) tt.Text = displayTime.ToString(@"hh\:mm\:ss");
 
         ResultsEmblem.Ratio = percentage / 100d;
-        var prepareScoreReveal = !UiMotion.PrefersReducedMotion;
+        var prepareScoreReveal = !UiMotion.IsMotionDisabled;
         if (FindName("ResultsTitleText") is TextBlock rt)
         {
             rt.Text = LocalizationService.GetString(passed ? "QuizPassedResult" : "QuizFailedResult");
@@ -1232,13 +1232,13 @@ public partial class QuizModeWindow : Window
 
     private static void AnimateResultsReviewCard(FrameworkElement card, int index)
     {
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled || !MotionPolicy.ExpressiveExtras && index >= MotionPolicy.PresenceItemBudget)
             return;
 
         card.Opacity = 0;
         var translate = UiMotion.EnsureTranslate(card);
         translate.Y = UiMotion.ContentLiftY;
-        var delay = Math.Min(index * 30, 90);
+        var delay = MotionPolicy.StaggerDelay(Math.Min(index * 30, 90));
 
         UiMotion.RunComposited(
             card,
@@ -1282,7 +1282,7 @@ public partial class QuizModeWindow : Window
 
     private void LoadQuestionAnimated(int direction)
     {
-        if (direction == 0 || UiMotion.PrefersReducedMotion || FindName("QuestionView") is not FrameworkElement questionView)
+        if (direction == 0 || UiMotion.IsMotionDisabled || FindName("QuestionView") is not FrameworkElement questionView)
         {
             LoadQuestion();
             return;
@@ -1318,7 +1318,7 @@ public partial class QuizModeWindow : Window
     {
         if (FindName("ResultsView") is not FrameworkElement resultsView
             || FindName("QuestionView") is not FrameworkElement questionView
-            || UiMotion.PrefersReducedMotion)
+            || UiMotion.IsMotionDisabled)
         {
             ApplyReturnFromResultsState();
             LoadQuestion();
@@ -1389,7 +1389,7 @@ public partial class QuizModeWindow : Window
 
         if (FindName("QuestionView") is not FrameworkElement questionView
             || FindName("ResultsView") is not FrameworkElement resultsView
-            || UiMotion.PrefersReducedMotion)
+            || UiMotion.IsMotionDisabled)
         {
             applyResults();
             PlayCelebration();

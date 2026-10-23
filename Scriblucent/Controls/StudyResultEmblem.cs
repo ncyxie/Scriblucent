@@ -85,10 +85,11 @@ public sealed class StudyResultEmblem : Grid
              new(translate, TranslateTransform.YProperty, 0, true, Profile: MotionProfiles.Arrival),
              new(scale, ScaleTransform.ScaleXProperty, 1, true, 1.025, .997, MotionProfiles.Showcase),
              new(scale, ScaleTransform.ScaleYProperty, 1, true, 1.025, .997, MotionProfiles.Showcase)], 520, UiMotion.InOutSine, cache: true);
-        _arc.StrokeDashOffset = MotionPolicy.Spatial ? length : 0;
-        SurfaceMotion.AnimateTracks(_arc, MotionChannel.Showcase,
-            [new(_arc, Shape.StrokeDashOffsetProperty, 0, true)], 520, UiMotion.OutSine);
-        if (IsCompletion)
+        _arc.StrokeDashOffset = MotionPolicy.ExpressiveExtras ? length : 0;
+        if (MotionPolicy.ExpressiveExtras)
+            SurfaceMotion.AnimateTracks(_arc, MotionChannel.Showcase,
+                [new(_arc, Shape.StrokeDashOffsetProperty, 0, true)], 520, UiMotion.OutSine);
+        if (IsCompletion && MotionPolicy.ExpressiveExtras)
         {
             _check.StrokeDashOffset = MotionPolicy.Spatial ? 18 : 0;
             SurfaceMotion.AnimateTracks(_check, MotionChannel.Showcase,

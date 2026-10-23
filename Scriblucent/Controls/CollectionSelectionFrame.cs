@@ -200,12 +200,19 @@ public sealed class CollectionSelectionFrame : ContentControl
     private void PlayHover(bool hover, bool animate)
     {
         var translate = UiMotion.ChannelTranslate(this, MotionChannel.Interaction);
-        double lift = hover && MotionPolicy.Spatial ? UiMotion.CardHoverLiftY : 0;
-        if (!animate || !MotionPolicy.Spatial || !hover && translate.Y == 0 && !NativeSurfaceMotion.IsRunning(this, MotionChannel.Interaction))
+        double lift = hover && MotionPolicy.ExpressiveExtras ? UiMotion.CardHoverLiftY : 0;
+        if (!animate || !MotionPolicy.Enabled || !hover && translate.Y == 0
+            && !NativeSurfaceMotion.IsRunning(this, MotionChannel.Interaction) && (_face is null || !SurfaceLight.HasHighlight(_face)))
         { ResetHover(); return; }
-        var tracks = new List<NativeMotionTrack> { new(translate, TranslateTransform.YProperty, lift, true) };
+        var tracks = new List<NativeMotionTrack>();
+        if (MotionPolicy.ExpressiveExtras) tracks.Add(new(translate, TranslateTransform.YProperty, lift, true));
+        else translate.Y = 0;
         if (IsHoverTintEnabled && _face is { IsVisible: true }) SurfaceLight.AddTracks(_face, tracks, hover);
-        if (_shadow is not null) tracks.Add(new(_shadow, OpacityProperty, hover ? 1 : .72));
+        if (_shadow is not null)
+        {
+            if (MotionPolicy.ExpressiveExtras) tracks.Add(new(_shadow, OpacityProperty, hover ? 1 : .72));
+            else _shadow.Opacity = .72;
+        }
         SurfaceMotion.AnimateTracks(this, MotionChannel.Interaction, tracks,
             hover ? UiMotion.HoverInMs : UiMotion.HoverOutMs, UiMotion.OutCubic,
             () =>

@@ -30,7 +30,7 @@ public class MotionFifthPassTests
             var preference = MotionPolicy.Preference;
             var system = typeof(MotionPolicy).GetField("_systemOff", BindingFlags.Static | BindingFlags.NonPublic)!;
             var previous = (bool)system.GetValue(null)!;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception error) { failure = error; }
             finally { MotionPolicy.Configure(preference, previous); }
         });
@@ -214,7 +214,7 @@ public class MotionFifthPassTests
         expander.IsExpanded = true; Pump(60); expander.IsExpanded = false; Pump(40); expander.IsExpanded = true;
         MotionPolicy.Configure(MotionPreference.Reduced, false); Pump(100);
         Assert.Equal(Visibility.Visible, content.Visibility); Assert.True(content.IsEnabled);
-        expander.IsExpanded = false; Assert.Equal(Visibility.Collapsed, content.Visibility);
+        expander.IsExpanded = false; Pump(300); Assert.Equal(Visibility.Collapsed, content.Visibility);
     });
     [Fact]
     public void Recycled_history_rows_snap_selection_and_release_hover_and_adorner_motion() => Sta(() =>
@@ -250,7 +250,7 @@ public class MotionFifthPassTests
         Assert.False(NativeSurfaceMotion.IsRunning(container, MotionChannel.Presence));
         MotionPolicy.Configure(MotionPreference.Off, false);
         list.ItemsSource = Enumerable.Range(0, 20_000).Select(i => $"Quiz {i}").ToArray(); list.UpdateLayout(); Pump(30);
-        MotionPolicy.Configure(MotionPreference.Automatic, false); list.ScrollIntoView(list.Items[19000]); list.UpdateLayout(); Pump(40);
+        MotionPolicy.Configure(MotionPreference.Full, false); list.ScrollIntoView(list.Items[19000]); list.UpdateLayout(); Pump(40);
         Assert.InRange(list.ItemContainerGenerator.Items.Count, 20_000, 20_000);
         for (int i = 18990; i < 19020; i++)
             if (list.ItemContainerGenerator.ContainerFromIndex(i) is UIElement realized)
@@ -289,7 +289,7 @@ public class MotionFifthPassTests
         Assert.True(NativeSurfaceMotion.IsRunning(list, MotionChannel.Presence));
         LoadContinuityBehavior.SetIsLoading(list, true);
         Assert.False(NativeSurfaceMotion.IsRunning(list, MotionChannel.Presence)); Assert.Equal(1, list.Opacity);
-        MotionPolicy.Configure(MotionPreference.Reduced, false); LoadContinuityBehavior.SetIsLoading(list, false); Pump(100);
+        MotionPolicy.Configure(MotionPreference.Reduced, false); LoadContinuityBehavior.SetIsLoading(list, false); Pump(200);
         Assert.Equal(1, list.Opacity); Assert.False(NativeSurfaceMotion.IsRunning(list, MotionChannel.Presence));
     });
     private static DpiChangedEventArgs DpiArgs(Window window, double oldScale, double newScale)

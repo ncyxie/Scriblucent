@@ -42,7 +42,7 @@ public class MotionThirdPassTests
             var system = (bool)typeof(MotionPolicy).GetField("_systemOff", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
             var material = typeof(MotionPolicy).GetField("_transparencyEnabled", BindingFlags.Static | BindingFlags.NonPublic)!;
             var transparency = material.GetValue(null);
-            try { material.SetValue(null, true); MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { material.SetValue(null, true); MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception error) { failure = error; }
             finally { MotionPolicy.Configure(preference, system); material.SetValue(null, transparency); }
         });
@@ -261,7 +261,7 @@ public class MotionThirdPassTests
 
 
     [Fact]
-    public void Live_reduced_hides_surface_lighting_even_when_a_hover_clock_settles_to_one() => Sta(() =>
+    public void Live_reduced_preserves_surface_tint_when_a_hover_clock_settles_to_one() => Sta(() =>
     {
         var host = new Grid { Background = Brushes.White };
         var window = new Window { Content = host, Width = 500, Height = 350, ShowActivated = false };
@@ -273,7 +273,8 @@ public class MotionThirdPassTests
             SurfaceMotion.AnimateTracks(host, MotionChannel.Interaction, tracks, 160, UiMotion.OutCubic);
             var light = host.Children.OfType<FrameworkElement>().Single();
             MotionPolicy.Configure(MotionPreference.Reduced, false);
-            Assert.Equal(Visibility.Hidden, light.Visibility);
+            Assert.Equal(Visibility.Visible, light.Visibility);
+            Assert.Equal(1, light.Opacity);
             Assert.False(RenderTransitionClock.IsAnyRunning);
         }
         finally { window.Close(); Pump(40); }

@@ -24,7 +24,7 @@ internal static partial class Program
         foreach (var language in new[] { "en", "lt" })
         {
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme); LocalizationService.SetCulture(language);
-            if (!quick) foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            if (!quick) foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             foreach (var width in new[] { 920d, 520d })
             {
                 MotionPolicy.Configure(mode, false);
@@ -33,7 +33,7 @@ internal static partial class Program
                 owner.Show(); Pump(35); _app.MainWindow = owner;
                 void Capture(Window dialog, string name)
                 {
-                    if (mode == MotionPreference.Automatic) SaveControlCapture((FrameworkElement)dialog.Content, name + "-" + suffix);
+                    if (mode == MotionPreference.Full) SaveControlCapture((FrameworkElement)dialog.Content, name + "-" + suffix);
                 }
                 void Show(Window dialog)
                 {

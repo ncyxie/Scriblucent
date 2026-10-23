@@ -18,7 +18,7 @@ public class DashboardLoadingTests
         var previous = MotionPolicy.Preference;
         try
         {
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             window.Show(); window.Activate(); overlay.StartWave(); Pump(60);
             Assert.True(overlay.IsWaveRunning);
             var builds = overlay.DrawingBuildCount;
@@ -41,13 +41,13 @@ public class DashboardLoadingTests
         {
             window.Show(); window.Activate();
             MotionPolicy.Configure(MotionPreference.Reduced, false); overlay.StartWave(); Pump(30);
-            Assert.False(overlay.IsWaveRunning);
-            MotionPolicy.Configure(MotionPreference.Automatic, false); Pump(30);
+            Assert.True(overlay.IsWaveRunning);
+            MotionPolicy.Configure(MotionPreference.Full, false); Pump(30);
             Assert.True(overlay.IsWaveRunning);
             overlay.Visibility = Visibility.Collapsed; Pump(20); Assert.False(overlay.IsWaveRunning);
             overlay.Visibility = Visibility.Visible; Pump(20); Assert.True(overlay.IsWaveRunning);
             MotionPolicy.Configure(MotionPreference.Off, false); Assert.False(overlay.IsWaveRunning);
-            overlay.StopWave(); MotionPolicy.Configure(MotionPreference.Automatic, false); Assert.False(overlay.IsWaveRunning);
+            overlay.StopWave(); MotionPolicy.Configure(MotionPreference.Full, false); Assert.False(overlay.IsWaveRunning);
         }
         finally { window.Close(); MotionPolicy.Configure(previous, false); }
     });

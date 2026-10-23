@@ -43,7 +43,7 @@ internal static partial class Program
                 Require(icons.Select(i => ((SolidColorBrush)i.Foreground).Color).Distinct().Count() == 1,
                     "Creation/import icon foregrounds do not match.");
                 SaveControlCapture(root, $"creation-paint-{theme}");
-                MotionPolicy.Configure(MotionPreference.Automatic, false);
+                MotionPolicy.Configure(MotionPreference.Full, false);
                 var face = ControlTree(menu.CreateButton).OfType<InteractionSurface>().Single();
                 face.AnimateState(true, false, false);
                 var scope = (FrameworkElement)menu.FindName("ActionPanel");
@@ -126,7 +126,7 @@ internal static partial class Program
         var launcherPosition = menu.LauncherButton.TranslatePoint(new(), page);
         var content = (FrameworkElement)page.FindName(vm.ActiveDashboard + "DashboardContentHost");
         var contentSize = content.RenderSize;
-        foreach (var preference in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var preference in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             MotionPolicy.Configure(preference, false);
             InvokeCreationButton(menu.LauncherButton); Pump(320); AwaitCreationMotion(menu); window.UpdateLayout();
@@ -143,11 +143,11 @@ internal static partial class Program
             var peer = UIElementAutomationPeer.CreatePeerForElement(menu)!;
             Require(((IExpandCollapseProvider)peer.GetPattern(PatternInterface.ExpandCollapse)!).ExpandCollapseState == ExpandCollapseState.Expanded,
                 "Automation did not expose expansion state.");
-            if (preference == MotionPreference.Automatic) SaveControlCapture(page, $"creation-{vm.ActiveDashboard}-{theme}-open");
+            if (preference == MotionPreference.Full) SaveControlCapture(page, $"creation-{vm.ActiveDashboard}-{theme}-open");
             InvokeCreationButton(menu.LauncherButton); Pump(300); AwaitCreationMotion(menu);
             Require(!menu.IsOpen && !menu.CreateButton.IsVisible, "Creation menu did not finish closing.");
         }
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         for (var i = 0; i < 10; i++) { InvokeCreationButton(menu.LauncherButton); Pump(15); }
         menu.IsOpen = true; Pump(320);
         Require(menu.CreateButton.IsVisible && menu.CreateButton.Opacity == 1, "Interrupted creation animation did not settle.");
@@ -215,7 +215,7 @@ internal static partial class Program
         menu.ImportRequested += (_, _) => { imported++; Require(!menu.IsOpen && !menu.CreateButton.IsVisible, "Import handoff saw an open menu."); };
         try
         {
-            window.Show(); Pump(100); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            window.Show(); Pump(100); MotionPolicy.Configure(MotionPreference.Full, false);
             menu.IsOpen = true; Pump(260);
             var gap = menu.TranslatePoint(new Point(8, menu.ActualHeight - 26), window);
             for (var hit = window.InputHitTest(gap) as DependencyObject; hit is not null;

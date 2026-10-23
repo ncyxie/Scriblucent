@@ -111,6 +111,12 @@ public static class ItemPresenceMotionBehavior
                     if (p.Element.DataContext is not { } item || state.Seen.Contains(Identity(item))) continue;
                     var element = p.Element;
                     var translate = UiMotion.ChannelTranslate(element, MotionChannel.Presence);
+                    if (index >= MotionPolicy.PresenceItemBudget)
+                    {
+                        SurfaceMotion.Stop(element, MotionChannel.Presence);
+                        element.Opacity = 1; translate.X = translate.Y = 0;
+                        continue;
+                    }
                     element.Opacity = 0;
                     translate.Y = MotionPolicy.Spatial ? GetRise(list) : 0;
                     translate.X = MotionPolicy.Spatial ? GetEntryOffsetX(list) : 0;
@@ -133,6 +139,7 @@ public static class ItemPresenceMotionBehavior
         double reserved = 0;
         foreach (var p in state.Previous)
         {
+            if (images.Count >= MotionPolicy.PresenceItemBudget) break;
             if (!state.Identities.TryGetValue(p.Element, out var id) || current.Contains(id)) continue;
             var width = p.Element.ActualWidth; var height = p.Element.ActualHeight;
             if (width < 1 || height < 1) continue;

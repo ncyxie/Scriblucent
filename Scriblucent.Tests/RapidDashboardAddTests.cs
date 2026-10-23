@@ -73,9 +73,12 @@ public class RapidDashboardAddTests
         Assert.Contains(document.Id, (HashSet<Guid>)typeof(DashboardMotionEngine).GetField("_enteringItemIds", flags)!.GetValue(engine)!);
     });
 
-    [Fact]
-    public void Repeated_dashboard_insertions_retarget_live_glides_instead_of_disabling_them() => Sta(() =>
+    [Theory]
+    [InlineData(MotionPreference.Full)]
+    [InlineData(MotionPreference.Reduced)]
+    public void Repeated_dashboard_insertions_retarget_live_glides_instead_of_disabling_them(MotionPreference preference) => Sta(() =>
     {
+        MotionPolicy.Configure(preference, false);
         var items = new ObservableCollection<FlashcardSetViewModel>();
         var original = new FlashcardSetViewModel(new FlashcardSetDocument());
         items.Add(original);
@@ -211,11 +214,16 @@ public class RapidDashboardAddTests
     });
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(12)]
-    [InlineData(40)]
-    public void Instant_entries_do_not_bypass_the_visible_entrance_budget(int instantCount) => Sta(() =>
+    [InlineData(1, MotionPreference.Full, false)]
+    [InlineData(12, MotionPreference.Full, false)]
+    [InlineData(40, MotionPreference.Full, false)]
+    [InlineData(1, MotionPreference.Reduced, false)]
+    [InlineData(12, MotionPreference.Reduced, false)]
+    [InlineData(40, MotionPreference.Reduced, false)]
+    [InlineData(1, MotionPreference.Reduced, true)]
+    public void Instant_entries_do_not_bypass_the_visible_entrance_budget(int instantCount, MotionPreference preference, bool relocating) => Sta(() =>
     {
+        MotionPolicy.Configure(preference, false);
         var grid = new DashboardVirtualizedCardGrid { ItemCellSize = new Size(244, 164), Width = 500 };
         var ids = new List<Guid>();
         for (var index = 0; index < 40; index++)
@@ -228,10 +236,11 @@ public class RapidDashboardAddTests
         engine.Bind(grid, grid, grid);
         var flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var instant = (HashSet<Guid>)typeof(DashboardMotionEngine).GetField("_instantEnterIds", flags)!.GetValue(engine)!;
+        if (relocating) ((HashSet<Guid>)typeof(DashboardMotionEngine).GetField("_relocatingItemIds", flags)!.GetValue(engine)!).UnionWith(ids);
         instant.UnionWith(ids.Take(instantCount));
         var animated = (IReadOnlyList<Guid>)typeof(DashboardMotionEngine).GetMethod("ResolveAnimatedEnterIds", flags)!
             .Invoke(engine, [ids])!;
-        Assert.Equal(Math.Min(40 - instantCount, UiMotion.MaxBulkAnimatedEnters), animated.Count);
+        Assert.Equal(Math.Min(40 - instantCount, MotionPolicy.PresenceItemBudget), animated.Count);
         Assert.DoesNotContain(animated, id => ids.Take(instantCount).Contains(id));
         Assert.All(ids.Except(animated), id => Assert.Contains(id, instant));
     });
@@ -309,7 +318,7 @@ public class RapidDashboardAddTests
         MotionPolicy.Configure(MotionPreference.Reduced, false);
         SurfaceLight.PulseArrival(face, false, 0);
         Assert.Empty(face.Children.Cast<UIElement>());
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         SurfaceLight.PulseArrival(face, false, 0);
         var arrival = Assert.Single(face.Children.Cast<FrameworkElement>());
         var frame = new DispatcherFrame();
@@ -321,7 +330,8 @@ public class RapidDashboardAddTests
         Assert.Equal(2, face.Children.Count);
         Assert.True(NativeSurfaceMotion.IsRunning(arrival, MotionChannel.Presence));
         MotionPolicy.Configure(MotionPreference.Reduced, false);
-        Assert.All(face.Children.Cast<FrameworkElement>(), light => Assert.Equal(Visibility.Hidden, light.Visibility));
+        Assert.All(face.Children.Cast<FrameworkElement>(), light => Assert.Equal(Visibility.Visible, light.Visibility));
+        Assert.Equal(1, face.Children.Cast<FrameworkElement>().Single(light => !ReferenceEquals(light, arrival)).Opacity);
         Assert.Equal(0, arrival.Opacity);
         Assert.False(NativeSurfaceMotion.IsRunning(arrival, MotionChannel.Presence));
     });
@@ -417,7 +427,7 @@ public class RapidDashboardAddTests
         var thread = new Thread(() =>
         {
             var preference = MotionPolicy.Preference;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception ex) { failure = ex; }
             finally { MotionPolicy.Configure(preference, false); }
         });

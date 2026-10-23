@@ -57,7 +57,7 @@ internal static partial class Program
                 var scope = dashboard == "Flashcards" ? DashboardMotionScope.Flashcards : dashboard == "Quizzes" ? DashboardMotionScope.Quizzes : DashboardMotionScope.MindMaps;
                 var engine = new DashboardMotionEngine(Dispatcher.CurrentDispatcher, scope);
                 engine.Bind(root, root, null); engine.Activate(); engine.PreparePendingEnter(id, grouped: true);
-                MotionPolicy.Configure(MotionPreference.Automatic, false);
+                MotionPolicy.Configure(MotionPreference.Full, false);
                 typeof(DashboardMotionEngine).GetMethod("PlayCardEnter", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(engine, [fixture, face, id, null, 0, false]);
                 // Capture deterministic poses of the real entry surface; wall-clock dispatcher delays

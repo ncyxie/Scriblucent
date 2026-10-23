@@ -53,15 +53,15 @@ internal static partial class Program
             // Warm fixture libraries before observing motion; disk loading is not this probe's subject.
             foreach (var dashboard in new[] { "Flashcards", "Quizzes", "MindMaps", "Notes" })
             { Go(dashboard); WaitLoading(() => model.IsActiveDashboardReady); Rest(); }
-            foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             {
                 MotionPolicy.Configure(mode, false); Go("Notes"); CheckRest(false, false);
                 var fixedPositions = UtilityPositions();
                 Go("Flashcards");
                 Require(mode == MotionPreference.Off ? !strip.IsTransitioning : strip.IsTransitioning, "Entry did not follow the selected motion preference.");
-                if (mode != MotionPreference.Automatic)
-                    Require(surfaces.All(surface => ((TranslateTransform)surface.RenderTransform).Y == 0), "Reduced/Off entry retained a spatial lift.");
-                if (mode == MotionPreference.Automatic)
+                if (mode == MotionPreference.Off)
+                    Require(surfaces.All(surface => ((TranslateTransform)surface.RenderTransform).Y == 0), "Off entry retained a spatial lift.");
+                if (mode == MotionPreference.Full)
                 {
                     var frames = new List<BitmapSource> { ToolbarFrame(header) };
                     foreach (int elapsed in new[] { 32, 32, 32, 64, 96 }) { Pump(elapsed); frames.Add(ToolbarFrame(header)); FixedUtilities(fixedPositions); }
@@ -71,7 +71,7 @@ internal static partial class Program
                 Go("Quizzes");
                 Require(surfaces[0].Opacity == 1 && surfaces[1].Opacity == 1, "Shared buttons replayed their entrance on a sibling dashboard.");
                 Require(!surfaces[2].IsHitTestVisible, "Departing Statistics retained an obsolete hit target.");
-                if (mode == MotionPreference.Automatic)
+                if (mode == MotionPreference.Full)
                 {
                     var frames = new List<BitmapSource> { ToolbarFrame(header) };
                     foreach (int elapsed in new[] { 40, 40, 40, 80, 120 }) { Pump(elapsed); frames.Add(ToolbarFrame(header)); FixedUtilities(fixedPositions); }
@@ -81,7 +81,7 @@ internal static partial class Program
                 Go("Flashcards");
                 Require(surfaces[0].Opacity == 1 && surfaces[1].Opacity == 1, "Statistics entry blanked the shared buttons.");
                 if (mode != MotionPreference.Off) Require(!surfaces[2].IsHitTestVisible, "Invisible arriving Statistics could intercept a utility click.");
-                if (mode == MotionPreference.Automatic)
+                if (mode == MotionPreference.Full)
                 {
                     var frames = new List<BitmapSource> { ToolbarFrame(header) };
                     foreach (int elapsed in new[] { 40, 40, 40, 60, 80 }) { Pump(elapsed); frames.Add(ToolbarFrame(header)); FixedUtilities(fixedPositions); }
@@ -93,14 +93,14 @@ internal static partial class Program
                 CheckRest(false, false); FixedUtilities(fixedPositions);
                 report.Add($"{theme}/{mode}: staged group arrival/exit, retained shared buttons, Statistics handoff, stationary utilities, rest geometry and hit-target cleanup passed.");
             }
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             foreach (var dashboard in new[] { "Flashcards", "Quizzes", "MindMaps", "Flashcards", "Notes", "Flashcards", "Quizzes" })
             { Go(dashboard); Pump(22); }
             CheckRest(true, false);
             Go("Flashcards"); Pump(25); MotionPolicy.Configure(MotionPreference.Off, false);
             Require(!strip.IsTransitioning, "Changing motion preference left a toolbar animation running.");
             CheckRest(true, true);
-            MotionPolicy.Configure(MotionPreference.Automatic, false); Go("Notes"); Pump(20);
+            MotionPolicy.Configure(MotionPreference.Full, false); Go("Notes"); Pump(20);
             window.Content = null; Pump(60);
             Require(!strip.IsTransitioning, "Unloading the toolbar retained native motion clocks.");
             report.Add($"{theme}: rapid reversals, preference changes during motion and unload cleanup passed. Pose captures are sampled WPF visuals, not presented-frame measurements.");

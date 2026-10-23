@@ -36,7 +36,6 @@ public sealed class OverlayPanelAnimator
     private int _transitionVersion;
     private int _backdropVersion;
     private bool _entryStarted;
-    private bool _watchingPolicy;
     private Action? _pendingEntrance;
     private Action? _finishEntrancePreparation;
     private TaskCompletionSource? _entrySettled;
@@ -57,19 +56,11 @@ public sealed class OverlayPanelAnimator
         _motionHost = motionHost;
         _backdropImage = backdropImage;
         _scrimHost = scrimHost;
-        _host.Loaded += (_, _) =>
-        {
-            if (_watchingPolicy) return;
-            MotionPolicy.Changed += PolicyChanged; _watchingPolicy = true;
-        };
-        if (_host.IsLoaded) { MotionPolicy.Changed += PolicyChanged; _watchingPolicy = true; }
         _host.Unloaded += (_, _) =>
         {
             _transitionVersion++;
             _pendingEntrance = null;
             FinishEntrancePreparation();
-            if (_watchingPolicy) MotionPolicy.Changed -= PolicyChanged;
-            _watchingPolicy = false;
             StopSurfaceMotion();
             CancelBackdropRequest();
             EndPanelMotionPrep();
@@ -128,23 +119,26 @@ public sealed class OverlayPanelAnimator
             _entryStarted = true;
             FinishEntrancePreparation();
             _motionHost.IsHitTestVisible = true;
+            // Off still prepares the material asynchronously, but presents it on the
+            // same tick as the dialog rather than adding blur after the dialog is shown.
+            var instant = ReducedMotionPreferences.ShouldUseInstantOverlayTransitions;
+            if (instant && backdropStaged) ApplyBackdrop(stagedBackdrop);
             ArrivalGroups.Start(_motionHost, fresh: !reversing);
             onEntranceStarted?.Invoke();
-            if (ReducedMotionPreferences.ShouldUseInstantOverlayTransitions) ShowImmediately(afterShown);
+            if (instant) ShowImmediately(afterShown);
             else RunOpenTransition(afterShown);
-            if (backdropStaged) ApplyBackdrop(stagedBackdrop);
+            if (!instant && backdropStaged) ApplyBackdrop(stagedBackdrop);
             if (reversing && OverlayBackdropCapture.TryCaptureForDialog(_backdropOwner) is { } existing)
                 ApplyBackdrop(existing);
         }
         _pendingEntrance = Start;
-        var ready = !reversing && !ReducedMotionPreferences.ShouldUseInstantOverlayTransitions
-            ? entrance?.Register(Start) : null;
+        var ready = !reversing ? entrance?.Register(Start) : null;
         _finishEntrancePreparation = ready;
         _host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             if (version != _transitionVersion || _isClosing) return;
             _host.UpdateLayout();
-            if (ReducedMotionPreferences.ShouldUseInstantOverlayTransitions || reversing)
+            if (reversing)
             {
                 if (_pendingEntrance is not null) Start();
                 if (_backdropRequest is null) BeginBackdropRequest();
@@ -153,9 +147,23 @@ public sealed class OverlayPanelAnimator
             {
                 if (ready is null)
                 {
-                    // Immediate modal feedback; the hidden surface cannot accept accidental clicks.
-                    SetDimOpacity(.12);
-                    BeginBackdropRequest(Start);
+                    // Animated entrances can overlap worker blur processing. Off presents
+                    // the complete material and foreground together once processing finishes.
+                    if (!ReducedMotionPreferences.ShouldUseInstantOverlayTransitions)
+                        SetDimOpacity(.12);
+                    BeginBackdropRequest(() =>
+                    {
+                        if (!ReducedMotionPreferences.ShouldUseInstantOverlayTransitions) Start();
+                    }, snapshot =>
+                    {
+                        if (_entryStarted) ApplyBackdrop(snapshot);
+                        else
+                        {
+                            stagedBackdrop = snapshot;
+                            backdropStaged = true;
+                            Start();
+                        }
+                    });
                 }
                 else
                 {
@@ -253,11 +261,6 @@ public sealed class OverlayPanelAnimator
         // A requested refresh may wait for showcase layers too; there is no resting poll/subscription.
         while (_host.IsLoaded && _host.IsVisible && AdditionalEntranceRunning?.Invoke() == true)
             await Task.Delay(16);
-    }
-
-    private void PolicyChanged()
-    {
-        if (!MotionPolicy.Spatial) _pendingEntrance?.Invoke();
     }
 
     private void ApplyBackdrop(BitmapSource? snapshot)

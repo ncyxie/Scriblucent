@@ -45,7 +45,7 @@ public static class WindowContentEnterHelper
         if (!state.EnterScheduled)
         {
             state.EnterScheduled = true;
-            state.IsEnterAnimating = !UiMotion.PrefersReducedMotion;
+            state.IsEnterAnimating = !UiMotion.IsMotionDisabled;
             ScheduleEnterWhenRendered(window, state, attempt: 0);
         }
 
@@ -74,7 +74,7 @@ public static class WindowContentEnterHelper
         var state = States.GetValue(window, _ => new WindowMotionState());
         state.PendingDialogResult = dialogResult;
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             ApplyPendingDialogResult(window, state);
             return;
@@ -94,7 +94,7 @@ public static class WindowContentEnterHelper
 
     private static void ScheduleEnterWhenRendered(Window window, WindowMotionState state, int attempt)
     {
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             if (ResolveMotionRoot(window, state) is { } root)
                 root.SetCurrentValue(UIElement.OpacityProperty, 1.0);
@@ -125,7 +125,7 @@ public static class WindowContentEnterHelper
 
     private static void PrepareEnterStart(Window window, WindowMotionState state)
     {
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
             return;
 
         if (state.IsClosed || state.IsExitAnimating || ResolveMotionRoot(window, state) is not { } root)
@@ -178,7 +178,7 @@ public static class WindowContentEnterHelper
         if (sender is not Window window || !States.TryGetValue(window, out var state))
             return;
 
-        if (state.AllowImmediateClose || UiMotion.PrefersReducedMotion || e.Cancel)
+        if (state.AllowImmediateClose || UiMotion.IsMotionDisabled || e.Cancel)
             return;
 
         if (state.IsExitAnimating)

@@ -1275,7 +1275,7 @@ namespace Scriblucent
         }
 
         private bool ShouldApplyReorderMotionInstantly()
-            => _dashboardTransitionActive || UiMotion.PrefersReducedMotion;
+            => _dashboardTransitionActive || UiMotion.IsMotionDisabled;
 
         private static double MeasureTopOffset(FrameworkElement element, UIElement relativeTo)
         {

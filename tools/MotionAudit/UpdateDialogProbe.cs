@@ -24,7 +24,7 @@ internal static partial class Program
         {
             foreach (var size in new[] { new Size(980, 760), new Size(680, 540) })
             foreach (var theme in new[] { "Dark", "Light" })
-            foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             {
                 LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme);
                 LocalizationService.SetCulture("en"); MotionPolicy.Configure(mode, false);
@@ -44,7 +44,7 @@ internal static partial class Program
                 var scroller=ControlTree(reader).OfType<ScrollViewer>().Single();
                 var shell=(OverlayDialogShell)dialog.Content;
                 var card=ControlTree(shell).OfType<Border>().Single(b=>b.Name=="DialogCard");
-                if(mode==MotionPreference.Automatic && size.Height>700)
+                if(mode==MotionPreference.Full && size.Height>700)
                     SaveControlCapture(shell,$"update-notes-top-{theme}");
                 var textPoint=reader.PointToScreen(new Point(30,45));
                 SetCursorPos((int)textPoint.X,(int)textPoint.Y); Pump(50);
@@ -76,7 +76,7 @@ internal static partial class Program
                 Require(reader.ActualHeight<=280.5,"The release reader is oversized.");
                 if(size.Height>700) Require(reader.ActualHeight>=250,"The release reader is too short for long notes.");
                 Require(!hadViewportDrift,"Scrolling translates the viewport-sized document view between commits.");
-                if(mode==MotionPreference.Automatic) Require(offsets.Count>4,"The document did not advance through intermediate eased offsets.");
+                if(mode!=MotionPreference.Off) Require(offsets.Count>4,"The document did not advance through intermediate eased offsets.");
                 var readerBounds=new Rect(reader.RenderSize);
                 Require(reader.Clip is { } clip && !clip.FillContains(new Point(0,0)) && clip.FillContains(new Point(readerBounds.Width/2,readerBounds.Height/2)),
                     "The inner release reading area is not rounded.");
@@ -102,7 +102,7 @@ internal static partial class Program
                 var end=reader.Document.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
                 Require(scroller.VerticalOffset>0 && end.Bottom>0 && end.Bottom<=reader.ActualHeight+1,
                     $"The final release line cannot be reached: offset={scroller.VerticalOffset}, maximum={scroller.ScrollableHeight}, end={end}, height={reader.ActualHeight}.");
-                if(mode==MotionPreference.Automatic) SaveControlCapture(shell,$"release-scroll-{theme}-{size.Height}");
+                if(mode==MotionPreference.Full) SaveControlCapture(shell,$"release-scroll-{theme}-{size.Height}");
                 dialog.Close();Pump(80);owner.Close();Pump(50);
             }
         }
@@ -123,7 +123,7 @@ internal static partial class Program
             LoadNativeControlResources(theme);
             Scriblucent.ThemeManager.SetTheme(theme);
             LocalizationService.SetCulture("en");
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             var background = new Grid();
             background.SetResourceReference(Panel.BackgroundProperty, "WindowBackground");
             var owner = new Window { Width = 980, Height = 760, Content = background, ShowInTaskbar = false };

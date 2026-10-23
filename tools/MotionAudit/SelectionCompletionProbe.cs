@@ -28,7 +28,7 @@ internal static partial class Program
         var settings = new AppSettings { EnableAutoSave = false, EnableAiFeatures = false };
         typeof(AppSettingsService).GetField("_cachedSettings", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, settings);
         var checks = new List<string>();
-        foreach (var (theme, mode) in new[] { ("Light", MotionPreference.Automatic), ("Dark", MotionPreference.Reduced), ("Light", MotionPreference.Off) })
+        foreach (var (theme, mode) in new[] { ("Light", MotionPreference.Full), ("Dark", MotionPreference.Reduced), ("Light", MotionPreference.Off) })
         {
             if (only is not null && only != $"{theme}/{mode}") continue;
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme);
@@ -40,7 +40,7 @@ internal static partial class Program
             CompletionMindMap(suffix, checks);
             CompletionPickers(vm, suffix, checks);
             CompletionTrash(suffix, checks);
-            if (mode == MotionPreference.Automatic) CompletionExports(vm, suffix, checks);
+            if (mode == MotionPreference.Full) CompletionExports(vm, suffix, checks);
         }
         Pump(500); Require(!RenderTransitionClock.IsAnyRunning, "Selection completion left running motion after disposal.");
         File.WriteAllLines(Path.Combine(_output, "completion-checks.txt"), checks);

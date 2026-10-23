@@ -71,7 +71,7 @@ public static class DashboardDragGhost
 
         try
         {
-            if (UiMotion.PrefersReducedMotion)
+            if (UiMotion.IsMotionDisabled)
             {
                 result = DragDrop.DoDragDrop(dragSource, data, allowedEffects);
                 return result;

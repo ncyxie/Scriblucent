@@ -60,7 +60,7 @@ internal static class LayoutRevealMotion
             : CurrentExtent(host);
         if (!soften) content.SetCurrentValue(UIElement.OpacityProperty, 1.0);
         else if (show && from == 0) content.SetCurrentValue(UIElement.OpacityProperty, 0.0);
-        if (!animate || !host.IsLoaded || (host.Parent as UIElement)?.IsVisible != true || UiMotion.PrefersReducedMotion)
+        if (!animate || !host.IsLoaded || (host.Parent as UIElement)?.IsVisible != true || UiMotion.IsMotionDisabled)
         {
             Finish(host, content, state);
             return;

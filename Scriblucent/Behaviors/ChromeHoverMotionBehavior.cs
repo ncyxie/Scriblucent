@@ -32,6 +32,7 @@ public static class ChromeHoverMotionBehavior
         public MouseButtonEventHandler? MouseUpHandler;
         public KeyEventHandler? KeyDownHandler, KeyUpHandler;
         public KeyboardFocusChangedEventHandler? LostFocusHandler;
+        public Action? PolicyChanged;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -105,7 +106,18 @@ public static class ChromeHoverMotionBehavior
         if (state.IsAttached)
             return;
 
-        state.LoadedHandler = (_, _) => ResetRestState(element);
+        state.PolicyChanged = () =>
+        {
+            if (!element.Dispatcher.CheckAccess()) return;
+            ForceRestHoverState(element);
+            if (element.IsMouseOver && element.IsEnabled) PlayHover(element, true);
+        };
+        state.LoadedHandler = (_, _) =>
+        {
+            MotionPolicy.Changed -= state.PolicyChanged;
+            MotionPolicy.Changed += state.PolicyChanged;
+            ResetRestState(element);
+        };
         state.MouseEnterHandler = (_, _) => PlayHover(element, isEnter: true);
         state.MouseLeaveHandler = (_, _) =>
         {
@@ -159,7 +171,7 @@ public static class ChromeHoverMotionBehavior
         state.IsAttached = true;
 
         if (element.IsLoaded)
-            ResetRestState(element);
+            state.LoadedHandler(element, new());
     }
 
     private static void Detach(FrameworkElement element)
@@ -167,6 +179,7 @@ public static class ChromeHoverMotionBehavior
         element.Unloaded -= OnUnloaded;
         if (element.GetValue(StateProperty) is not State state || !state.IsAttached)
             return;
+        MotionPolicy.Changed -= state.PolicyChanged;
 
         if (state.LoadedHandler != null)
             element.Loaded -= state.LoadedHandler;
@@ -190,6 +203,7 @@ public static class ChromeHoverMotionBehavior
     private static void OnUnloaded(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement element) return;
+        if (GetState(element) is { } policyState) MotionPolicy.Changed -= policyState.PolicyChanged;
         UiMotion.Cleanup(ResolveMotionHost(element));
         if (GetState(element) is { } state) state.IsPressed = false;
     }
@@ -289,19 +303,24 @@ public static class ChromeHoverMotionBehavior
         var host = ResolveMotionHost(element);
         var profile = GetProfile(element);
         var durationMs = isEnter ? UiMotion.HoverInMs : UiMotion.HoverOutMs;
-        var targetLift = isEnter ? GetHoverLiftY(profile) : 0.0;
+        var targetLift = isEnter && MotionPolicy.ExpressiveExtras ? GetHoverLiftY(profile) : 0.0;
         var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
 
-        var tracks = new List<NativeMotionTrack> { new(translate, TranslateTransform.YProperty, targetLift, true) };
+        var tracks = new List<NativeMotionTrack>();
+        if (MotionPolicy.ExpressiveExtras) tracks.Add(new(translate, TranslateTransform.YProperty, targetLift, true));
+        else translate.Y = 0;
         // Recent items are content cards: use exactly the same wash, edge and
         // timing as CardSurfaceMotionBehavior, rather than a command-button light.
         if (profile == ChromeHoverMotionProfile.RecentCard || CommandLightBehavior.LightFor(element) is null)
             SurfaceLight.AddTracks(host, tracks, isEnter);
         else SurfaceLight.Reset(host);
         if (TryResolveBakedShadowLayer(element, out var bakedShadow))
-            tracks.Add(new(bakedShadow, UIElement.OpacityProperty,
-                profile == ChromeHoverMotionProfile.RecentCard ? isEnter ? 1 : .72 :
-                isEnter ? GetHoverShadowOpacity(profile) : GetRestShadowOpacity(profile)));
+        {
+            var opacity = profile == ChromeHoverMotionProfile.RecentCard ? isEnter && MotionPolicy.ExpressiveExtras ? 1 : .72 :
+                isEnter && MotionPolicy.ExpressiveExtras ? GetHoverShadowOpacity(profile) : GetRestShadowOpacity(profile);
+            if (MotionPolicy.ExpressiveExtras) tracks.Add(new(bakedShadow, UIElement.OpacityProperty, opacity));
+            else bakedShadow.Opacity = opacity;
+        }
         UiMotion.Stop(UiMotion.Channel(host, MotionChannel.Interaction));
         SurfaceMotion.AnimateTracks(host, MotionChannel.Interaction, tracks, durationMs, UiMotion.OutCubic);
     }
@@ -310,7 +329,7 @@ public static class ChromeHoverMotionBehavior
     {
         if (!MotionPolicy.Spatial) return;
         var host = ResolveMotionHost(element);
-        var target = isPressed ? UiMotion.PressNudgeY : element.IsMouseOver ? GetHoverLiftY(GetProfile(element)) : 0;
+        var target = isPressed ? UiMotion.PressNudgeY : element.IsMouseOver && MotionPolicy.ExpressiveExtras ? GetHoverLiftY(GetProfile(element)) : 0;
         var translate = UiMotion.ChannelTranslate(host, MotionChannel.Interaction);
         UiMotion.Stop(UiMotion.Channel(host, MotionChannel.Interaction));
         SurfaceMotion.AnimateTracks(host, MotionChannel.Interaction,

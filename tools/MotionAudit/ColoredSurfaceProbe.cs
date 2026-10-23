@@ -25,7 +25,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         {
             LoadNativeControlResources(theme);
-            foreach (var preference in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            foreach (var preference in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             {
                 MotionPolicy.Configure(preference, false);
                 var gallery = BuildSurfaceGallery();
@@ -96,7 +96,7 @@ internal static partial class Program
                 finally { window.Close(); Pump(30); }
             }
         }
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         Require(!RenderTransitionClock.IsAnyRunning, "Closed surface fixtures left frame observers behind.");
         File.WriteAllLines(Path.Combine(_output, "checks.txt"), checks);
         File.WriteAllText(Path.Combine(_output, "capture-costs.json"), JsonSerializer.Serialize(costs, new JsonSerializerOptions { WriteIndented = true }));

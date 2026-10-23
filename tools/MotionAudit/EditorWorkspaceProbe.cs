@@ -26,7 +26,7 @@ internal static partial class Program
         foreach (var language in new[] { "en", "lt" })
         {
             LoadNativeControlResources(theme); LocalizationService.SetCulture(language);
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             var store = Path.Combine(_output, "stores", runId, theme + "-" + language);
             Directory.CreateDirectory(store);
             var vm = new MainViewModel(settings, loadPersistedContent: false, applyThemeAndCulture: false)
@@ -216,7 +216,7 @@ internal static partial class Program
             window.CloseDocument(flashSession.Key); Pump(160);
             Require(flashSession.IsDisposed && tabs.Items.Count == 2 && vm.FlashcardSets[0].Title.Contains("pending"),
                 "Save and close did not persist before releasing the tab.");
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             // The plus menu must open every kind, including Notes, without a dashboard opening hook.
             foreach (var kind in Enum.GetValues<EditorDocumentKind>())
             {

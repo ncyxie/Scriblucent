@@ -78,15 +78,17 @@ public class MotionSystemTests
     });
 
     [Theory]
-    [InlineData(MotionPreference.Reduced, 80)]
+    [InlineData(MotionPreference.Full, 300)]
+    [InlineData(MotionPreference.Reduced, 300)]
     [InlineData(MotionPreference.Off, 0)]
-    public void Motion_preference_limits_fades_and_disables_spatial_motion(MotionPreference preference, int duration) => Sta(() =>
+    public void Motion_sets_share_timing_and_only_off_disables_core_motion(MotionPreference preference, int duration) => Sta(() =>
     {
         var materialBefore = MotionPolicy.BackdropBlur;
         MotionPolicy.Configure(preference, false);
         Assert.Equal(duration, MotionPolicy.FadeDuration(300));
-        Assert.False(MotionPolicy.Spatial);
-        Assert.False(MotionPolicy.Celebration);
+        Assert.Equal(preference != MotionPreference.Off, MotionPolicy.Spatial);
+        Assert.Equal(preference == MotionPreference.Full, MotionPolicy.Celebration);
+        Assert.Equal(preference == MotionPreference.Full ? 8 : 4, MotionPolicy.PresenceItemBudget);
         Assert.Equal(materialBefore, MotionPolicy.BackdropBlur);
     });
 
@@ -102,12 +104,80 @@ public class MotionSystemTests
         Assert.False(RenderTransitionClock.IsAnyRunning);
     });
 
-    [Fact]
-    public void System_accessibility_overrides_automatic() => Sta(() =>
+    [Theory]
+    [InlineData(MotionPreference.Full)]
+    [InlineData(MotionPreference.Reduced)]
+    public void System_accessibility_overrides_both_motion_sets(MotionPreference preference) => Sta(() =>
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, true);
+        MotionPolicy.Configure(preference, true);
         Assert.Equal(MotionQuality.Off, MotionPolicy.Quality);
+        Assert.False(MotionPolicy.Enabled);
+        Assert.False(MotionPolicy.ExpressiveExtras);
     });
+
+    [Fact]
+    public void Reduced_procedural_motion_keeps_full_timing_and_every_intermediate_step() => Sta(() =>
+    {
+        var samples = new List<double[]>();
+        foreach (var preference in new[] { MotionPreference.Full, MotionPreference.Reduced })
+        {
+            MotionPolicy.Configure(preference, false);
+            var clock = new RenderTransitionClock(); var values = new List<double>();
+            clock.Run([UiMotion.Track(300, UiMotion.InOutSine, 0, 1, values.Add)]);
+            for (var time = 0; time <= 300; time += 10) Tick(clock, time);
+            Assert.Equal(31, values.Count);
+            Assert.InRange(values[15], .49, .51);
+            Assert.Equal(1, values[^1]);
+            samples.Add(values.ToArray());
+        }
+        Assert.Equal(samples[0], samples[1]);
+        Assert.False(RenderTransitionClock.IsAnyRunning);
+    });
+
+    [Fact]
+    public void Reduced_limits_arrivals_without_stagger_or_overshoot_and_settles_every_item() => Sta(() =>
+    {
+        using var h = new Harness();
+        var items = Enumerable.Range(0, 8).Select(_ => new Border { Width = 40, Height = 40 }).ToArray();
+        h.Window.Content = new StackPanel();
+        var root = (StackPanel)h.Window.Content;
+        foreach (var item in items) root.Children.Add(item);
+        h.Pump(30); MotionPolicy.Configure(MotionPreference.Reduced, false);
+        Assert.All(items, item => Assert.True(item.IsLoaded));
+        var completed = 0;
+        UiMotion.AnimateStaggeredContentEnter(items, 280, onComplete: () => completed++);
+        Assert.All(items.Take(4), item => Assert.True(NativeSurfaceMotion.IsRunning(item, MotionChannel.Presence)));
+        Assert.All(items.Skip(4), item =>
+        { Assert.Equal(1, item.Opacity); Assert.False(NativeSurfaceMotion.IsRunning(item, MotionChannel.Presence)); });
+        var states = typeof(NativeSurfaceMotion).GetField("States", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var args = new object?[] { items[3], null };
+        Assert.True((bool)states.GetType().GetMethod("TryGetValue")!.Invoke(states, args)!);
+        var state = ((System.Collections.IDictionary)args[1]!)[MotionChannel.Presence]!;
+        var tracks = (System.Collections.IEnumerable)state.GetType().GetField("Tracks", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(state)!;
+        foreach (var track in tracks)
+        {
+            var clock = (System.Windows.Media.Animation.AnimationClock)track!.GetType().GetField("Item2")!.GetValue(track)!;
+            var frames = Assert.IsType<System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames>(clock.Timeline).KeyFrames;
+            Assert.Equal(2, frames.Count);
+            Assert.Equal(TimeSpan.Zero, frames[0].KeyTime.TimeSpan);
+            Assert.InRange(frames[1].KeyTime.TimeSpan.TotalMilliseconds, 180, 280);
+        }
+        h.Pump(400);
+        Assert.Equal(1, completed);
+        Assert.All(items, item => { Assert.Equal(1, item.Opacity); Assert.Equal(1, UiMotion.EnsureScale(item).ScaleX); });
+        Assert.Equal(0, MotionCacheBudget.ReservedPixels);
+    });
+
+    [Theory]
+    [InlineData(0, MotionPreference.Full)]
+    [InlineData(1, MotionPreference.Reduced)]
+    [InlineData(2, MotionPreference.Off)]
+    public void Renamed_motion_sets_preserve_saved_numeric_preferences(int saved, MotionPreference expected)
+    {
+        var settings = System.Text.Json.JsonSerializer.Deserialize<Scriblucent.Models.AppSettings>("{\"AnimationPreference\":" + saved + "}")!;
+        Assert.Equal(expected, settings.AnimationPreference);
+        Assert.Equal(saved, (int)expected);
+    }
 
     [Fact]
     public void Temporary_cache_budget_rejects_large_surfaces_and_releases_on_cancel() => Sta(() =>
@@ -319,8 +389,16 @@ public class MotionSystemTests
         internal void Pump(int milliseconds)
         {
             var frame = new DispatcherFrame();
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
-            timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Min(16, milliseconds)) };
+            timer.Tick += (_, _) =>
+            {
+                // Transparent fixtures can coast without rendering; exercise real clock
+                // completion rather than allowing the first tick only at the deadline.
+                if (Window.IsLoaded) Window.InvalidateVisual();
+                if (elapsed.ElapsedMilliseconds < milliseconds) return;
+                timer.Stop(); frame.Continue = false;
+            };
             timer.Start(); Dispatcher.PushFrame(frame); Window.UpdateLayout();
         }
         public void Dispose() { UiMotion.Cleanup(Content); Window.Close(); Pump(25); }
@@ -332,7 +410,7 @@ public class MotionSystemTests
         {
             var previous = MotionPolicy.Preference;
             var system = (bool)typeof(MotionPolicy).GetField("_systemOff", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception ex) { failure = ex; }
             finally { MotionPolicy.Configure(previous, system); }
         });
@@ -423,7 +501,7 @@ public class MotionSystemTests
         var shade = (Border)flip.FindName("FlipShade"); Assert.Equal(0, shade.Opacity);
         var front = (FrameworkElement)flip.FindName("FrontHost"); var back = (FrameworkElement)flip.FindName("BackFace");
         Assert.Equal(Visibility.Hidden, front.Visibility); Assert.Equal(Visibility.Visible, back.Visibility);
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         flip.AnimateToggle(1000, () => calls++); flip.PrepareForReuse();
         Assert.True(flip.IsFlipped); Assert.False(flip.IsAnimating); Assert.Equal(1, calls);
         Assert.Equal(Visibility.Hidden, front.Visibility); Assert.Equal(Visibility.Visible, back.Visibility);

@@ -88,7 +88,7 @@ public static class SectionChevronMotionBehavior
         var rotate = EnsureRotate(element);
         var target = expanded ? ExpandedAngle : CollapsedAngle;
 
-        if (!animate || UiMotion.PrefersReducedMotion)
+        if (!animate || UiMotion.IsMotionDisabled)
         {
             UiMotion.Stop(element);
             rotate.Angle = target;

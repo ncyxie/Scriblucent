@@ -5,7 +5,7 @@ using System.Windows.Interop;
 
 namespace Scriblucent.Animations;
 
-public enum MotionPreference { Automatic, Reduced, Off }
+public enum MotionPreference { Full = 0, Reduced = 1, Off = 2 }
 public enum MotionQuality { Expressive, Lightweight, Reduced, Off }
 public enum MotionChannel { Presence, Interaction, Navigation, Layout, Showcase, Selection, CommandLight, CommandPress, InteractionPaint }
 
@@ -25,18 +25,23 @@ public static class MotionPolicy
     private static bool _systemOff;
     private static WeakReference<Window>? _activeWindow;
     private static MotionQuality _notifiedQuality;
+    private static bool _notifiedLightweight;
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Window, object> ObservedWindows = new();
     public static event Action? Changed;
     public static MotionPreference Preference => _preference;
     public static MotionQuality Quality => _systemOff || _preference == MotionPreference.Off
         ? MotionQuality.Off : _preference == MotionPreference.Reduced ? MotionQuality.Reduced
-        : (RenderCapability.Tier >> 16) < 2 || SystemParameters.IsRemoteSession
-            || RenderOptions.ProcessRenderMode == RenderMode.SoftwareOnly
-            ? MotionQuality.Lightweight : MotionQuality.Expressive;
-    public static bool Spatial => Quality is MotionQuality.Expressive or MotionQuality.Lightweight;
-    public static bool Celebration => Spatial;
-    internal static int ParticleBudget => Quality == MotionQuality.Lightweight ? 16 : Spatial ? 36 : 0;
-    internal static bool DecorativeLayers => Quality == MotionQuality.Expressive;
+        : LightweightRendering ? MotionQuality.Lightweight : MotionQuality.Expressive;
+    public static bool Enabled => Quality != MotionQuality.Off;
+    public static bool Spatial => Enabled;
+    // Reduced keeps the same core motion, paint and timing. Only secondary choreography
+    // uses this budget; hardware limits remain independent of the selected motion set.
+    internal static bool ExpressiveExtras => Enabled && _preference == MotionPreference.Full;
+    public static bool Celebration => ExpressiveExtras;
+    internal static int ParticleBudget => !Celebration ? 0 : LightweightRendering ? 16 : 36;
+    internal static bool DecorativeMotion => ExpressiveExtras && !LightweightRendering;
+    internal static int PresenceItemBudget => ExpressiveExtras ? MotionTokens.MaxItems : 4;
+    internal static int StaggerDelay(int requested) => ExpressiveExtras ? requested : 0;
     internal static event Action? DecorationBudgetChanged;
     public static bool BackdropBlur => !SystemParameters.HighContrast && _transparencyEnabled;
     internal static bool LightweightRendering => (RenderCapability.Tier >> 16) < 2 || SystemParameters.IsRemoteSession
@@ -52,12 +57,7 @@ public static class MotionPolicy
         }
         catch { return true; }
     }
-    public static int FadeDuration(int requested) => Quality switch
-    {
-        MotionQuality.Off => 0,
-        MotionQuality.Reduced => Math.Min(80, requested),
-        _ => requested
-    };
+    public static int FadeDuration(int requested) => Enabled ? requested : 0;
 
     static MotionPolicy()
     {
@@ -87,11 +87,12 @@ public static class MotionPolicy
     }
     private static void NotifyQualityChanged()
     {
-        if (_notifiedQuality == Quality) return;
+        if (_notifiedQuality == Quality && _notifiedLightweight == LightweightRendering) return;
         var previous = _notifiedQuality;
         _notifiedQuality = Quality;
-        if (previous is MotionQuality.Expressive or MotionQuality.Lightweight
-            && Quality is MotionQuality.Expressive or MotionQuality.Lightweight)
+        _notifiedLightweight = LightweightRendering;
+        if (previous == Quality || (previous is MotionQuality.Expressive or MotionQuality.Lightweight
+            && Quality is MotionQuality.Expressive or MotionQuality.Lightweight))
             DecorationBudgetChanged?.Invoke();
         else Changed?.Invoke();
     }

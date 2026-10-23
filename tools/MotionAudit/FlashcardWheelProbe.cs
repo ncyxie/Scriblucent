@@ -24,7 +24,7 @@ internal static partial class Program
         typeof(AppSettingsService).GetField("_cachedSettings", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, settings);
         foreach (var theme in new[] { "Light", "Dark" })
         {
-            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Full, false);
             var store = Path.Combine(_output, "stores", theme); Directory.CreateDirectory(store);
             var vm = new MainViewModel(settings, loadPersistedContent: false, applyThemeAndCulture: false) { PersistenceDirectoryOverride = store };
             var owner = new Window { Width = 800, Height = 600, Content = new TextBlock { Text = "Isolated dashboard" }, ShowInTaskbar = false };

@@ -107,7 +107,7 @@ public class DashboardViewportTests
             groups[0].body.IsRevealed = true; Settle();
             Assert.InRange(viewer.ExtentHeight, expanded - 1, expanded + 1);
         }
-        finally { window.Close(); MotionPolicy.Configure(MotionPreference.Automatic, false); }
+        finally { window.Close(); MotionPolicy.Configure(MotionPreference.Full, false); }
     });
 
     [Theory]

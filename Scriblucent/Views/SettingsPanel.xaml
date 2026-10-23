@@ -175,7 +175,7 @@
                                                     <StackPanel Grid.Column="2">
                                                         <TextBlock Text="{Binding [Animations], Source={StaticResource Loc}}" Style="{StaticResource FormOptionLabelStyle}" Margin="{StaticResource Field.LabelMargin}" />
                                                         <ComboBox x:Name="MotionPreferenceComboBox" HorizontalAlignment="Stretch" SelectionChanged="MotionPreferenceComboBox_SelectionChanged" Margin="0">
-                                                            <ComboBoxItem Content="{Binding [MotionAutomatic], Source={StaticResource Loc}}" />
+                                                            <ComboBoxItem Content="{Binding [MotionFull], Source={StaticResource Loc}}" />
                                                             <ComboBoxItem Content="{Binding [MotionReduced], Source={StaticResource Loc}}" />
                                                             <ComboBoxItem Content="{Binding [MotionOff], Source={StaticResource Loc}}" />
                                                         </ComboBox>

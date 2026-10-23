@@ -63,14 +63,14 @@ internal static class NativeSurfaceMotion
         if (!MotionPolicy.Spatial)
         {
             // A constant spatial clock can expose its pre-animation base before the first tick.
-            // Reduced commits these properties directly and animates only meaningful fades.
+            // Disabled motion commits spatial properties without creating constant clocks.
             var animated = tracks.Select((track, index) => (track, initial: from[index]))
                 .Where(item => !item.track.Spatial).ToArray();
             tracks = animated.Select(item => item.track).ToArray();
             from = animated.Select(item => item.initial).ToArray();
         }
         durationMs = MotionPolicy.FadeDuration(durationMs);
-        if (tracks.Count == 0 || durationMs == 0 || (instant && MotionPolicy.Quality != MotionQuality.Reduced)
+        if (tracks.Count == 0 || durationMs == 0 || instant
             || element is FrameworkElement { IsLoaded: false } || !element.IsVisible)
         { onComplete?.Invoke(); return; }
         var states = States.GetValue(element, _ => new());
@@ -89,7 +89,7 @@ internal static class NativeSurfaceMotion
         {
             var track = tracks[i];
             var initial = !MotionPolicy.Spatial && track.Spatial ? track.To : from[i];
-            var delay = MotionPolicy.Spatial ? startDelayMs : 0;
+            var delay = MotionPolicy.StaggerDelay(startDelayMs);
             var trackMs = MotionPolicy.FadeDuration(Math.Max(0, track.Profile?.DurationMs ?? durationMs));
             var trackEase = track.Profile?.Easing ?? easing;
             // Short opacity tracks retain their finish until the group's longest clock releases all tracks.
@@ -98,14 +98,15 @@ internal static class NativeSurfaceMotion
             if (delay > 0) timeline.KeyFrames.Add(new DiscreteDoubleKeyFrame(initial, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(delay))));
             void Frame(double value, double fraction, IEasingFunction ease) => timeline.KeyFrames.Add(
                 new EasingDoubleKeyFrame(value, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(delay + trackMs * fraction)), ease));
-            if (MotionPolicy.Spatial && track.Overshoot is { } peak)
+            var overshoot = MotionPolicy.ExpressiveExtras && track.Overshoot is not null;
+            if (overshoot && track.Overshoot is { } peak)
             {
                 Frame(peak, track.Profile?.PeakAt ?? .65, track.Profile?.Easing ?? UiMotion.OutCubic);
                 // Routine arrivals turn once and settle. Showcase artwork keeps its extra correction.
                 if (track.Profile is null || track.Profile.Value.CorrectionAt is not null)
                     Frame(track.Correction ?? track.To, track.Profile?.CorrectionAt ?? .85, UiMotion.InOutSine);
             }
-            Frame(track.To, 1, track.Overshoot is not null && track.Profile is not null ? UiMotion.InOutSine : trackEase);
+            Frame(track.To, 1, overshoot && track.Profile is not null ? UiMotion.InOutSine : trackEase);
             var clock = timeline.CreateClock();
             state.Tracks.Add((track, clock));
             if (delay + trackMs > longestMs)
@@ -170,8 +171,8 @@ internal static class NativeSurfaceMotion
         foreach (var (track, _) in state.Tracks)
         {
             Apply(track, null);
-            var final = channel == MotionChannel.Interaction && !MotionPolicy.Spatial
-                && track.Target is TranslateTransform ? 0 : track.To;
+            var final = channel == MotionChannel.Interaction && track.Target is TranslateTransform
+                && (!MotionPolicy.Enabled || !MotionPolicy.ExpressiveExtras && track.To < 0) ? 0 : track.To;
             track.Target.SetCurrentValue(track.Property, final);
         }
         if (state.TemporaryCache is not null && ReferenceEquals(element.CacheMode, state.TemporaryCache))

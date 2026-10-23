@@ -53,7 +53,7 @@ public class LayoutRevealTests
         Assert.Same(transform, h.Content.RenderTransform);
         Assert.Equal(2, transform.X); Assert.Equal(3, transform.Y);
         Assert.Equal(120, h.Content.ActualWidth); Assert.Equal(60, h.Content.ActualHeight);
-        if (!UiMotion.PrefersReducedMotion)
+        if (!UiMotion.IsMotionDisabled)
         {
             Assert.InRange(h.Host.Extent, .01, axis == Orientation.Vertical ? 59.99 : 119.99);
             Assert.False(h.Host.IsHitTestVisible);
@@ -69,13 +69,13 @@ public class LayoutRevealTests
     {
         using var h = new Harness(); int stale = 0, latest = 0;
         UiMotion.AnimateLayoutReveal(h.Content, true);
-        if (!UiMotion.PrefersReducedMotion)
+        if (!UiMotion.IsMotionDisabled)
             typeof(RenderTransitionClock).GetMethod("Advance", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(h.Clock(), [55d]);
         UiMotion.AnimateLayoutReveal(h.Content, false, () => stale++);
-        if (!UiMotion.PrefersReducedMotion)
+        if (!UiMotion.IsMotionDisabled)
             typeof(RenderTransitionClock).GetMethod("Advance", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(h.Clock(), [35d]);
         UiMotion.AnimateLayoutReveal(h.Content, true, () => latest++); h.Pump(350);
-        Assert.Equal(UiMotion.PrefersReducedMotion ? 1 : 0, stale); Assert.Equal(1, latest);
+        Assert.Equal(UiMotion.IsMotionDisabled ? 1 : 0, stale); Assert.Equal(1, latest);
         Assert.Equal(Visibility.Visible, h.Host.Visibility);
         Assert.Equal(Visibility.Visible, h.Content.Visibility);
         Assert.False(h.Host.ClipToBounds);
@@ -87,7 +87,7 @@ public class LayoutRevealTests
         using var h = new Harness();
         h.Host.HorizontalAlignment = HorizontalAlignment.Stretch;
         UiMotion.AnimateLayoutReveal(h.Content, true, axis: Orientation.Horizontal); h.Pump(60);
-        if (UiMotion.PrefersReducedMotion) return;
+        if (UiMotion.IsMotionDisabled) return;
         var clip = LayoutInformation.GetLayoutClip(h.Host);
         Assert.NotNull(clip);
         Assert.InRange(clip.Bounds.Width, .01, 119.99);
@@ -101,7 +101,7 @@ public class LayoutRevealTests
     {
         using var h = new Harness();
         UiMotion.AnimateLayoutReveal(h.Content, true); h.Pump(60);
-        if (UiMotion.PrefersReducedMotion) return;
+        if (UiMotion.IsMotionDisabled) return;
         var clock = h.Clock();
         var field = typeof(RenderTransitionClock).GetField("_stopwatch", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var stopwatch = field.GetValue(clock);
@@ -166,13 +166,12 @@ public class LayoutRevealTests
     });
 
     [Fact]
-    public void Reduced_motion_applies_both_states_immediately() => Sta(() =>
+    public void Off_applies_both_states_immediately() => Sta(() =>
     {
-        var field = typeof(ReducedMotionPreferences).GetField("_appReduceAnimations", BindingFlags.NonPublic | BindingFlags.Static)!;
-        bool previous = (bool)field.GetValue(null)!;
+        var previous = MotionPolicy.Preference;
         try
         {
-            ReducedMotionPreferences.Configure(true);
+            MotionPolicy.Configure(MotionPreference.Off, false);
             using var h = new Harness(); int calls = 0;
             UiMotion.AnimateLayoutReveal(h.Content, true, () => calls++);
             Assert.Equal(Visibility.Visible, h.Host.Visibility);
@@ -181,7 +180,7 @@ public class LayoutRevealTests
             Assert.Equal(Visibility.Collapsed, h.Host.Visibility);
             Assert.Equal(2, calls);
         }
-        finally { ReducedMotionPreferences.Configure(previous); }
+        finally { MotionPolicy.Configure(previous, false); }
     });
 
     [Fact]
@@ -215,7 +214,7 @@ public class LayoutRevealTests
     public void Repeated_typing_feedback_does_not_restart_status_reveal() => Sta(() =>
     {
         var previous = MotionPolicy.Preference;
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         try
         {
             using var h = new Harness();
@@ -234,7 +233,7 @@ public class LayoutRevealTests
     });
 
     [Theory]
-    [InlineData(MotionPreference.Automatic)]
+    [InlineData(MotionPreference.Full)]
     [InlineData(MotionPreference.Reduced)]
     [InlineData(MotionPreference.Off)]
     public void Floating_command_reversal_preserves_full_content_and_cancels_stale_exit(MotionPreference preference) => Sta(() =>
@@ -272,7 +271,7 @@ public class LayoutRevealTests
     public void Soft_search_reversal_holds_the_visible_pose_and_returns_auto_size() => Sta(() =>
     {
         var previous = MotionPolicy.Preference;
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         try
         {
             using var h = new Harness(); h.Host.RevealFromEnd = true; int stale = 0;

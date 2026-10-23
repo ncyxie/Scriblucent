@@ -44,7 +44,7 @@ internal static partial class Program
                 var inner = ControlTree(list).OfType<ScrollViewer>().First();
                 Console.WriteLine($"{theme}, {width}: dictionary viewport={inner.ViewportHeight:F2}, extent={inner.ExtentHeight:F2}, physical={inner.ActualHeight:F2}, scroll unit={VirtualizingPanel.GetScrollUnit(list)}");
                 Require(inner.ViewportHeight > 100 && inner.ScrollableHeight > 10, "Dictionary list is reporting item counts to pixel-based smooth scrolling.");
-                foreach (var preference in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+                foreach (var preference in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
                 {
                     MotionPolicy.Configure(preference, false);
                     inner.ScrollToTop(); window.UpdateLayout(); Pump(50);
@@ -75,7 +75,7 @@ internal static partial class Program
             }
             window.Close(); Pump(60);
         }
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         Require(!RenderTransitionClock.IsAnyRunning, "Dictionary fixture left motion observers running.");
         File.WriteAllLines(Path.Combine(_output, "checks.txt"), checks);
         foreach (var check in checks) Console.WriteLine(check);

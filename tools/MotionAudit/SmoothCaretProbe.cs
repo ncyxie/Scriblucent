@@ -55,7 +55,7 @@ internal static partial class Program
                         CaretType(field, "a"); CaretDrain();
                         var state = SmoothCaretBehavior.Inspect(field);
                         Require(state.Tracking, "App-wide caret registration missed " + field.GetType().Name);
-                        if (mode == MotionPreference.Automatic)
+                        if (mode != MotionPreference.Off)
                         {
                             Require(state.Moving, $"Caret did not glide in {field.GetType().Name}: {state}");
                             var native = field.GetRectFromCharacterIndex(field.CaretIndex);
@@ -63,11 +63,11 @@ internal static partial class Program
                             PauseCaretForCapture(field, 30);
                             SaveControlCapture(window, $"fields-{theme}-{field.Name}-{field.GetType().Name}-{stack.Children.IndexOf(field)}");
                         }
-                        else Require(!state.NativeHidden && !state.Moving, "Reduced/Off replaced the native caret.");
+                        else Require(!state.NativeHidden && !state.Moving, "Off replaced the native caret.");
                         field.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, -120) { RoutedEvent = Mouse.PreviewMouseWheelEvent });
                         Require(!SmoothCaretBehavior.Inspect(field).NativeHidden, "Wheel scrolling retained the visual caret.");
                     }
-                    if (mode == MotionPreference.Automatic) ProbeNativeCaretInput(normal);
+                    if (mode != MotionPreference.Off) ProbeNativeCaretInput(normal);
                 }
                 finally { window.Close(); Pump(35); }
                 checks.Add($"PASS {theme}/{mode}: native, embedded, multiline, editable-dropdown and date-picker fields; exact caret target; native wheel fallback; focus/window cleanup.");
@@ -95,7 +95,7 @@ internal static partial class Program
         var workspace = service.Window!; workspace.ShowInTaskbar = false; Pump(200);
         try
         {
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             foreach (var session in workspace.Sessions.ToArray())
             {
                 workspace.FocusDocument(session.Key); Pump(300);

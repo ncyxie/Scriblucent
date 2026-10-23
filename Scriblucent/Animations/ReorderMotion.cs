@@ -17,6 +17,11 @@ internal static class ReorderMotion
     private static readonly ConditionalWeakTable<FrameworkElement, Running> Active = new();
     private static readonly ConditionalWeakTable<FrameworkElement, Generation> Generations = new();
     private sealed class Generation { public int Value; }
+    static ReorderMotion() => MotionPolicy.Changed += () =>
+    {
+        foreach (var entry in Active)
+            if (entry.Key.Dispatcher.CheckAccess()) Reset(entry.Key);
+    };
     public static bool Commit(ItemsControl list, Func<bool> mutation, IReadOnlySet<object>? incoming = null)
     {
         FrameworkElement scope = list;
@@ -34,10 +39,10 @@ internal static class ReorderMotion
         DashboardMotionEngine.BeginPinReorder();
         try { changed = mutation(); }
         finally { DashboardMotionEngine.EndPinReorder(); }
-        if (!changed || UiMotion.PrefersReducedMotion) return changed;
+        if (!changed || UiMotion.IsMotionDisabled) return changed;
         list.Dispatcher.BeginInvoke(() =>
         {
-            if (!scope.IsLoaded || generation.Value != version) return;
+            if (!scope.IsLoaded || generation.Value != version || UiMotion.IsMotionDisabled) return;
             scope.UpdateLayout();
             foreach (var entry in Containers(scope, list))
             {

@@ -79,7 +79,7 @@ public sealed class EditorTitleStatus : UserControl
     {
         Feedback = value;
         _glyphSlot.Visibility = value == EditorSaveFeedback.None ? Visibility.Collapsed : Visibility.Visible;
-        _wash.Visibility = value == EditorSaveFeedback.Saved && MotionPolicy.Spatial ? Visibility.Visible : Visibility.Hidden;
+        _wash.Visibility = value == EditorSaveFeedback.Saved && MotionPolicy.ExpressiveExtras ? Visibility.Visible : Visibility.Hidden;
         Glyph.Data = value == EditorSaveFeedback.Saved ? Check : Cross;
         Glyph.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, value == EditorSaveFeedback.Failed ? "AccentDanger" : "AccentSuccess");
     }

@@ -466,7 +466,7 @@ public static class SmoothScrollBehavior
         if (!state.ImpulseActiveY && !state.ImpulseActiveX)
             SyncFromViewer(state);
 
-        if (ReducedMotionPreferences.ShouldReduceMotion)
+        if (ReducedMotionPreferences.ShouldDisableMotion)
         {
             ApplyOffset(
                 state,
@@ -564,7 +564,7 @@ public static class SmoothScrollBehavior
             return;
         }
 
-        if (ReducedMotionPreferences.ShouldReduceMotion)
+        if (ReducedMotionPreferences.ShouldDisableMotion)
         {
             SyncFromViewer(state);
             return;

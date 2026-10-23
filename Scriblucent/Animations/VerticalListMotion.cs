@@ -18,7 +18,7 @@ public static class VerticalListMotion
         int durationMs = UiMotion.QuickMs,
         double offsetY = UiMotion.SubtleLiftY)
     {
-        if (UiMotion.PrefersReducedMotion || host is null || itemsControl is null)
+        if (UiMotion.IsMotionDisabled || host is null || itemsControl is null)
             return;
 
         void TryAnimate()
@@ -74,7 +74,7 @@ public static class VerticalListMotion
             return false;
         }
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             applyMove();
             onComplete?.Invoke();

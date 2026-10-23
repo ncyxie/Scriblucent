@@ -193,7 +193,7 @@ public static class ButtonPressMotionBehavior
         if (ResolveMotionHost(element) is Scriblucent.Controls.InteractionSurface || ChromeHoverMotionBehavior.GetIsEnabled(element)) return;
         ApplyPressedBackground(element, isPressed);
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
             return;
 
         var host = ResolveMotionHost(element);

@@ -44,7 +44,7 @@ internal static partial class Program
             void Invoke(string method, params object[] args) => typeof(MainWindow).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(shell, args);
             try
             {
-                window.Show(); Pump(80); MotionPolicy.Configure(MotionPreference.Automatic, false);
+                window.Show(); Pump(80); MotionPolicy.Configure(MotionPreference.Full, false);
                 var rightEdges = new List<double>(); var partialSearch = false;
                 var frames = CaptureFeedback(root, () => Invoke("ExpandTopSearchPanel"), 36,
                     new() { [12] = () => Invoke("CollapseTopSearchPanel"), [14] = () => Invoke("ExpandTopSearchPanel"),
@@ -77,19 +77,19 @@ internal static partial class Program
                 foreach (var preference in new[] { MotionPreference.Reduced, MotionPreference.Off })
                 {
                     MotionPolicy.Configure(preference, false);
-                    vm.DashboardSelection.Begin(); Pump(110);
+                    vm.DashboardSelection.Begin(); Pump(320);
                     var (scale, translate) = UiMotion.EnsureScaleTranslateGroup(overlay);
-                    Require(scale.ScaleX == 1 && translate.Y == 0 && overlay.Opacity == 1, "Reduced multiselect retained spatial movement.");
-                    vm.DashboardSelection.End(); Pump(110);
+                    Require(scale.ScaleX == 1 && translate.Y == 0 && overlay.Opacity == 1, "The selection island did not settle at its rest pose.");
+                    vm.DashboardSelection.End(); Pump(240);
                     Require(overlay.Visibility == Visibility.Collapsed, "Reduced multiselect did not close.");
-                    Invoke("ExpandTopSearchPanel"); window.UpdateLayout();
-                    Require(double.IsNaN(searchHost.Extent) && search.Opacity == 1, "Reduced search retained width animation.");
+                    Invoke("ExpandTopSearchPanel"); Pump(300); window.UpdateLayout();
+                    Require(double.IsNaN(searchHost.Extent) && search.Opacity == 1, "The search panel did not settle at its natural width.");
                     Invoke("CollapseTopSearchPanel");
                 }
             }
             finally { window.Close(); shell.Close(); }
             ProbeTrashBounds(theme, settings);
-            checks.Add($"PASS {theme}: compiled search keeps its button-side edge stationary through open/close/reversal; shared selection island fades without resizing its viewport and reverses cleanly; Reduced/Off settle without spatial motion; actual Trash keeps its bounds across empty/1/40/empty items and adapts to 1020x780 and 820x560 owners.");
+            checks.Add($"PASS {theme}: compiled search keeps its button-side edge stationary through open/close/reversal; shared selection island fades without resizing its viewport and reverses cleanly; Reduced keeps core movement and Off settles immediately; actual Trash keeps its bounds across empty/1/40/empty items and adapts to 1020x780 and 820x560 owners.");
             File.WriteAllLines(Path.Combine(_output, "context-checks.txt"), checks);
             Console.WriteLine(checks[^1]);
         }

@@ -21,6 +21,10 @@ internal static class SurfaceLight
                 entry.Value.Visibility = MotionPolicy.Spatial ? Visibility.Visible : Visibility.Hidden;
                 if (!MotionPolicy.Spatial) entry.Value.SetCurrentValue(UIElement.OpacityProperty, 0d);
             }
+            if (!MotionPolicy.ExpressiveExtras)
+                foreach (var entry in ArrivalLights)
+                    if (entry.Key.Dispatcher.CheckAccess())
+                    { SurfaceMotion.Stop(entry.Value); entry.Value.Opacity = 0; }
         };
     }
     internal static void AddTracks(FrameworkElement surface, List<NativeMotionTrack> tracks, bool hover,
@@ -45,9 +49,11 @@ internal static class SurfaceLight
     {
         if (Lights.TryGetValue(surface, out var light)) light.SetCurrentValue(UIElement.OpacityProperty, 0d);
     }
+    internal static bool HasHighlight(FrameworkElement surface)
+        => Lights.TryGetValue(surface, out var light) && light.Opacity > .001;
     internal static void PulseArrival(FrameworkElement surface, bool compact, int delayMs)
     {
-        if (!MotionPolicy.Spatial) return;
+        if (!MotionPolicy.ExpressiveExtras) return;
         if (!ArrivalLights.TryGetValue(surface, out var light))
         {
             light = new Light { Opacity = 0, IsHitTestVisible = false };
@@ -62,7 +68,7 @@ internal static class SurfaceLight
         // so it neither holds the layout gate nor fights the pointer highlight.
         void Start()
         {
-            if (!MotionPolicy.Spatial) return;
+            if (!MotionPolicy.ExpressiveExtras) return;
             SurfaceMotion.AnimateTracks(light, MotionChannel.Presence,
                 [new(light, UIElement.OpacityProperty, 0, Overshoot: compact ? .45 : .85,
                     Profile: new(UiMotion.InOutSine, PeakAt: .38))],

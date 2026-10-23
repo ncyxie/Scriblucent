@@ -21,7 +21,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         {
             LoadNativeControlResources(theme);
-            foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             {
                 MotionPolicy.Configure(mode, false);
                 // Keep installed-font discovery deliberately pending while exercising input.
@@ -42,7 +42,7 @@ internal static partial class Program
                     for (var cycle = 0; cycle < 2; cycle++)
                     {
                         settings.ShowAnimated();
-                        if (mode == MotionPreference.Automatic && cycle == 0)
+                        if (mode == MotionPreference.Full && cycle == 0)
                         {
                             window.Dispatcher.Invoke(() => { }, DispatcherPriority.Loaded);
                             var lease = typeof(OverlayPanelAnimator).GetField("_backdropRequest", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(animator);
@@ -92,7 +92,7 @@ internal static partial class Program
                         Require(settings.Visibility == Visibility.Collapsed, "Settings Close did not finish.");
                         Console.WriteLine($"{theme}/{mode}: cycle {cycle + 1} responds.");
                     }
-                    checks.Add($"{theme}/{mode}: animated open/reopen with real backdrop; pointer hits reach category, switch, dropdown and Close; switch and Close work while installed-font discovery is pending; batched font completion preserves selection; category scrolling responds; Automatic also restarts preparation before capture.");
+                    checks.Add($"{theme}/{mode}: animated open/reopen with real backdrop; pointer hits reach category, switch, dropdown and Close; switch and Close work while installed-font discovery is pending; batched font completion preserves selection; category scrolling responds; Full also restarts preparation before capture.");
                 }
                 finally { fonts.TrySetResult([]); window.Close(); Pump(120); fontTaskField.SetValue(null, null); }
             }

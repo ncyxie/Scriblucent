@@ -118,7 +118,7 @@ internal static partial class Program
 
     private static void ProbeWorkspaceTabs(string theme, string language, List<string> checks)
     {
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             MotionPolicy.Configure(mode, false);
             var window = new Scriblucent.NoteEditorTabsWindow();
@@ -182,14 +182,14 @@ internal static partial class Program
             };
             headerScroll.ScrollChanged += sampled;
             next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            if (mode == MotionPreference.Automatic)
+            if (mode != MotionPreference.Off)
                 Require(headerScroll.HorizontalOffset < .1, "The arrow immediately teleported the tab strip.");
             for (var sample = 0; sample < 20 && headerScroll.HorizontalOffset < .1; sample++)
             { Pump(25); window.UpdateLayout(); }
             headerScroll.ScrollChanged -= sampled;
             Require(headerScroll.HorizontalOffset > 0 && ReferenceEquals(tabs.SelectedItem, selectedBeforeScroll) && ReferenceEquals(host.Content, editor),
                 $"Scrolling headers changed the document or failed to move: {theme}/{language}/{mode}, offset {headerScroll.HorizontalOffset}, clocks {RenderTransitionClock.IsAnyRunning}.");
-            if (mode == MotionPreference.Automatic)
+            if (mode != MotionPreference.Off)
                 Require(sawIntermediateOffset,
                     "The tab scroll arrow teleported to its final offset.");
             previous.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -197,7 +197,7 @@ internal static partial class Program
             { Pump(25); window.UpdateLayout(); }
             Require(headerScroll.HorizontalOffset < 1 && !previous.IsEnabled,
                 $"Tab overflow does not settle at its left edge: {theme}/{language}/{mode}, offset {headerScroll.HorizontalOffset}, enabled {previous.IsEnabled}, clocks {RenderTransitionClock.IsAnyRunning}.");
-            if (mode == MotionPreference.Automatic)
+            if (mode != MotionPreference.Off)
             {
                 next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

@@ -23,7 +23,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var variant in new[] { "legacy", "current", "legacy-repeat", "current-repeat" })
         {
-            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Full, false);
             var window = new FlashcardsPreviewWindow(Enumerable.Range(0, 24).Select(i => new FlashcardItem
                 { Question = $"Question {i}: plain text in a small set", Answer = $"Answer {i}", Category = "Practice", Hint = "A clue" }));
             var grid = (FlashcardGridItemsControl)window.FindName("FlashcardsItemsControl");

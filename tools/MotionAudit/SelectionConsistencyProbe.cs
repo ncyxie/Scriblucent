@@ -21,7 +21,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         {
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme);
-            LocalizationService.SetCulture(theme == "Light" ? "en" : "lt"); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LocalizationService.SetCulture(theme == "Light" ? "en" : "lt"); MotionPolicy.Configure(MotionPreference.Full, false);
             ConsistencyRenameDefault(checks);
         }
         File.WriteAllLines(Path.Combine(_output, "rename-default-checks.txt"), checks);
@@ -54,7 +54,7 @@ internal static partial class Program
         FlashcardMediaStorageService.MediaDirectoryOverride = Path.Combine(_output, "media");
         typeof(AppSettingsService).GetField("_cachedSettings", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, new AppSettings { EnableAutoSave = false, EnableAiFeatures = false });
         var checks = new List<string>();
-        foreach (var (theme, mode) in new[] { ("Light", MotionPreference.Automatic), ("Dark", MotionPreference.Reduced) })
+        foreach (var (theme, mode) in new[] { ("Light", MotionPreference.Full), ("Dark", MotionPreference.Reduced) })
         {
             if (only is not null && only != $"{theme}/{mode}") continue;
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme); LocalizationService.SetCulture(theme == "Light" ? "en" : "lt"); MotionPolicy.Configure(mode, false);

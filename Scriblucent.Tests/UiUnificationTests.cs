@@ -56,7 +56,7 @@ public class UiUnificationTests
     });
 
     [Theory]
-    [InlineData(MotionPreference.Automatic)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
+    [InlineData(MotionPreference.Full)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
     public void Disclosure_header_preserves_native_toggle_and_collapses_its_body_gap_after_reversal(MotionPreference mode) => Sta(() =>
     {
         var disclosure = new Expander { Header = "Optional details", Content = new Border { Height = 52 } };
@@ -234,7 +234,7 @@ public class UiUnificationTests
         Exception? failure = null;
         var thread = new Thread(() =>
         {
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception e) { failure = e; }
             finally { MotionPolicy.Configure(MotionPreference.Off, false); Dispatcher.CurrentDispatcher.InvokeShutdown(); }
         });
@@ -269,7 +269,7 @@ public class UiUnificationTests
             { RoutedEvent = Keyboard.KeyDownEvent });
 
     [Theory]
-    [InlineData(MotionPreference.Automatic)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
+    [InlineData(MotionPreference.Full)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
     public void Picker_rapid_preview_changes_commit_logical_selection_without_layout_or_clock_leaks(MotionPreference mode) => Sta(() =>
     {
         var picker = new TableSizePicker { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
@@ -289,13 +289,13 @@ public class UiUnificationTests
         Assert.Contains("1", peer.GetName()); Assert.Contains("8", peer.GetName());
         Key(picker, System.Windows.Input.Key.Escape); Assert.Equal(1, dismissals);
         host.Window.UpdateLayout(); Assert.Equal(size, picker.RenderSize);
-        if (mode != MotionPreference.Automatic) Assert.False(NativeSurfaceMotion.IsRunning(picker, MotionChannel.Selection));
+        Assert.Equal(mode != MotionPreference.Off, NativeSurfaceMotion.IsRunning(picker, MotionChannel.Selection));
         root.Children.Remove(picker); Pump(); Assert.False(NativeSurfaceMotion.IsRunning(picker, MotionChannel.Selection));
         root.Children.Add(picker); Pump(); Assert.Equal((1, 8), (picker.Rows, picker.Columns));
     });
 
     [Theory]
-    [InlineData(MotionPreference.Automatic)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
+    [InlineData(MotionPreference.Full)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
     public void Inline_validation_preserves_one_line_and_recovers_from_wrapping_reversal_and_reload(MotionPreference mode) => Sta(() =>
     {
         var feedback = new InlineValidationPresenter();
@@ -327,7 +327,7 @@ public class UiUnificationTests
     });
 
     [Theory]
-    [InlineData(MotionPreference.Automatic)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
+    [InlineData(MotionPreference.Full)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
     public void Content_swaps_retarget_current_height_without_disabling_other_actions(MotionPreference mode) => Sta(() =>
     {
         var content = new Border { Height = 32, Child = new Button { Content = "Remove" } };

@@ -157,7 +157,7 @@ internal static partial class Program
         var main = XDocument.Load("Scriblucent/MainWindow.xaml");
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var language in quick ? new[] { "en" } : new[] { "en", "lt" })
-        foreach (var mode in quick ? new[] { MotionPreference.Automatic } : new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in quick ? new[] { MotionPreference.Full } : new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             LoadNativeControlResources(theme); LocalizationService.SetCulture(language); MotionPolicy.Configure(mode, false);
             foreach (var dashboard in quick || Environment.GetCommandLineArgs().Contains("--shared-planner") ? new[] { "Notes" } : new[] { "Notes", "Flashcards", "Quizzes", "MindMaps" })

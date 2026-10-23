@@ -151,7 +151,7 @@ internal static partial class Program
                     {
                         var returned = list.ItemContainerGenerator.ContainerFromItem(moving) as FrameworkElement;
                         var returnedFrame = returned is null ? null : ControlTree(returned).OfType<CollectionSelectionFrame>().FirstOrDefault();
-                        double expected = UiMotion.PrefersReducedMotion ? 1 : moving is NoteCardViewModel ? .22 : .18;
+                        double expected = UiMotion.IsMotionDisabled ? 1 : moving is NoteCardViewModel ? .22 : .18;
                         returnedDimmed = returnedFrame is { IsLoaded: true } && Math.Abs(returnedFrame.Opacity - expected) < .001;
                         unrelatedOpaque = ControlTree(list).OfType<CollectionSelectionFrame>()
                             .Where(item => item.IsLoaded && !ReferenceEquals(item.DataContext, moving)).All(item => item.Opacity == 1);
@@ -172,7 +172,7 @@ internal static partial class Program
                     Require(physicallyOutside && outsideRate > insideRate * 1.5,
                         $"Pushing beyond the window did not increase drag scrolling speed: inside={insideRate:F0} DIP/s, outside={outsideRate:F0} DIP/s, actual outside={physicallyOutside}.");
                     Require(outsideMarkerCleared, "Scrolling outside the window retained an invalid insertion marker.");
-                    // Reduced motion applies speed immediately and can already reach
+                    // Disabled motion applies speed immediately and can already reach
                     // the ceiling in the first interval; further acceleration is then bounded.
                     Require(heldRate > outsideRate * 1.1 || outsideRate >= heldLimit * .9 && heldRate >= heldLimit * .9,
                         $"Holding at the outside edge did not accelerate or sustain its ceiling: early={outsideRate:F0}, held={heldRate:F0}, ceiling={heldLimit:F0} DIP/s.");

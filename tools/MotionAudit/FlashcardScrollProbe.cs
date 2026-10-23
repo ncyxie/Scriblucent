@@ -38,7 +38,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var variant in quick ? new[] { "current" } : new[] { "current", "direct", "without-shadows", "uncached-shadows" })
         {
-            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Full, false);
             var window = new FlashcardsPreviewWindow(Enumerable.Range(0, 500).Select(i => new FlashcardItem
                 { Question = $"Question {i}: a card to exercise the recycled grid", Answer = $"Answer {i}", Category = "Practice", Hint = "A clue" }));
             if (variant == "without-shadows")
@@ -93,9 +93,9 @@ internal static partial class Program
                     viewer.RaiseEvent(new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice,
                         Environment.TickCount, 120) { RoutedEvent = System.Windows.Input.Mouse.PreviewMouseWheelEvent, Source = viewer });
                     Pump(50);
-                    Require(viewer.VerticalOffset < before && !SmoothScrollCompositor.IsActive(viewer), "Reduced/Off wheel scrolling failed.");
+                    Require(viewer.VerticalOffset < before && (preference != MotionPreference.Off || !SmoothScrollCompositor.IsActive(viewer)), "The motion set did not scroll."); Pump(500); Require(!SmoothScrollCompositor.IsActive(viewer), "Scrolling did not settle.");
                 }
-                MotionPolicy.Configure(MotionPreference.Automatic, false);
+                MotionPolicy.Configure(MotionPreference.Full, false);
             }
             samples.Sort(); updateSamples.Sort();
             var report = $"{theme}/{variant}: begin={beginMs:F1}ms; step median={samples[60]:F1}ms; p95={samples[114]:F1}ms; max={samples[^1]:F1}ms; layout p95={updateSamples[114]:F1}ms; maximum offset drift={maxDrift:F1}; maximum realized cards={maxCards}; live shadows=0";

@@ -17,7 +17,7 @@ public class SidebarLoadTests
     [Fact]
     public void Sidebar_width_advances_without_a_render_callback_and_releases_its_wakeup_on_settle() => Sta(() =>
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         var root = new Grid(); var column = new ColumnDefinition { Width = new GridLength(64) };
         root.ColumnDefinitions.Add(column); root.ColumnDefinitions.Add(new ColumnDefinition());
         var sidebar = new Border(); SidebarResizeMotion.SetIsEnabled(sidebar, true); root.Children.Add(sidebar);
@@ -43,7 +43,7 @@ public class SidebarLoadTests
             Assert.Null(state.GetType().GetField("_layoutObserver", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(state));
             Assert.False(RenderTransitionClock.IsAnyRunning);
         }
-        finally { window.Close(); MotionPolicy.Configure(MotionPreference.Automatic, false); }
+        finally { window.Close(); MotionPolicy.Configure(MotionPreference.Full, false); }
     });
 
     [Fact]
@@ -111,7 +111,7 @@ public class SidebarLoadTests
     [InlineData(232, 64)]
     public void Sidebar_does_not_request_fractional_column_layouts_inside_the_same_endpoint_pixel(double from, double to) => Sta(() =>
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         var root = new Grid { UseLayoutRounding = true };
         var column = new ColumnDefinition { Width = new GridLength(from) };
         root.ColumnDefinitions.Add(column); root.ColumnDefinitions.Add(new ColumnDefinition());
@@ -133,13 +133,13 @@ public class SidebarLoadTests
             MotionPolicy.Configure(MotionPreference.Off, false); window.UpdateLayout();
             Assert.Equal(to, column.Width.Value);
         }
-        finally { window.Close(); MotionPolicy.Configure(MotionPreference.Automatic, false); }
+        finally { window.Close(); MotionPolicy.Configure(MotionPreference.Full, false); }
     });
 
     [Fact]
     public void Auto_hide_only_owns_template_bars_and_reuses_an_in_progress_fade() => Sta(() =>
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         var inner = new ScrollViewer { Content = new Border { Height = 2000 }, Height = 160 };
         var content = new CountingBorder { Height = 2000, Child = inner };
         var viewer = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Visible };

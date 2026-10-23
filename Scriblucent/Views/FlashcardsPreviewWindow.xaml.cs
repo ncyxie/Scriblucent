@@ -2284,7 +2284,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
         UiMotion.Stop(UiMotion.Channel(cardRoot, MotionChannel.Interaction));
         UiMotion.Run(cardRoot, MotionChannel.Interaction, new[]
         {
-            UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, liftFrom, UiMotion.CardHoverLiftY, value => translate.Y = value)
+            UiMotion.Track(UiMotion.HoverInMs, UiMotion.OutCubic, liftFrom, MotionPolicy.ExpressiveExtras ? UiMotion.CardHoverLiftY : 0, value => translate.Y = value)
         });
     }
 
@@ -2619,7 +2619,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
     {
         ApplyStudyModeEditorChrome(showStudyMode);
 
-        if (_isInitializing || UiMotion.PrefersReducedMotion || showStudyMode == _studyModeLayoutVisible)
+        if (_isInitializing || UiMotion.IsMotionDisabled || showStudyMode == _studyModeLayoutVisible)
         {
             SetStudyModeLayoutImmediate(showStudyMode);
             _studyModeLayoutVisible = showStudyMode;

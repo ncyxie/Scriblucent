@@ -89,7 +89,7 @@ internal static partial class Program
         Pump(650); WaitForRest();
         ReducedMotionPreferences.Configure(MotionPreference.Reduced);
         SaveGif(Capture(fixture.Root, () => { fixture.Hover(true); fixture.Select(true); fixture.Save(); }, 250), $"reduced-control-states-{suffix}.gif");
-        ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+        ReducedMotionPreferences.Configure(MotionPreference.Full);
     }
     private static void BenchmarkFourthPass(Scene scene, string theme, MotionPreference preference)
     {

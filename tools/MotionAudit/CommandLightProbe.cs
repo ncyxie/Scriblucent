@@ -23,7 +23,7 @@ internal static partial class Program
         foreach (var language in new[] { "en", "lt" })
         {
             LoadNativeControlResources(theme); LocalizationService.SetCulture(language);
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             var window = new Scriblucent.NoteEditorTabsWindow { ShowActivated = false, ShowInTaskbar = false, IsHitTestVisible = false };
             try
             {
@@ -105,7 +105,7 @@ internal static partial class Program
                     CommandLightBehavior.PreviewPointer(tabs, pointer, true); Pump(140);
                     tabs.SelectedIndex = 0; Pump(150);
                     Require(!NativeSurfaceMotion.IsRunning(tabs, MotionChannel.CommandLight), "Reduced/Off retained a selection light clock.");
-                    if (mode == MotionPreference.Off) Require(chromeLight.Strength == 0 && tabLight.Strength == 0, "Off retained a pointer light.");
+                    Require(chromeLight.Strength == 0 && tabLight.Strength == 0, "Reduced/Off retained a pointer light.");
                     SaveControlCapture((FrameworkElement)window.Content, $"command-{mode}-{theme}-{language}");
                 }
                 checks.Add($"{theme}/{language}: compiled tab styles and production editor markup; one pointer coordinate across chrome/plate; selected header has no duplicate wash; interruptible selection, retained editor/undo; Reduced and Off settle without spatial light clocks. Input is fed to the production controller without moving the desktop pointer.");

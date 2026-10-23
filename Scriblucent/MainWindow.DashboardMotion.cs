@@ -208,7 +208,7 @@ public partial class MainWindow : IDashboardMotionHost
             return;
         }
 
-        if (!IsLoaded || UiMotion.PrefersReducedMotion)
+        if (!IsLoaded || UiMotion.IsMotionDisabled)
         {
             commitSync();
             return;
@@ -266,7 +266,7 @@ public partial class MainWindow : IDashboardMotionHost
 
     private void ScheduleGroupCardEnterCore(DashboardMotionScope scope, Guid groupId, int attempt)
     {
-        if (!IsLoaded || UiMotion.PrefersReducedMotion)
+        if (!IsLoaded || UiMotion.IsMotionDisabled)
             return;
 
         Dispatcher.BeginInvoke(() =>
@@ -307,7 +307,7 @@ public partial class MainWindow : IDashboardMotionHost
             return;
 
         if (DataContext is not ViewModels.MainViewModel { IsDashboardRevealMotionEnabled: true }
-            || UiMotion.PrefersReducedMotion)
+            || UiMotion.IsMotionDisabled)
         {
             UiMotion.EnsureContentRevealRestState(container);
             return;
@@ -542,7 +542,7 @@ public partial class MainWindow : IDashboardMotionHost
         EnsureRecentSectionRestState(scope);
 
         if (DataContext is not ViewModels.MainViewModel { IsDashboardRevealMotionEnabled: true }
-            || UiMotion.PrefersReducedMotion)
+            || UiMotion.IsMotionDisabled)
         {
             FinishDashboardSwitchReveal(scope);
             return;
@@ -573,7 +573,7 @@ public partial class MainWindow : IDashboardMotionHost
         var remaining = targets.Count;
         for (var index = 0; index < targets.Count; index++)
         {
-            var delayMs = index * staggerStepMs;
+            var delayMs = MotionPolicy.StaggerDelay(index * staggerStepMs);
             UiMotion.AnimateDashboardContentHostEnter(
                 targets[index],
                 startDelayMs: delayMs,

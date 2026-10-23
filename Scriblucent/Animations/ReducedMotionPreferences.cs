@@ -4,22 +4,21 @@ using Microsoft.Win32;
 namespace Scriblucent.Animations;
 
 /// <summary>
-/// Resolves whether UI motion should be reduced from the in-app setting and Windows accessibility settings.
+/// Applies the selected motion set while respecting Windows animation preferences.
 /// </summary>
 public static class ReducedMotionPreferences
 {
     private const int SpiGetAnimation = 0x0048;
 
-    private static bool _appReduceAnimations;
-    private static bool? _cached;
+    private static bool _initialized;
     private static readonly object Sync = new();
 
-    public static bool ShouldReduceMotion
+    public static bool ShouldDisableMotion
     {
         get
         {
-            if (!_cached.HasValue) Refresh();
-            return !MotionPolicy.Spatial;
+            if (!_initialized) Refresh();
+            return !MotionPolicy.Enabled;
         }
     }
 
@@ -34,23 +33,12 @@ public static class ReducedMotionPreferences
         }
     }
 
-    public static void Configure(bool appReduceAnimations)
-    {
-        lock (Sync)
-        {
-            _appReduceAnimations = appReduceAnimations;
-            _cached = null;
-        }
-        Configure(appReduceAnimations ? MotionPreference.Reduced : MotionPreference.Automatic);
-    }
-
     public static void Configure(MotionPreference preference)
     {
         lock (Sync)
         {
-            _appReduceAnimations = preference != MotionPreference.Automatic;
-            _cached = null;
             MotionPolicy.Configure(preference, IsSystemReducedMotion());
+            _initialized = true;
         }
     }
 
@@ -58,9 +46,9 @@ public static class ReducedMotionPreferences
     {
         lock (Sync)
         {
-            _cached = _appReduceAnimations || IsSystemReducedMotion();
             MotionPolicy.Configure(MotionPolicy.Preference, IsSystemReducedMotion());
-            return _cached.Value;
+            _initialized = true;
+            return !MotionPolicy.Enabled;
         }
     }
 

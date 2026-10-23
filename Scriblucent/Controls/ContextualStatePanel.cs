@@ -89,7 +89,11 @@ public sealed class ContextualStatePanel : StackPanel
              new(scale, ScaleTransform.ScaleXProperty, 1, true, 1.015, 1), new(scale, ScaleTransform.ScaleYProperty, 1, true, 1.015, 1)], 320, UiMotion.InOutSine);
         int delay = 40;
         foreach (var text in new[] { _title, _description })
-        { text.Opacity = MotionPolicy.Spatial ? .35 : 1; SurfaceMotion.Arrive(text, 180, startDelayMs: delay); delay += 30; }
+        {
+            text.Opacity = MotionPolicy.ExpressiveExtras ? .35 : 1;
+            if (MotionPolicy.ExpressiveExtras) SurfaceMotion.Arrive(text, 180, startDelayMs: delay);
+            delay += 30;
+        }
     }
     private void PolicyChanged()
     { foreach (var item in _decoration) item.Visibility = MotionPolicy.Spatial ? Visibility.Visible : Visibility.Hidden; }

@@ -178,8 +178,6 @@
   <data name="PasteAsText" xml:space="preserve"><value>Paste as text</value></data>
   <data name="PasteAsPhoto" xml:space="preserve"><value>Paste as photo</value></data>
   <data name="Animations" xml:space="preserve"><value>Animations</value></data>
-  <data name="ReduceAnimations" xml:space="preserve"><value>Reduce animations</value></data>
-  <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Minimize motion effects in the app. When off, Windows accessibility animation settings are used.</value></data>
   <data name="SpellCheck" xml:space="preserve"><value>Spell check</value></data>
   <data name="EnableSpellCheck" xml:space="preserve"><value>Enable spell check</value></data>
   <data name="SpellCheckDescription" xml:space="preserve"><value>Underline misspelled words in the note editor. Download a language below and select it to check against, like Word or LibreOffice's proofing language.</value></data>
@@ -1140,10 +1138,10 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="EditorInsertGroup" xml:space="preserve"><value>Insert:</value></data>
   <data name="ListStartingValueInvalid" xml:space="preserve"><value>Enter a whole number from 1 to 2,147,483,647.</value></data>
   <data name="EditCaption" xml:space="preserve"><value>Edit caption</value></data>
-  <data name="MotionAutomatic" xml:space="preserve"><value>Automatic</value></data>
+  <data name="MotionFull" xml:space="preserve"><value>Full</value></data>
   <data name="MotionReduced" xml:space="preserve"><value>Reduced</value></data>
   <data name="MotionOff" xml:space="preserve"><value>Off</value></data>
-  <data name="MotionDescription" xml:space="preserve"><value>Expressive motion adapts to your computer. Reduced keeps brief fades; Off makes changes immediate. Windows accessibility preferences are always respected.</value></data>
+  <data name="MotionDescription" xml:space="preserve"><value>Full includes expressive details. Reduced keeps smooth everyday motion and hover tints with fewer effects. Off makes changes immediate. Windows animation preferences are always respected.</value></data>
   <data name="MotionStateTrashDescription" xml:space="preserve"><value>Deleted items will appear here until you restore or remove them.</value></data>
   <data name="MotionStateStudyTitle" xml:space="preserve"><value>Your study story starts here</value></data>
   <data name="MotionStateStudyDescription" xml:space="preserve"><value>Complete a flashcard session to see your progress over time.</value></data>

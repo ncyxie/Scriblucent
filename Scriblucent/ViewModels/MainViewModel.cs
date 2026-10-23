@@ -3736,8 +3736,8 @@ public partial class MainViewModel : ViewModelBase
         var query = ActiveSearchQuery;
         int delayMs;
         if (string.IsNullOrEmpty(query))
-            delayMs = UiMotion.PrefersReducedMotion ? 0 : UiMotion.HoverOutMs + 80;
-        else if (deleting && !UiMotion.PrefersReducedMotion)
+            delayMs = UiMotion.IsMotionDisabled ? 0 : UiMotion.HoverOutMs + 80;
+        else if (deleting && !UiMotion.IsMotionDisabled)
             delayMs = SearchDeleteDebounceMs;
         else
             delayMs = SearchTypeDebounceMs;
@@ -4551,7 +4551,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void CommitPinReorderWithMotion(DashboardMotionScope scope, Action applyPinSort, Action save)
     {
-        if (MotionHost is null || UiMotion.PrefersReducedMotion)
+        if (MotionHost is null || UiMotion.IsMotionDisabled)
         {
             applyPinSort();
             save();
@@ -4566,7 +4566,7 @@ public partial class MainViewModel : ViewModelBase
     private static void ScheduleAfterIndicatorIconMotion(Action commit, int animationMs)
     {
         var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || animationMs <= 0 || UiMotion.PrefersReducedMotion)
+        if (dispatcher is null || animationMs <= 0 || UiMotion.IsMotionDisabled)
         {
             commit();
             return;

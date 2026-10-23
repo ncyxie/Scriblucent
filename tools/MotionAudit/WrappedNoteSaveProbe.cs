@@ -14,7 +14,7 @@ internal static partial class Program
         AppSettingsService.SettingsDirectoryOverride = Path.Combine(_output, "settings");
         typeof(AppSettingsService).GetField("_cachedSettings", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null,
             new AppSettings { EnableAutoSave = false, EnableAiFeatures = false });
-        LoadNativeControlResources("Light"); Scriblucent.ThemeManager.SetTheme("Light"); MotionPolicy.Configure(MotionPreference.Automatic, false);
+        LoadNativeControlResources("Light"); Scriblucent.ThemeManager.SetTheme("Light"); MotionPolicy.Configure(MotionPreference.Full, false);
         var bytes = File.ReadAllBytes(Path.Combine(Directory.GetCurrentDirectory(), "Scriblucent.Tests", "TestData", "Images", "pixel.png"));
         var checks = new List<string>(); var failures = new List<string>();
         foreach (var mode in new[] { NoteImageWrapMode.Square, NoteImageWrapMode.TopAndBottom })

@@ -41,7 +41,7 @@ internal static partial class Program
             ProbePremiumCalendar(theme, language, checks);
             ProbePremiumWindows(theme, language, checks);
         }
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             MotionPolicy.Configure(mode, false);
             var tabs = new Scriblucent.NoteEditorTabsWindow();

@@ -114,15 +114,17 @@ internal sealed class EmptyDashboardIllustration : Grid
         foreach (var (layer, rotate, move, angle, x, y) in _planes)
         {
             SurfaceMotion.Stop(layer);
-            rotate.Angle = MotionPolicy.Spatial ? 0 : angle;
-            move.X = MotionPolicy.Spatial ? 0 : x; move.Y = MotionPolicy.Spatial ? 0 : y;
+            rotate.Angle = MotionPolicy.ExpressiveExtras ? 0 : angle;
+            move.X = MotionPolicy.ExpressiveExtras ? 0 : x; move.Y = MotionPolicy.ExpressiveExtras ? 0 : y;
+            if (!MotionPolicy.ExpressiveExtras) continue;
             SurfaceMotion.AnimateTracks(layer, MotionChannel.Showcase,
                 [new(rotate, RotateTransform.AngleProperty, angle, true), new(move, TranslateTransform.XProperty, x, true),
                  new(move, TranslateTransform.YProperty, y, true)], 480, UiMotion.InOutSine);
         }
         foreach (var (stroke, length) in _strokes)
         {
-            SurfaceMotion.Stop(stroke); stroke.StrokeDashOffset = MotionPolicy.Spatial ? length : 0;
+            SurfaceMotion.Stop(stroke); stroke.StrokeDashOffset = MotionPolicy.ExpressiveExtras ? length : 0;
+            if (!MotionPolicy.ExpressiveExtras) continue;
             SurfaceMotion.AnimateTracks(stroke, MotionChannel.Showcase,
                 [new(stroke, Shape.StrokeDashOffsetProperty, 0, true)], 420, UiMotion.OutSine, startDelayMs: 60);
         }

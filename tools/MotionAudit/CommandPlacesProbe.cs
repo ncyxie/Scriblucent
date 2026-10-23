@@ -23,7 +23,7 @@ internal static partial class Program
         foreach (var language in new[] { "en", "lt" })
         {
             LoadNativeControlResources(theme); LocalizationService.SetCulture(language);
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             ProbeCommandNavigation(theme, language, checks);
             ProbeCommandSettings(theme, language, checks);
             ProbeCommandChoices(theme, language, checks);
@@ -80,7 +80,7 @@ internal static partial class Program
             {
                 MotionPolicy.Configure(mode, false); PointCommand(group, buttons[1]);
                 var light = CommandLightBehavior.LightFor(buttons[1])!;
-                Require(mode == MotionPreference.Reduced ? light.Strength <= .22 : light.Strength == 0, "Sidebar motion preferences were ignored.");
+                Require(light.Strength == 0, "Reduced/Off retained sidebar cursor glow.");
                 Require(mode != MotionPreference.Reduced || Math.Abs(light.X - 24) < .1, "Reduced feedback missed the visible collapsed face.");
                 SaveControlCapture(root, $"sidebar-{mode}-{theme}-{language}");
             }
@@ -90,7 +90,7 @@ internal static partial class Program
     }
     private static void ProbeCommandSettings(string theme, string language, List<string> checks)
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         var settings = new SettingsPanel();
         typeof(SettingsPanel).GetField("_isApplyingSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(settings, true);
         settings.DataContext = new SettingsProbeModel();
@@ -109,8 +109,10 @@ internal static partial class Program
             MotionPolicy.Configure(MotionPreference.Off, false);
             buttons[^1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(100);
             var viewer = (ScrollViewer)settings.FindName("SettingsScrollViewer");
-            Require(viewer.VerticalOffset >= viewer.ScrollableHeight - 2, "Settings navigation no longer follows its sections.");
-            window.Width = 480; window.UpdateLayout(); Pump(80); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            var section = (FrameworkElement)settings.FindName((string)buttons[^1].Tag);
+            var expectedOffset = Math.Clamp(section.TranslatePoint(new Point(), (UIElement)viewer.Content).Y, 0, viewer.ScrollableHeight);
+            Require(Math.Abs(viewer.VerticalOffset - expectedOffset) <= 2, "Settings navigation no longer follows its sections.");
+            window.Width = 480; window.UpdateLayout(); Pump(80); MotionPolicy.Configure(MotionPreference.Full, false);
             PointCommand(nav, narrow); SaveControlCapture(settings, $"settings-wrapped-{theme}-{language}");
             checks.Add($"{theme}/{language}: compiled Settings categories; content-sized radii {small:F1}/{large:F1}; narrow wrapped layout and section scrolling; population/save handlers suppressed.");
         }
@@ -118,7 +120,7 @@ internal static partial class Program
     }
     private static void ProbeCommandChoices(string theme, string language, List<string> checks)
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var (text, style) in new[] { ("Cancel", "DialogSecondaryButtonStyle"), ("Delete", "DialogDangerButtonStyle"), ("Save", "DialogPrimaryButtonStyle") })
             actions.Children.Add(new Button { Content = text, Style = (Style)_app.FindResource(style), Margin = new Thickness(8, 0, 0, 0) });
@@ -153,7 +155,7 @@ internal static partial class Program
 
     private static void ProbeCommandFamilies(string theme, string language, List<string> checks)
     {
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         var root = new StackPanel { Margin = new Thickness(24) };
         root.SetResourceReference(Panel.BackgroundProperty, "WorkspaceBackdrop");
         root.Children.Add(new TextBlock { Text = "Control families · the same material wherever used", FontSize = 18 });
@@ -195,18 +197,18 @@ internal static partial class Program
                     "A row became stronger than an action or gained hover travel.");
             }
             PointCommand(day, day);
-            var circle = ControlTree(day).OfType<InteractionSurface>().Single();
-            Require(circle.CornerRadius == new CornerRadius(13) && circle.ActualWidth == 26 && circle.ActualHeight == 26,
-                "Calendar feedback escaped the circular marker face.");
+            var dayFace = ControlTree(day).OfType<InteractionSurface>().Single();
+            var marker = (System.Windows.Shapes.Rectangle)day.Template.FindName("DayMarker", day);
+            Require(dayFace.CornerRadius == new CornerRadius(marker.RadiusX) && dayFace.ActualWidth == marker.ActualWidth && dayFace.ActualHeight == marker.ActualHeight,
+                "Calendar feedback escaped the rounded day face.");
             SaveControlCapture(root, $"control-families-{theme}-{language}");
             foreach (var preference in new[] { MotionPreference.Reduced, MotionPreference.Off })
             {
                 MotionPolicy.Configure(preference, false);
                 foreach (var button in actions.Children.OfType<Button>())
-                    Require(preference == MotionPreference.Off ? CommandLightBehavior.LightFor(button)!.Strength == 0
-                        : CommandLightBehavior.LightFor(button)!.Strength <= .22, "A shared button family ignored the motion preference.");
+                    Require(CommandLightBehavior.LightFor(button)!.Strength == 0, "Reduced/Off retained a shared button cursor glow.");
             }
-            checks.Add($"{theme}/{language}: ordinary, lone footer, toolbar, editor, semantic and floating buttons acquire feedback without feature opt-ins; list, dropdown and menu rows share the quiet controller; calendar feedback stays circular; Reduced/Off respected.");
+            checks.Add($"{theme}/{language}: ordinary, lone footer, toolbar, editor, semantic and floating buttons acquire feedback without feature opt-ins; list, dropdown and menu rows share the quiet controller; calendar feedback fits its rounded face; Reduced/Off respected.");
         }
         finally { window.Close(); Pump(100); }
     }

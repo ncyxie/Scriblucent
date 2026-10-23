@@ -34,8 +34,8 @@ internal static partial class Program
         typeof(AppSettingsService).GetField("_cachedSettings", BindingFlags.Static | BindingFlags.NonPublic)!
             .SetValue(null, new AppSettings { EnableAutoSave = false });
         var checks = new List<string>();
-        var modes = baseline ? new[] { MotionPreference.Off } : quick ? new[] { MotionPreference.Automatic }
-            : new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off };
+        var modes = baseline ? new[] { MotionPreference.Off } : quick ? new[] { MotionPreference.Full }
+            : new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off };
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var language in quick ? new[] { "en" } : new[] { "en", "lt" })
         foreach (var mode in modes)

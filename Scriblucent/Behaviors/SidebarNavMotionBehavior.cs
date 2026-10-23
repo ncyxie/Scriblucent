@@ -131,7 +131,7 @@ public static class SidebarNavMotionBehavior
 
         var targetOpacity = isActive ? 1.0 : 0.0;
 
-        if (!animate || UiMotion.PrefersReducedMotion)
+        if (!animate || UiMotion.IsMotionDisabled)
         {
             UiMotion.Stop(button);
             indicator.Opacity = targetOpacity;

@@ -1306,7 +1306,7 @@ namespace Scriblucent
             }
 
             _allowCloseWithoutPrompt = true;
-            if (!_windowMotionRegistered || UiMotion.PrefersReducedMotion) PerformEditorCloseCleanup();
+            if (!_windowMotionRegistered || UiMotion.IsMotionDisabled) PerformEditorCloseCleanup();
         }
 
         private void PerformEditorCloseCleanup()
@@ -4592,7 +4592,7 @@ namespace Scriblucent
                 // The open animation shares this thread. A full wrap settle waits on the
                 // dispatcher at render priority, so it runs after that motion, or immediately
                 // when motion is reduced.
-                if (!UiMotion.PrefersReducedMotion)
+                if (!UiMotion.IsMotionDisabled)
                     await Task.Delay(UiMotion.OpenMs);
                 _wrapLayout?.Apply();
             }

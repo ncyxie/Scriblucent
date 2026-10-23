@@ -46,14 +46,14 @@ public class EditorWorkspaceTests
             var body = new Border(); Grid.SetRow(body, 1);
             var footer = new Border(); Grid.SetRow(footer, 2); WindowMotion.SetRole(footer, WindowMotionRole.Footer);
             root.Children.Add(header); root.Children.Add(body); root.Children.Add(footer);
-            foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+            foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
             {
                 MotionPolicy.Configure(mode, false);
                 HostedEditorMotion.Prepare(root, true);
                 Assert.Equal(1, root.Opacity); Assert.Equal(1, header.Opacity);
                 Assert.True(root.RenderTransform.Value.IsIdentity); Assert.True(header.RenderTransform.Value.IsIdentity);
                 Assert.Equal(mode == MotionPreference.Off ? 1 : .65, body.Opacity);
-                Assert.Equal(mode == MotionPreference.Automatic ? 4 : 0, body.RenderTransform.Value.OffsetY);
+                Assert.Equal(mode != MotionPreference.Off ? 4 : 0, body.RenderTransform.Value.OffsetY);
                 HostedEditorMotion.Settle(root);
                 Assert.Equal(1, body.Opacity); Assert.Equal(1, footer.Opacity);
                 Assert.True(body.RenderTransform.Value.IsIdentity); Assert.True(footer.RenderTransform.Value.IsIdentity);

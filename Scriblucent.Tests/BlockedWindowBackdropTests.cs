@@ -14,6 +14,28 @@ namespace Scriblucent.Tests;
 public class BlockedWindowBackdropTests
 {
     [Fact]
+    public void Off_shows_the_dialog_and_all_disabled_window_blurs_together() => Sta(() =>
+    {
+        if (!MotionPolicy.BackdropBlur) return;
+        MotionPolicy.Configure(MotionPreference.Off, false);
+        using var main = new Host(); main.Window.Show();
+        using var editor = new Host(main.Window); editor.Window.Show();
+        using var dialog = new Dialog(editor.Window);
+        dialog.OnShown = () =>
+        {
+            Assert.NotNull(dialog.BackdropImage.Source);
+            Assert.Equal(1, dialog.BackdropImage.Opacity);
+            Assert.Contains(Images(main.Root), image => image.Source is not null && image.Opacity == 1);
+            Assert.False(dialog.IsEntering);
+        };
+        dialog.ShowModal(() =>
+        {
+            WaitUntil(() => dialog.IsShown);
+            Assert.Equal(1, dialog.ShownCount);
+        });
+    });
+
+    [Fact]
     public void Both_backdrops_are_ready_before_any_window_starts_fading() => Sta(() =>
     {
         if (!MotionPolicy.BackdropBlur) return;
@@ -125,7 +147,7 @@ public class BlockedWindowBackdropTests
     });
 
     [Theory]
-    [InlineData(MotionPreference.Automatic)]
+    [InlineData(MotionPreference.Full)]
     [InlineData(MotionPreference.Reduced)]
     [InlineData(MotionPreference.Off)]
     public void Secondary_modal_blurs_the_disabled_main_window_and_releases_it_on_close(MotionPreference preference) => Sta(() =>
@@ -255,6 +277,7 @@ public class BlockedWindowBackdropTests
         internal bool IsEntering => NativeSurfaceMotion.IsRunning(_card, MotionChannel.Presence);
         internal bool IsShown => _card.Opacity > .99 && !IsEntering;
         internal int ShownCount { get; private set; }
+        internal Action? OnShown { get; set; }
         internal Image BackdropImage { get; }
         internal Dialog(Window owner)
         {
@@ -268,7 +291,7 @@ public class BlockedWindowBackdropTests
             Window = new Window { Owner = owner, Content = root, Width = 320, Height = 240,
                 Opacity = 0, ShowInTaskbar = false, ShowActivated = false };
             _animator = OverlayDialogAnimator.Bind(Window, root, dim, card, image, scrim);
-            Window.Loaded += (_, _) => _animator.BeginOpen(() => ShownCount++);
+            Window.Loaded += (_, _) => _animator.BeginOpen(() => { ShownCount++; OnShown?.Invoke(); });
         }
 
         internal void ShowModal(Action inspect)
@@ -307,7 +330,7 @@ public class BlockedWindowBackdropTests
         var thread = new Thread(() =>
         {
             var preference = MotionPolicy.Preference;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception ex) { failure = ex; }
             finally { MotionPolicy.Configure(preference, false); }
         });

@@ -27,7 +27,7 @@ internal static partial class Program
         _wake16 = true;
         var report = new List<string>();
         foreach (var theme in new[] { "Light", "Dark" })
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             if (only is not null && only != $"{theme}/{mode}") continue;
             LoadNativeControlResources(theme); ThemeManager.SetTheme(theme); LocalizationService.SetCulture(theme == "Light" ? "en" : "lt");
@@ -112,7 +112,7 @@ internal static partial class Program
         foreach (var realized in ItemReorderBehavior.Realized(list))
         {
             bool movingItem = moving.Contains(list.ItemContainerGenerator.ItemFromContainer(realized));
-            if (!movingItem && !UiMotion.PrefersReducedMotion) continue;
+            if (!movingItem && !UiMotion.IsMotionDisabled) continue;
             Require(!(bool)active.GetType().GetMethod("TryGetValue")!.Invoke(active, [realized, null])!,
                 "Dropped items or reduced-motion neighbours retained spatial settling.");
         }

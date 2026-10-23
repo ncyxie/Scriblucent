@@ -178,8 +178,6 @@
   <data name="PasteAsText" xml:space="preserve"><value>Įklijuoti kaip tekstą</value></data>
   <data name="PasteAsPhoto" xml:space="preserve"><value>Įklijuoti kaip nuotrauką</value></data>
   <data name="Animations" xml:space="preserve"><value>Animacijos</value></data>
-  <data name="ReduceAnimations" xml:space="preserve"><value>Mažinti animacijas</value></data>
-  <data name="ReduceAnimationsDescription" xml:space="preserve"><value>Sumažinti judėjimo efektus programoje. Kai išjungta, naudojami „Windows“ pritaikymo neįgaliesiems animacijų nustatymai.</value></data>
   <data name="SpellCheck" xml:space="preserve"><value>Rašybos tikrinimas</value></data>
   <data name="EnableSpellCheck" xml:space="preserve"><value>Įjungti rašybos tikrinimą</value></data>
   <data name="SpellCheckDescription" xml:space="preserve"><value>Pabraukti klaidingai parašytus žodžius užrašų rengyklėje. Atsisiųskite kalbą žemiau ir pasirinkite ją tikrinimui - panašiai kaip Word ar LibreOffice rašybos tikrinimo kalba.</value></data>
@@ -1139,10 +1137,10 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="EditorInsertGroup" xml:space="preserve"><value>Įterpti:</value></data>
   <data name="ListStartingValueInvalid" xml:space="preserve"><value>Įveskite sveikąjį skaičių nuo 1 iki 2 147 483 647.</value></data>
   <data name="EditCaption" xml:space="preserve"><value>Keisti antraštę</value></data>
-  <data name="MotionAutomatic" xml:space="preserve"><value>Automatiškai</value></data>
-  <data name="MotionReduced" xml:space="preserve"><value>Sumažinti</value></data>
-  <data name="MotionOff" xml:space="preserve"><value>Išjungti</value></data>
-  <data name="MotionDescription" xml:space="preserve"><value>Išraiškingos animacijos prisitaiko prie kompiuterio. Sumažinus lieka trumpi išnykimai, išjungus pakeitimai rodomi iškart. Visada laikomasi „Windows“ pritaikymo neįgaliesiems nuostatų.</value></data>
+  <data name="MotionFull" xml:space="preserve"><value>Visos</value></data>
+  <data name="MotionReduced" xml:space="preserve"><value>Sumažintos</value></data>
+  <data name="MotionOff" xml:space="preserve"><value>Išjungtos</value></data>
+  <data name="MotionDescription" xml:space="preserve"><value>Visos animacijos apima išraiškingas detales. Sumažintos išlaiko sklandų kasdienį judėjimą ir paryškinimą užvedus pelę, bet turi mažiau efektų. Išjungus pakeitimai rodomi iškart. Visada laikomasi „Windows“ animacijų nuostatų.</value></data>
   <data name="MotionStateTrashDescription" xml:space="preserve"><value>Ištrinti elementai bus rodomi čia, kol juos atkursite arba pašalinsite.</value></data>
   <data name="MotionStateStudyTitle" xml:space="preserve"><value>Čia prasideda jūsų mokymosi istorija</value></data>
   <data name="MotionStateStudyDescription" xml:space="preserve"><value>Užbaikite kortelių sesiją ir stebėkite savo pažangą.</value></data>

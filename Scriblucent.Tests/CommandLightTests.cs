@@ -54,7 +54,7 @@ public class CommandLightTests
         longFace.PaintedWidth = 120; Assert.True(large.RadiusX > 80);
         MotionPolicy.Configure(MotionPreference.Reduced, false);
         Assert.Equal(60, large.X);
-        longFace.PaintedWidth = 48; Assert.Equal(24, large.X);
+        longFace.PaintedWidth = 48; Assert.Equal(0, large.Strength);
         longChoice.IsEnabled = false; Pump(230); Assert.Equal(0, large.Strength);
     });
 
@@ -120,7 +120,7 @@ public class CommandLightTests
         Assert.InRange(CommandLightBehavior.LightFor(rows[1])!.Strength, .3, .45);
         host.Root.UpdateLayout(); Assert.Equal(measures, host.Root.Measures);
         MotionPolicy.Configure(MotionPreference.Reduced, false);
-        Assert.InRange(CommandLightBehavior.LightFor(rows[1])!.Strength, .1, .15);
+        Assert.Equal(0, CommandLightBehavior.LightFor(rows[1])!.Strength);
         MotionPolicy.Configure(MotionPreference.Off, false); Assert.Equal(0, CommandLightBehavior.LightFor(rows[1])!.Strength);
     });
     private static void Pump(int ms)
@@ -176,7 +176,7 @@ public class CommandLightTests
         var thread = new Thread(() =>
         {
             var preference = MotionPolicy.Preference;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception error) { failure = error; }
             finally { MotionPolicy.Configure(preference, false); }
         });
@@ -244,18 +244,23 @@ public class CommandLightTests
     });
 
     [Fact]
-    public void Reduced_and_off_change_mid_feedback_without_stranded_clocks_or_spatial_motion() => Sta(() =>
+    public void Reduced_clears_cursor_glow_skips_pointer_work_and_full_restores_it() => Sta(() =>
     {
         using var host = new Host(); CommandLightBehavior.PreviewPointer(host.Root, new Point(100, 95), true); Pump(40);
         MotionPolicy.Configure(MotionPreference.Reduced, false);
         var chrome = CommandLightBehavior.LightFor(host.Chrome)!; var plate = CommandLightBehavior.LightFor(host.Plate)!;
-        Assert.Equal(.22, chrome.Strength); Assert.Equal(0, plate.Strength);
+        Assert.Equal(0, chrome.Strength); Assert.Equal(0, plate.Strength);
         Assert.Equal(host.Chrome.ActualWidth / 2, chrome.X);
         Assert.False(NativeSurfaceMotion.IsRunning(host.Root, MotionChannel.CommandLight));
         for (var i = 0; i < 50; i++) CommandLightBehavior.PreviewPointer(host.Root, new Point(100 + i, 95), true);
+        Assert.Equal(host.Chrome.ActualWidth / 2, chrome.X);
+        Assert.Equal(0, chrome.Strength);
         Assert.False(NativeSurfaceMotion.IsRunning(host.Root, MotionChannel.CommandLight));
         CommandLightBehavior.SettleSelection(host.Root, new Point(90, 50), new Point(280, 50));
         Assert.Equal(0, plate.Strength);
+        MotionPolicy.Configure(MotionPreference.Full, false);
+        CommandLightBehavior.PreviewPointer(host.Root, new Point(130, 95), true); Pump(240);
+        Assert.True(chrome.Strength > .5);
         MotionPolicy.Configure(MotionPreference.Off, false); Assert.Equal(0, chrome.Strength);
         CommandLightBehavior.PreviewPointer(host.Root, new Point(110, 35), true); Assert.Equal(0, plate.Strength);
         Assert.False(NativeSurfaceMotion.IsRunning(host.Root, MotionChannel.CommandLight));

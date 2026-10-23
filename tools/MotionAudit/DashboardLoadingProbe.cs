@@ -26,7 +26,7 @@ internal static partial class Program
         // These cases retain MainWindow.ContentRendered and InitializeStartupData in production order.
         foreach (var count in new[] { 0, 24, 400 })
         {
-            var (window, vm, store) = LoadingWindow(theme, MotionPreference.Automatic, count);
+            var (window, vm, store) = LoadingWindow(theme, MotionPreference.Full, count);
             var layer = (FrameworkElement)window.FindName("DashboardLoadingLayer");
             var shell = (DashboardLoadingOverlay)window.FindName("DashboardLoadingShell");
             bool firstFrame = false, contentRendered = false;
@@ -55,7 +55,7 @@ internal static partial class Program
         }
 
         foreach (var kind in Enum.GetValues<EditorDocumentKind>())
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             var (window, vm, _) = LoadingWindow(theme, mode, 24, held: true);
             var layer = (FrameworkElement)window.FindName("DashboardLoadingLayer");
@@ -66,10 +66,10 @@ internal static partial class Program
                 SelectLoadingDashboard(vm, kind); Pump(180);
                 Require(!vm.IsActiveDashboardReady && layer.Visibility == Visibility.Visible && layer.Opacity == 1 && shell.Opacity == 1,
                     "Held loading introduced a delayed/transparent cover.");
-                Require(mode == MotionPreference.Automatic || !shell.IsWaveRunning, "Reduced/Off animated the shimmer.");
+                Require(mode != MotionPreference.Off || !shell.IsWaveRunning, "Off animated the shimmer.");
                 var builds = shell.DrawingBuildCount; Pump(80);
                 Require(shell.DrawingBuildCount == builds, "The native sweep rebuilt geometry every frame.");
-                if (mode == MotionPreference.Automatic)
+                if (mode == MotionPreference.Full)
                 {
                     SaveControlCapture((FrameworkElement)window.Content, $"loading-{theme}-{kind}-wide");
                     window.Width = 760; Pump(100);
@@ -98,7 +98,7 @@ internal static partial class Program
                 var page = (FrameworkElement)window.FindName(vm.ActiveDashboard + "DashboardView");
                 var host = (FrameworkElement)page.FindName(vm.ActiveDashboard + "DashboardContentHost");
                 Require(host.Opacity == 1 && host.RenderTransform.Value.IsIdentity, "Hydration added a second entrance under the dissolving skeleton.");
-                if (mode == MotionPreference.Automatic) SaveControlCapture((FrameworkElement)window.Content, $"loading-{theme}-{kind}-ready");
+                if (mode == MotionPreference.Full) SaveControlCapture((FrameworkElement)window.Content, $"loading-{theme}-{kind}-ready");
                 Mark($"PASS {theme}/{kind}/{mode}: opaque held loading, retained geometry, responsive preview, real read + handoff {handoff.ElapsedMilliseconds}ms, stationary content and released input");
             }
             finally { CloseLoadingWindow(window); }
@@ -110,7 +110,7 @@ internal static partial class Program
 
     private static void ProbeLoadingCancellation(string theme, Action<string> mark)
     {
-        var (window, vm, _) = LoadingWindow(theme, MotionPreference.Automatic, 0, held: true);
+        var (window, vm, _) = LoadingWindow(theme, MotionPreference.Full, 0, held: true);
         var layer = (FrameworkElement)window.FindName("DashboardLoadingLayer");
         try
         {
@@ -143,7 +143,7 @@ internal static partial class Program
 
     private static void ProbeLoadingFailureAndRetry(string theme, Action<string> mark)
     {
-        var (window, vm, store) = LoadingWindow(theme, MotionPreference.Automatic, 0);
+        var (window, vm, store) = LoadingWindow(theme, MotionPreference.Full, 0);
         File.WriteAllText(Path.Combine(store, "notes.json"), "{broken");
         try
         {

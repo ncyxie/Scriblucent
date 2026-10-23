@@ -13,7 +13,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var before in new[] { true, false })
         {
-            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LoadNativeControlResources(theme); MotionPolicy.Configure(MotionPreference.Full, false);
             var root = new Grid { Width = corners ? 240 : 160, Height = 100, HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top, Background = theme == "Light" ? Brushes.White : (Brush)_app.FindResource("WindowBackground") };
             var button = new Button { Width = corners ? 180 : 100, Height = 40, Content = corners ? "Add flashcard" : "Close", FontSize = 14,

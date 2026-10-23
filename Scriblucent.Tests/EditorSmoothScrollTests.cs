@@ -7,6 +7,7 @@ using Scriblucent.Controls;
 
 namespace Scriblucent.Tests;
 
+[Collection("Layout reveal")]
 public class EditorSmoothScrollTests
 {
     [Fact]
@@ -14,7 +15,7 @@ public class EditorSmoothScrollTests
     {
         RunSta(() =>
         {
-            if (ReducedMotionPreferences.ShouldReduceMotion)
+            if (ReducedMotionPreferences.ShouldDisableMotion)
                 return;
 
             var staticShell = new Border
@@ -56,15 +57,14 @@ public class EditorSmoothScrollTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Document_scroll_commits_each_eased_position_without_moving_the_view(bool readOnlyReader)
+    [InlineData(false, MotionPreference.Full)]
+    [InlineData(true, MotionPreference.Full)]
+    [InlineData(false, MotionPreference.Reduced)]
+    [InlineData(true, MotionPreference.Reduced)]
+    public void Document_scroll_commits_each_eased_position_without_moving_the_view(bool readOnlyReader, MotionPreference preference)
     {
         RunSta(() =>
         {
-            if (ReducedMotionPreferences.ShouldReduceMotion)
-                return;
-
             var document = new FlowDocument();
             for (var i = 0; i < 80; i++)
                 document.Blocks.Add(new Paragraph(new Run($"Line {i}")));
@@ -91,6 +91,8 @@ public class EditorSmoothScrollTests
 
             SmoothScrollCompositor.SetDirectOffsetMode(viewer, true);
             SmoothScrollCompositor.RegisterSessionLifecycle(viewer, OnBegan, OnEnded);
+            var previous = MotionPolicy.Preference;
+            MotionPolicy.Configure(preference, false);
             try
             {
                 SmoothScrollCompositor.Begin(viewer, Array.Empty<DashboardVirtualizationHost>());
@@ -120,6 +122,7 @@ public class EditorSmoothScrollTests
                 SmoothScrollCompositor.End(viewer, 0, viewer.VerticalOffset);
                 SmoothScrollCompositor.UnregisterSessionLifecycle(viewer, OnBegan, OnEnded);
                 SmoothScrollCompositor.SetDirectOffsetMode(viewer, false);
+                MotionPolicy.Configure(previous, false);
             }
         });
     }

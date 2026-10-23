@@ -25,7 +25,7 @@ public class ControlRevampTests
         var thread = new Thread(() =>
         {
             var preference = MotionPolicy.Preference;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception e) { failure = e; }
             finally { MotionPolicy.Configure(preference, false); }
         });
@@ -154,7 +154,7 @@ public class ControlRevampTests
     });
     private sealed class Preference { public bool Enabled { get; set; } }
     [Theory]
-    [InlineData(MotionPreference.Automatic)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
+    [InlineData(MotionPreference.Full)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
     public void Switch_preserves_automation_binding_and_native_events(MotionPreference motion) => Sta(() =>
     {
         var toggle = new CheckBox { Content = "Preference", Width = 320 };
@@ -182,7 +182,7 @@ public class ControlRevampTests
         foreach (var child in Tree(toggle).OfType<FrameworkElement>()) Assert.False(NativeSurfaceMotion.IsRunning(child, MotionChannel.Selection));
     });
     [Theory]
-    [InlineData(MotionPreference.Automatic)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
+    [InlineData(MotionPreference.Full)] [InlineData(MotionPreference.Reduced)] [InlineData(MotionPreference.Off)]
     public void Switch_starting_enabled_settles_and_can_toggle_after_reloading(MotionPreference motion) => Sta(() =>
     {
         MotionPolicy.Configure(motion, false);
@@ -238,7 +238,7 @@ public class ControlRevampTests
         StateSurfaceMotionBehavior.SetActiveState(row, false); Pump(190);
         Assert.Equal(0, fill.Opacity); Assert.Equal(size, row.RenderSize);
         MotionPolicy.Configure(MotionPreference.Reduced, false); StateSurfaceMotionBehavior.SetActiveState(row, true); Pump(100);
-        Assert.IsType<SolidColorBrush>(fill.GetValue(SurfaceFill.Layer.BrushProperty));
+        Assert.Same(row.FindResource("ControlHoverSurfaceWash"), fill.GetValue(SurfaceFill.Layer.BrushProperty));
         StateSurfaceMotionBehavior.SetIsSelected(row, true); Assert.Equal(size, row.RenderSize);
         StateSurfaceMotionBehavior.SetIsEnabled(row, false);
         Assert.False(NativeSurfaceMotion.IsRunning(row, MotionChannel.Interaction)); Assert.Equal(0, fill.Opacity);
@@ -290,12 +290,14 @@ public class ControlRevampTests
         ControlDetailMotionBehavior.SetIsExpanded(detail, false);
         Assert.Equal(visible, rotation.Angle, 2); SeekNative(detail, MotionChannel.Navigation, 160);
         MotionPolicy.Configure(MotionPreference.Off, false); Assert.Equal(0, rotation.Angle);
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         ControlDetailMotionBehavior.SetIsExpanded(detail, true); SeekNative(detail, MotionChannel.Navigation, 35);
         root.Children.Remove(detail); host.Window.UpdateLayout(); Pump(25);
         Assert.Equal(180, rotation.Angle); Assert.False(NativeSurfaceMotion.IsRunning(detail, MotionChannel.Navigation));
         root.Children.Add(detail); host.Window.UpdateLayout(); Pump(25);
         MotionPolicy.Configure(MotionPreference.Reduced, false); ControlDetailMotionBehavior.SetIsExpanded(detail, false);
+        Assert.True(NativeSurfaceMotion.IsRunning(detail, MotionChannel.Navigation));
+        SeekNative(detail, MotionChannel.Navigation, 160); Pump(200);
         Assert.Equal(0, rotation.Angle); Assert.False(NativeSurfaceMotion.IsRunning(detail, MotionChannel.Navigation));
     });
 }

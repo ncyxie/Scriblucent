@@ -29,7 +29,7 @@ public partial class AboutPanel : UserControl
     private void DecorationChanged()
     {
         MeshNear.Visibility = MeshFar.Visibility = MotionPolicy.Spatial ? Visibility.Visible : Visibility.Hidden;
-        if (MotionPolicy.DecorativeLayers) return;
+        if (MotionPolicy.DecorativeMotion) return;
         SurfaceMotion.Stop(MeshNear); SurfaceMotion.Stop(MeshFar); SurfaceMotion.Stop(BrandLight);
         UiMotion.EnsureTranslate(MeshNear).X = UiMotion.EnsureTranslate(MeshFar).X = 0;
         BrandLight.Opacity = 0;
@@ -87,14 +87,15 @@ public partial class AboutPanel : UserControl
         {
             SurfaceMotion.Stop(mesh);
             var move = UiMotion.EnsureTranslate(mesh);
-            move.X = MotionPolicy.DecorativeLayers ? ReferenceEquals(mesh, MeshNear) ? -18 : 18 : 0;
+            move.X = MotionPolicy.DecorativeMotion ? ReferenceEquals(mesh, MeshNear) ? -18 : 18 : 0;
+            if (!MotionPolicy.DecorativeMotion) continue;
             SurfaceMotion.AnimateTracks(mesh, MotionChannel.Showcase,
                 [new(move, TranslateTransform.XProperty, 0, true, Profile: MotionProfiles.Arrival)], 650, UiMotion.InOutSine);
         }
         SurfaceMotion.Stop(BrandLight);
-        BrandLight.Opacity = MotionPolicy.DecorativeLayers ? 1 : 0;
+        BrandLight.Opacity = MotionPolicy.DecorativeMotion ? 1 : 0;
         var sweep = UiMotion.EnsureTranslate(BrandLight); sweep.X = -160;
-        if (MotionPolicy.DecorativeLayers)
+        if (MotionPolicy.DecorativeMotion)
             SurfaceMotion.AnimateTracks(BrandLight, MotionChannel.Showcase,
                 [new(sweep, TranslateTransform.XProperty, 500, true), new(BrandLight, UIElement.OpacityProperty, 0)],
                 650, UiMotion.InOutSine);

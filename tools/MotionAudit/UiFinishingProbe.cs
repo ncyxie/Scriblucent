@@ -25,7 +25,7 @@ internal static partial class Program
         var checks = new List<string>();
         foreach (var theme in new[] { "Light", "Dark" })
         foreach (var language in new[] { "en", "lt" })
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             LoadNativeControlResources(theme);
             Scriblucent.ThemeManager.SetTheme(theme);

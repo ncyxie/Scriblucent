@@ -38,8 +38,6 @@ public static class UiMotion
     public const int ReflowStaggerCapMs = 96;
     public const int ReflowStaggerMaxItems = 8;
     public const int BulkAddLayoutHideThreshold = 2;
-    public const int MaxBulkAnimatedEnters = 8;
-    public const int MaxBulkAnimatedExits = 8;
     public const int NavFadeOutMs = 70;
     public const int SectionMs = 220;
     public const int SidebarMs = 220;
@@ -104,7 +102,7 @@ public static class UiMotion
         System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(RenderTransitionClock).TypeHandle);
         MotionPolicy.Changed += () =>
         {
-            if (MotionPolicy.Spatial) return;
+            if (MotionPolicy.ExpressiveExtras) return;
             foreach (var entry in ChannelTransforms)
                 if (entry.Value.TryGetValue(MotionChannel.Interaction, out var translate))
                 {
@@ -152,16 +150,16 @@ public static class UiMotion
     public static double Lerp(double from, double to, double eased) => from + (to - from) * eased;
 
     /// <summary>
-    /// True when Windows accessibility / performance settings request reduced UI motion.
+    /// True when the application or Windows preferences disable UI motion.
     /// </summary>
-    public static bool PrefersReducedMotion => ReducedMotionPreferences.ShouldReduceMotion;
+    public static bool IsMotionDisabled => ReducedMotionPreferences.ShouldDisableMotion;
 
     public static bool IsAnyMotionRunning => RenderTransitionClock.IsAnyRunning;
     public static bool SuppressChildEntrances { get; set; }
 
     public static bool ShouldSkipDashboardRevealMotion()
     {
-        if (PrefersReducedMotion || SuppressChildEntrances)
+        if (IsMotionDisabled || SuppressChildEntrances)
             return true;
 
         return Application.Current?.MainWindow?.DataContext is ViewModels.MainViewModel { IsDashboardRevealMotionEnabled: false };
@@ -294,7 +292,7 @@ public static class UiMotion
         Action? onComplete = null,
         bool suppressEffect = true)
     {
-        if (PrefersReducedMotion)
+        if (IsMotionDisabled)
         {
             Run(element, tracks, onComplete);
             return;
@@ -649,7 +647,7 @@ public static class UiMotion
             return;
         }
 
-        if (PrefersReducedMotion)
+        if (IsMotionDisabled)
         {
             foreach (var element in elements)
                 SnapStaggeredEnterRest(element);
@@ -669,8 +667,8 @@ public static class UiMotion
         for (var index = 0; index < elements.Count; index++)
         {
             var element = elements[index];
-            if (index >= MotionTokens.MaxItems) { SnapStaggeredEnterRest(elements[index]); MarkOneComplete(); continue; }
-            var delayMs = Math.Min(index * staggerMs, MotionTokens.MaxStagger);
+            if (index >= MotionPolicy.PresenceItemBudget) { Stop(element); SnapStaggeredEnterRest(element); MarkOneComplete(); continue; }
+            var delayMs = MotionPolicy.StaggerDelay(Math.Min(index * staggerMs, MotionTokens.MaxStagger));
             element.RenderTransformOrigin = new Point(0.5, 0.5);
             Stop(element);
             Clear(element, UIElement.OpacityProperty);
@@ -698,6 +696,13 @@ public static class UiMotion
         if (container is null) { AnimateContentEnter(panel, 240, 14, onComplete); return; }
         var elements = CollectEmptyDashboardMotionChildren(container);
         if (elements.Count == 0) { onComplete?.Invoke(); return; }
+        if (!MotionPolicy.ExpressiveExtras)
+        {
+            foreach (var child in elements) { Stop(child); SnapStaggeredEnterRest(child); }
+            AnimateContentEnter(panel, 240, 14, onComplete);
+            if (panel is Scriblucent.Controls.Dashboard.EmptyDashboardPanel reducedEmpty) reducedEmpty.PlayIllustration();
+            return;
+        }
         Stop(panel); panel.Opacity = 1; ResetTranslate(panel);
         var remaining = elements.Count;
         for (var i = 0; i < elements.Count; i++)
@@ -784,7 +789,7 @@ public static class UiMotion
             onComplete?.Invoke();
         }
 
-        if (PrefersReducedMotion)
+        if (IsMotionDisabled)
         {
             Complete();
             return;
@@ -795,6 +800,7 @@ public static class UiMotion
         PrepDashboardContentRevealStart(element);
         var translate = EnsureTranslate(element);
 
+        startDelayMs = MotionPolicy.StaggerDelay(startDelayMs);
         Run(
             element,
             new[]
@@ -1050,7 +1056,7 @@ public static class UiMotion
             return;
         }
 
-        if (PrefersReducedMotion)
+        if (IsMotionDisabled)
         {
             element.Width = to;
             onComplete?.Invoke();
@@ -1114,7 +1120,7 @@ public static class UiMotion
         if (FindComboBoxPopup(comboBox) is not { Child: FrameworkElement child })
             return;
 
-        if (PrefersReducedMotion)
+        if (IsMotionDisabled)
         {
             PreparePopupOpenVisual(child);
             ResolvePopupMotionSurface(child).Opacity = 1;
@@ -1316,7 +1322,7 @@ public static class UiMotion
         double to,
         int durationMs = 900)
     {
-        if (PrefersReducedMotion)
+        if (!MotionPolicy.ExpressiveExtras)
             return;
 
         Stop(key);

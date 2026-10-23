@@ -572,7 +572,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged, Scriblu
 
         var questionsScrollViewer = QuestionsScrollViewer;
         SubmitAnswers();
-        if (UiMotion.PrefersReducedMotion || questionsScrollViewer is null)
+        if (UiMotion.IsMotionDisabled || questionsScrollViewer is null)
         {
             return;
         }
@@ -1330,7 +1330,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged, Scriblu
         }
 
         var questionsScrollViewer = QuestionsScrollViewer;
-        if (_isInitializing || questionsScrollViewer is null || UiMotion.PrefersReducedMotion)
+        if (_isInitializing || questionsScrollViewer is null || UiMotion.IsMotionDisabled)
         {
             UpdateModeChrome();
             UpdateSummary();
@@ -1580,7 +1580,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged, Scriblu
 
         ScoreTextBlock.Text = string.Format(LocalizationService.GetString("QuizScoreFormat"), correctCount, questionCount, percent);
 
-        if (animateScore && !UiMotion.PrefersReducedMotion)
+        if (animateScore && !UiMotion.IsMotionDisabled)
             UiMotion.AnimateLayoutReveal(ScoreBadge, true, axis: Orientation.Horizontal);
         else
             UiMotion.AnimateLayoutReveal(ScoreBadge, true, axis: Orientation.Horizontal, animate: false);

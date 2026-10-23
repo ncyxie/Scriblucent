@@ -18,7 +18,7 @@ internal static partial class Program
         foreach (var theme in new[] { "Light", "Dark" })
         {
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme);
-            MotionPolicy.Configure(MotionPreference.Automatic, false);
+            MotionPolicy.Configure(MotionPreference.Full, false);
             var stack = new StackPanel { Margin = new Thickness(24), Width = 420 };
             var plain = new TextBox { Text = "Ordinary field" };
             var embedded = new TextBox { Text = "Wrapped field", Style = (Style)_app.FindResource("EmbeddedFieldTextBoxStyle") };

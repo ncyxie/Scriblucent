@@ -176,7 +176,7 @@ public static class SidebarResizeMotion
         private void Finish() { var callback = _completed; _completed = null; callback?.Invoke(); }
         private void Resized(object sender, SizeChangedEventArgs e) { Settle(_target); Finish(); }
         private void DpiChanged(object sender, DpiChangedEventArgs e) { Settle(_target); Finish(); }
-        private void PolicyChanged() { if (!MotionPolicy.Spatial) { Settle(_target); Finish(); } }
+        private void PolicyChanged() { Settle(_target); Finish(); }
         private void Unloaded(object sender, RoutedEventArgs e) { Dispose(); States.Remove(_sidebar); }
         private void OwnerClosed(object? sender, EventArgs e) { Dispose(); States.Remove(_sidebar); }
         internal void Dispose()

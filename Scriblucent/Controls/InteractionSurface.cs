@@ -192,18 +192,19 @@ public sealed class InteractionSurface : Border
         Fill(SurfaceFill.Role.Hover, HoverBackground, hovered);
         Fill(SurfaceFill.Role.Pressed, PressedBackground, pressed);
         var move = UiMotion.ChannelTranslate(this, MotionChannel.Interaction);
-        var lift = Role == InteractionRole.Prominent ? -2d : Role == InteractionRole.Standard ? -1d : 0d;
+        var lift = !MotionPolicy.ExpressiveExtras ? 0d : Role == InteractionRole.Prominent ? -2d : Role == InteractionRole.Standard ? -1d : 0d;
         var targetY = MotionPolicy.Spatial ? pressed ? 1 : hovered ? lift : 0 : 0;
         var ownsMovement = _button is null || !Behaviors.ChromeHoverMotionBehavior.GetIsEnabled(_button);
         // Chrome owns lift on this same face. Its movement and our fill must not
         // cancel each other's clocks when both respond to the same mouse event.
         var channel = ownsMovement ? MotionChannel.Interaction : MotionChannel.InteractionPaint;
-        if (ownsMovement) tracks.Add(new(move, TranslateTransform.YProperty, targetY, true, Profile: new(UiMotion.OutCubic, paintMs)));
+        if (ownsMovement && (MotionPolicy.ExpressiveExtras || pressed || move.Y != 0))
+            tracks.Add(new(move, TranslateTransform.YProperty, targetY, true, Profile: new(UiMotion.OutCubic, paintMs)));
         RenderTransformOrigin = new Point(.5, .5);
         var scale = UiMotion.EnsureScale(this);
         var targetScale = pressed && MotionPolicy.Spatial ? .985 : 1;
-        var settle = pressChanged && !pressed && hovered && Role == InteractionRole.Prominent && MotionPolicy.Spatial ? 1.005 : (double?)null;
-        if (ownsMovement)
+        var settle = pressChanged && !pressed && hovered && Role == InteractionRole.Prominent && MotionPolicy.ExpressiveExtras ? 1.005 : (double?)null;
+        if (ownsMovement && (MotionPolicy.ExpressiveExtras || pressed || scale.ScaleX != 1 || scale.ScaleY != 1))
         {
             tracks.Add(new(scale, ScaleTransform.ScaleXProperty, targetScale, true, settle, settle is null ? null : 1));
             tracks.Add(new(scale, ScaleTransform.ScaleYProperty, targetScale, true, settle, settle is null ? null : 1));
@@ -218,8 +219,12 @@ public sealed class InteractionSurface : Border
         }
         if (_button?.Template.FindName("ButtonShadow", _button) is BakedElevationLayer shadow)
         {
-            tracks.Add(new(shadow, OpacityProperty, MotionPolicy.Spatial && hovered && !pressed ? .32 : 0));
-            tracks.Add(new(UiMotion.ChannelTranslate(shadow, MotionChannel.Interaction), TranslateTransform.YProperty, targetY, true));
+            if (MotionPolicy.ExpressiveExtras)
+            {
+                tracks.Add(new(shadow, OpacityProperty, hovered && !pressed ? .32 : 0));
+                tracks.Add(new(UiMotion.ChannelTranslate(shadow, MotionChannel.Interaction), TranslateTransform.YProperty, targetY, true));
+            }
+            else { shadow.Opacity = 0; UiMotion.ChannelTranslate(shadow, MotionChannel.Interaction).Y = 0; }
         }
         if (!animate || !MotionPolicy.Spatial)
         {

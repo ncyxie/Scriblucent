@@ -57,7 +57,7 @@ public static class WindowMotion
         if (!Active.TryGetValue(root, out var parts)) return;
         Active.Remove(root);
         SurfaceMotion.Stop(parts.Stage);
-        ArrivalGroups.Stop(parts.Stage);
+        ArrivalGroups.Stop(parts.Stage, settle: !MotionPolicy.ExpressiveExtras);
         foreach (var element in parts.Chrome.Concat(parts.Footer)) SurfaceMotion.Stop(element, MotionChannel.Presence);
     }
 

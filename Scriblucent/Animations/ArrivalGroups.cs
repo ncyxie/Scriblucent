@@ -39,7 +39,8 @@ public static class ArrivalGroups
         { WindowMotionRole.Chrome => ArrivalRole.Heading, WindowMotionRole.Footer => ArrivalRole.Actions, _ => ArrivalRole.None };
     internal static void Start(FrameworkElement root, bool fresh)
     {
-        Stop(root);
+        Stop(root, settle: !MotionPolicy.ExpressiveExtras);
+        if (!MotionPolicy.ExpressiveExtras) return;
         root.UpdateLayout();
         var groups = Resolve(root); Active.Add(root, groups);
         root.Unloaded -= Unloaded; root.Unloaded += Unloaded;

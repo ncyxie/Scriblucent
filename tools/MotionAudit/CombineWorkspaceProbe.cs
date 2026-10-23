@@ -29,7 +29,7 @@ internal static partial class Program
         {
             if (only is not null && only != $"{theme}/{language}") continue;
             LoadNativeControlResources(theme); Scriblucent.ThemeManager.SetTheme(theme);
-            LocalizationService.SetCulture(language); MotionPolicy.Configure(MotionPreference.Automatic, false);
+            LocalizationService.SetCulture(language); MotionPolicy.Configure(MotionPreference.Full, false);
             foreach (var flashcards in new[] { true, false })
             {
                 var model = PremiumLibraryFixture();

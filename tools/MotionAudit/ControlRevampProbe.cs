@@ -112,7 +112,7 @@ internal static partial class Program
             SaveControlCapture((FrameworkElement)print.Content, $"print-{theme}"); print.Close(); Pump(30);
             checks.Add($"{theme}: compiled print preview uses dark paper ink and cached square paper elevation.");
         }
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         Require(!RenderTransitionClock.IsAnyRunning, "A control left idle motion work behind.");
         checks.Add("Closed/unloaded controls leave no active motion tracks or frame observers.");
         File.WriteAllLines(Path.Combine(_output, "checks.txt"), checks);
@@ -159,7 +159,7 @@ internal static partial class Program
         ((Button)nav.Children[6]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(80);
         Require(viewer.VerticalOffset > viewer.ScrollableHeight - 2, "Last shortcut did not scroll to Data.");
         Require(nav.TranslatePoint(new Point(), settings) == originalNav, "Settings shortcuts scrolled away.");
-        MotionPolicy.Configure(MotionPreference.Automatic, false);
+        MotionPolicy.Configure(MotionPreference.Full, false);
         ((Button)nav.Children[0]).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(30);
         SmoothScrollBehavior.CancelTarget(viewer);
         var interrupted = viewer.VerticalOffset; Pump(160);
@@ -247,7 +247,7 @@ internal static partial class Program
         }
         combo.Style = (Style)_app.FindResource("FeatureToolbarComboBoxStyle");
         Require(combo.FontSize == 14 && combo.MinHeight == 32, "Toolbar density family was overridden.");
-        foreach (var preference in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var preference in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             MotionPolicy.Configure(preference, false);
             toggle.IsChecked = true; toggle.IsChecked = false;
@@ -257,7 +257,7 @@ internal static partial class Program
         }
         MotionPolicy.Configure(MotionPreference.Off, false); SaveControlCapture(stage, $"controls-{theme}");
         window.Close(); Pump(60);
-        checks.Add($"{theme}: native switch automation/routed events/two-way binding, immediate slider values and fill geometry, hue spectrum, five dropdown templates and popup densities, recycled results; Automatic/Reduced/Off.");
+        checks.Add($"{theme}: native switch automation/routed events/two-way binding, immediate slider values and fill geometry, hue spectrum, five dropdown templates and popup densities, recycled results; Full/Reduced/Off.");
     }
     private sealed class SwitchModel { public bool Enabled { get; set; } }
     private sealed class SettingsProbeModel

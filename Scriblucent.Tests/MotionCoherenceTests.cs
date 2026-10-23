@@ -32,7 +32,7 @@ public class MotionCoherenceTests
         var thread = new Thread(() =>
         {
             var preference = MotionPolicy.Preference;
-            try { MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception e) { failure = e; }
             finally { MotionPolicy.Configure(preference, false); }
         });

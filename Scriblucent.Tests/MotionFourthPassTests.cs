@@ -41,7 +41,7 @@ public class MotionFourthPassTests
             var systemField = typeof(MotionPolicy).GetField("_systemOff", BindingFlags.Static | BindingFlags.NonPublic)!;
             var materialField = typeof(MotionPolicy).GetField("_transparencyEnabled", BindingFlags.Static | BindingFlags.NonPublic)!;
             var system = (bool)systemField.GetValue(null)!; var transparency = materialField.GetValue(null);
-            try { materialField.SetValue(null, true); MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { materialField.SetValue(null, true); MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception error) { failure = error; }
             finally { MotionPolicy.Configure(preference, system); materialField.SetValue(null, transparency); }
         });
@@ -161,7 +161,7 @@ public class MotionFourthPassTests
     });
 
     [Fact]
-    public void Live_off_finishes_a_preparing_overlay_once_without_waiting_for_material() => Sta(() =>
+    public void Live_off_presents_a_preparing_overlay_once_with_its_material() => Sta(() =>
     {
         var root = new Grid(); var overlay = new Grid { Visibility = Visibility.Collapsed };
         var dim = new Border(); var face = new Border(); var image = new Image();
@@ -171,7 +171,10 @@ public class MotionFourthPassTests
         var animator = OverlayPanelAnimator.Bind(overlay, dim, face, image, overlay);
         var shown = 0; animator.Show(() => shown++, backdropOwner: cleanup.Window);
         MotionPolicy.Configure(MotionPreference.Off, false);
-        Assert.Equal(1, shown); Assert.Equal(1, face.Opacity);
+        Assert.Equal(0, shown);
+        Until(() => shown == 1);
+        Assert.Equal(1, face.Opacity);
+        if (MotionPolicy.BackdropBlur) Assert.NotNull(image.Source);
         Pump(100); Assert.Equal(1, shown);
         animator.Hide(); Until(() => !OverlayBackdropCapture.IsProcessing);
         Assert.Equal(0, MotionCacheBudget.ReservedPixels);
@@ -225,13 +228,84 @@ public class MotionFourthPassTests
         Seek(face, MotionChannel.Interaction, 80);
         Assert.Equal(1, UiMotion.ChannelTranslate(face, MotionChannel.Interaction).Y);
         MotionPolicy.Configure(MotionPreference.Reduced, false);
-        Assert.Equal(0, UiMotion.ChannelTranslate(face, MotionChannel.Interaction).Y);
-        Assert.Equal(.22, light.Strength);
+        Assert.Equal(1, UiMotion.ChannelTranslate(face, MotionChannel.Interaction).Y);
+        Assert.Equal(0, light.Strength);
         Assert.False(RenderTransitionClock.IsAnyRunning);
         button.IsEnabled = false; Pump(230);
         Assert.Equal(0, light.Strength);
         Assert.Equal(1, UiMotion.EnsureScale(face).ScaleX);
         if (SurfaceFill.Get(face, SurfaceFill.Role.Pressed, false) is { } pressed) Assert.Equal(0, pressed.Opacity);
+    });
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void Reduced_hover_runs_paint_only_and_button_press_retains_tactile_motion(string theme) => Sta(() =>
+    {
+        var card = new Grid { Width = 220, Height = 140, Background = Brushes.White };
+        var button = new Button { Width = 130, Height = 40, Content = "Save" };
+        CardSurfaceMotionBehavior.SetProfile(card, CardSurfaceMotionProfile.NoteCard);
+        CardSurfaceMotionBehavior.SetIsEnabled(card, true);
+        using var cleanup = new Cleanup(Window(new StackPanel { Children = { card, button } }, theme));
+        button.Style = (Style)button.FindResource("DialogPrimaryButtonStyle"); button.ApplyTemplate(); Pump(30);
+        MotionPolicy.Configure(MotionPreference.Reduced, false);
+        CommandLightBehavior.PreviewPointer(button, new Point(65, 20), true);
+        Assert.Equal(0, CommandLightBehavior.LightFor(button)!.Strength);
+        card.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseEnterEvent });
+        var cardTracks = Tracks(card, MotionChannel.Interaction);
+        Assert.Single(cardTracks); Assert.All(cardTracks, track => Assert.False(track.Track.Spatial));
+        Assert.Equal(0, UiMotion.ChannelTranslate(card, MotionChannel.Interaction).Y);
+        Seek(card, MotionChannel.Interaction, 80);
+        var light = card.Children.OfType<FrameworkElement>().Single();
+        Assert.InRange(light.Opacity, .01, .99);
+        Seek(card, MotionChannel.Interaction, 160); SurfaceMotion.Stop(card, MotionChannel.Interaction);
+        Assert.Equal(1, light.Opacity);
+        card.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseLeaveEvent });
+        Assert.True(NativeSurfaceMotion.IsRunning(card, MotionChannel.Interaction));
+        Seek(card, MotionChannel.Interaction, 90); Assert.InRange(light.Opacity, .01, .99);
+        Assert.Equal(0, UiMotion.ChannelTranslate(card, MotionChannel.Interaction).Y);
+        var face = (InteractionSurface)button.Template.FindName("ButtonBorder", button);
+        face.AnimateState(true, false);
+        Assert.All(Tracks(face, MotionChannel.Interaction), track => Assert.False(track.Track.Spatial));
+        face.AnimateState(true, true);
+        Assert.Contains(Tracks(face, MotionChannel.Interaction), track => track.Track.Spatial);
+        Seek(face, MotionChannel.Interaction, 80);
+        Assert.Equal(1, UiMotion.ChannelTranslate(face, MotionChannel.Interaction).Y);
+        Assert.Equal(.985, UiMotion.EnsureScale(face).ScaleX);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Off_overlay_has_its_complete_backdrop_at_the_shown_callback(bool closeDuringPreparation) => Sta(() =>
+    {
+        MotionPolicy.Configure(MotionPreference.Off, false);
+        var root = new Grid { Background = Brushes.SlateGray };
+        var overlay = new Grid { Visibility = Visibility.Collapsed };
+        var image = new Image(); var dim = new Border(); var face = new Border();
+        overlay.Children.Add(image); overlay.Children.Add(dim); overlay.Children.Add(face);
+        Panel.SetZIndex(overlay, 300); root.Children.Add(overlay);
+        using var cleanup = new Cleanup(Window(root));
+        var animator = OverlayPanelAnimator.Bind(overlay, dim, face, image, overlay);
+        var shown = 0;
+        animator.Show(() =>
+        {
+            shown++;
+            if (MotionPolicy.BackdropBlur)
+            {
+                Assert.NotNull(image.Source);
+                Assert.Equal(1, image.Opacity);
+            }
+            Assert.Equal(1, dim.Opacity);
+            Assert.False(NativeSurfaceMotion.IsRunning(face, MotionChannel.Presence));
+        }, backdropOwner: cleanup.Window);
+        if (closeDuringPreparation) animator.Hide();
+        Until(() => closeDuringPreparation ? !OverlayBackdropCapture.IsProcessing : shown == 1);
+        Pump(100);
+        Assert.Equal(closeDuringPreparation ? 0 : 1, shown);
+        animator.Hide(); Until(() => !OverlayBackdropCapture.IsProcessing);
+        Assert.Null(image.Source);
+        Assert.Equal(0, MotionCacheBudget.ReservedPixels);
     });
 
     [Fact]

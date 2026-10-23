@@ -29,7 +29,7 @@ public sealed class RenderTransitionClock
 
     static RenderTransitionClock() => MotionPolicy.Changed += SettleAll;
     public void Run(IEnumerable<Track> tracks, Action? onAllComplete = null,
-        bool instantOnlyForSystemReducedMotion = false, Action? onStopped = null, bool startOnNextFrame = false)
+        Action? onStopped = null, bool startOnNextFrame = false)
     {
         Stop();
         _startOnNextFrame = startOnNextFrame;

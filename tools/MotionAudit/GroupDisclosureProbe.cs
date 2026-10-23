@@ -52,12 +52,12 @@ internal static partial class Program
             CheckChevron();
         }
         Require(Body().NaturalExtent > 320 && Body().AnimateLargeExtent, "Group disclosure fixture did not cover a large body.");
-        foreach (var mode in new[] { MotionPreference.Automatic, MotionPreference.Reduced, MotionPreference.Off })
+        foreach (var mode in new[] { MotionPreference.Full, MotionPreference.Reduced, MotionPreference.Off })
         {
             MotionPolicy.Configure(mode, false);
             var otherStates = ControlTree(root).OfType<DashboardGroupHeader>().Where(h => !ReferenceEquals(h.DataContext, model)).Select(h => h.IsExpanded).ToArray();
             Click(); Pump(40);
-            if (mode == MotionPreference.Automatic && NativeSurfaceMotion.IsRunning(Body(), MotionChannel.Layout))
+            if (mode == MotionPreference.Full && NativeSurfaceMotion.IsRunning(Body(), MotionChannel.Layout))
             {
                 Require(!Body().IsEnabled && !Body().IsHitTestVisible,
                     $"Collapsing content still accepted input: expanded={state.IsExpanded}, header={Header().IsExpanded}, visible={Body().Visibility}, enabled={Body().IsEnabled}, hit={Body().IsHitTestVisible}.");
@@ -72,7 +72,7 @@ internal static partial class Program
             Require(Toggle().ToolTip as string == LocalizationService.GetString("ExpandGroup"), "Disclosure tooltip did not follow its state.");
             Require(ControlTree(root).OfType<DashboardGroupHeader>().Where(h => !ReferenceEquals(h.DataContext, model)).Select(h => h.IsExpanded).SequenceEqual(otherStates),
                 "Collapsing a group changed another group's state.");
-            if (mode == MotionPreference.Automatic) SaveControlCapture(scene, $"disclosure-{dashboard}-{theme}-collapsed");
+            if (mode != MotionPreference.Off) SaveControlCapture(scene, $"disclosure-{dashboard}-{theme}-collapsed");
 
             var owner = ControlTree(root).OfType<ItemsControl>().Single(c => ReferenceEquals(c.ItemsSource, groups));
             owner.Items.Filter = item => !ReferenceEquals(item, model); Pump(40);
@@ -88,18 +88,18 @@ internal static partial class Program
             Require(state.IsExpanded && Header().IsExpanded && Body().Visibility == Visibility.Visible && Body().IsEnabled && Body().IsHitTestVisible,
                 "Accepted drop did not reopen a usable group.");
             Require(Toggle().ToolTip as string == LocalizationService.GetString("CollapseGroup"), "Expanded disclosure tooltip is incorrect.");
-            if (mode == MotionPreference.Automatic)
+            if (mode != MotionPreference.Off)
             {
                 for (var i = 0; i < 8; i++) { Click(); Pump(20); }
                 Settle();
                 Require(state.IsExpanded && Body().Visibility == Visibility.Visible && Body().Child.Opacity == 1 && !Body().ClipToBounds,
                     "Rapid disclosure reversals stranded cards, opacity or clipping.");
             }
-            else Require(!NativeSurfaceMotion.IsRunning(Body(), MotionChannel.Layout), "Reduced/Off retained group layout motion.");
+            else Require(!NativeSurfaceMotion.IsRunning(Body(), MotionChannel.Layout), "Off retained group layout motion.");
         }
         MotionPolicy.Configure(MotionPreference.Off, false);
         items.Clear(); foreach (var item in original) items.Add(item); Settle();
         Require(Header().ItemCount == original.Length, "Disclosure fixture failed to restore its original group count.");
-        Console.WriteLine($"PASS disclosure {dashboard}/{theme}: large group, one-group isolation, filtering, reordering, hidden additions, drop reopening, rapid reversal and Automatic/Reduced/Off.");
+        Console.WriteLine($"PASS disclosure {dashboard}/{theme}: large group, one-group isolation, filtering, reordering, hidden additions, drop reopening, rapid reversal and Full/Reduced/Off.");
     }
 }

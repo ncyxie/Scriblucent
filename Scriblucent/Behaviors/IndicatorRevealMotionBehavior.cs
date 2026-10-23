@@ -355,7 +355,7 @@ public static class IndicatorRevealMotionBehavior
 
     private static void PlayPendingIndicators()
     {
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             lock (Gate)
             {
@@ -511,7 +511,7 @@ public static class IndicatorRevealMotionBehavior
 
     private static bool TryStartDismiss(FrameworkElement element, (Guid Id, string Property) key)
     {
-        if (UiMotion.PrefersReducedMotion
+        if (UiMotion.IsMotionDisabled
             || element.Visibility != Visibility.Visible
             || element.Opacity < 0.5)
         {

@@ -109,7 +109,7 @@ internal static partial class Program
             P95Ms = times[(int)(times.Count * .95)], MaxMs = times[^1], MedianAllocatedBytes = allocations[allocations.Count / 2], PeakRealizedCards = peak,
             Scope = "UI-thread seek and layout update; two warm-up cycles excluded. Includes wrap changes. Not presented-frame timing or bitmap readback." };
         File.WriteAllText(Path.Combine(_output, $"sidebar-layout-{theme.ToLowerInvariant()}.json"), JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine(JsonSerializer.Serialize(result)); MotionPolicy.Configure(MotionPreference.Automatic, false);
+        Console.WriteLine(JsonSerializer.Serialize(result)); MotionPolicy.Configure(MotionPreference.Full, false);
     }
     private static void RecordCoherenceBlue(Window owner, string suffix)
     {
@@ -167,7 +167,7 @@ internal static partial class Program
     {
         foreach (var theme in new[] { "Light", "Dark" })
         {
-            LoadResources(theme); MotionPolicy.Configure(MotionPreference.Automatic, false); var suffix = theme.ToLowerInvariant();
+            LoadResources(theme); MotionPolicy.Configure(MotionPreference.Full, false); var suffix = theme.ToLowerInvariant();
             var owner = new Window { Width = 960, Height = 720, ShowInTaskbar = false, ShowActivated = false, Content = new Grid() }; owner.Show(); Pump(60);
             using (var sidebar = new SidebarFixture(owner, wrapCards: true))
             {

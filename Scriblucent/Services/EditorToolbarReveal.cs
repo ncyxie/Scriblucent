@@ -40,7 +40,7 @@ internal static class EditorToolbarReveal
         UiMotion.Stop(host);
         host.IsEnabled = visible;
         host.IsHitTestVisible = visible;
-        if (firstUpdate || !animate || (host.Parent as UIElement)?.IsVisible != true || UiMotion.PrefersReducedMotion)
+        if (firstUpdate || !animate || (host.Parent as UIElement)?.IsVisible != true || UiMotion.IsMotionDisabled)
         {
             Finish(host, state);
             return;

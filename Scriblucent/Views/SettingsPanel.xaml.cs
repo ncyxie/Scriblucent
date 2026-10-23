@@ -185,7 +185,7 @@ namespace Scriblucent.Views
                 UpdateRecentItemsLimitControls(settings.RecentItemsLimit);
                 if (MotionPreferenceComboBox is not null)
                     MotionPreferenceComboBox.SelectedIndex = (int)(settings.AnimationPreference ??
-                        (settings.ReduceAnimations ? MotionPreference.Reduced : MotionPreference.Automatic));
+                        (settings.ReduceAnimations ? MotionPreference.Reduced : MotionPreference.Full));
                 if (EnableSpellCheckCheckBox is not null)
                     EnableSpellCheckCheckBox.IsChecked = settings.EnableSpellCheck;
                 PopulateDefaultNoteTemplate(settings);
@@ -1433,7 +1433,7 @@ namespace Scriblucent.Views
             var preference = (MotionPreference)MotionPreferenceComboBox.SelectedIndex;
             var settings = AppSettingsService.Load();
             settings.AnimationPreference = preference;
-            settings.ReduceAnimations = preference != MotionPreference.Automatic;
+            settings.ReduceAnimations = preference != MotionPreference.Full;
             AppSettingsService.Save(settings);
             ReducedMotionPreferences.Configure(preference);
             ReducedMotionPreferences.Refresh();

@@ -149,7 +149,7 @@ public static class CheckBoxCheckMotionBehavior
 
         if (checkBox.IsChecked == true)
         {
-            if (animate && !UiMotion.PrefersReducedMotion)
+            if (animate && !UiMotion.IsMotionDisabled)
                 AnimateGlyph(checkBox, isChecked: true);
             else
                 ShowChecked(glyph);
@@ -166,7 +166,7 @@ public static class CheckBoxCheckMotionBehavior
 
         UiMotion.Stop(glyph);
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             if (isChecked)
                 ShowChecked(glyph);

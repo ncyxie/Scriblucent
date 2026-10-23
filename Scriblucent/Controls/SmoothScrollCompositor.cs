@@ -406,7 +406,7 @@ internal static class SmoothScrollCompositor
 
     private static bool ShouldUseCompositor(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost> hosts)
     {
-        if (ReducedMotionPreferences.ShouldReduceMotion)
+        if (ReducedMotionPreferences.ShouldDisableMotion)
             return false;
 
         if (scrollViewer.ViewportHeight >= MinViewportForCompositor)

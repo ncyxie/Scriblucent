@@ -14,7 +14,7 @@ internal static partial class Program
     {
         foreach (var theme in new[] { "Light", "Dark" })
         {
-            LoadResources(theme); ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+            LoadResources(theme); ReducedMotionPreferences.Configure(MotionPreference.Full);
             var suffix = theme.ToLowerInvariant();
             var owner = new Window { Content = new Grid(), Width = 960, Height = 680, ShowInTaskbar = false, ShowActivated = false };
             owner.Show(); Pump(60);

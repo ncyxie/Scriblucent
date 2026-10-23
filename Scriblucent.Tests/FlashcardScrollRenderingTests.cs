@@ -21,7 +21,7 @@ public class FlashcardScrollRenderingTests
         Exception? error = null;
         var thread = new Thread(() =>
         {
-            try { SkiaCardTileCache.Clear(); MotionPolicy.Configure(MotionPreference.Automatic, false); action(); }
+            try { SkiaCardTileCache.Clear(); MotionPolicy.Configure(MotionPreference.Full, false); action(); }
             catch (Exception caught) { error = caught; }
             finally { SkiaCardTileCache.Clear(); Dispatcher.CurrentDispatcher.InvokeShutdown(); }
         });
@@ -88,9 +88,10 @@ public class FlashcardScrollRenderingTests
             flip.AnimateToggle(240); Pump(60); flip.PrepareForReuse();
             Assert.False(flip.IsAnimating); Assert.Equal(Visibility.Collapsed, ((FrameworkElement)flip.FindName("BackFace")).Visibility);
             MotionPolicy.Configure(MotionPreference.Reduced, false); flip.AnimateToggle(240);
-            Assert.True(flip.IsFlipped); Assert.False(flip.IsAnimating);
+            Assert.True(flip.IsAnimating); Until(() => !flip.IsAnimating);
+            Assert.True(flip.IsFlipped);
         }
-        finally { MotionPolicy.Configure(MotionPreference.Automatic, false); window.Content = null; Pump(40); window.Close(); Pump(40); }
+        finally { MotionPolicy.Configure(MotionPreference.Full, false); window.Content = null; Pump(40); window.Close(); Pump(40); }
     });
     [Fact]
     public void Incremental_capture_yields_and_preserves_native_painter_order() => Sta(() =>
@@ -228,7 +229,7 @@ public class FlashcardScrollRenderingTests
             MotionPolicy.Configure(MotionPreference.Off, false);
             Assert.False(ScrollTileBehavior.GetIsScrolling(viewer)); Assert.False(SmoothScrollCompositor.IsActive(viewer));
         }
-        finally { MotionPolicy.Configure(MotionPreference.Automatic, false); window.Content = null; Pump(40); window.Close(); Pump(40); }
+        finally { MotionPolicy.Configure(MotionPreference.Full, false); window.Content = null; Pump(40); window.Close(); Pump(40); }
     });
     private static Button? FindButton(DependencyObject? item)
     { for (; item is not null; item = VisualTreeHelper.GetParent(item)) if (item is Button button) return button; return null; }

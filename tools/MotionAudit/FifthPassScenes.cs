@@ -134,7 +134,7 @@ internal static partial class Program
             ReducedMotionPreferences.Configure(MotionPreference.Reduced);
             SaveGif(CaptureFeedback(sidebar.Root, () => sidebar.Resize(64), 9,
                 new() { [4] = () => sidebar.Select(0) }), $"reduced-sidebar-{suffix}.gif");
-            ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+            ReducedMotionPreferences.Configure(MotionPreference.Full);
         }
         foreach (var kind in Enum.GetValues<StateIllustrationKind>())
         {
@@ -193,7 +193,7 @@ internal static partial class Program
         ReducedMotionPreferences.Configure(MotionPreference.Reduced);
         var reduced = StageFixture(scene.Window, new ContextualStatePanel { IllustrationKind = StateIllustrationKind.Trash, Title = "Room for a fresh start", Description = "Simple feedback when you want less movement." });
         SaveGif(Capture((FrameworkElement)reduced.Content, reduced.Show, 250), $"reduced-staging-and-context-{suffix}.gif");
-        WindowContentEnterHelper.AllowImmediateClose(reduced); reduced.Close(); Pump(40); ReducedMotionPreferences.Configure(MotionPreference.Automatic);
+        WindowContentEnterHelper.AllowImmediateClose(reduced); reduced.Close(); Pump(40); ReducedMotionPreferences.Configure(MotionPreference.Full);
         WaitForRest();
     }
     private static void BenchmarkFifthPass(Scene scene, string theme, MotionPreference preference)

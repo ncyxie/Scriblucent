@@ -195,7 +195,7 @@ public static class RadioButtonSelectionMotionBehavior
 
         UiMotion.Stop(glyph);
 
-        if (UiMotion.PrefersReducedMotion)
+        if (UiMotion.IsMotionDisabled)
         {
             ShowChecked(glyph);
             return;

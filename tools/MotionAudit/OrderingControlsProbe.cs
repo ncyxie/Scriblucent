@@ -32,12 +32,12 @@ internal static partial class Program
     private static void ProbeSettingsOrderingOnly(string theme)
     {
         LoadNativeControlResources(theme);
-        var (window, model, _) = LoadingWindow(theme, MotionPreference.Automatic, 0);
+        var (window, model, _) = LoadingWindow(theme, MotionPreference.Full, 0);
         try
         {
             window.Show(); WaitLoading(() => model.IsActiveDashboardReady); Pump(300);
             var report = new List<string>();
-            ProbeSettingsOrdering(window, theme, MotionPreference.Automatic, report);
+            ProbeSettingsOrdering(window, theme, MotionPreference.Full, report);
             File.WriteAllLines(Path.Combine(_output, "ordering-settings.txt"), report);
             foreach (var line in report) Console.WriteLine(line);
         }
