@@ -40,30 +40,34 @@ Windows 10 &amp; 11 · x64 &amp; ARM64 · Free and open source
 Start with an idea. Keep your notes and study materials together, then move between them in a shared tabbed workspace. Click an editor to explore it at full resolution.
 
 <table>
-  <tr>
-    <td width="50%" valign="top">
-      <h3>Notes</h3>
-      <p>Rich text, images, linked notes, and reusable templates. Autosave and version history help you pick up where you left off.</p>
-      <a href="Screenshots/editor-note.png"><img src="Screenshots/editor-note.png" width="100%" alt="Rich-text note editor with connected tabs for notes and study materials"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h3>Flashcards</h3>
-      <p>Text, images, and audio for recall practice. Review with spaced repetition and follow your progress.</p>
-      <a href="Screenshots/editor-flashcards.png"><img src="Screenshots/editor-flashcards.png" width="100%" alt="Flashcard editor showing a grid of cards for recall practice"></a>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h3>Mind maps</h3>
-      <p>Connect ideas, arrange branches, choose layouts, and style your nodes. Link them back to the notes that inspired them.</p>
-      <a href="Screenshots/editor-mindmap.png"><img src="Screenshots/editor-mindmap.png" width="100%" alt="Mind map connecting retrieval, spaced practice, and related ideas"></a>
-    </td>
-    <td width="50%" valign="top">
-      <h3>Quizzes</h3>
-      <p>Choice, true/false, and written questions. Review attempts, understand missed answers, and try again.</p>
-      <a href="Screenshots/editor-quiz.png"><img src="Screenshots/editor-quiz.png" width="100%" alt="Quiz editor with editable questions, answer choices, and explanations"></a>
-    </td>
-  </tr>
+  <tbody>
+    <tr>
+      <td width="50%" valign="top">
+        <a href="Screenshots/editor-note.png"><img src="Screenshots/editor-note.png" width="100%" alt="Rich-text note editor with connected tabs for notes and study materials"></a>
+        <h3>Notes</h3>
+        <p>Rich text, images, templates, and linked notes. Includes autosave and version history.</p>
+      </td>
+      <td width="50%" valign="top">
+        <a href="Screenshots/editor-flashcards.png"><img src="Screenshots/editor-flashcards.png" width="100%" alt="Flashcard editor showing a grid of cards for recall practice"></a>
+        <h3>Flashcards</h3>
+        <p>Text, images, and audio for active recall. Study with spaced repetition and track progress.</p>
+      </td>
+    </tr>
+  </tbody>
+  <tbody>
+    <tr>
+      <td width="50%" valign="top">
+        <a href="Screenshots/editor-mindmap.png"><img src="Screenshots/editor-mindmap.png" width="100%" alt="Mind map connecting retrieval, spaced practice, and related ideas"></a>
+        <h3>Mind maps</h3>
+        <p>Connect ideas, arrange branches, and style nodes. Link maps back to the notes behind them.</p>
+      </td>
+      <td width="50%" valign="top">
+        <a href="Screenshots/editor-quiz.png"><img src="Screenshots/editor-quiz.png" width="100%" alt="Quiz editor with editable questions, answer choices, and explanations"></a>
+        <h3>Quizzes</h3>
+        <p>Choice, true/false, and written questions. Review attempts and learn from missed answers.</p>
+      </td>
+    </tr>
+  </tbody>
 </table>
 
 ## Keep your next step in sight
