@@ -27,7 +27,7 @@
 
 </div>
 
-Scriblucent builds on the original NoteCards project with a substantial rewrite of its interface and everyday workflows. Bring notes, recall practice, connected ideas, and self-testing into one Windows workspace. Your materials stay local, and AI is optional.
+Scriblucent builds on the original NoteCards with a substantial rewrite of its interface and daily workflows. Write, connect ideas, and practice recall in one Windows workspace. Your materials stay local, and AI is optional.
 
 <div align="center">
 <a href="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.2/Screenshots/dashboard-light.png">
@@ -43,14 +43,14 @@ Scriblucent builds on the original NoteCards project with a substantial rewrite 
 
 | Create | Make it useful |
 | --- | --- |
-| **Notes** | Write with rich text and images, link related notes, reuse templates, and return to earlier versions. |
-| **Flashcards** | Build sets with text, images, and audio. Practice with spaced repetition and follow your progress. |
+| **Notes** | Write with rich text, images, checklists, tables, and sketches. Link notes, reuse templates, and return to earlier versions. |
+| **Flashcards** | Build cards with text, images, and audio. Choose SM-2 or FSRS-6 spaced repetition, use Cram mode, and follow your progress. |
 | **Mind maps** | Connect ideas, arrange branches, style nodes, and link them to your notes. |
 | **Quizzes** | Mix choice, true/false, and written questions, then review attempts and missed answers. |
 
 ### An interface that feels alive
 
-The dashboard and editors share a renewed visual language: light and dark themes, soft depth, cursor-responsive card tints, and coordinated motion. Tabs connect your open materials, while smooth caret movement makes writing feel more fluid. Reduced motion keeps the experience quieter when you prefer it.
+Light and dark themes, soft depth, cursor-responsive card tints, and coordinated motion give the dashboard and editors one visual language. Tabs keep your materials together, smooth caret movement makes writing more fluid, and reduced motion offers a quieter experience.
 
 <details>
 <summary><strong>See it in motion</strong></summary>
@@ -63,9 +63,10 @@ The dashboard and editors share a renewed visual language: light and dark themes
 
 - **Organize your way.** Group and tag materials, search your collection, and drag cards into a manual order.
 - **Work in batches.** Select multiple items for common actions, including bulk renaming and export where supported.
+- **Review across topics.** Combine flashcard sets or quizzes into a broader study set or test.
 - **Keep practice in view.** Plan reminders in the dashboard calendar and choose the first day of your week.
-- **Move between materials.** Keep editors open in tabs and connect study materials to their source notes.
-- **Stay comfortable.** Choose English or Lithuanian, adjust motion, and work with large collections through on-demand card rendering.
+- **Bring your materials along.** Import RTF and text notes, CSV or Anki plain-text flashcards, and GIFT or CSV quizzes. Export notes to PDF or selected materials together in a ZIP archive.
+- **Make it yours.** Choose English or Lithuanian and adjust motion to your preference.
 
 ### Local first, AI when you want it
 
@@ -75,4 +76,4 @@ Write, organize, and study offline without an AI model. Optional local AI can tu
 
 Setup installers are available for **x64** and **ARM64**, with the required runtimes included. Optional models download separately. This is a beta release; [report issues](https://github.com/ncyxie/Scriblucent/issues) with the steps to reproduce them.
 
-[Explore Scriblucent](https://github.com/ncyxie/Scriblucent#one-place-to-think-and-learn) · [Download the latest beta](https://github.com/ncyxie/Scriblucent/releases)
+**[Watch the current workflow demo](https://github.com/ncyxie/Scriblucent#readme)** · [Explore the tools](https://github.com/ncyxie/Scriblucent#one-place-to-think-and-learn) · [Download the latest beta](https://github.com/ncyxie/Scriblucent/releases)
