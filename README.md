@@ -1,81 +1,95 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Scriblucent/Assets/brand-logo-light.svg">
-  <source media="(prefers-color-scheme: light)" srcset="Scriblucent/Assets/brand-logo-dark.svg">
-  <img src="Scriblucent/Assets/brand-logo-dark.svg" width="260" alt="Scriblucent">
+  <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="Scriblucent/Assets/brand-logo-light.svg">
+  <source media="(max-width: 600px)" srcset="Scriblucent/Assets/brand-logo-dark.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="Screenshots/readme-cover-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="Screenshots/readme-cover-light.svg">
+  <img src="Screenshots/readme-cover-light.svg" width="960" alt="Scriblucent. Your notes. Connected ideas. All local.">
 </picture>
 
 # Write. Recite. Get it right.
 
 Learn offline at your own pace. Take notes, build flashcards, map ideas, and test yourself, all in one private space.
 
-**[Download beta](https://github.com/ncyxie/Scriblucent/releases)** &nbsp; · &nbsp; [Explore the tools](#one-place-to-think-and-learn) &nbsp; · &nbsp; [Report an issue](https://github.com/ncyxie/Scriblucent/issues)
+**[Download for Windows](https://github.com/ncyxie/Scriblucent/releases)** &nbsp; · &nbsp; [Explore the tools](#one-place-to-think-and-learn) &nbsp; · &nbsp; [Get started](#get-started)
 
-Windows desktop · Local storage · Optional local AI
+Windows 10 &amp; 11 · x64 &amp; ARM64 · Free and open source
+
+<a href="Screenshots/scriblucent-in-motion.gif"><img src="Screenshots/scriblucent-in-motion.gif" width="960" alt="Scriblucent in action: the sidebar glides, cards respond to the cursor, and the plus button reveals quick actions."></a>
+
+<sub>A workspace that feels alive. Cursor-responsive cards, a gliding sidebar, and quick actions.</sub>
 
 </div>
+
+<details>
+<summary><strong>Explore the dashboard in light and dark mode</strong></summary>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Screenshots/dashboard-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="Screenshots/dashboard-light.png">
-  <img src="Screenshots/dashboard-light.png" alt="Scriblucent dashboard with grouped study notes and calendar reminders" width="1280">
+  <img src="Screenshots/dashboard-light.png" alt="Scriblucent dashboard with grouped study notes and calendar reminders" width="960">
 </picture>
+
+[Light dashboard](Screenshots/dashboard-light.png) · [Dark dashboard](Screenshots/dashboard-dark.png)
+
+</details>
 
 ## One place to think and learn
 
-Start with an idea. Keep your notes and study materials together, then move between them in a shared tabbed workspace.
+Start with an idea. Keep your notes and study materials together, then move between them in a shared tabbed workspace. Click an editor to explore it at full resolution.
 
-### Notes
-
-Give ideas room to grow with rich text, images, linked notes, and templates. Autosave and version history help you pick up where you left off.
-
-[![Rich-text note editor with connected tabs for notes and study materials](Screenshots/editor-note.png)](Screenshots/editor-note.png)
-
-### Flashcards
-
-Turn key ideas into recall practice. Build sets with text, images, and audio, review with spaced repetition, and follow your progress.
-
-[![Flashcard editor showing a grid of cards for recall practice](Screenshots/editor-flashcards.png)](Screenshots/editor-flashcards.png)
-
-### Mind maps
-
-See how ideas connect. Branch out, choose a layout, style your nodes, and link them back to your notes.
-
-[![Mind map connecting retrieval, spaced practice, and related ideas](Screenshots/editor-mindmap.png)](Screenshots/editor-mindmap.png)
-
-### Quizzes
-
-Check what you know with choice, true/false, and written questions. Review attempts and return to the questions you missed.
-
-[![Quiz editor with editable questions, answer choices, and explanations](Screenshots/editor-quiz.png)](Screenshots/editor-quiz.png)
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Notes</h3>
+      <p>Rich text, images, linked notes, and reusable templates. Autosave and version history help you pick up where you left off.</p>
+      <a href="Screenshots/editor-note.png"><img src="Screenshots/editor-note.png" width="100%" alt="Rich-text note editor with connected tabs for notes and study materials"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Flashcards</h3>
+      <p>Text, images, and audio for recall practice. Review with spaced repetition and follow your progress.</p>
+      <a href="Screenshots/editor-flashcards.png"><img src="Screenshots/editor-flashcards.png" width="100%" alt="Flashcard editor showing a grid of cards for recall practice"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Mind maps</h3>
+      <p>Connect ideas, arrange branches, choose layouts, and style your nodes. Link them back to the notes that inspired them.</p>
+      <a href="Screenshots/editor-mindmap.png"><img src="Screenshots/editor-mindmap.png" width="100%" alt="Mind map connecting retrieval, spaced practice, and related ideas"></a>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Quizzes</h3>
+      <p>Choice, true/false, and written questions. Review attempts, understand missed answers, and try again.</p>
+      <a href="Screenshots/editor-quiz.png"><img src="Screenshots/editor-quiz.png" width="100%" alt="Quiz editor with editable questions, answer choices, and explanations"></a>
+    </td>
+  </tr>
+</table>
 
 ## Keep your next step in sight
 
 - **Find your flow.** Organize materials with groups and tags, search your collection, drag items into your own order, and handle selections in bulk.
 - **Make room for practice.** Schedule reminders right from your materials and see what is coming up in the dashboard calendar.
 - **Make it yours.** Switch between light and dark themes, choose English or Lithuanian, and adjust motion to your preference.
-
-<details>
-<summary><strong>See Scriblucent in motion</strong></summary>
-
-A short look at card feedback, the sidebar, and quick actions in the current app.
-
-![Scriblucent's sidebar glides open and closed, a recent card gains a soft blue tint, and the floating plus reveals quick actions](Screenshots/scriblucent-in-motion.gif)
-
-</details>
+- **Take your materials with you.** Import and export notes and study materials for sharing, backups, or moving to another computer. Export selected dashboard items together in a ZIP archive.
 
 ## Your materials, on your computer
 
-Notes, study materials, and settings are stored locally. Write, organize, and study offline without downloading an AI model.
+Notes, study materials, and settings are stored locally. Write, organize, and study offline. Your materials stay on your device.
 
-When you want a starting point, optional local AI can generate flashcards, mind maps, and quizzes from your notes. Choose a model suited to your computer; it downloads when needed and runs locally afterward. Review generated material before studying it.
+When you want a starting point, **optional local AI** can generate flashcards, mind maps, and quizzes from your notes. Choose a model suited to your computer; it downloads when needed and runs locally afterward. Review generated material before studying it.
+
+An internet connection is needed to download models, spell-check dictionaries, and app updates. Automatic update checks can be turned off in Settings. Writing, organizing, and studying work offline, and AI is never required.
 
 ## Get started
 
-1. Download the Windows setup installer for your computer from [Releases](https://github.com/ncyxie/Scriblucent/releases).
-2. Choose **x64** for most Windows PCs or **ARM64** for Windows on Arm, then run the installer. The .NET runtime is included.
+**Windows 10 (1809+) or Windows 11 · x64 / ARM64**. See Microsoft's [supported Windows editions](https://learn.microsoft.com/en-us/dotnet/core/install/windows#supported-versions) for runtime compatibility.
+
+1. Download the Windows setup installer from [Releases](https://github.com/ncyxie/Scriblucent/releases).
+2. Choose **x64** for most Windows PCs or **ARM64** for Windows on Arm, then run the installer. The required runtimes are included.
 3. Open Scriblucent and create your first note or study set using the **+** button, or import existing materials.
+
+Installers are currently unsigned and require administrator approval. Uninstalling keeps your local data.
 
 Scriblucent is currently in beta. If something gets in your way, [report an issue](https://github.com/ncyxie/Scriblucent/issues) with the steps to reproduce it.
 
@@ -91,22 +105,6 @@ dotnet run --project Scriblucent -c Release
 
 </details>
 
-<details>
-<summary><strong>Create a release</strong></summary>
-
-Add an entry for the version to [CHANGELOG.md](CHANGELOG.md) for curated release notes. In GitHub Actions, select **Windows release → Run workflow**, enter a version such as `1.0.0-beta.2`, and run it. Alternatively, push a matching version tag:
-
-```powershell
-git tag v1.0.0-beta.2
-git push origin v1.0.0-beta.2
-```
-
-Both methods build and check x64 and ARM64 setup installers, then attach them and SHA-256 checksums to a GitHub release. Versions containing a suffix such as `-beta.2` are marked as prereleases. Clear **Publish a GitHub release** in the manual workflow to build installers without publishing. Ordinary commits do not trigger releases.
-
-Installers are currently unsigned. Setup requests administrator approval and installs for all users under `Program Files\Scriblucent`, with a shared Start menu shortcut. Desktop shortcuts and native file associations are optional. Setup is available in English and Lithuanian. Existing per-user installations are replaced after the new installation verifies successfully; launch setup normally from the account that owns the old copy, then approve the administrator prompt. Opening an associated Scriblucent file imports a copy into your library; the exported original is unchanged. Libraries, settings, media and downloaded models remain separate for each account under `%LOCALAPPDATA%\Scriblucent`, including after uninstall. Interrupted upgrades retain a temporary recovery backup that the next setup run restores before continuing.
-
-</details>
-
 ---
 
-[Changelog](CHANGELOG.md) · [MIT License](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
+[Download beta](https://github.com/ncyxie/Scriblucent/releases) · [Report an issue](https://github.com/ncyxie/Scriblucent/issues) · [Changelog](CHANGELOG.md) · [MIT License](LICENSE) · [Third-party notices](THIRD-PARTY-NOTICES.md)
