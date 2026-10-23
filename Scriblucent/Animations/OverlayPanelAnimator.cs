@@ -38,6 +38,7 @@ public sealed class OverlayPanelAnimator
     private bool _entryStarted;
     private bool _watchingPolicy;
     private Action? _pendingEntrance;
+    private Action? _finishEntrancePreparation;
     private TaskCompletionSource? _entrySettled;
     private IDisposable? _backdropRequest;
     private Window? _backdropOwner;
@@ -66,6 +67,7 @@ public sealed class OverlayPanelAnimator
         {
             _transitionVersion++;
             _pendingEntrance = null;
+            FinishEntrancePreparation();
             if (_watchingPolicy) MotionPolicy.Changed -= PolicyChanged;
             _watchingPolicy = false;
             StopSurfaceMotion();
@@ -92,8 +94,16 @@ public sealed class OverlayPanelAnimator
     // captureBackdrop is retained for source compatibility; owner leases perform all capture.
     public void Show(Action? afterShown = null, Func<BitmapSource?>? captureBackdrop = null,
         Window? backdropOwner = null, Action? onEntranceStarted = null)
+        => ShowCore(afterShown, backdropOwner, onEntranceStarted, null);
+
+    internal void Show(OverlayEntranceBatch entrance, Action? afterShown = null, Window? backdropOwner = null)
+        => ShowCore(afterShown, backdropOwner, null, entrance);
+
+    private void ShowCore(Action? afterShown, Window? backdropOwner, Action? onEntranceStarted,
+        OverlayEntranceBatch? entrance)
     {
         var version = ++_transitionVersion;
+        FinishEntrancePreparation();
         var reversing = _isClosing && _host.Visibility == Visibility.Visible;
         _isClosing = false;
         StopSurfaceMotion();
@@ -109,20 +119,27 @@ public sealed class OverlayPanelAnimator
         ConfigureScrim(null);
         BeginPanelMotionPrep();
         _motionHost.IsHitTestVisible = reversing;
+        BitmapSource? stagedBackdrop = null;
+        bool backdropStaged = false;
         void Start()
         {
-            if (version != _transitionVersion || _isClosing || _host.Visibility != Visibility.Visible) return;
+            if (version != _transitionVersion || _isClosing || _entryStarted || _host.Visibility != Visibility.Visible) return;
             _pendingEntrance = null;
             _entryStarted = true;
+            FinishEntrancePreparation();
             _motionHost.IsHitTestVisible = true;
             ArrivalGroups.Start(_motionHost, fresh: !reversing);
             onEntranceStarted?.Invoke();
             if (ReducedMotionPreferences.ShouldUseInstantOverlayTransitions) ShowImmediately(afterShown);
             else RunOpenTransition(afterShown);
+            if (backdropStaged) ApplyBackdrop(stagedBackdrop);
             if (reversing && OverlayBackdropCapture.TryCaptureForDialog(_backdropOwner) is { } existing)
                 ApplyBackdrop(existing);
         }
         _pendingEntrance = Start;
+        var ready = !reversing && !ReducedMotionPreferences.ShouldUseInstantOverlayTransitions
+            ? entrance?.Register(Start) : null;
+        _finishEntrancePreparation = ready;
         _host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             if (version != _transitionVersion || _isClosing) return;
@@ -134,9 +151,33 @@ public sealed class OverlayPanelAnimator
             }
             else
             {
-                // Immediate modal feedback; the hidden surface cannot accept accidental clicks.
-                SetDimOpacity(.12);
-                BeginBackdropRequest(Start);
+                if (ready is null)
+                {
+                    // Immediate modal feedback; the hidden surface cannot accept accidental clicks.
+                    SetDimOpacity(.12);
+                    BeginBackdropRequest(Start);
+                }
+                else
+                {
+                    // A multi-window modal is one transition. Stage its textures without
+                    // starting a fade while another window is still being rasterized.
+                    BeginBackdropRequest(received: snapshot =>
+                    {
+                        if (_entryStarted)
+                        {
+                            ApplyBackdrop(snapshot);
+                            FinishEntrancePreparation();
+                            ready();
+                            return;
+                        }
+                        stagedBackdrop = snapshot;
+                        backdropStaged = true;
+                        InstallBackdrop(snapshot);
+                        if (_backdropImage is { } image) image.Opacity = 0;
+                        _finishEntrancePreparation = null;
+                        ready();
+                    });
+                }
             }
         });
     }
@@ -149,6 +190,7 @@ public sealed class OverlayPanelAnimator
         _isClosing = true;
         _transitionVersion++;
         _pendingEntrance = null;
+        FinishEntrancePreparation();
         _host.IsHitTestVisible = false;
         StopSurfaceMotion();
 
@@ -184,20 +226,30 @@ public sealed class OverlayPanelAnimator
         _backdropRequest?.Dispose(); _backdropRequest = null;
     }
 
-    private void BeginBackdropRequest(Action? prepared = null)
+    private void BeginBackdropRequest(Action? prepared = null, Action<BitmapSource?>? received = null)
     {
         CancelBackdropRequest();
         var revision = _backdropVersion;
         _backdropRequest = OverlayBackdropCapture.RequestPrepared(_backdropOwner, snapshot =>
         {
             if (revision != _backdropVersion || _isClosing || _host.Visibility != Visibility.Visible) return;
-            ApplyBackdrop(snapshot);
-        }, prepared ?? (() => { }), WaitForEntrance, deferInitial: prepared is null);
+            if (received is not null) received(snapshot);
+            else ApplyBackdrop(snapshot);
+        }, prepared ?? (() => { }), WaitForEntrance, deferInitial: prepared is null && received is null);
+    }
+
+    private void FinishEntrancePreparation()
+    {
+        var finish = _finishEntrancePreparation;
+        _finishEntrancePreparation = null;
+        finish?.Invoke();
     }
 
     private async Task WaitForEntrance()
     {
-        while (_entrySettled is { Task.IsCompleted: false } pending) await pending.Task;
+        // A resize can restart a staged capture before the batch releases its clocks.
+        // That preparation must not wait for the entrance it is responsible for starting.
+        while (_entryStarted && _entrySettled is { Task.IsCompleted: false } pending) await pending.Task;
         // A requested refresh may wait for showcase layers too; there is no resting poll/subscription.
         while (_host.IsLoaded && _host.IsVisible && AdditionalEntranceRunning?.Invoke() == true)
             await Task.Delay(16);

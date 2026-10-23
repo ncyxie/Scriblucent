@@ -12,6 +12,7 @@ public sealed class OverlayDialogAnimator
     private readonly OverlayPanelAnimator _animator;
     private readonly Window _window;
     private bool _isClosing;
+    private IDisposable? _blockedWindows;
 
     private OverlayDialogAnimator(
         Window window,
@@ -23,6 +24,7 @@ public sealed class OverlayDialogAnimator
     {
         _window = window;
         _animator = OverlayPanelAnimator.Bind(overlayRoot, dimLayer, panelMotionHost, backdropImage, scrimHost);
+        _window.Closed += (_, _) => ReleaseBlockedWindows();
     }
 
     public static OverlayDialogAnimator Bind(
@@ -39,9 +41,10 @@ public sealed class OverlayDialogAnimator
         _isClosing = false;
         _window.Opacity = 1;
 
-        _animator.Show(
-            afterShown,
-            backdropOwner: _window.Owner);
+        var entrance = new OverlayEntranceBatch();
+        _blockedWindows ??= BlockedWindowBackdrops.Begin(_window, entrance);
+        _animator.Show(entrance, afterShown, backdropOwner: _window.Owner);
+        entrance.Seal();
     }
 
     public void RefreshBackdrop()
@@ -53,11 +56,18 @@ public sealed class OverlayDialogAnimator
             return false;
 
         _isClosing = true;
+        ReleaseBlockedWindows();
         _animator.Hide(() =>
         {
             _isClosing = false;
             onClosed();
         });
         return true;
+    }
+
+    private void ReleaseBlockedWindows()
+    {
+        _blockedWindows?.Dispose();
+        _blockedWindows = null;
     }
 }

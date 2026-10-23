@@ -15,9 +15,11 @@ public partial class FlashcardImageViewerWindow : Window
     private readonly WeakReference<FrameworkElement>? _thumbnail;
     private readonly object? _sourceItem;
     private IDisposable? _backdrop;
+    private IDisposable? _blockedWindows;
     private bool _isClosing, _allowClose, _closed, _entered;
     private Rect _restBounds;
     private Action? _pendingEnter;
+    private Action? _finishEntrancePreparation;
     private TaskCompletionSource? _entrySettled;
 
     public FlashcardImageViewerWindow(BitmapImage image, FrameworkElement? thumbnail = null)
@@ -40,7 +42,9 @@ public partial class FlashcardImageViewerWindow : Window
             _closed = true;
             MotionPolicy.Changed -= PolicyChanged;
             _pendingEnter = null;
+            FinishEntrancePreparation();
             _backdrop?.Dispose(); _backdrop = null;
+            _blockedWindows?.Dispose(); _blockedWindows = null;
             _entrySettled?.TrySetResult();
             UiMotion.Cleanup(BackdropLayer); UiMotion.Cleanup(BackdropImage); UiMotion.Cleanup(ViewerImage);
             UiMotion.Cleanup(CloseButton); BackdropImage.Source = null;
@@ -96,6 +100,8 @@ public partial class FlashcardImageViewerWindow : Window
     }
     private void BeginEnterAnimation()
     {
+        var entrance = new OverlayEntranceBatch();
+        _blockedWindows ??= BlockedWindowBackdrops.Begin(this, entrance);
         var (scale, move) = UiMotion.EnsureScaleTranslateGroup(ViewerImage);
         ViewerImage.RenderTransformOrigin = new Point(.5, .5);
         ConfigureShadow();
@@ -107,11 +113,17 @@ public partial class FlashcardImageViewerWindow : Window
         move.Y = origin is { } offsetY ? offsetY.Y + offsetY.Height / 2 - (bounds.Y + bounds.Height / 2) : 0;
         RenderOptions.SetBitmapScalingMode(ViewerImage, BitmapScalingMode.Linear);
         _entrySettled = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        BackdropLayer.Opacity = MotionPolicy.Spatial ? .12 : 1;
+        BackdropLayer.Opacity = MotionPolicy.Spatial ? 0 : 1;
+        BitmapSource? stagedBackdrop = null;
         void Start()
         {
             if (_closed || _isClosing || _pendingEnter is null) return;
             _pendingEnter = null;
+            FinishEntrancePreparation();
+            BackdropImage.Source = stagedBackdrop;
+            if (stagedBackdrop is not null && MotionPolicy.Spatial)
+            { BackdropImage.Opacity = 0; SurfaceMotion.Animate(BackdropImage, 1, 160, UiMotion.OutSine, false); }
+            else BackdropImage.Opacity = 1;
             SurfaceMotion.Animate(BackdropLayer, 1, 240, UiMotion.OutSine, false);
             SurfaceMotion.Animate(CloseButton, 1, 180, UiMotion.OutSine, false, startDelayMs: 80);
             SurfaceMotion.AnimateTracks(ViewerImage, MotionChannel.Presence,
@@ -128,24 +140,42 @@ public partial class FlashcardImageViewerWindow : Window
                 });
         }
         _pendingEnter = Start;
+        var ready = entrance.Register(Start);
+        _finishEntrancePreparation = ready;
         if (!MotionPolicy.Spatial) Start();
-        _backdrop = OverlayBackdropCapture.RequestPrepared(Owner, image =>
+        entrance.Seal();
+        Dispatcher.BeginInvoke(() =>
         {
-            if (_isClosing) return;
-            var first = BackdropImage.Source is null;
-            BackdropImage.Source = image;
-            if (first && image is not null && MotionPolicy.Spatial)
-            { BackdropImage.Opacity = 0; SurfaceMotion.Animate(BackdropImage, 1, 160, UiMotion.OutSine, false); }
-            else BackdropImage.Opacity = 1;
-        }, () => _pendingEnter?.Invoke(), WaitForEntrance);
+            if (_closed || _isClosing) return;
+            _backdrop = OverlayBackdropCapture.RequestPrepared(Owner, image =>
+            {
+                if (_isClosing) return;
+                if (_pendingEnter is not null)
+                {
+                    stagedBackdrop = image;
+                    BackdropImage.Source = image;
+                    BackdropImage.Opacity = 0;
+                    _finishEntrancePreparation = null;
+                    ready();
+                }
+                else
+                {
+                    // Resize/theme refresh, or an instant entrance already completed.
+                    BackdropImage.Source = image;
+                    BackdropImage.Opacity = 1;
+                    FinishEntrancePreparation();
+                }
+            }, () => { }, WaitForEntrance);
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
     }
     private async Task WaitForEntrance()
-    { if (_entrySettled is { } pending) await pending.Task; }
+    { if (_pendingEnter is null && _entrySettled is { } pending) await pending.Task; }
     private void PolicyChanged()
     { if (!MotionPolicy.Spatial) _pendingEnter?.Invoke(); }
     private void SettleAfterResize()
     {
         _pendingEnter = null; _entrySettled?.TrySetResult();
+        FinishEntrancePreparation();
         SurfaceMotion.Stop(BackdropLayer); SurfaceMotion.Stop(CloseButton);
         BackdropLayer.Opacity = CloseButton.Opacity = 1;
         SurfaceMotion.Stop(ViewerImage); ViewerImage.Opacity = 1; ImageShadow.Opacity = .30;
@@ -157,7 +187,9 @@ public partial class FlashcardImageViewerWindow : Window
     {
         if (_isClosing) return;
         _isClosing = true; _backdrop?.Dispose(); _backdrop = null;
+        _blockedWindows?.Dispose(); _blockedWindows = null;
         _pendingEnter = null; _entrySettled?.TrySetResult();
+        FinishEntrancePreparation();
         SurfaceMotion.Stop(BackdropImage); SurfaceMotion.Stop(ViewerImage);
         var (scale, move) = UiMotion.EnsureScaleTranslateGroup(ViewerImage);
         // Rest bounds were computed before transforms: interrupted opening retains its visible pose.
@@ -180,6 +212,12 @@ public partial class FlashcardImageViewerWindow : Window
                 // Off completes inline, potentially inside WPF's Closing event. Re-enter later.
                 _ = Dispatcher.BeginInvoke(() => { if (!_closed) Close(); });
             });
+    }
+    private void FinishEntrancePreparation()
+    {
+        var finish = _finishEntrancePreparation;
+        _finishEntrancePreparation = null;
+        finish?.Invoke();
     }
     protected override void OnClosing(CancelEventArgs e)
     {
