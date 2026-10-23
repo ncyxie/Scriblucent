@@ -15,6 +15,8 @@ public class AppSettings
 
     public string? DismissedUpdateVersion { get; set; }
 
+    public bool LegacyMigrationConflictAcknowledged { get; set; }
+
     public string MeasurementUnitSystem { get; set; } = UnitSystemImperial;
 
     // Null preserves the language's normal week layout for existing settings files.

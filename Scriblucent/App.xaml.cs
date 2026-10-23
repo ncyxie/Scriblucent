@@ -138,9 +138,13 @@ public partial class App : Application
         void OnFirstContentRendered(object? sender, EventArgs args)
         {
             window.ContentRendered -= OnFirstContentRendered;
-            if (migration == LegacyMigrationResult.Conflict)
+            if (migration == LegacyMigrationResult.Conflict && !settings.LegacyMigrationConflictAcknowledged)
+            {
                 ModernMessageBox.Show(LocalizationService.GetString("LegacyMigrationConflict"), "Scriblucent",
                     MessageBoxButton.OK, MessageBoxImage.Information);
+                settings.LegacyMigrationConflictAcknowledged = true;
+                AppSettingsService.Save(settings);
+            }
             window.ProcessLaunchImports(_launchImports);
         }
         window.Show();
