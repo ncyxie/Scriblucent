@@ -10,6 +10,9 @@
 #ifndef OutputDir
   #error OutputDir must be supplied by Build-Installer.ps1
 #endif
+#ifndef ControlStyleDir
+  #error ControlStyleDir must be supplied by Build-Installer.ps1
+#endif
 #if TargetArch == "x64"
   #define AllowedArch "x64compatible and not arm64"
   #define InstallArch "x64compatible"
@@ -38,9 +41,13 @@ ArchitecturesAllowed={#AllowedArch}
 ArchitecturesInstallIn64BitMode={#InstallArch}
 MinVersion=10.0.17763
 WizardStyle=modern dynamic
-WizardSmallImageFile=wizard-logo.bmp
-WizardSmallImageFileDynamicDark=wizard-logo-dark.bmp
-SetupIconFile=..\..\Scriblucent\logo.ico
+WizardStyleFile={#ControlStyleDir}\scriblucent-light.vsf
+WizardStyleFileDynamicDark={#ControlStyleDir}\scriblucent-dark.vsf
+WizardImageFile=wizard-panel-light.png
+WizardImageFileDynamicDark=wizard-panel-dark.png
+WizardSmallImageFile=wizard-logo-light.png
+WizardSmallImageFileDynamicDark=wizard-logo-dark.png
+SetupIconFile=setup.ico
 UninstallDisplayIcon={app}\Scriblucent.exe
 UninstallDisplayName=Scriblucent
 LicenseFile=..\..\LICENSE

@@ -43,13 +43,15 @@ if (!$CompilerPath) {
     else { $CompilerPath = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe' }
 }
 if (!(Test-Path -LiteralPath $CompilerPath -PathType Leaf)) { throw 'Install Inno Setup 6 or pass -CompilerPath.' }
+$controlStyles = Join-Path $buildRoot 'control-styles'
+& (Join-Path $PSScriptRoot 'Build-ControlStyles.ps1') -CompilerPath $CompilerPath -OutputDirectory $controlStyles
 & (Join-Path $PSScriptRoot 'Test-InstallerLanguages.ps1') -EnglishCatalog (Join-Path (Split-Path $CompilerPath) 'Default.isl')
 if ($env:GITHUB_ACTIONS -eq 'true') { & (Join-Path $PSScriptRoot 'Test-StandardUser.ps1') -ProfileOnly -OutputDirectory (Join-Path $buildRoot 'profile-tests') }
 & (Join-Path $PSScriptRoot 'Build-SetupHelper.ps1') -Architecture $Architecture -OutputDirectory (Join-Path $buildRoot 'helper')
 $helperPath = Join-Path $buildRoot 'helper/SetupHelper.exe'
 & (Join-Path $PSScriptRoot 'Test-SetupHelper.ps1') -HelperPath $helperPath -OutputDirectory (Join-Path $buildRoot 'helper-tests')
 if ($env:GITHUB_ACTIONS -eq 'true') { & (Join-Path $PSScriptRoot 'Test-OriginalUser.ps1') -HelperPath $helperPath }
-& (Join-Path $PSScriptRoot 'Build-RecoveryTest.ps1') -CompilerPath $CompilerPath -HelperPath $helperPath -Architecture $Architecture -Version $Version -OutputDirectory (Join-Path $buildRoot 'recovery-tests')
+& (Join-Path $PSScriptRoot 'Build-RecoveryTest.ps1') -CompilerPath $CompilerPath -HelperPath $helperPath -Architecture $Architecture -Version $Version -ControlStyleDirectory $controlStyles -OutputDirectory (Join-Path $buildRoot 'recovery-tests')
 if ($env:GITHUB_ACTIONS -eq 'true') {
     $probeKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A225-1F0D-43A6-9AF9-C6A8F8CAAA72}_is1'
     if (Test-Path $probeKey) { throw 'The runner already has a per-user installation.' }
@@ -213,7 +215,7 @@ $inventory | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot 'pa
 Write-Host "Payload: $($payloadFiles.Count) files, $([Math]::Round($payloadBytes / 1MB, 1)) MiB."
 
 & $CompilerPath "/DAppVersion=$Version" "/DNumericVersion=$($versionParts -join '.').0" `
-    "/DTargetArch=$Architecture" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" "/DHelperPath=$helperPath" "/DManifestPath=$manifest" (Join-Path $PSScriptRoot 'Scriblucent.iss')
+    "/DTargetArch=$Architecture" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" "/DHelperPath=$helperPath" "/DManifestPath=$manifest" "/DControlStyleDir=$controlStyles" (Join-Path $PSScriptRoot 'Scriblucent.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
 $installer = Join-Path $outputDir "Scriblucent-$Version-win-$Architecture-Setup.exe"
 if (!(Test-Path -LiteralPath $installer)) { throw 'Installer output is missing.' }
