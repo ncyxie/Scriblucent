@@ -232,6 +232,13 @@
   <data name="ThemeDark" xml:space="preserve"><value>Tamsi</value></data>
   <data name="ThemeSystem" xml:space="preserve"><value>Naudoti sistemos</value></data>
   <data name="CheckForUpdates" xml:space="preserve"><value>Tikrinti atnaujinimus</value></data>
+  <data name="UpdatesSectionTitle" xml:space="preserve"><value>Atnaujinimai</value></data>
+  <data name="CheckForUpdatesOnStartup" xml:space="preserve"><value>Tikrinti atnaujinimus paleidžiant</value></data>
+  <data name="CheckForUpdatesOnStartupDescription" xml:space="preserve"><value>Paleidus „Scriblucent“, tikrinami „GitHub“ leidimai. Jūs pasirenkate, kada atsisiųsti ir įdiegti atnaujinimus.</value></data>
+  <data name="UpdateAvailableVersionFormat" xml:space="preserve"><value>Pasiekiama {0} versija.</value></data>
+  <data name="SettingsUpdateAvailableFormat" xml:space="preserve"><value>Nuostatos · Pasiekiamas {0} atnaujinimas</value></data>
+  <data name="UpdateViewDetails" xml:space="preserve"><value>Peržiūrėti atnaujinimą</value></data>
+  <data name="UpdateDismissNotice" xml:space="preserve"><value>Užverti pranešimą apie atnaujinimą</value></data>
   <data name="CheckingForUpdates" xml:space="preserve"><value>Tikrinama...</value></data>
   <data name="LatestVersion" xml:space="preserve"><value>Naudojate naujausią versiją.</value></data>
   <data name="AppUpdate" xml:space="preserve"><value>Programos atnaujinimas</value></data>

@@ -11,6 +11,10 @@ public class AppSettings
 
     public string Theme { get; set; } = "Light";
 
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
+
+    public string? DismissedUpdateVersion { get; set; }
+
     public string MeasurementUnitSystem { get; set; } = UnitSystemImperial;
 
     // Null preserves the language's normal week layout for existing settings files.

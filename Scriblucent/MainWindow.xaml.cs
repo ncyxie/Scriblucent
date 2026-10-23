@@ -185,6 +185,7 @@ namespace Scriblucent
             DataContextChanged += MainWindow_DataContextChanged;
             PreviewKeyDown += DashboardSelection_PreviewKeyDown;
             InitializeShellViewModel();
+            InitializeUpdateNotifications();
             Scriblucent.Services.StartupProbe.Mark("windowShellVm");
 
             // Startup probe: the first rendered frame marks the dashboard's first layout.
@@ -1953,6 +1954,7 @@ namespace Scriblucent
         private void SidebarSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             SettingsMenuButton_Click(sender, e);
+            if (Updates?.HasAvailableUpdate == true) SettingsPanelControl.ShowUpdatesSection();
         }
 
         private void SidebarAddButton_Click(object sender, RoutedEventArgs e)

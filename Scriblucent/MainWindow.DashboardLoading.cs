@@ -282,6 +282,7 @@ public partial class MainWindow
         DashboardLoadingLayer.Opacity = 1;
         DashboardLoadingLayer.IsHitTestVisible = false;
         DashboardLoadingLayer.Visibility = Visibility.Collapsed;
+        RefreshUpdateNotifications();
     }
 
     private void ShowDashboardLoadFailure()

@@ -491,7 +491,7 @@
 							</Grid>
 						</Button>
 
-                        <Button Style="{StaticResource SidebarActionButtonStyle}"
+                        <Button x:Name="SidebarSettingsButton" Style="{StaticResource SidebarActionButtonStyle}"
 								Click="SidebarSettingsButton_Click"
 								ToolTip="{Binding [Settings], Source={StaticResource Loc}}">
 							<Grid VerticalAlignment="Center">
@@ -499,7 +499,13 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-								<icons:AppIcon Grid.Column="0" Kind="Settings" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                <Grid Grid.Column="0" Width="24" Height="24" HorizontalAlignment="Center">
+                                    <icons:AppIcon Kind="Settings" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                    <controls:SurfaceMaterialBorder x:Name="SettingsUpdateBadge" controls:SurfaceMaterial.Kind="Marker"
+                                            Width="7" Height="7" CornerRadius="4" Background="{DynamicResource AccentPrimary}"
+                                            BorderBrush="{DynamicResource SidebarBackground}" BorderThickness="1" Margin="0,-1,-2,0"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Visibility="Collapsed" IsHitTestVisible="False"/>
+                                </Grid>
 								<TextBlock Grid.Column="1" Style="{StaticResource SidebarLabelTextStyle}"
 										   Text="{Binding [Settings], Source={StaticResource Loc}}"/>
 							</Grid>
@@ -1035,8 +1041,8 @@
                 </Grid>
             </Grid>
                 </Grid>
-
-
+        <controls:UpdateAvailableNotice x:Name="UpdateNotice" Grid.Row="1" Panel.ZIndex="150"
+                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16,10,16,16"/>
         </Grid>
 			</controls:SurfaceMaterialBorder>
 		</Grid>

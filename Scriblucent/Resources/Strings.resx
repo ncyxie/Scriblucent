@@ -232,6 +232,13 @@
   <data name="ThemeDark" xml:space="preserve"><value>Dark</value></data>
   <data name="ThemeSystem" xml:space="preserve"><value>Use system</value></data>
   <data name="CheckForUpdates" xml:space="preserve"><value>Check for Updates</value></data>
+  <data name="UpdatesSectionTitle" xml:space="preserve"><value>Updates</value></data>
+  <data name="CheckForUpdatesOnStartup" xml:space="preserve"><value>Check for updates at startup</value></data>
+  <data name="CheckForUpdatesOnStartupDescription" xml:space="preserve"><value>Checks GitHub after Scriblucent starts. You choose when to download and install updates.</value></data>
+  <data name="UpdateAvailableVersionFormat" xml:space="preserve"><value>Version {0} is available.</value></data>
+  <data name="SettingsUpdateAvailableFormat" xml:space="preserve"><value>Settings · Update {0} available</value></data>
+  <data name="UpdateViewDetails" xml:space="preserve"><value>View update</value></data>
+  <data name="UpdateDismissNotice" xml:space="preserve"><value>Dismiss update notice</value></data>
   <data name="CheckingForUpdates" xml:space="preserve"><value>Checking...</value></data>
   <data name="LatestVersion" xml:space="preserve"><value>You are using the latest version.</value></data>
   <data name="AppUpdate" xml:space="preserve"><value>App Update</value></data>

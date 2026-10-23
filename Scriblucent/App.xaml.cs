@@ -11,6 +11,7 @@ public partial class App : Application
 {
     private AppInstanceCoordinator? _instance;
     private bool _settingsInitialized;
+    public AppUpdateCoordinator? Updates { get; private set; }
     private readonly LaunchImportQueue _launchImports = new();
     private static readonly string[] ElevationTokenKeys =
     {
@@ -105,6 +106,7 @@ public partial class App : Application
 
         var settings = AppSettingsService.Load();
         _settingsInitialized = true;
+        Updates = AppUpdateCoordinator.Create(Dispatcher);
         Scriblucent.Services.StartupProbe.Mark("settings");
 
         // Best-effort cleanup of old diagnostic and crash logs
@@ -253,6 +255,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        Updates?.Dispose();
         if (_instance?.IsOwner != true || !_settingsInitialized)
         {
             _instance?.Dispose();

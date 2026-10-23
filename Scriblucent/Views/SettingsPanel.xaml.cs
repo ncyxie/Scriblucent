@@ -72,7 +72,8 @@ namespace Scriblucent.Views
         private readonly ObservableCollection<ManagedSpellCheckLanguageItem> _managedSpellCheckLanguages = new();
         private bool _isDownloadingSpellCheckLanguage;
         private bool _isCheckingSpellCheckUpdates;
-        private readonly GitHubUpdateService _updateService = new();
+        public AppUpdateCoordinator? Updates => (Application.Current as App)?.Updates;
+        private bool _showUpdatesOnPopulate;
 
         public SettingsPanel()
         {
@@ -87,6 +88,11 @@ namespace Scriblucent.Views
             Unloaded += (_, _) => NoteEditorWindow.AiGenerationStateChanged -= NoteEditorWindow_AiGenerationStateChanged;
             ThemeManager.ThemeChanged += ThemeManager_ThemeChanged;
             Unloaded += (_, _) => ThemeManager.ThemeChanged -= ThemeManager_ThemeChanged;
+            if (Updates is { } updates)
+            {
+                updates.PropertyChanged += Updates_PropertyChanged;
+                Unloaded += (_, _) => updates.PropertyChanged -= Updates_PropertyChanged;
+            }
         }
 
         private void ThemeManager_ThemeChanged(object? sender, EventArgs e)
@@ -121,6 +127,7 @@ namespace Scriblucent.Views
             var selectedKey = GetSelectedFlashcardModelKey() ?? _lastSelectedFlashcardModelKey;
             UpdateFlashcardModelWarning(selectedKey, machineMemoryBytes);
             UpdateAiToolsStatusText();
+            RefreshUpdateStatus();
         }
 
         public void ShowAnimated()
@@ -143,6 +150,8 @@ namespace Scriblucent.Views
             {
                 ApplyScrollbarPreferences(settings.EnableScrollbar, settings.EnableVerticalScrollbar, settings.EnableHorizontalScrollbar);
                 EnableAutoSaveCheckBox.IsChecked = settings.EnableAutoSave;
+                CheckForUpdatesOnStartupCheckBox.IsChecked = settings.CheckForUpdatesOnStartup;
+                RefreshUpdateStatus();
                 AutoFormatListsCheckBox.IsChecked = settings.AutoFormatLists;
 
                 UpdateAutoSaveIntervalControls(settings.AutoSaveIntervalSeconds);
@@ -201,7 +210,46 @@ namespace Scriblucent.Views
                 _isApplyingSettings = wasApplying;
             }
             _ = PopulateTemplateFontNamesAsync();
+            if (_showUpdatesOnPopulate)
+            {
+                _showUpdatesOnPopulate = false;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (SettingsScrollViewer.Content is not UIElement content) return;
+                    Behaviors.SmoothScrollBehavior.CancelTarget(SettingsScrollViewer);
+                    SettingsScrollViewer.ScrollToVerticalOffset(SettingsSectionData.TranslatePoint(new Point(), content).Y);
+                }, DispatcherPriority.ContextIdle);
+            }
         }
+
+        public void ShowUpdatesSection() => _showUpdatesOnPopulate = true;
+
+        private void Updates_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(AppUpdateCoordinator.HasPendingNotice)) RefreshUpdateStatus();
+        }
+
+        private void RefreshUpdateStatus()
+        {
+            AvailableUpdateVersionText.Text = Updates?.HasAvailableUpdate == true
+                ? string.Format(LocalizationService.GetString("UpdateAvailableVersionFormat"), Updates.AvailableVersion) : string.Empty;
+        }
+
+        private void CheckForUpdatesOnStartup_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isApplyingSettings) return;
+            var enabled = CheckForUpdatesOnStartupCheckBox.IsChecked == true;
+            if (Updates is { } updates) updates.SetAutomaticChecksEnabled(enabled);
+            else
+            {
+                var settings = AppSettingsService.Load();
+                settings.CheckForUpdatesOnStartup = enabled;
+                AppSettingsService.Save(settings);
+            }
+        }
+
+        private void ViewAvailableUpdate_Click(object sender, RoutedEventArgs e)
+            => (Window.GetWindow(this) as MainWindow)?.ShowAvailableUpdateDetails();
 
         internal void ApplyScrollbarPreferences(bool enabled, bool vertical, bool horizontal)
         {
@@ -1136,7 +1184,10 @@ namespace Scriblucent.Views
 
             try
             {
-                var result = await _updateService.CheckForUpdatesAsync();
+                if (Updates is not { } updates) return;
+                var result = await updates.CheckManuallyAsync();
+                if (!IsLoaded || Visibility != Visibility.Visible || Window.GetWindow(this)?.IsVisible != true) return;
+                if (result.IsUpdateAvailable) updates.AcknowledgeAvailableUpdate();
                 var dialog = new UpdateCheckDialog(result)
                 {
                     Owner = Window.GetWindow(this)
@@ -1144,8 +1195,12 @@ namespace Scriblucent.Views
 
                 dialog.ShowDialog();
             }
+            catch (OperationCanceledException) when (Application.Current?.Dispatcher.HasShutdownStarted == true || !IsLoaded)
+            {
+            }
             catch (Exception ex)
             {
+                if (!IsLoaded || Visibility != Visibility.Visible || Window.GetWindow(this)?.IsVisible != true) return;
                 var dialog = new UpdateCheckDialog(
                     LocalizationService.GetString("UpdateCheckFailedTitle"),
                     string.Format(LocalizationService.GetString("UpdateCheckFailedMessageFormat"), ex.Message),

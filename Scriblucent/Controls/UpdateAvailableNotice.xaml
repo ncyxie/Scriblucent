@@ -1,0 +1,32 @@
+<UserControl x:Class="Scriblucent.Controls.UpdateAvailableNotice"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Scriblucent.Controls"
+             xmlns:icons="clr-namespace:Scriblucent.Icons"
+             Visibility="Collapsed" MaxWidth="380" HorizontalAlignment="Right" VerticalAlignment="Top"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <UserControl.RenderTransform><TranslateTransform x:Name="NoticeTranslation"/></UserControl.RenderTransform>
+    <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised"
+            Background="{DynamicResource CardBackground}" BorderBrush="{DynamicResource BorderColor}"
+            BorderThickness="1" CornerRadius="{StaticResource Radius.Card}" Padding="16">
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Tinted" Background="{DynamicResource AccentPrimarySubtle}"
+                    CornerRadius="{StaticResource Radius.Control}" Width="32" Height="32" Margin="0,0,12,0" VerticalAlignment="Top">
+                <icons:AppIcon Kind="ArrowUp" Width="17" Height="17" Foreground="{DynamicResource AccentPrimarySubtleForeground}"/>
+            </controls:SurfaceMaterialBorder>
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="{Binding [UpdateAvailableTitle], Source={StaticResource Loc}}" FontSize="{StaticResource Type.Body}"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" TextWrapping="Wrap"/>
+                <TextBlock x:Name="VersionText" Margin="0,5,0,12" FontSize="{StaticResource Type.Body}"
+                           Foreground="{DynamicResource TextColorSecondary}" TextWrapping="Wrap"/>
+                <Button Content="{Binding [UpdateViewDetails], Source={StaticResource Loc}}" Style="{StaticResource DialogPrimaryButtonStyle}"
+                        FontSize="{StaticResource Type.Control.Toolbar}" Padding="12,6" HorizontalAlignment="Left" Click="ViewUpdate_Click"/>
+            </StackPanel>
+            <Button Grid.Column="2" Content="{icons:Icon Kind=Close, Size=12}" Style="{StaticResource OverlayCloseIconButtonStyle}"
+                    Width="24" Height="24" MinWidth="0" MinHeight="0" Margin="12,-4,-4,0" VerticalAlignment="Top"
+                    ToolTip="{Binding [UpdateDismissNotice], Source={StaticResource Loc}}"
+                    AutomationProperties.Name="{Binding [UpdateDismissNotice], Source={StaticResource Loc}}" Click="Dismiss_Click"/>
+        </Grid>
+    </controls:SurfaceMaterialBorder>
+</UserControl>

@@ -37,20 +37,24 @@ public sealed class GitHubUpdateService
     };
 
     private readonly HttpClient _httpClient;
+    private readonly string _currentVersion;
+    private readonly Uri _releasesApiUrl;
 
     public GitHubUpdateService()
         : this(CreateHttpClient())
     {
     }
 
-    internal GitHubUpdateService(HttpClient httpClient)
+    internal GitHubUpdateService(HttpClient httpClient, string? currentVersion = null, Uri? releasesApiUrl = null)
     {
         _httpClient = httpClient;
+        _currentVersion = currentVersion ?? AppVersionInfo.DisplayVersion;
+        _releasesApiUrl = releasesApiUrl ?? new Uri(ReleasesApiUrl);
     }
 
     public async Task<GitHubUpdateResult> CheckForUpdatesAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient.GetAsync(ReleasesApiUrl, cancellationToken).ConfigureAwait(false);
+        using var response = await _httpClient.GetAsync(_releasesApiUrl, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -68,7 +72,7 @@ public sealed class GitHubUpdateService
         var updateAvailable = false;
 
         if (latestRelease is not null
-            && ReleaseVersion.TryParse(AppVersionInfo.DisplayVersion, out var currentVersion)
+            && ReleaseVersion.TryParse(_currentVersion, out var currentVersion)
             && currentVersion is not null
             && ReleaseVersion.TryParse(latestRelease.TagName, out var latestVersion)
             && latestVersion is not null)
@@ -79,7 +83,7 @@ public sealed class GitHubUpdateService
 
         return new GitHubUpdateResult
         {
-            CurrentVersion = AppVersionInfo.DisplayVersion,
+            CurrentVersion = _currentVersion,
             LatestRelease = latestRelease,
             HasComparableVersions = comparable,
             IsUpdateAvailable = updateAvailable
@@ -160,6 +164,7 @@ public sealed class GitHubUpdateService
                 normalized = normalized[1..];
 
             normalized = normalized.Replace('_', '-');
+            normalized = normalized.Split('+')[0];
             var prereleaseIndex = normalized.IndexOf('-', StringComparison.Ordinal);
             var numericPart = prereleaseIndex >= 0 ? normalized[..prereleaseIndex] : normalized;
             var prereleasePart = prereleaseIndex >= 0 ? normalized[(prereleaseIndex + 1)..] : string.Empty;
