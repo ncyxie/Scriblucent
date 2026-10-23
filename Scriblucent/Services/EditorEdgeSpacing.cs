@@ -178,10 +178,17 @@ internal sealed class EditorEdgeSpacing
 
     private static void Restore(Block block, AppliedPadding state)
     {
-        if (ReferenceEquals(state.OriginalLocal, DependencyProperty.UnsetValue))
+        // Only the edge insets belong to this service. List marker sizing can change
+        // the horizontal gutter while spacing is applied; never restore its old width.
+        var current = block.Padding;
+        var restored = new Thickness(current.Left,
+            state.Top && current.Top == state.Applied.Top ? state.Original.Top : current.Top,
+            current.Right,
+            state.Bottom && current.Bottom == state.Applied.Bottom ? state.Original.Bottom : current.Bottom);
+        if (ReferenceEquals(state.OriginalLocal, DependencyProperty.UnsetValue) && restored == state.Original)
             block.ClearValue(Block.PaddingProperty);
         else
-            block.SetCurrentValue(Block.PaddingProperty, state.Original);
+            block.SetCurrentValue(Block.PaddingProperty, restored);
     }
 
     private static Block? ContentEdge(Block? block, bool forward)

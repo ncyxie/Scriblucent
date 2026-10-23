@@ -30,8 +30,8 @@ internal sealed class EditorLists
     private static readonly Uri MetadataUri = new("/Scriblucent/ListMetadata.json", UriKind.Relative);
     internal Action? BeforeChange { get; set; }
     internal Action? AfterChange { get; set; }
-    private sealed record ListState(Guid Id, Guid? ContinuesFrom = null, bool ExplicitStyle = false, bool Checklist = false);
-    internal sealed record MetadataEntry(int Ordinal, Guid Id, Guid? ContinuesFromId, bool ExplicitStyle, bool Checklist = false);
+    private sealed record ListState(Guid Id, Guid? ContinuesFrom = null, bool ExplicitStyle = false, bool Checklist = false, Guid? TypographyGroup = null);
+    internal sealed record MetadataEntry(int Ordinal, Guid Id, Guid? ContinuesFromId, bool ExplicitStyle, bool Checklist = false, Guid? TypographyGroup = null);
     internal sealed record Metadata(int Version, MetadataEntry[] Lists);
 
     internal EditorLists(RichTextBox editor, Func<double> indent)
@@ -121,7 +121,8 @@ internal sealed class EditorLists
             }
             else
             {
-                if (pointer.GetAdjacentElement(LogicalDirection.Forward) is LineBreak) result.Append('\n');
+                if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.ElementStart
+                    && pointer.GetAdjacentElement(LogicalDirection.Forward) is LineBreak) result.Append('\n');
                 if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.EmbeddedElement)
                     result.Append('\uFFFC');
                 var next = pointer.GetNextContextPosition(LogicalDirection.Forward);
@@ -151,11 +152,36 @@ internal sealed class EditorLists
     internal static bool Checkbox(Paragraph paragraph, out TextPointer textStart, out bool isChecked)
     {
         // TextRange.Text synthesizes a marker and tab for its ancestor list. Read real characters.
-        var text = RawText(paragraph.ContentStart, AdvanceCharacters(paragraph.ContentStart, 2));
-        isChecked = text.StartsWith(CheckedPrefix, StringComparison.Ordinal);
-        bool found = isChecked || text.StartsWith(UncheckedPrefix, StringComparison.Ordinal);
-        textStart = found ? AdvanceCharacters(paragraph.ContentStart, 2) : paragraph.ContentStart;
-        return found;
+        isChecked = false;
+        textStart = paragraph.ContentStart;
+        var pointer = paragraph.ContentStart;
+        var prefix = new StringBuilder(2);
+        while (prefix.Length < 2 && pointer.CompareTo(paragraph.ContentEnd) < 0)
+        {
+            var context = pointer.GetPointerContext(LogicalDirection.Forward);
+            if (context == TextPointerContext.Text)
+            {
+                var run = pointer.GetTextInRun(LogicalDirection.Forward);
+                int take = Math.Min(2 - prefix.Length, run.Length);
+                prefix.Append(run, 0, take);
+                pointer = pointer.GetPositionAtOffset(take)!;
+            }
+            else
+            {
+                // A split marker is not a prefix, even if the next line starts with
+                // its missing space. Never let deletion consume another line or item.
+                if (context == TextPointerContext.EmbeddedElement
+                    || pointer.GetAdjacentElement(LogicalDirection.Forward) is LineBreak) return false;
+                var next = pointer.GetNextContextPosition(LogicalDirection.Forward);
+                if (next is null) break;
+                pointer = next;
+            }
+        }
+        var text = prefix.ToString();
+        isChecked = text == CheckedPrefix;
+        if (!isChecked && text != UncheckedPrefix) return false;
+        textStart = pointer;
+        return true;
     }
 
     private static Paragraph? FirstParagraph(ListItem item) => item.Blocks.OfType<Paragraph>().FirstOrDefault();
@@ -234,25 +260,33 @@ internal sealed class EditorLists
             Math.Min(InlineText(value.Paragraph).Length, value.Characters + prefix)).GetInsertionPosition(LogicalDirection.Forward);
     }
 
+    private void RestoreSelection(Endpoint? start, Endpoint? end)
+    {
+        if (RestoreEndpoint(start) is { } restoredStart && RestoreEndpoint(end) is { } restoredEnd
+            && (_editor.Selection.Start.CompareTo(restoredStart) != 0 || _editor.Selection.End.CompareTo(restoredEnd) != 0))
+            _editor.Selection.Select(restoredStart, restoredEnd);
+    }
+
     private void Edit(Action action, bool preserveSelection = true)
     {
         if (_editing) { action(); return; }
+        WpfEditorInput.Flush(_editor);
         var start = preserveSelection ? CaptureEndpoint(_editor.Selection.Start) : null;
         var end = preserveSelection ? CaptureEndpoint(_editor.Selection.End) : null;
         _editing = true;
-        BeforeChange?.Invoke();
-        _editor.BeginChange();
         try
         {
-            action(); RefreshNumbering();
-            if (RestoreEndpoint(start) is { } restoredStart && RestoreEndpoint(end) is { } restoredEnd)
-                _editor.Selection.Select(restoredStart, restoredEnd);
+            BeforeChange?.Invoke();
+            _editor.BeginChange();
+            try
+            {
+                CoalesceTypographyGroups();
+                action(); RefreshNumbering(); RefreshLayout(all: true);
+                RestoreSelection(start, end);
+            }
+            finally { _editor.EndChange(); }
         }
-        finally
-        {
-            try { _editor.EndChange(); }
-            finally { _editing = false; AfterChange?.Invoke(); }
-        }
+        finally { _editing = false; AfterChange?.Invoke(); }
     }
 
     /// <summary>Metadata shares the editor's undo units, including units created by ordinary typing.</summary>
@@ -277,9 +311,13 @@ internal sealed class EditorLists
             }
         }
         else if (e.UndoAction == UndoAction.Clear) { _undo.Clear(); _redo.Clear(); }
-        // Single-character typing and font changes cannot change the list traversal order.
-        // Keep their immutable metadata snapshot without scanning a long note on each key.
-        bool structureChanged = _editing || e.UndoAction is UndoAction.Undo or UndoAction.Redo or UndoAction.Clear
+        // WPF has applied the typed character's formatting by this point, but its
+        // typing undo unit is still open. Refresh only when marker typography differs.
+        bool layoutChanged = !_editing && e.UndoAction is UndoAction.Create or UndoAction.Merge
+            && e.Changes.Any(change => change.AddedLength > 0) && NeedsMarkerLayout(_editor.CaretPosition.Paragraph);
+        if (layoutChanged) RefreshLayout();
+        // Ordinary typing keeps its snapshot without scanning a long note on each key.
+        bool structureChanged = _editing || layoutChanged || e.UndoAction is UndoAction.Undo or UndoAction.Redo or UndoAction.Clear
             || e.Changes.Any(change => change.AddedLength > 1 || change.RemovedLength > 1);
         if (structureChanged && !_editing)
         {
@@ -294,7 +332,7 @@ internal sealed class EditorLists
     private MetadataEntry[] Snapshot() => Lists(_editor.Document.Blocks).Select((list, ordinal) =>
     {
         var state = State(list);
-        return new MetadataEntry(ordinal, state.Id, state.ContinuesFrom, state.ExplicitStyle, state.Checklist);
+        return new MetadataEntry(ordinal, state.Id, state.ContinuesFrom, state.ExplicitStyle, state.Checklist, state.TypographyGroup);
     }).ToArray();
 
     private void RestoreState(MetadataEntry[] snapshot)
@@ -303,7 +341,7 @@ internal sealed class EditorLists
         var lists = Lists(_editor.Document.Blocks).ToArray();
         foreach (var entry in snapshot)
             if (entry.Ordinal >= 0 && entry.Ordinal < lists.Length)
-                _states[lists[entry.Ordinal]] = new(entry.Id, entry.ContinuesFromId, entry.ExplicitStyle, entry.Checklist);
+                _states[lists[entry.Ordinal]] = new(entry.Id, entry.ContinuesFromId, entry.ExplicitStyle, entry.Checklist, entry.TypographyGroup);
     }
 
     internal void ResetHistory()
@@ -340,10 +378,10 @@ internal sealed class EditorLists
                 {
                     SetStyle(Isolate([Ancestor<ListItem>(paragraph)!]), TextMarkerStyle.None, false);
                 }
-                AlignCheckbox(paragraph);
             }
             foreach (var list in Lists(_editor.Document.Blocks)) State(list);
             RefreshNumbering();
+            RefreshLayout(all: true);
         }
         finally { _restoring = false; if (resetHistory) ResetHistory(); }
     }
@@ -378,21 +416,31 @@ internal sealed class EditorLists
         }, false);
     }
 
-    private void AlignCheckbox(Paragraph paragraph)
+    private readonly record struct CheckboxMetricsKey(Typeface Typeface, double Size, double PixelsPerDip);
+
+    private double AlignCheckbox(Paragraph paragraph, Dictionary<CheckboxMetricsKey, (double Unchecked, double Checked)> metrics)
     {
-        if (!Checkbox(paragraph, out _, out _)) return;
+        if (!Checkbox(paragraph, out _, out var isChecked)) return 0;
         var prefixPosition = paragraph.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
         var prefixRange = new TextRange(prefixPosition, AdvanceCharacters(paragraph.ContentStart, 1));
-        double size = (double)prefixRange.GetPropertyValue(TextElement.FontSizeProperty);
-        var family = (FontFamily)prefixRange.GetPropertyValue(TextElement.FontFamilyProperty);
-        var width = new FormattedText(UncheckedPrefix, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface(family, (FontStyle)prefixRange.GetPropertyValue(TextElement.FontStyleProperty),
-                (FontWeight)prefixRange.GetPropertyValue(TextElement.FontWeightProperty), paragraph.FontStretch),
-            size, Brushes.Black, VisualTreeHelper.GetDpi(_editor).PixelsPerDip).WidthIncludingTrailingWhitespace;
+        var typography = MarkerTypography(paragraph);
+        if ((double)prefixRange.GetPropertyValue(TextElement.FontSizeProperty) != typography.Size)
+            prefixRange.ApplyPropertyValue(TextElement.FontSizeProperty, typography.Size);
+        if (((FontFamily)prefixRange.GetPropertyValue(TextElement.FontFamilyProperty)).Source != typography.Family.Source)
+            prefixRange.ApplyPropertyValue(TextElement.FontFamilyProperty, typography.Family);
+        var typeface = new Typeface(typography.Family, (FontStyle)prefixRange.GetPropertyValue(TextElement.FontStyleProperty),
+            (FontWeight)prefixRange.GetPropertyValue(TextElement.FontWeightProperty), paragraph.FontStretch);
+        double Width(string text) => new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            typeface, typography.Size, Brushes.Black, VisualTreeHelper.GetDpi(_editor).PixelsPerDip).WidthIncludingTrailingWhitespace;
+        var key = new CheckboxMetricsKey(typeface, typography.Size, VisualTreeHelper.GetDpi(_editor).PixelsPerDip);
+        if (!metrics.TryGetValue(key, out var widths))
+            metrics[key] = widths = (Width(UncheckedPrefix), Width(CheckedPrefix));
         // The list already reserves the text column. Hang the glyph into its marker area,
         // so bullets, numbers and checkbox text all start at the same column.
         paragraph.Margin = new Thickness(0, paragraph.Margin.Top, paragraph.Margin.Right, paragraph.Margin.Bottom);
-        paragraph.TextIndent = -width;
+        paragraph.TextIndent = -(isChecked ? widths.Checked : widths.Unchecked);
+        // Reserve both states, so checking an item never shifts the shared text column.
+        return Math.Max(widths.Unchecked, widths.Checked) + 2;
     }
 
     private static void RemovePrefix(Paragraph paragraph)
@@ -416,32 +464,136 @@ internal sealed class EditorLists
             {
                 if (!Checkbox(paragraph, out _, out _))
                     new TextRange(paragraph.ContentStart, paragraph.ContentStart).Text = UncheckedPrefix;
-                AlignCheckbox(paragraph);
             }
             else RemovePrefix(paragraph);
-            SyncMarkerTypography(item);
         }
+        RefreshListLayout(list);
     }
 
-    private static void SyncMarkerTypography(ListItem item)
+    private static (double Size, FontFamily Family) MarkerTypography(Paragraph paragraph)
     {
-        if (FirstParagraph(item) is not { } paragraph) return;
-        var start = paragraph.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
-        var end = AdvanceCharacters(paragraph.ContentStart, 1);
+        var start = Checkbox(paragraph, out var textStart, out _) ? textStart : paragraph.ContentStart;
+        start = start.GetInsertionPosition(LogicalDirection.Forward) ?? paragraph.ContentStart;
+        if (start.CompareTo(paragraph.ContentEnd) > 0) start = paragraph.ContentEnd;
+        var end = AdvanceCharacters(start, 1);
+        if (end.CompareTo(paragraph.ContentEnd) > 0) end = paragraph.ContentEnd;
         var range = new TextRange(start, end);
-        if (range.IsEmpty) return;
         var size = range.GetPropertyValue(TextElement.FontSizeProperty);
         var family = range.GetPropertyValue(TextElement.FontFamilyProperty);
-        if (size is not double fontSize || family is not FontFamily fontFamily) return;
-        if (Math.Abs(item.FontSize - fontSize) < .01 && item.FontFamily.Source == fontFamily.Source) return;
-        // ListItem typography draws the marker and also inherits into its paragraphs.
-        // Preserve those paragraph defaults before changing the marker's typography.
-        foreach (var own in item.Blocks.Cast<Block>().ToArray())
+        return (size is double fontSize ? fontSize : paragraph.FontSize,
+            family is FontFamily fontFamily ? fontFamily : paragraph.FontFamily);
+    }
+
+    private void RefreshListLayout(DocumentList list)
+    {
+        var paragraphs = list.ListItems.Cast<ListItem>().Select(FirstParagraph).OfType<Paragraph>().ToArray();
+        // Marker typography belongs to the container; body text must retain its own
+        // inherited defaults when that container changes or adjacent lists merge.
+        foreach (ListItem item in list.ListItems)
         {
-            own.SetCurrentValue(TextElement.FontSizeProperty, own.FontSize);
-            own.SetCurrentValue(TextElement.FontFamilyProperty, own.FontFamily);
+            if (item.ReadLocalValue(TextElement.FontSizeProperty) == DependencyProperty.UnsetValue)
+                item.SetValue(TextElement.FontSizeProperty, item.FontSize);
+            if (item.ReadLocalValue(TextElement.FontFamilyProperty) == DependencyProperty.UnsetValue)
+                item.SetValue(TextElement.FontFamilyProperty, item.FontFamily);
         }
-        item.FontSize = fontSize; item.FontFamily = fontFamily;
+        double gutter = Math.Max(24, _indent());
+        if (list.MarkerStyle != TextMarkerStyle.None && paragraphs.Length > 0)
+        {
+            // WPF draws native markers using List typography, not ListItem typography.
+            var typography = MarkerTypography(paragraphs[0]);
+            if (Math.Abs(list.FontSize - typography.Size) > .01 || list.FontFamily.Source != typography.Family.Source)
+            {
+                list.FontSize = typography.Size;
+                list.FontFamily = typography.Family;
+            }
+            var lineHeight = double.IsNaN(list.LineHeight) ? list.FontFamily.LineSpacing * list.FontSize : list.LineHeight;
+            var offset = double.IsNaN(list.MarkerOffset) ? lineHeight / 2 : Math.Max(0, list.MarkerOffset);
+            double markerWidth = list.FontSize;
+            if (Numbered(list.MarkerStyle))
+            {
+                var widths = new Dictionary<char, double>();
+                var typeface = new Typeface(list.FontFamily, list.FontStyle, list.FontWeight, list.FontStretch);
+                double Width(char c)
+                {
+                    if (!widths.TryGetValue(c, out var width))
+                        widths[c] = width = new FormattedText(c.ToString(), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                            typeface, list.FontSize, Brushes.Black, VisualTreeHelper.GetDpi(_editor).PixelsPerDip).WidthIncludingTrailingWhitespace;
+                    return width;
+                }
+                markerWidth = Enumerable.Range(0, list.ListItems.Count)
+                    .Max(index => Marker(list.MarkerStyle, SafeStart(list.StartIndex, index)).TrimEnd().Sum(Width));
+            }
+            gutter = Math.Max(gutter, Math.Ceiling(markerWidth + offset + 2));
+        }
+        var metrics = new Dictionary<CheckboxMetricsKey, (double Unchecked, double Checked)>();
+        foreach (var paragraph in paragraphs)
+            gutter = Math.Max(gutter, AlignCheckbox(paragraph, metrics));
+        list.Padding = new Thickness(Math.Ceiling(gutter), list.Padding.Top, list.Padding.Right, list.Padding.Bottom);
+    }
+
+    private bool SameLogicalList(DocumentList first, DocumentList second) => ReferenceEquals(first, second)
+        || State(first).TypographyGroup is { } group && group == State(second).TypographyGroup;
+
+    private void CoalesceTypographyGroups(HashSet<Guid>? onlyGroups = null)
+    {
+        if (!_states.Values.Any(state => state.TypographyGroup is not null)) return;
+        var start = CaptureEndpoint(_editor.Selection.Start);
+        var end = CaptureEndpoint(_editor.Selection.End);
+        foreach (var list in Lists(_editor.Document.Blocks).ToArray())
+        {
+            if (list.Parent is null || State(list).TypographyGroup is not { } group
+                || onlyGroups is not null && !onlyGroups.Contains(group)) continue;
+            while (list.NextBlock is DocumentList next && State(next).TypographyGroup == group
+                && list.MarkerStyle == next.MarkerStyle && list.Margin == next.Margin)
+            {
+                var removedId = State(next).Id;
+                foreach (var item in next.ListItems.Cast<ListItem>().ToArray())
+                { next.ListItems.Remove(item); list.ListItems.Add(item); }
+                foreach (var follower in _states.Where(pair => pair.Value.ContinuesFrom == removedId).Select(pair => pair.Key).ToArray())
+                    _states[follower] = State(follower) with { ContinuesFrom = State(list).Id };
+                ParentBlocks(next)!.Remove(next);
+                _states.Remove(next);
+            }
+            _states[list] = State(list) with { TypographyGroup = null };
+        }
+        RestoreSelection(start, end);
+    }
+
+    private void RefreshTypographyGroups(DocumentList list)
+    {
+        // WPF supports one marker font per List. Typography segments keep their own
+        // fonts and share a gutter, while their metadata preserves one logical list.
+        if (list.MarkerStyle == TextMarkerStyle.None) { RefreshListLayout(list); return; }
+        List<List<ListItem>> groups = [];
+        (double Size, FontFamily Family)? previous = null;
+        foreach (ListItem item in list.ListItems)
+        {
+            var typography = FirstParagraph(item) is { } paragraph ? MarkerTypography(paragraph) : (list.FontSize, list.FontFamily);
+            if (previous is null || Math.Abs(previous.Value.Size - typography.Item1) > .01
+                || previous.Value.Family.Source != typography.Item2.Source) groups.Add([]);
+            groups[^1].Add(item); previous = typography;
+        }
+        if (groups.Count <= 1) { RefreshListLayout(list); return; }
+
+        var original = State(list);
+        var followers = _states.Where(pair => !ReferenceEquals(pair.Key, list) && pair.Value.ContinuesFrom == original.Id)
+            .Select(pair => pair.Key).ToArray();
+        DocumentList? preceding = null;
+        List<DocumentList> segments = [];
+        foreach (var items in groups)
+        {
+            var segment = Isolate(items);
+            _states[segment] = State(segment) with { TypographyGroup = original.Id,
+                ContinuesFrom = Numbered(segment.MarkerStyle) && preceding is not null ? State(preceding).Id : State(segment).ContinuesFrom };
+            RefreshListLayout(segment);
+            segments.Add(segment);
+            preceding = segment;
+        }
+        var gutter = segments.Max(segment => segment.Padding.Left);
+        foreach (var segment in segments)
+            segment.Padding = new Thickness(gutter, segment.Padding.Top, segment.Padding.Right, segment.Padding.Bottom);
+        foreach (var follower in followers)
+            _states[follower] = State(follower) with { ContinuesFrom = State(preceding!).Id };
     }
 
     /// <summary>Split the parent so operations affect only the selected contiguous items.</summary>
@@ -506,6 +658,7 @@ internal sealed class EditorLists
 
     internal void ApplyStyle(TextMarkerStyle style, bool toggle = false, bool explicitStyle = true)
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
         var paragraphs = Targets();
         if (paragraphs.Count == 0)
         {
@@ -570,6 +723,7 @@ internal sealed class EditorLists
 
     internal void Remove()
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
         var paragraphs = Targets();
         Edit(() =>
         {
@@ -644,7 +798,6 @@ internal sealed class EditorLists
             if (!Checkbox(paragraph, out _, out _))
                 new TextRange(paragraph.ContentStart, paragraph.ContentStart).Text = UncheckedPrefix;
             else new TextRange(paragraph.ContentStart, AdvanceCharacters(paragraph.ContentStart, 2)).Text = UncheckedPrefix;
-            AlignCheckbox(paragraph);
             _editor.CaretPosition = AdvanceCharacters(paragraph.ContentStart, 2);
         }
     }
@@ -701,21 +854,46 @@ internal sealed class EditorLists
                         new TextRange(AdvanceCharacters(p.ContentStart, 1), AdvanceCharacters(p.ContentStart, 1)).Text = " ";
                     else new TextRange(p.ContentStart, p.ContentStart).Text = UncheckedPrefix;
                 }
-                AlignCheckbox(p);
             }
         }
     }
 
     internal void RefreshLayout(bool all = false)
     {
-        foreach (var p in (all ? Paragraphs(_editor.Document.Blocks) : Targets()).ToArray())
+        var start = CaptureEndpoint(_editor.Selection.Start);
+        var end = CaptureEndpoint(_editor.Selection.End);
+        var targets = all ? [] : Targets().ToArray();
+        var groups = targets.Select(p => Ancestor<DocumentList>(p)).OfType<DocumentList>()
+            .Select(list => State(list).TypographyGroup).OfType<Guid>().ToHashSet();
+        var wasRestoring = _restoring;
+        _restoring = true;
+        try
         {
-            if (Ancestor<ListItem>(p) is { } item) SyncMarkerTypography(item);
-            if (Checkbox(p, out _, out _)) AlignCheckbox(p);
+            CoalesceTypographyGroups(all ? null : groups);
+            var lists = all ? Lists(_editor.Document.Blocks).ToArray()
+                : targets.Select(p => Ancestor<DocumentList>(p)).OfType<DocumentList>().Distinct().ToArray();
+            foreach (var list in lists) if (list.Parent is not null) RefreshTypographyGroups(list);
+            RefreshNumbering();
         }
-        if (all)
-            foreach (var list in Lists(_editor.Document.Blocks).ToArray())
-                list.Padding = new Thickness(Math.Max(24, _indent()), list.Padding.Top, list.Padding.Right, list.Padding.Bottom);
+        finally
+        {
+            try { RestoreSelection(start, end); }
+            finally { _restoring = wasRestoring; }
+        }
+    }
+
+    private bool NeedsMarkerLayout(Paragraph? paragraph)
+    {
+        if (paragraph is null || Ancestor<DocumentList>(paragraph) is not { } list) return false;
+        var typography = MarkerTypography(paragraph);
+        if (Checkbox(paragraph, out _, out _))
+        {
+            var prefix = new TextRange(paragraph.ContentStart, AdvanceCharacters(paragraph.ContentStart, 1));
+            return !Equals(prefix.GetPropertyValue(TextElement.FontSizeProperty), typography.Size)
+                || prefix.GetPropertyValue(TextElement.FontFamilyProperty) is FontFamily family && family.Source != typography.Family.Source;
+        }
+        return list.MarkerStyle != TextMarkerStyle.None && (Math.Abs(list.FontSize - typography.Size) > .01
+            || list.FontFamily.Source != typography.Family.Source);
     }
 
     internal void ChangeIndentStep(double previousStep)
@@ -775,6 +953,7 @@ internal sealed class EditorLists
 
     internal void Indent(bool decrease)
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
         var items = TargetItems(true);
         if (items.Count == 0) return;
         Edit(() =>
@@ -851,12 +1030,18 @@ internal sealed class EditorLists
         else foreach (var item in items) if (FirstParagraph(item) is { } p)
         {
             if (!Checkbox(p, out _, out _)) new TextRange(p.ContentStart, p.ContentStart).Text = UncheckedPrefix;
-            AlignCheckbox(p);
         }
     }
 
     internal bool Move(bool down)
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
+        if (!_editing && _states.Values.Any(state => state.TypographyGroup is not null))
+        {
+            bool moved = false;
+            Edit(() => moved = Move(down), preserveSelection: false);
+            return moved;
+        }
         var groups = Groups(TargetItems(true)).ToArray();
         if (groups.Length != 1) return false;
         var items = groups[0];
@@ -880,6 +1065,7 @@ internal sealed class EditorLists
 
     internal bool ToggleCheckbox(Paragraph? paragraph = null)
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
         paragraph ??= _editor.CaretPosition.Paragraph;
         if (paragraph is null || !Checkbox(paragraph, out var end, out bool done)) return false;
         Edit(() => new TextRange(paragraph.ContentStart, end).Text = done ? UncheckedPrefix : CheckedPrefix);
@@ -904,7 +1090,9 @@ internal sealed class EditorLists
 
     internal bool AutoStart(string input)
     {
-        if (input != " " || !_editor.Selection.IsEmpty || _editor.CaretPosition.Paragraph is not { } paragraph
+        if (input != " ") return false;
+        if (!_editing) WpfEditorInput.Flush(_editor);
+        if (!_editor.Selection.IsEmpty || _editor.CaretPosition.Paragraph is not { } paragraph
             || Ancestor<ListItem>(paragraph) is not null) return false;
         string before = RawText(paragraph.ContentStart, _editor.CaretPosition);
         TextMarkerStyle style;
@@ -960,6 +1148,7 @@ internal sealed class EditorLists
 
     internal bool HandleKey(Key key, ModifierKeys modifiers, bool inTable)
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.L)
         { ApplyStyle(TextMarkerStyle.Disc, toggle: true, explicitStyle: false); return true; }
         if (modifiers is ModifierKeys.Control or (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.M && HasList)
@@ -992,6 +1181,9 @@ internal sealed class EditorLists
         }
         if (key == Key.Back && modifiers == ModifierKeys.None && _editor.Selection.IsEmpty && AtTextStart(paragraph))
         { Edit(() => OutdentItems([item])); return true; }
+        if (key == Key.Return && modifiers == ModifierKeys.Shift && _editor.Selection.IsEmpty
+            && Checkbox(paragraph, out var bodyStart, out _) && _editor.CaretPosition.CompareTo(bodyStart) < 0)
+            _editor.CaretPosition = bodyStart;
         if (key == Key.Return && modifiers == ModifierKeys.None)
         { Enter(); return true; }
         // Native deletion knows how to merge the rich tree. Keep renumbering in its undo unit.
@@ -1013,6 +1205,7 @@ internal sealed class EditorLists
 
     internal void Enter()
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
         var paragraph = _editor.CaretPosition.Paragraph;
         var item = paragraph is null ? null : Ancestor<ListItem>(paragraph);
         if (paragraph is null || item is null) return;
@@ -1040,7 +1233,6 @@ internal sealed class EditorLists
                 if (!Checkbox(nextParagraph, out _, out _))
                     new TextRange(nextParagraph.ContentStart, nextParagraph.ContentStart).Text = UncheckedPrefix;
                 else new TextRange(nextParagraph.ContentStart, AdvanceCharacters(nextParagraph.ContentStart, 2)).Text = UncheckedPrefix;
-                AlignCheckbox(nextParagraph);
                 _editor.CaretPosition = AdvanceCharacters(nextParagraph.ContentStart, 2);
             }
         }, preserveSelection: false);
@@ -1052,7 +1244,7 @@ internal sealed class EditorLists
         if (paragraphs.Count == 0) return null;
         var item = Ancestor<ListItem>(paragraphs[0]);
         if (item?.Parent is not DocumentList list || !Numbered(list.MarkerStyle)
-            || paragraphs.Any(p => !ReferenceEquals(Ancestor<DocumentList>(p), list))) return null;
+            || paragraphs.Any(p => Ancestor<DocumentList>(p) is not { } other || !SameLogicalList(list, other))) return null;
         return item;
     }
 
@@ -1078,6 +1270,7 @@ internal sealed class EditorLists
         if (ActiveNumberedList() is not { } active) return null;
         return Lists(_editor.Document.Blocks).TakeWhile(list => !ReferenceEquals(list, active)).LastOrDefault(list =>
             Numbered(list.MarkerStyle) && list.MarkerStyle == active.MarkerStyle && Depth(list) == Depth(active)
+            && !SameLogicalList(list, active)
             && ReferenceEquals(Container(list), Container(active)));
     }
     private static DependencyObject? Container(DocumentList list)
@@ -1085,6 +1278,9 @@ internal sealed class EditorLists
 
     internal void SetNumbering(int? start)
     {
+        if (!_editing) WpfEditorInput.Flush(_editor);
+        if (!_editing && _states.Values.Any(state => state.TypographyGroup is not null))
+        { Edit(() => SetNumbering(start)); return; }
         if (NumberingTarget() is not { Parent: DocumentList list } item) return;
         if (start is null && !CanContinue || start == 1 && !CanRestartNumbering) return;
         var candidate = start is null ? ContinuationCandidate() : null;
@@ -1155,7 +1351,7 @@ internal sealed class EditorLists
                     foreach (var entry in metadata.Lists)
                         if (entry is not null && entry.Ordinal >= 0 && entry.Ordinal < lists.Length
                             && entry.Id != Guid.Empty && ids.Add(entry.Id) && ordinals.Add(entry.Ordinal))
-                            _states[lists[entry.Ordinal]] = new(entry.Id, entry.ContinuesFromId, entry.ExplicitStyle, entry.Checklist);
+                            _states[lists[entry.Ordinal]] = new(entry.Id, entry.ContinuesFromId, entry.ExplicitStyle, entry.Checklist, entry.TypographyGroup);
             }
         }
         catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException or ArgumentException)

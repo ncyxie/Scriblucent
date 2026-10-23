@@ -186,6 +186,13 @@ public partial class NoteEditorWindow
 
     private void ComposeSelectionTiles()
     {
+        // Measuring a selection can complete pending layout and invalidate its tiles.
+        // A rapid deletion may therefore clear the cache during the paint itself.
+        if (_selectionTiles.Count == 0)
+        {
+            _selectionHighlightPath!.Data = Geometry.Empty;
+            return;
+        }
         var originX = _selectionTiles.Values.Min(tile => tile.Left);
         var originY = _selectionTiles.Keys.Min() * HighlightTileHeight;
         Canvas.SetLeft(_selectionHighlightPath!, originX);

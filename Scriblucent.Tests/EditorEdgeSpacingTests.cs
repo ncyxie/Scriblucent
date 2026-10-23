@@ -9,6 +9,22 @@ namespace Scriblucent.Tests;
 public class EditorEdgeSpacingTests
 {
     [Fact]
+    public void Suspending_edge_spacing_preserves_changes_to_the_marker_gutter()
+    {
+        RunSta(() =>
+        {
+            var list = new System.Windows.Documents.List(new ListItem(new Paragraph(new Run("task"))))
+            { Padding = new Thickness(48, 3, 2, 4) };
+            var document = new FlowDocument(list);
+            var spacing = new EditorEdgeSpacing();
+            spacing.Update(document);
+            list.Padding = new Thickness(160, list.Padding.Top, 8, list.Padding.Bottom);
+            spacing.Suspend();
+            Assert.Equal(new Thickness(160, 3, 8, 4), list.Padding);
+        });
+    }
+
+    [Fact]
     public void Empty_caret_uses_viewport_padding_until_text_exists()
     {
         RunSta(() =>

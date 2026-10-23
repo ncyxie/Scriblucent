@@ -14,6 +14,114 @@ namespace Scriblucent.Tests;
 public class EditorListTests
 {
     [Fact]
+    public void Checkbox_detection_never_reads_across_paragraph_boundaries() => Sta(() =>
+    {
+        using var h = new Harness("", "☐ task", "☐", " next");
+        var p = h.Paragraphs();
+        Assert.False(EditorLists.Checkbox(p[0], out _, out _));
+        Assert.True(EditorLists.Checkbox(p[1], out _, out _));
+        Assert.False(EditorLists.Checkbox(p[2], out _, out _));
+        p[0].Inlines.Add(new Run("☐"));
+        p[0].Inlines.Add(new LineBreak());
+        p[0].Inlines.Add(new Run(" task"));
+        Assert.False(EditorLists.Checkbox(p[0], out _, out _));
+    });
+
+    [Fact]
+    public void Soft_break_cannot_split_the_checkbox_prefix() => Sta(() =>
+    {
+        using var h = new Harness("task");
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.None);
+        var p = h.Paragraphs()[0];
+        h.Editor.CaretPosition = EditorLists.AdvanceCharacters(p.ContentStart, 1);
+        Assert.False(h.Lists.HandleKey(Key.Return, ModifierKeys.Shift, false));
+        EditingCommands.EnterLineBreak.Execute(null, h.Editor); h.Flush();
+        Assert.Equal("☐ \ntask", EditorLists.InlineText(p));
+        Assert.True(EditorLists.Checkbox(p, out _, out _));
+        Assert.Single(h.RootLists().Single().ListItems);
+    });
+
+    [Fact]
+    public void Enter_replaces_a_selection_spanning_checklist_items() => Sta(() =>
+    {
+        using var h = new Harness("one", "two", "three");
+        h.UseEdgeSpacing();
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.None);
+        var p = h.Paragraphs();
+        h.Editor.Selection.Select(p[0].ContentEnd, p[2].ContentEnd);
+        h.Lists.Enter(); h.Flush();
+        Assert.Equal(["☐ one", "☐ "], h.Paragraphs().Select(EditorLists.InlineText));
+    });
+
+    [Fact]
+    public void Deleting_after_a_soft_break_and_exited_checklist_can_be_undone() => Sta(() =>
+    {
+        using var h = new Harness("reset");
+        h.UseEdgeSpacing();
+        h.SelectAll(); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 16d);
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.None);
+        var first = h.Paragraphs()[0];
+        h.Editor.CaretPosition = first.ContentEnd;
+        h.Lists.Enter(); h.Lists.Enter();
+        h.Editor.CaretPosition = first.ContentEnd;
+        EditingCommands.EnterLineBreak.Execute(null, h.Editor);
+        TextCompositionManager.StartComposition(new TextComposition(InputManager.Current, h.Editor, "text"));
+        h.Lists.HandleKey(Key.Delete, ModifierKeys.None, false);
+        Assert.Single(h.Paragraphs());
+        Assert.Contains("text", EditorLists.InlineText(h.Paragraphs()[0]));
+        h.Editor.Undo(); h.Flush();
+        Assert.Equal(2, h.Paragraphs().Length);
+    });
+
+    [Fact]
+    public void Splitting_and_rejoining_a_large_checklist_keeps_the_marker_inside_the_editor() => Sta(() =>
+    {
+        using var h = new Harness("first", "second");
+        h.UseEdgeSpacing();
+        h.SelectAll(); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 96d);
+        h.Lists.ApplyStyle(TextMarkerStyle.None);
+        for (int cycle = 0; cycle < 5; cycle++)
+        {
+            var p = h.Paragraphs()[0];
+            h.Editor.CaretPosition = p.ContentEnd;
+            h.Lists.Enter(); h.Editor.Selection.Text = "split";
+            h.Editor.CaretPosition = p.ContentEnd;
+            h.Lists.HandleKey(Key.Delete, ModifierKeys.None, false);
+            h.Flush();
+            var glyph = h.Paragraphs()[0].ContentStart.GetInsertionPosition(LogicalDirection.Forward)!
+                .GetCharacterRect(LogicalDirection.Forward);
+            Assert.True(glyph.Left >= 0, $"Marker escaped the editor: {glyph.Left}");
+        }
+    });
+
+    [Fact]
+    public void Rapid_checklist_add_split_and_delete_keeps_the_document_editable() => Sta(() =>
+    {
+        using var h = new Harness("");
+        h.UseEdgeSpacing();
+        for (int cycle = 0; cycle < 40; cycle++)
+        {
+            h.SelectAll(); h.Editor.Selection.Text = "task";
+            h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.None);
+            for (int item = 0; item < 8; item++)
+            {
+                h.Editor.CaretPosition = h.Paragraphs()[^1].ContentEnd;
+                h.Lists.Enter();
+                h.Editor.Selection.Text = "next";
+            }
+            for (int item = 0; item < 8; item++)
+            {
+                h.Editor.CaretPosition = h.Paragraphs()[0].ContentEnd;
+                h.Lists.HandleKey(Key.Delete, ModifierKeys.None, false);
+            }
+            h.SelectAll(); h.Lists.HandleKey(Key.Back, ModifierKeys.None, false);
+            h.Flush();
+        }
+        h.Editor.Selection.Text = "still editable"; h.Flush();
+        Assert.Contains("still editable", new TextRange(h.Editor.Document.ContentStart, h.Editor.Document.ContentEnd).Text);
+    });
+
+    [Fact]
     public void Conversion_replaces_markers_and_only_changes_selected_items() => Sta(() =>
     {
         using var h = new Harness("first", "second", "third");
@@ -324,6 +432,220 @@ public class EditorListTests
     [Theory]
     [InlineData(TextMarkerStyle.Disc)]
     [InlineData(TextMarkerStyle.Decimal)]
+    [InlineData(TextMarkerStyle.LowerLatin)]
+    [InlineData(TextMarkerStyle.UpperRoman)]
+    public void Rendered_native_markers_follow_font_size_changes(TextMarkerStyle style) => Sta(() =>
+    {
+        using var h = new Harness("task", "other");
+        h.SelectAll(); h.Lists.ApplyStyle(style);
+        foreach (var size in new[] { 36.0, 10.0 })
+        {
+            h.SelectAll(); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
+            h.Lists.RefreshLayout(); h.Flush(); h.Editor.UpdateLayout();
+            var markers = GlyphRuns(h.Editor).Where(run => run.Characters is { Count: > 0 }
+                && !new string(run.Characters.ToArray()).Contains("task")
+                && !new string(run.Characters.ToArray()).Contains("other")).ToArray();
+            Assert.True(markers.Length >= 2, "Expected the actual native marker drawings.");
+            Assert.All(markers, marker => Assert.Equal(size, marker.FontRenderingEmSize, 1));
+        }
+    });
+
+    [Theory]
+    [InlineData(36.0)]
+    [InlineData(96.0)]
+    [InlineData(144.0)]
+    public void Large_checkbox_markers_stay_inside_the_editor_and_keep_the_text_column_when_toggled(double size) => Sta(() =>
+    {
+        using var h = new Harness("task");
+        h.Editor.Document.PagePadding = new Thickness(0);
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.None);
+        var paragraph = h.Paragraphs()[0];
+        h.Select(paragraph); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
+        h.Lists.RefreshLayout(); h.Flush(); h.Editor.UpdateLayout();
+        var start = paragraph.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+        Assert.InRange(start.GetCharacterRect(LogicalDirection.Forward).Left, 0, h.Editor.ActualWidth);
+        EditorLists.Checkbox(paragraph, out var body, out _);
+        var textX = body.GetCharacterRect(LogicalDirection.Forward).Left;
+        h.Lists.ToggleCheckbox(paragraph); h.Flush(); h.Editor.UpdateLayout();
+        Assert.InRange(start.GetCharacterRect(LogicalDirection.Forward).Left, 0, h.Editor.ActualWidth);
+        EditorLists.Checkbox(paragraph, out body, out _);
+        Assert.InRange(Math.Abs(textX - body.GetCharacterRect(LogicalDirection.Forward).Left), 0, 1);
+        h.Select(paragraph); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 12.0);
+        h.Lists.RefreshLayout();
+        Assert.Equal(48, h.RootLists().Single().Padding.Left);
+    });
+
+    [Fact]
+    public void Formatting_task_text_without_selecting_its_checkbox_also_resizes_the_marker() => Sta(() =>
+    {
+        using var h = new Harness("task");
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.None);
+        var paragraph = h.Paragraphs()[0];
+        EditorLists.Checkbox(paragraph, out var body, out _);
+        h.Editor.Selection.Select(body, paragraph.ContentEnd);
+        h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 96.0);
+        h.Lists.RefreshLayout(); h.Flush(); h.Editor.UpdateLayout();
+        var prefix = new TextRange(paragraph.ContentStart, EditorLists.AdvanceCharacters(paragraph.ContentStart, 1));
+        Assert.Equal(96.0, prefix.GetPropertyValue(TextElement.FontSizeProperty));
+        Assert.True(h.RootLists().Single().Padding.Left >= -paragraph.TextIndent);
+        Assert.True(paragraph.ContentStart.GetInsertionPosition(LogicalDirection.Forward).GetCharacterRect(LogicalDirection.Forward).Left >= 0);
+    });
+
+    [Fact]
+    public void Resizing_native_markers_preserves_mixed_text_nested_lists_and_numbering() => Sta(() =>
+    {
+        using var h = new Harness("small", "large", "nested");
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.Decimal);
+        var paragraphs = h.Paragraphs();
+        h.Caret(paragraphs[2]); h.Lists.Indent(false);
+        var originalSmallSize = paragraphs[0].Inlines.FirstInline.FontSize;
+        var originalNestedSize = paragraphs[2].Inlines.FirstInline.FontSize;
+        h.Select(paragraphs[1]); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 48.0);
+        h.Lists.RefreshLayout();
+        Assert.Equal(originalSmallSize, paragraphs[0].Inlines.FirstInline.FontSize);
+        Assert.Equal(originalNestedSize, paragraphs[2].Inlines.FirstInline.FontSize);
+        Assert.Equal(2, h.RootLists().Sum(list => list.ListItems.Count));
+        h.Caret(paragraphs[0]); Assert.Equal(1, h.Lists.CurrentNumber);
+        h.Caret(paragraphs[1]); Assert.Equal(2, h.Lists.CurrentNumber);
+        Assert.IsType<ListItem>(EditorLists.Ancestor<DocumentList>(paragraphs[2])!.Parent);
+        h.Flush(); h.Editor.UpdateLayout();
+        var firstTextX = paragraphs[0].ContentStart.GetCharacterRect(LogicalDirection.Forward).Left;
+        var secondTextX = paragraphs[1].ContentStart.GetCharacterRect(LogicalDirection.Forward).Left;
+        Assert.InRange(Math.Abs(firstTextX - secondTextX), 0, 1);
+        var numberMarkers = GlyphRuns(h.Editor).Where(run => run.Characters is { Count: > 0 }
+            && new string(run.Characters.ToArray()) is "1." or "2.").ToArray();
+        Assert.Contains(numberMarkers, marker => marker.FontRenderingEmSize == originalSmallSize);
+        Assert.Contains(numberMarkers, marker => marker.FontRenderingEmSize == 48);
+    });
+
+    [Fact]
+    public void Mixed_size_items_move_indent_and_undo_as_one_numbered_list() => Sta(() =>
+    {
+        using var h = new Harness("small", "large", "last");
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.Decimal);
+        var large = h.Paragraphs()[1];
+        h.Editor.BeginChange();
+        h.Select(large); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 36.0);
+        h.Lists.RefreshLayout(); h.Editor.EndChange(); h.Flush();
+        h.Caret(large); Assert.True(h.Lists.Move(false)); h.Flush();
+        Assert.Equal(["large", "small", "last"], h.Paragraphs().Select(EditorLists.InlineText));
+        h.Editor.Undo(); h.Flush();
+        Assert.Equal(["small", "large", "last"], h.Paragraphs().Select(EditorLists.InlineText));
+        large = h.Paragraphs()[1];
+        h.Caret(large); Assert.Equal(2, h.Lists.CurrentNumber);
+        h.Lists.Indent(false); h.Flush();
+        Assert.IsType<ListItem>(EditorLists.Ancestor<DocumentList>(large)!.Parent);
+        h.Editor.Undo(); h.Flush(); h.Editor.Redo(); h.Flush();
+        large = h.Paragraphs()[1];
+        Assert.IsType<ListItem>(EditorLists.Ancestor<DocumentList>(large)!.Parent);
+    });
+
+    [Fact]
+    public void Mixed_size_numbering_survives_save_reopen_and_insertion() => Sta(() =>
+    {
+        using var h = new Harness("small", "large", "last");
+        h.SelectAll(); h.Lists.ApplyStyle(TextMarkerStyle.Decimal);
+        h.Editor.BeginChange();
+        h.Select(h.Paragraphs()[1]); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 36.0);
+        h.Lists.RefreshLayout(); h.Editor.EndChange();
+        using var package = new MemoryStream();
+        new TextRange(h.Editor.Document.ContentStart, h.Editor.Document.ContentEnd).Save(package, DataFormats.XamlPackage);
+        h.Lists.WriteMetadata(package); package.Position = 0;
+        using var reopened = new Harness(); reopened.Lists.LoadContent(package, DataFormats.XamlPackage);
+        reopened.Editor.CaretPosition = reopened.Paragraphs()[1].ContentEnd;
+        reopened.Lists.Enter(); reopened.Editor.Selection.Text = "new"; reopened.Flush();
+        var last = reopened.Paragraphs().Last(); reopened.Caret(last);
+        Assert.Equal(4, reopened.Lists.CurrentNumber);
+        Assert.Equal(["small", "large", "new", "last"], reopened.Paragraphs().Select(EditorLists.InlineText));
+    });
+
+    [Fact]
+    public void A_numbered_list_linked_after_mixed_size_items_keeps_following_their_total() => Sta(() =>
+    {
+        using var h = new Harness("small", "large", "break", "follower");
+        var paragraphs = h.Paragraphs();
+        h.Editor.Selection.Select(paragraphs[0].ContentStart, paragraphs[1].ContentEnd);
+        h.Lists.ApplyStyle(TextMarkerStyle.Decimal);
+        h.Select(paragraphs[3]); h.Lists.ApplyStyle(TextMarkerStyle.Decimal);
+        h.Caret(paragraphs[3]); h.Lists.SetNumbering(null);
+        h.Editor.BeginChange();
+        h.Select(paragraphs[1]); h.Editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, 36.0);
+        h.Lists.RefreshLayout(); h.Editor.EndChange();
+        h.Caret(paragraphs[3]); Assert.Equal(3, h.Lists.CurrentNumber);
+        h.Editor.CaretPosition = paragraphs[1].ContentEnd; h.Lists.Enter(); h.Flush();
+        h.Caret(h.Paragraphs().Last()); Assert.Equal(4, h.Lists.CurrentNumber);
+        h.Editor.Undo(); h.Flush();
+        h.Caret(h.Paragraphs().Last()); Assert.Equal(3, h.Lists.CurrentNumber);
+    });
+
+    [Theory]
+    [InlineData(TextMarkerStyle.Decimal)]
+    [InlineData(TextMarkerStyle.None)]
+    public void Typing_a_larger_first_character_updates_markers_in_the_same_undo_unit(TextMarkerStyle style) => Sta(() =>
+    {
+        using var h = new Harness("small", "tail");
+        h.SelectAll(); h.Lists.ApplyStyle(style);
+        h.Caret(h.Paragraphs()[1]);
+        var paragraph = h.Paragraphs()[1];
+        using (h.Editor.DeclareChangeBlock())
+        {
+            var firstText = style == TextMarkerStyle.None
+                ? EditorLists.AdvanceCharacters(paragraph.ContentStart, 2) : paragraph.ContentStart;
+            firstText = firstText.GetInsertionPosition(LogicalDirection.Forward);
+            var typed = new Run("X", firstText) { FontSize = 36 };
+            h.Editor.CaretPosition = typed.ContentEnd;
+            Assert.Equal(36, typed.FontSize);
+        }
+        h.Flush(); h.Editor.UpdateLayout();
+        Assert.Equal(style == TextMarkerStyle.None ? "☐ Xtail" : "Xtail", EditorLists.InlineText(h.Paragraphs()[1]));
+        paragraph = h.Paragraphs()[1];
+        var markerSize = style == TextMarkerStyle.None
+            ? new TextRange(paragraph.ContentStart, EditorLists.AdvanceCharacters(paragraph.ContentStart, 1)).GetPropertyValue(TextElement.FontSizeProperty)
+            : EditorLists.Ancestor<DocumentList>(paragraph)!.FontSize;
+        Assert.Equal(36.0, markerSize);
+        h.Editor.Undo(); h.Flush();
+        Assert.Equal(style == TextMarkerStyle.None ? "☐ tail" : "tail", EditorLists.InlineText(h.Paragraphs()[1]));
+        Assert.Single(h.RootLists());
+        h.Editor.Redo(); h.Flush();
+        Assert.Equal(style == TextMarkerStyle.None ? "☐ Xtail" : "Xtail", EditorLists.InlineText(h.Paragraphs()[1]));
+    });
+
+    [Fact]
+    public void Reopening_an_old_large_checklist_repairs_its_gutter_without_changing_content() => Sta(() =>
+    {
+        using var h = new Harness("☐ task");
+        h.Paragraphs()[0].FontSize = 108;
+        h.Lists.NormalizeLegacy();
+        h.RootLists().Single().Padding = new Thickness(24, 0, 0, 0);
+        using var package = new MemoryStream();
+        new TextRange(h.Editor.Document.ContentStart, h.Editor.Document.ContentEnd).Save(package, DataFormats.XamlPackage);
+        package.Position = 0;
+        using var reopened = new Harness();
+        reopened.Lists.LoadContent(package, DataFormats.XamlPackage); reopened.Flush(); reopened.Editor.UpdateLayout();
+        var paragraph = reopened.Paragraphs().Single();
+        Assert.Equal("☐ task", EditorLists.InlineText(paragraph));
+        Assert.True(paragraph.ContentStart.GetInsertionPosition(LogicalDirection.Forward).GetCharacterRect(LogicalDirection.Forward).Left >= 0);
+        Assert.True(reopened.RootLists().Single().Padding.Left >= -paragraph.TextIndent);
+    });
+
+    private static IEnumerable<GlyphRun> GlyphRuns(DependencyObject root)
+    {
+        static IEnumerable<GlyphRun> Drawings(Drawing drawing)
+        {
+            if (drawing is GlyphRunDrawing glyph) yield return glyph.GlyphRun;
+            else if (drawing is DrawingGroup group)
+                foreach (var child in group.Children)
+                foreach (var run in Drawings(child)) yield return run;
+        }
+        if (root is Visual visual && VisualTreeHelper.GetDrawing(visual) is { } drawing)
+            foreach (var run in Drawings(drawing)) yield return run;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            foreach (var run in GlyphRuns(VisualTreeHelper.GetChild(root, i))) yield return run;
+    }
+
+    [Theory]
+    [InlineData(TextMarkerStyle.Disc)]
+    [InlineData(TextMarkerStyle.Decimal)]
     [InlineData(TextMarkerStyle.None)]
     public void The_first_item_can_be_indented_without_a_previous_parent(TextMarkerStyle style) => Sta(() =>
     {
@@ -516,6 +838,21 @@ public class EditorListTests
             Editor.IsUndoEnabled = false; Editor.IsUndoEnabled = true; Lists.ResetHistory();
         }
         internal void Flush() => Editor.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        internal void UseEdgeSpacing()
+        {
+            var spacing = new EditorEdgeSpacing();
+            bool applying = false;
+            void Update(Action action)
+            {
+                if (applying) return;
+                applying = true;
+                try { action(); } finally { applying = false; }
+            }
+            Lists.BeforeChange = () => WpfNonUndoChange.Run(Editor, () => Update(spacing.Suspend));
+            Lists.AfterChange = () => WpfNonUndoChange.Run(Editor, () => Update(() => spacing.UpdateEditor(Editor)));
+            Editor.TextChanged += (_, _) => Update(() => spacing.UpdateEditor(Editor));
+            Update(() => spacing.UpdateEditor(Editor));
+        }
         internal Paragraph[] Paragraphs() => EditorLists.Paragraphs(Editor.Document.Blocks).ToArray();
         internal DocumentList[] RootLists() => Editor.Document.Blocks.OfType<DocumentList>().ToArray();
         internal void SelectAll() => Editor.SelectAll();
