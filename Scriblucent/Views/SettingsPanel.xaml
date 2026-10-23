@@ -20,6 +20,12 @@
             <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryForeground}" />
             <Setter Property="FontSize" Value="{StaticResource Type.Control.Inline}" />
         </Style>
+        <Style x:Key="SettingsDangerInlineButtonStyle" TargetType="Button" BasedOn="{StaticResource SettingsAccentInlineButtonStyle}">
+            <Setter Property="Background" Value="{DynamicResource AccentDanger}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentDangerForeground}" />
+            <Setter Property="controls:InteractionSurface.HoverBackground" Value="{DynamicResource AccentDangerHover}" />
+            <Setter Property="controls:InteractionSurface.PressedBackground" Value="{DynamicResource AccentDangerPressed}" />
+        </Style>
         <Style x:Key="AiToolsListBoxItemStyle" TargetType="{x:Type ListBoxItem}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -422,7 +428,7 @@
                                                                             </Grid.ColumnDefinitions>
                                                                             <RadioButton Grid.Column="0" Style="{StaticResource SortOptionRadioButtonStyle}" GroupName="SpellCheckLanguageGroup" Content="{Binding DisplayName}" IsChecked="{Binding IsEnabled}" IsEnabled="{Binding IsDownloaded}" Tag="{Binding Key}" Margin="2,4" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}" Checked="SpellCheckLanguageRadioButton_Checked" />
                                                                             <Button Grid.Column="1" Content="{Binding [SpellCheckLanguageDownload], Source={StaticResource Loc}}" Tag="{Binding Key}" Style="{StaticResource SettingsAccentInlineButtonStyle}" Margin="10,0,0,0" VerticalAlignment="Center" Click="DownloadSpellCheckLanguage_Click" Visibility="{Binding IsDownloaded, Converter={StaticResource InverseBoolToVis}}" />
-                                                                            <Button Grid.Column="1" Content="{Binding [Delete], Source={StaticResource Loc}}" Tag="{Binding Key}" Style="{StaticResource DialogDangerButtonStyle}" Padding="10,4" Margin="10,0,0,0" VerticalAlignment="Center" Click="DeleteSpellCheckLanguage_Click" Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVis}}" />
+                                                                            <Button Grid.Column="1" Content="{Binding [Delete], Source={StaticResource Loc}}" Tag="{Binding Key}" Style="{StaticResource SettingsDangerInlineButtonStyle}" Margin="10,0,0,0" VerticalAlignment="Center" Click="DeleteSpellCheckLanguage_Click" Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVis}}" />
                                                                         </Grid>
                                                                     </Border>
                                                                 </DataTemplate>
@@ -530,14 +536,7 @@
                                                 </StackPanel>
                                             </controls:SurfaceMaterialBorder>
                                         </StackPanel>
-                                        <Border Grid.Row="2" Background="Transparent" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,1,0,0" CornerRadius="0" Padding="0,20,0,0" Margin="0,20,0,0">
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding [ResetFactorySettings], Source={StaticResource Loc}}" Style="{StaticResource FormSectionTitleStyle}" />
-                                                <TextBlock Text="{Binding [ResetFactorySettingsDescription], Source={StaticResource Loc}}" Style="{StaticResource FormHelperTextStyle}" Margin="0,0,0,12" />
-                                                <Button Content="{Binding [ResetFactorySettings], Source={StaticResource Loc}}" Style="{StaticResource DialogDangerButtonStyle}" Padding="14,8" MinWidth="140" HorizontalAlignment="Left" Click="ResetFactorySettings_Click" />
-                                            </StackPanel>
-                                        </Border>
-                                        <Border Grid.Row="3" Margin="0,20,0,0" Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="0">
+                                        <Border Grid.Row="2" Margin="0,20,0,0" Background="Transparent" BorderThickness="0" CornerRadius="0" Padding="0">
                                             <StackPanel>
                                                 <TextBlock Text="{Binding [Diagnostics], Source={StaticResource Loc}}" Style="{StaticResource FormSectionTitleStyle}" />
                                                 <CheckBox x:Name="EnableDiagnosticLoggingCheckBox" Content="{Binding [EnableDiagnosticLogging], Source={StaticResource Loc}}" HorizontalAlignment="Stretch" Checked="EnableDiagnosticLoggingCheckBox_Changed" Unchecked="EnableDiagnosticLoggingCheckBox_Changed" Style="{StaticResource SettingsSwitchStyle}" />
@@ -548,6 +547,13 @@
                                                         <TextBlock Text="{Binding [EnableAiContentDiagnosticsDescription], Source={StaticResource Loc}}" Margin="0,5,0,0" Style="{StaticResource FormHelperTextStyle}" />
                                                     </StackPanel>
                                                 </motion:LayoutRevealHost>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Grid.Row="3" Background="Transparent" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,1,0,0" CornerRadius="0" Padding="0,20,0,0" Margin="0,20,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding [ResetFactorySettings], Source={StaticResource Loc}}" Style="{StaticResource FormSectionTitleStyle}" />
+                                                <TextBlock Text="{Binding [ResetFactorySettingsDescription], Source={StaticResource Loc}}" Style="{StaticResource FormHelperTextStyle}" Margin="0,0,0,12" />
+                                                <Button Content="{Binding [ResetFactorySettings], Source={StaticResource Loc}}" Style="{StaticResource DialogDangerButtonStyle}" Padding="14,8" MinWidth="140" HorizontalAlignment="Left" Click="ResetFactorySettings_Click" />
                                             </StackPanel>
                                         </Border>
                                     </Grid>

@@ -184,13 +184,13 @@
   <data name="EnableSpellCheck" xml:space="preserve"><value>Įjungti rašybos tikrinimą</value></data>
   <data name="SpellCheckDescription" xml:space="preserve"><value>Pabraukti klaidingai parašytus žodžius užrašų rengyklėje. Atsisiųskite kalbą žemiau ir pasirinkite ją tikrinimui - panašiai kaip Word ar LibreOffice rašybos tikrinimo kalba.</value></data>
   <data name="Diagnostics" xml:space="preserve"><value>Diagnostika</value></data>
-  <data name="EnableDiagnosticLogging" xml:space="preserve"><value>Įjungti diagnostikos žurnalus</value></data>
+  <data name="EnableDiagnosticLogging" xml:space="preserve"><value>Įjungti vietinius diagnostikos žurnalus</value></data>
   <data name="UseGpuAcceleration" xml:space="preserve"><value>Naudoti GPU spartinimą</value></data>
   <data name="UseGpuAccelerationDescription" xml:space="preserve"><value>Naudoja „Vulkan“ palaikomuose „Windows“ kompiuteriuose, kad DI generavimas būtų greitesnis ir sklandesnis. Jei negalima, automatiškai tęsia su CPU.</value></data>
   <data name="AiStatusFallingBackToCpu" xml:space="preserve"><value>GPU spartinimas nepasiekiamas. Tęsiama naudojant CPU...</value></data>
-  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Įrašo vietinį klaidų žurnalą ir DI klaidų metaduomenis. Duomenys lieka šiame įrenginyje ir niekur nesiunčiami.</value></data>
-  <data name="EnableAiContentDiagnostics" xml:space="preserve"><value>Įtraukti užrašų turinį į DI diagnostiką</value></data>
-  <data name="EnableAiContentDiagnosticsDescription" xml:space="preserve"><value>Įtraukia pradinius užrašus ir modelio išvestį į apdorojimo klaidų žurnalus. Pagal numatytuosius nustatymus išjungta, nes užrašuose gali būti privačios informacijos.</value></data>
+  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Įrašo strigčių informaciją ir DI klaidų metaduomenis. Žurnalai saugomi tik šiame įrenginyje ir niekur nesiunčiami.</value></data>
+  <data name="EnableAiContentDiagnostics" xml:space="preserve"><value>Įtraukti užrašų turinį į vietinę DI diagnostiką</value></data>
+  <data name="EnableAiContentDiagnosticsDescription" xml:space="preserve"><value>Įtraukia pradinius užrašus ir modelio išvestį į apdorojimo klaidų žurnalus, saugomus tik šiame įrenginyje ir niekur nesiunčiamus. Pagal numatytuosius nustatymus išjungta, nes užrašuose gali būti privačios informacijos.</value></data>
   <data name="SpellCheckLanguages" xml:space="preserve"><value>Kalbos</value></data>
   <data name="SpellCheckLanguagesDescription" xml:space="preserve"><value>Pasirinkite vieną kalbą, pagal kurią bus tikrinama. Kiekvienai pirmą kartą atsisiunčiamas žodynas.</value></data>
   <data name="SpellCheckLanguageDownload" xml:space="preserve"><value>Atsisiųsti</value></data>

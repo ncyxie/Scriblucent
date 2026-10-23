@@ -184,13 +184,13 @@
   <data name="EnableSpellCheck" xml:space="preserve"><value>Enable spell check</value></data>
   <data name="SpellCheckDescription" xml:space="preserve"><value>Underline misspelled words in the note editor. Download a language below and select it to check against, like Word or LibreOffice's proofing language.</value></data>
   <data name="Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
-  <data name="EnableDiagnosticLogging" xml:space="preserve"><value>Enable diagnostic logging</value></data>
+  <data name="EnableDiagnosticLogging" xml:space="preserve"><value>Enable local diagnostic logging</value></data>
   <data name="UseGpuAcceleration" xml:space="preserve"><value>Use GPU acceleration</value></data>
   <data name="UseGpuAccelerationDescription" xml:space="preserve"><value>Uses Vulkan on supported Windows PCs for faster, smoother AI generation. Automatically falls back to CPU when unavailable.</value></data>
   <data name="AiStatusFallingBackToCpu" xml:space="preserve"><value>GPU acceleration is unavailable. Continuing with CPU...</value></data>
-  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Writes local crash and AI failure metadata to help troubleshoot. Stays on this device and is never sent anywhere.</value></data>
-  <data name="EnableAiContentDiagnostics" xml:space="preserve"><value>Include note content in AI diagnostics</value></data>
-  <data name="EnableAiContentDiagnosticsDescription" xml:space="preserve"><value>Includes source notes and model output in parse-failure logs. Off by default because notes may contain private information.</value></data>
+  <data name="EnableDiagnosticLoggingDescription" xml:space="preserve"><value>Records crash details and AI failure metadata to help troubleshoot. Logs stay on this device and are never uploaded.</value></data>
+  <data name="EnableAiContentDiagnostics" xml:space="preserve"><value>Include note content in local AI diagnostics</value></data>
+  <data name="EnableAiContentDiagnosticsDescription" xml:space="preserve"><value>Includes source notes and model output in parse-failure logs stored only on this device, never uploaded. Off by default because notes may contain private information.</value></data>
   <data name="SpellCheckLanguages" xml:space="preserve"><value>Languages</value></data>
   <data name="SpellCheckLanguagesDescription" xml:space="preserve"><value>Choose one language to check against. Each one downloads its dictionary the first time.</value></data>
   <data name="SpellCheckLanguageDownload" xml:space="preserve"><value>Download</value></data>
