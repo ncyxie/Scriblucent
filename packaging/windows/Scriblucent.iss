@@ -151,19 +151,13 @@ end;
 
 function RunUserHelper(Operation: String): Boolean;
 var
-  Code, Index: Integer;
-  Bytes: AnsiString;
-  Hex: String;
+  Code: Integer;
 begin
   Result := ExecAsOriginalUser(BridgeDirectory + '\SetupHelper.exe', Operation + ' "' + UserState + '"', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Result := Result and (Code = 0) and (GetIniString('Setup', 'Result', '', UserState) = '0');
   if not Result then begin
     Log('Original-user setup operation failed: ' + Operation + ' (exit ' + IntToStr(Code) + ')');
     Log(GetIniString('Setup', 'Error', 'No user-helper diagnostic available', UserState));
-    if LoadStringFromFile(UserState, Bytes) then begin
-      for Index := 1 to Length(Bytes) do Hex := Hex + Format('%.2x', [Ord(Bytes[Index])]);
-      Log('User result bytes: ' + Hex);
-    end;
   end;
 end;
 

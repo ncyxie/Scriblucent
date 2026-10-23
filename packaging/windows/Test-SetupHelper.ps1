@@ -13,6 +13,7 @@ $manifest = Join-Path $root 'payload.sha256'
 & $HelperPath verify "$root/payload" $manifest
 if ($LASTEXITCODE -ne 0) { throw 'Unicode payload verification failed.' }
 [IO.File]::WriteAllText($file, 'Tampered fixture')
+Write-Host 'Checking expected rejection of corrupted, out-of-tree and empty payloads (nonzero exits are required):'
 & $HelperPath verify "$root/payload" $manifest
 if ($LASTEXITCODE -eq 0) { throw 'Payload verification accepted a modified file.' }
 [IO.File]::WriteAllText($manifest, $hash + '|..\outside.txt', [Text.UTF8Encoding]::new($false))

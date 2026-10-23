@@ -13,18 +13,24 @@ $installation = @(& $vswhere -products '*' -requires Microsoft.VisualStudio.Comp
 if (!$installation) { throw 'Install the Visual Studio C++ desktop tools to build the setup helper.' }
 $hostArchitecture = if ([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq 'Arm64') { 'arm64' } else { 'x64' }
 $developerCommand = Join-Path $installation 'Common7/Tools/VsDevCmd.bat'
-$source = Join-Path $PSScriptRoot 'SetupHelper.cpp'
-$response = '/nologo /std:c++17 /MT /O1 /W4 /EHsc /utf-8 /D_WIN32_WINNT=0x0A00 /Fo"{0}\SetupHelper.obj" /Fe"{0}\SetupHelper.exe" "{1}" /link /DYNAMICBASE /NXCOMPAT' -f $output,$source
-[IO.File]::WriteAllText((Join-Path $output 'helper.rsp'), $response, [Text.UTF8Encoding]::new($true))
+foreach ($name in 'SetupHelper','SetupHelperTests') {
+    $source = Join-Path $PSScriptRoot "$name.cpp"
+    $response = '/nologo /std:c++17 /MT /O1 /W4 /EHsc /utf-8 /D_WIN32_WINNT=0x0A00 /Fo"{0}\{2}.obj" /Fe"{0}\{2}.exe" "{1}" /link /DYNAMICBASE /NXCOMPAT' -f $output,$source,$name
+    [IO.File]::WriteAllText((Join-Path $output "$name.rsp"), $response, [Text.UTF8Encoding]::new($true))
+}
 $batch = @(
     '@echo off',
     'setlocal DisableDelayedExpansion',
     ('call "{0}" -no_logo -arch={1} -host_arch={2}' -f $developerCommand.Replace('%','%%'),$Architecture,$hostArchitecture),
     'if errorlevel 1 exit /b %errorlevel%',
-    'cl.exe @"%~dp0helper.rsp"',
+    'cl.exe @"%~dp0SetupHelper.rsp"',
+    'if errorlevel 1 exit /b %errorlevel%',
+    'cl.exe @"%~dp0SetupHelperTests.rsp"',
     'exit /b %errorlevel%'
 ) -join "`r`n"
 $buildScript = Join-Path $output 'compile-helper.cmd'
 [IO.File]::WriteAllText($buildScript, $batch, [Text.UTF8Encoding]::new($false))
 & cmd.exe /d /c $buildScript
 if ($LASTEXITCODE -ne 0) { throw 'Native setup helper compilation failed.' }
+& (Join-Path $output 'SetupHelperTests.exe') $output
+if ($LASTEXITCODE -ne 0) { throw 'Native registry/INI regression checks failed.' }

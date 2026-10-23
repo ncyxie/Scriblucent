@@ -85,7 +85,10 @@ static std::wstring ReadString(HKEY root, const std::wstring& key, const wchar_t
     if (RegGetValueW(root, key.c_str(), name, RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr, nullptr, &bytes) != ERROR_SUCCESS) return L"";
     std::wstring result(bytes / sizeof(wchar_t), L'\0');
     Require(RegGetValueW(root, key.c_str(), name, RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr, result.data(), &bytes) == ERROR_SUCCESS, "Cannot read installation registration");
-    if (!result.empty() && result.back() == 0) result.pop_back(); return result;
+    result.resize(bytes / sizeof(wchar_t));
+    auto terminator = result.find(L'\0');
+    if (terminator != std::wstring::npos) result.resize(terminator);
+    return result;
 }
 static void Ini(const fs::path& file, const std::wstring& name, const std::wstring& value) {
     Require(value.find_first_of(L"\r\n") == std::wstring::npos, "Invalid setup state value");
@@ -190,7 +193,7 @@ static std::wstring LinkTarget(const fs::path& path) {
 static void UserResult(const fs::path& state, const std::vector<std::pair<std::wstring,std::wstring>>& values, int result = 0) {
     std::wstring text = L"\xFEFF[Setup]\r\nResult=" + std::to_wstring(result) + L"\r\n";
     for (const auto& value : values) {
-        Require(value.second.find_first_of(L"\r\n") == std::wstring::npos, "Invalid user setup state");
+        Require(value.second.find(L'\0') == std::wstring::npos && value.second.find_first_of(L"\r\n") == std::wstring::npos, "Invalid user setup state");
         text += value.first + L"=" + value.second + L"\r\n";
     }
     HANDLE file = CreateFileW(state.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
