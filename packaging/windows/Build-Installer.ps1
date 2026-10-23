@@ -53,9 +53,9 @@ if ($env:GITHUB_ACTIONS -eq 'true') { & (Join-Path $PSScriptRoot 'Test-OriginalU
 if ($env:GITHUB_ACTIONS -eq 'true') {
     $probeKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2768A225-1F0D-43A6-9AF9-C6A8F8CAAA72}_is1'
     if (Test-Path $probeKey) { throw 'The runner already has a per-user installation.' }
-    foreach ($scenario in 'fresh','legacy') {
+    foreach ($scenario in 'fresh','legacy','override') {
         try {
-            if ($scenario -eq 'legacy') {
+            if ($scenario -ne 'fresh') {
                 New-Item -Path $probeKey -Force | Out-Null
                 New-ItemProperty $probeKey -Name InstallLocation -Value "$env:LOCALAPPDATA\Programs\Scriblucent Žinių biblioteka" | Out-Null
                 New-ItemProperty $probeKey -Name DisplayVersion -Value '1.0.0-beta.2' | Out-Null
@@ -63,13 +63,15 @@ if ($env:GITHUB_ACTIONS -eq 'true') {
             }
             $contextResult = Join-Path $buildRoot "recovery-tests/context-$scenario.txt"
             $contextLog = Join-Path $buildRoot "recovery-tests/context-$scenario.log"
-            $contextTest = Start-Process -FilePath (Join-Path $buildRoot 'recovery-tests/RecoveryTestSetup.exe') -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LANG=lithuanian /ContextTestResult=`"$contextResult`" /LOG=`"$contextLog`"" -WindowStyle Hidden -PassThru
+            $contextOptions = if ($scenario -eq 'override') { '/TASKS=""' } else { '' }
+            $expectedTasks = if ($scenario -eq 'legacy') { 'selected' } else { 'none' }
+            $contextTest = Start-Process -FilePath (Join-Path $buildRoot 'recovery-tests/RecoveryTestSetup.exe') -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LANG=lithuanian /ContextTestTasks=$expectedTasks /ContextTestResult=`"$contextResult`" /LOG=`"$contextLog`" $contextOptions" -WindowStyle Hidden -PassThru
             if (!$contextTest.WaitForExit(150000)) { Stop-Process -Id $contextTest.Id -Force; throw 'Installer user-context verification timed out.' }
-            if (!(Test-Path $contextResult) -or [IO.File]::ReadAllText($contextResult) -cne 'passed') {
+            if ($contextTest.ExitCode -eq 0 -or !(Test-Path $contextResult) -or [IO.File]::ReadAllText($contextResult) -cne 'passed') {
                 Get-Content $contextLog
                 throw "Installer original-user handoff failed ($scenario)."
             }
-        } finally { if ($scenario -eq 'legacy') { Remove-Item -LiteralPath $probeKey -Recurse -Force } }
+        } finally { if ($scenario -ne 'fresh') { Remove-Item -LiteralPath $probeKey -Recurse -Force } }
     }
 }
 

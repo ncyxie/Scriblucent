@@ -101,6 +101,8 @@ var
   BackupStarted, InstallationCommitted, ConversionIncomplete, InstallationFailed: Boolean;
   FailureMessage: String;
   FinishNote: TNewStaticText;
+  LegacyTasks: String;
+  ApplyLegacyTasks: Boolean;
 #ifdef RecoveryTests
   RecoveryFaultTriggered: Boolean;
 #endif
@@ -190,7 +192,7 @@ end;
 
 procedure InitializeWizard;
 var
-  Version, Tasks, BridgeName: String;
+  Version, BridgeName: String;
   Note: TNewStaticText;
   BridgeId: TGUID;
 begin
@@ -214,17 +216,13 @@ begin
   if not RunHelper('prepare-bridge "' + BridgeDirectory + '"') then RaiseException(CustomMessage('PreparationFailed'));
   UserState := BridgeDirectory + '\user.ini';
   if not RunUserHelper('probe-user') then RaiseException(CustomMessage('OriginalUserRequired'));
-#ifdef RecoveryTests
-  if ExpandConstant('{param:ContextTestResult|}') <> '' then begin
-    SaveStringToFile(ExpandConstant('{param:ContextTestResult}'), 'passed', False);
-    RaiseException('User-context verification completed before installation');
-  end;
-#endif
   LegacyPath := GetIniString('Setup', 'LegacyPath', '', UserState);
   CheckVersion(GetIniString('Setup', 'LegacyVersion', '', UserState));
-  if (LegacyPath <> '') and not RegKeyExists(HKLM64, UninstallKey) and (ExpandConstant('{param:TASKS|unspecified}') = 'unspecified') then begin
-    Tasks := GetIniString('Setup', 'Tasks', '', UserState);
-    WizardSelectTasks(Tasks);
+  if (LegacyPath <> '') and not RegKeyExists(HKLM64, UninstallKey) and
+    (ExpandConstant('{param:TASKS|unspecified}') = 'unspecified') and
+    (ExpandConstant('{param:MERGETASKS|unspecified}') = 'unspecified') then begin
+    LegacyTasks := GetIniString('Setup', 'Tasks', '', UserState);
+    ApplyLegacyTasks := True;
   end;
   Note := TNewStaticText.Create(WizardForm);
   Note.Parent := WizardForm.SelectTasksPage;
@@ -248,6 +246,15 @@ begin
   FinishNote.Caption := CustomMessage('RetainedData');
 end;
 
+procedure CurPageChanged(Page: Integer);
+begin
+  if (Page = wpSelectTasks) and ApplyLegacyTasks then begin
+    { Inno creates task checkboxes after InitializeWizard. Apply once so later user edits survive Back/Next. }
+    WizardSelectTasks(LegacyTasks);
+    ApplyLegacyTasks := False;
+  end;
+end;
+
 procedure ShowFinishFailure(Message: String);
 begin
   { Inno fills its own finished label after the page event. Keep our outcome in a separate control. }
@@ -269,8 +276,24 @@ begin
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+#ifdef RecoveryTests
+var ExpectedTasks: Boolean;
+#endif
 begin
   Result := '';
+#ifdef RecoveryTests
+  if ExpandConstant('{param:ContextTestResult|}') <> '' then begin
+    ExpectedTasks := ExpandConstant('{param:ContextTestTasks|none}') = 'selected';
+    if (WizardIsTaskSelected('desktopicon') <> ExpectedTasks) or
+      (WizardIsTaskSelected('fileassociations') <> ExpectedTasks) then
+      Result := 'User-context verification found incorrect task selections'
+    else begin
+      SaveStringToFile(ExpandConstant('{param:ContextTestResult}'), 'passed', False);
+      Result := 'User-context verification completed before installation';
+    end;
+    exit;
+  end;
+#endif
   if ScriblucentRunning(ExpandConstant('{app}')) or ScriblucentRunning(LegacyPath) then begin
     Result := CustomMessage('CloseApplication'); exit;
   end;
