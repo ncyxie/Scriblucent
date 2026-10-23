@@ -16,9 +16,15 @@ Learn offline at your own pace. Take notes, build flashcards, map ideas, and tes
 
 Windows 10 &amp; 11 · x64 &amp; ARM64 · Free and open source
 
-<a href="Screenshots/scriblucent-in-motion.gif"><img src="Screenshots/scriblucent-in-motion.gif" width="960" alt="Scriblucent in action: the sidebar glides, cards respond to the cursor, and the plus button reveals quick actions."></a>
+<a href="Screenshots/study-workflow.webp">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="Screenshots/study-workflow-preview.png">
+    <source media="(max-width: 600px)" srcset="Screenshots/study-workflow-mobile.webp">
+    <img src="Screenshots/study-workflow.webp" width="960" alt="A short Scriblucent workflow: write and save a note, add a flashcard in the linked study tab, then flip and grade it in study mode.">
+  </picture>
+</a>
 
-<sub>A workspace that feels alive. Cursor-responsive cards, a gliding sidebar, and quick actions.</sub>
+<sub>Write an idea. Build your cards. Put recall into practice. One connected workspace.</sub>
 
 </div>
 
