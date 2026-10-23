@@ -52,14 +52,24 @@ function Render-Png([int]$Width, [int]$Height, [scriptblock]$Draw) {
 $markBounds = [Windows.Rect]::new(44, 49.89, 171.25, 190.51)
 $textBounds = [Windows.Rect]::new(226.1, 139.77, 477.38, 70)
 
-# Each ICO frame is rendered independently. No opaque tile, legacy mask, or scaled-up small frame.
+# Render each badge at its native size, retaining transparency outside the rounded outline.
 $frames = @()
 foreach ($size in @(16, 20, 24, 32, 40, 48, 64, 96, 128, 256)) {
     $bytes = Render-Png $size $size {
         param($dc)
-        $height = $size * 0.9
+        $inset = $size * 0.025
+        $face = [Windows.Media.LinearGradientBrush]::new()
+        $face.StartPoint = [Windows.Point]::new(0, 0)
+        $face.EndPoint = [Windows.Point]::new(0.8, 1)
+        $face.GradientStops.Add([Windows.Media.GradientStop]::new([Windows.Media.ColorConverter]::ConvertFromString('#343B56'), 0))
+        $face.GradientStops.Add([Windows.Media.GradientStop]::new([Windows.Media.ColorConverter]::ConvertFromString('#252B41'), 1))
+        $edge = [Windows.Media.Pen]::new((Brush '#80687598'), ($size / 128.0))
+        $dc.DrawRoundedRectangle($face, $edge,
+            [Windows.Rect]::new($inset, $inset, ($size - 2 * $inset), ($size - 2 * $inset)),
+            ($size * 0.22), ($size * 0.22))
+        $height = $size * 0.78
         $width = $height * $markBounds.Width / $markBounds.Height
-        Draw-Logo $dc $mark $markBounds (($size - $width) / 2) (($size - $height) / 2) $width '#435CEC' '#435CEC'
+        Draw-Logo $dc $mark $markBounds (($size - $width) / 2) (($size - $height) / 2) $width '#FFFFFF' '#435CEC'
     }
     $frames += @{ Size = $size; Bytes = $bytes }
 }
