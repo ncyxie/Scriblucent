@@ -92,14 +92,15 @@
                         Padding="12"
                         Margin="64,0,0,18"
                         Visibility="{Binding ReleaseNotesVisibility}">
-                    <ScrollViewer MaxHeight="96" VerticalScrollBarVisibility="Auto">
-                        <TextBlock Text="{Binding ReleaseNotesText}"
-                                   FontSize="{StaticResource Type.Body}"
-                                   Foreground="{DynamicResource TextColor}"
-                                   Opacity="0.82"
-                                   TextWrapping="Wrap"
-                                   LineHeight="20"/>
-                    </ScrollViewer>
+                    <FlowDocumentScrollViewer Document="{Binding ReleaseNotesDocument}"
+                                              MaxHeight="220"
+                                              IsToolBarVisible="False"
+                                              IsSelectionEnabled="True"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              Padding="0"/>
                 </Border>
             </StackPanel>
         </controls:OverlayDialogShell.Body>

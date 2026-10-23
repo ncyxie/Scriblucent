@@ -38,6 +38,9 @@
     <None Include="..\Scriblucent\Views\NoteEditorTabsWindow.xaml"
           Link="TestData\Production\NoteEditorTabsWindow.xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\CHANGELOG.md"
+          Link="TestData\Production\CHANGELOG.md"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The app's worker project is a deployment-only reference, so its managed entry assembly

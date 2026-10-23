@@ -10,6 +10,7 @@ Scriblucent uses the following third-party software. Complete component copyrigh
 | LLamaSharp and LLamaSharp backends | MIT | https://github.com/SciSharp/LLamaSharp/blob/master/LICENSE |
 | llama.cpp | MIT | https://github.com/ggml-org/llama.cpp/blob/master/LICENSE |
 | MahApps.Metro.IconPacks | MIT | https://github.com/MahApps/MahApps.Metro.IconPacks/blob/develop/LICENSE |
+| Markdig | BSD 2-Clause | https://github.com/xoofx/markdig/blob/1.4.0/license.txt |
 | Lucide and Feather icon artwork | ISC and MIT | https://github.com/lucide-icons/lucide/blob/main/LICENSE |
 | Microsoft.Bcl and Microsoft.Extensions support assemblies | MIT | https://github.com/dotnet/runtime |
 | .NET runtime and Windows Desktop runtime | MIT and third-party notices | `Licenses` directory in the installed application |

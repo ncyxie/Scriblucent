@@ -45,6 +45,7 @@
 
   <ItemGroup>
     <PackageReference Include="MahApps.Metro.IconPacks.Lucide" Version="6.2.1" />
+    <PackageReference Include="Markdig" Version="1.4.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="SharpVectors.Wpf" Version="1.8.5" />
     <PackageReference Include="SkiaSharp" Version="4.151.1" />

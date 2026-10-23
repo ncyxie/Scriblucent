@@ -5,6 +5,7 @@ using Scriblucent.Services;
 using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Documents;
 
 using Scriblucent.Controls;
 
@@ -12,8 +13,6 @@ namespace Scriblucent.Views
 {
     public partial class UpdateCheckDialog : Window
     {
-        private const int MaxReleaseNotesLength = 700;
-
         private readonly string? _releasesUrl;
         private readonly OverlayDialogAnimator _overlayAnimator;
 
@@ -23,7 +22,7 @@ namespace Scriblucent.Views
         public string CurrentVersionText { get; }
         public string LatestVersionText { get; }
         public string PublishedText { get; }
-        public string ReleaseNotesText { get; }
+        public FlowDocument ReleaseNotesDocument { get; }
         public string CloseText { get; }
         public string OpenReleasesText { get; }
         public Visibility PublishedVisibility { get; }
@@ -46,8 +45,8 @@ namespace Scriblucent.Views
                 ? string.Empty
                 : string.Format(LocalizationService.GetString("UpdatePublishedFormat"), latest.PublishedAt.Value.ToLocalTime().ToString("g", CultureInfo.CurrentCulture));
             PublishedVisibility = string.IsNullOrWhiteSpace(PublishedText) ? Visibility.Collapsed : Visibility.Visible;
-            ReleaseNotesText = TrimReleaseNotes(latest?.Body);
-            ReleaseNotesVisibility = string.IsNullOrWhiteSpace(ReleaseNotesText) ? Visibility.Collapsed : Visibility.Visible;
+            ReleaseNotesDocument = ReleaseNotesDocumentBuilder.Build(latest?.Body);
+            ReleaseNotesVisibility = ReleaseNotesDocument.Blocks.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             CloseText = LocalizationService.GetString("Close");
             OpenReleasesText = result.IsUpdateAvailable
                 ? LocalizationService.GetString("OpenRelease")
@@ -70,7 +69,7 @@ namespace Scriblucent.Views
             CurrentVersionText = string.Format(LocalizationService.GetString("UpdateCurrentVersionFormat"), AppVersionInfo.DisplayVersion);
             LatestVersionText = LocalizationService.GetString("UpdateLatestVersionUnavailable");
             PublishedText = string.Empty;
-            ReleaseNotesText = string.Empty;
+            ReleaseNotesDocument = ReleaseNotesDocumentBuilder.Build(null);
             CloseText = LocalizationService.GetString("Close");
             OpenReleasesText = LocalizationService.GetString("OpenReleases");
             PublishedVisibility = Visibility.Collapsed;
@@ -107,18 +106,6 @@ namespace Scriblucent.Views
             }
 
             return LocalizationService.GetString("LatestVersion");
-        }
-
-        private static string TrimReleaseNotes(string? releaseNotes)
-        {
-            if (string.IsNullOrWhiteSpace(releaseNotes))
-                return string.Empty;
-
-            var normalized = releaseNotes.Trim();
-            if (normalized.Length <= MaxReleaseNotesLength)
-                return normalized;
-
-            return normalized[..MaxReleaseNotesLength].TrimEnd() + "...";
         }
 
         private void ApplyOwnerBounds()

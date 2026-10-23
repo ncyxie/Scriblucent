@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using Scriblucent.Animations;
 using Scriblucent.Controls;
@@ -37,12 +38,39 @@ internal static partial class Program
                         {
                             Name = "A new release", TagName = state == "available" ? "2.0.0" : "1.0.0",
                             HtmlUrl = "https://example.invalid/releases",
-                            Body = state == "available" ? "Small refinements for daily writing and planning." : null
+                            Body = state == "available" ? """
+                                ## More comfortable daily work
+
+                                **Smoother writing**, *clearer planning*, and small refinements throughout Scriblucent.
+
+                                - **Notes:** improved editing and list layout.
+                                - **Flashcards:** more comfortable study sessions.
+                                - Read the [release details](https://example.invalid/releases).
+
+                                | Area | Improvements |
+                                | --- | --- |
+                                | Dashboard | Refined feedback and navigation |
+                                | Editors | Consistent controls and typography |
+
+                                ### Complete release notes
+
+                                All entries remain available by scrolling, including this final section.
+                                """ : null
                         }
                     });
                 dialog.Owner = owner;
                 dialog.Show(); Pump(800);
                 var shell = (OverlayDialogShell)dialog.Content;
+                if (state == "available")
+                {
+                    var reader = ControlTree(shell).OfType<FlowDocumentScrollViewer>().Single();
+                    var text = new TextRange(reader.Document.ContentStart, reader.Document.ContentEnd).Text;
+                    Require(text.Contains("including this final section."), "Release notes were truncated.");
+                    Require(!text.Contains("**"), "Markdown leaked into the formatted release notes.");
+                    Require(reader.Document.TextAlignment == TextAlignment.Left, "Release prose uses stretched word spacing.");
+                    foreach (var anchor in ReleaseDocumentElements<Hyperlink>(reader.Document))
+                        Require(Equals(anchor.Foreground, reader.TryFindResource("AccentPrimarySubtleForeground")), "Release links do not use the theme's readable accent color.");
+                }
                 var face = ControlTree(shell).OfType<Border>().Single(element => element.Name == "DialogCard");
                 var shadow = ControlTree(shell).OfType<BakedElevationLayer>().Single(layer => layer.Kind == BakedElevationLayer.ElevationKind.Dialog);
                 var faceBounds = face.TransformToAncestor(shell).TransformBounds(new Rect(face.RenderSize));
@@ -59,11 +87,30 @@ internal static partial class Program
                         Require(Math.Abs(bounds.Bottom - shadow.ActualHeight) <= tolerance, "The lower shadow slices detached from the dialog.");
                 }
                 SaveControlCapture(shell, $"update-{state}-{theme}");
+                if (state == "available")
+                {
+                    var reader = ControlTree(shell).OfType<FlowDocumentScrollViewer>().Single();
+                    var scroller = ControlTree(reader).OfType<ScrollViewer>().Single();
+                    scroller.ScrollToEnd(); Pump(100);
+                    Require(scroller.VerticalOffset > 0, "Long release notes cannot be scrolled.");
+                    var end = reader.Document.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
+                    Require(end.Bottom > 0 && end.Bottom <= reader.ActualHeight + 1, "The final release-note line cannot be brought into view.");
+                    SaveControlCapture(shell, $"update-notes-bottom-{theme}");
+                }
                 dialog.Close(); Pump(40);
             }
             owner.Close(); Pump(40);
         }
         File.WriteAllLines(Path.Combine(_output, "update-dialog-checks.txt"), report);
         foreach (var line in report) Console.WriteLine(line);
+    }
+
+    private static IEnumerable<T> ReleaseDocumentElements<T>(DependencyObject root) where T : DependencyObject
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            if (child is T element) yield return element;
+            foreach (var descendant in ReleaseDocumentElements<T>(child)) yield return descendant;
+        }
     }
 }
