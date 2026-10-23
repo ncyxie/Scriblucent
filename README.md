@@ -51,12 +51,12 @@ Start with an idea. Keep your notes and study materials together, then move betw
       <td width="50%" valign="top">
         <a href="Screenshots/editor-note.png"><img src="Screenshots/editor-note.png" width="100%" alt="Rich-text note editor with connected tabs for notes and study materials"></a>
         <h3>Notes</h3>
-        <p>Rich text, images, templates, and linked notes. Includes autosave and version history.</p>
+        <p>Rich text, images, checklists, tables, and sketches. Link notes, reuse templates, and keep your work with autosave and version history.</p>
       </td>
       <td width="50%" valign="top">
         <a href="Screenshots/editor-flashcards.png"><img src="Screenshots/editor-flashcards.png" width="100%" alt="Flashcard editor showing a grid of cards for recall practice"></a>
         <h3>Flashcards</h3>
-        <p>Text, images, and audio for active recall. Study with spaced repetition and track progress.</p>
+        <p>Text, images, and audio for active recall. Study with SM-2 or FSRS-6 spaced repetition, switch to Cram mode, and track your progress.</p>
       </td>
     </tr>
   </tbody>
@@ -80,8 +80,9 @@ Start with an idea. Keep your notes and study materials together, then move betw
 
 - **Find your flow.** Organize materials with groups and tags, search your collection, drag items into your own order, and handle selections in bulk.
 - **Make room for practice.** Schedule reminders right from your materials and see what is coming up in the dashboard calendar.
+- **Review across topics.** Combine flashcard sets or quizzes to bring several topics into one study set or test.
 - **Make it yours.** Switch between light and dark themes, choose English or Lithuanian, and adjust motion to your preference.
-- **Take your materials with you.** Import and export notes and study materials for sharing, backups, or moving to another computer. Export selected dashboard items together in a ZIP archive.
+- **Take your materials with you.** Import RTF and text notes, CSV or Anki plain-text flashcards, and GIFT or CSV quizzes. Export notes to PDF, or bundle selected dashboard items in a ZIP archive.
 
 ## Your materials, on your computer
 
