@@ -372,7 +372,7 @@ public sealed class DashboardLoadingOverlay : FrameworkElement
         var calendarTitle = DashboardChromeMetrics.Text(this, LocalizationService.GetString("CalendarSection"), Metric("Type.SectionTitle", 15), FontWeights.SemiBold).Width;
         var sectionExtra = CalendarSectionHeaderPanel.NeedsWrap(usable - 28, sectionStripWidth + 8 + calendarTitle,
             actionWidths.Today + 8 + actionWidths.Add) ? CalendarSectionHeaderPanel.WrapExtraHeight : 0;
-        var calendarHeight = (_layout.ExpandCalendar ? (stacked ? DashboardCalendarPanel.StackedHeight : DashboardCalendarPanel.WideHeight) + agendaExtra + 48 : 24)
+        var calendarHeight = (_layout.ExpandCalendar ? DashboardCalendarPanel.BodyHeight(plannerWidth, agendaExtra) + 48 : 24)
             + CalendarSectionHeaderPanel.RowHeight + 8 + sectionExtra;
 
         void Calendar(double y)
@@ -389,31 +389,34 @@ public sealed class DashboardLoadingOverlay : FrameworkElement
             }
             if (!_layout.ExpandCalendar) return;
             var innerY = y + 56 + sectionExtra;
-            var bodyHeight = (stacked ? DashboardCalendarPanel.StackedHeight : DashboardCalendarPanel.WideHeight) + agendaExtra;
+            var bodyHeight = DashboardCalendarPanel.BodyHeight(plannerWidth, agendaExtra);
             Add(insets, left + 12, innerY, usable - 24, bodyHeight + 24, cardRadius);
             var bodyX = left + 24; var bodyY = innerY + 12;
-            var calendarWidth = 256d; var calendarControlHeight = Metric("Dashboard.CalendarHeight", 288);
-            var calendarX = bodyX + ((stacked ? plannerWidth : DashboardCalendarPanel.Rail) - calendarWidth) / 2;
+            var calendarSlotWidth = stacked ? plannerWidth : DashboardCalendarPanel.Rail;
+            var calendarScale = Math.Min(1, calendarSlotWidth / DashboardCalendarPanel.MonthWidth);
+            var calendarWidth = DashboardCalendarPanel.MonthWidth * calendarScale;
+            var calendarControlHeight = Metric("Dashboard.CalendarHeight", 288) * calendarScale;
+            var calendarX = bodyX + (calendarSlotWidth - calendarWidth) / 2;
             var calendarMargin = Style("CalendarItemStyle", MarginProperty, new Thickness(0, 3, 0, 3));
-            var calendarY = bodyY + (stacked ? 0 : (bodyHeight - calendarControlHeight) / 2) + calendarMargin.Top;
-            var previous = Track("Calendar.Previous", calendarX, calendarY, 36, 36);
-            var next = Track("Calendar.Next", calendarX + calendarWidth - 36, calendarY, 36, 36);
+            var calendarY = bodyY + ((stacked ? DashboardCalendarPanel.MonthSlotHeight(plannerWidth) : bodyHeight) - calendarControlHeight) / 2 + calendarMargin.Top * calendarScale;
+            var previous = Track("Calendar.Previous", calendarX, calendarY, 36 * calendarScale, 36 * calendarScale);
+            var next = Track("Calendar.Next", calendarX + calendarWidth - 36 * calendarScale, calendarY, 36 * calendarScale, 36 * calendarScale);
             foreach (var button in new[] { previous, next }) Add(controls, button.X, button.Y, button.Width, button.Height, controlRadius);
-            Glyph(AppIconKind.ChevronLeft, previous, 16); Glyph(AppIconKind.ChevronRight, next, 16);
-            Add(titles, calendarX + 57, calendarY + 13, 142, 10, 5);
-            var gridY = calendarY + 44;
+            Glyph(AppIconKind.ChevronLeft, previous, 16 * calendarScale); Glyph(AppIconKind.ChevronRight, next, 16 * calendarScale);
+            Add(titles, calendarX + 57 * calendarScale, calendarY + 13 * calendarScale, 142 * calendarScale, 10 * calendarScale, 5 * calendarScale);
+            var gridY = calendarY + 44 * calendarScale;
             for (var c = 0; c < 7; c++)
             {
                 var cx = calendarX + calendarWidth * (c + .5) / 7;
-                Add(details, cx - 5, gridY + 9, 10, 5, 2.5);
+                Add(details, cx - 5 * calendarScale, gridY + 9 * calendarScale, 10 * calendarScale, 5 * calendarScale, 2.5 * calendarScale);
                 for (var r = 0; r < 6; r++)
                 {
-                    var markWidth = (c + r) % 3 == 0 ? 8 : 11;
-                    Add(details, cx - markWidth / 2d, gridY + 24 + r * 36 + 14, markWidth, 8);
+                    var markWidth = ((c + r) % 3 == 0 ? 8 : 11) * calendarScale;
+                    Add(details, cx - markWidth / 2d, gridY + (24 + r * 36 + 14) * calendarScale, markWidth, 8 * calendarScale);
                 }
             }
             var agendaX = stacked ? bodyX : bodyX + DashboardCalendarPanel.Rail + DashboardCalendarPanel.Gap;
-            var agendaY = stacked ? bodyY + DashboardCalendarPanel.AgendaTop : bodyY;
+            var agendaY = stacked ? bodyY + DashboardCalendarPanel.MonthSlotHeight(plannerWidth) + DashboardCalendarPanel.Gap : bodyY;
             var modes = Track("Calendar.Modes", agendaX, agendaY, Math.Min(CalendarPlannerHeaderPanel.ModeWidth, agendaWidth), 32);
             Add(controls, modes.X, modes.Y, modes.Width, modes.Height, controlRadius);
             for (var i = 0; i < 3; i++) Add(titles, modes.X + i * modes.Width / 3 + 17, modes.Y + 13, Math.Max(0, modes.Width / 3 - 34), 6, 3);

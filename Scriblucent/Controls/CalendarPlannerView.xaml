@@ -17,11 +17,13 @@
  <StackPanel behaviors:CommandLightBehavior.IsScope="True">
   <controls:SurfaceMaterialBorder Style="{StaticResource ContentInsetBorderStyle}" Padding="12" behaviors:RoundedClipBehavior.IsEnabled="True">
    <controls:DashboardCalendarPanel x:Name="Body">
+    <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center">
     <Calendar x:Name="PlannerCalendar" Style="{StaticResource EmbeddedCalendarControlStyle}" Width="256" Height="{StaticResource Dashboard.CalendarHeight}"
      HorizontalAlignment="Center" VerticalAlignment="Center" SelectionMode="SingleDate"
      FirstDayOfWeek="{Binding FirstDayOfWeek}"
      SelectedDate="{Binding SelectedDate, Mode=TwoWay}" DisplayDate="{Binding DisplayedDate, Mode=TwoWay}"
      behaviors:CalendarScheduleMarkBehavior.DateCounts="{Binding DateCounts}" SelectedDatesChanged="Date_Selected"/>
+    </Viewbox>
     <Grid>
      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
      <controls:CalendarPlannerHeaderPanel x:Name="PlannerHeader">

@@ -12,6 +12,8 @@ public sealed class CalendarPlannerHeaderPanel : Panel
 {
     internal const double ModeWidth = 244, WrapExtraHeight = 40;
     private double _filterWidth;
+    private double _measuredHeight;
+    internal event Action? RequiredHeightChanged;
     private static readonly Dictionary<(string Culture, string Family, double Size, Thickness Padding, Thickness Border, double Dpi, FlowDirection Flow), double> FilterWidths = [];
     internal static bool NeedsWrap(double width, double filterWidth) => width < ModeWidth + 12 + filterWidth;
     internal static bool NeedsWrap(double width, FrameworkElement host)
@@ -37,13 +39,23 @@ public sealed class CalendarPlannerHeaderPanel : Panel
         var width = double.IsInfinity(available.Width) ? 400 : Math.Max(0, available.Width);
         if (InternalChildren.Count > 1)
         {
-            InternalChildren[1].Measure(new Size(double.PositiveInfinity, 32));
+            // Measure against the whole available row once. If its natural width fits
+            // beside the modes it also fits the smaller arranged slot; otherwise it
+            // uses this full-width second row. Alternating infinity and the final
+            // slot invalidates the ComboBox's measure cache on every sidebar frame.
+            InternalChildren[1].Measure(new Size(width, 32));
             _filterWidth = InternalChildren[1].DesiredSize.Width;
         }
-        for (var i = 0; i < InternalChildren.Count; i++)
-            InternalChildren[i].Measure(new Size(i == 0 ? Math.Min(ModeWidth, width) : NeedsWrap(width, _filterWidth) ? width : width - ModeWidth - 12, 32));
-        return new(width, NeedsWrap(width, _filterWidth) ? 72 : 32);
+        if (InternalChildren.Count > 0) InternalChildren[0].Measure(new Size(Math.Min(ModeWidth, width), 32));
+        var height = RequiredHeight(width);
+        if (height != _measuredHeight)
+        {
+            _measuredHeight = height;
+            RequiredHeightChanged?.Invoke();
+        }
+        return new(width, height);
     }
+    internal double RequiredHeight(double width) => NeedsWrap(width, _filterWidth) ? 72 : 32;
     protected override Size ArrangeOverride(Size available)
     {
         for (var i = 0; i < InternalChildren.Count; i++)

@@ -52,7 +52,8 @@ internal static partial class Program
                 var exitCode = 0;
                 try
                 {
-                    if (args.Contains("--spell-check-words")) ProbeSpellCheckWords();
+                    if (args.Contains("--calendar-resize")) ProbeCalendarResize();
+                    else if (args.Contains("--spell-check-words")) ProbeSpellCheckWords();
                     else if (args.Contains("--spell-check")) ProbeSpellCheck();
                     else if (args.Contains("--painting")) ProbePaintingWorkspace();
                     else if (args.Contains("--rename-scroll")) ProbeRenameScrolling(args.Contains("--baseline"));
