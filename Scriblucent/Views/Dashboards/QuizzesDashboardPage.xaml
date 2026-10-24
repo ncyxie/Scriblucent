@@ -768,7 +768,8 @@
                                             Grid.Row="2"
                                             IconKind="Quizzes"
                                             Visibility="{Binding ShowQuizzesEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            Prompt="{Binding QuizzesEmptyDashboardPrompt}"
+                                            Prompt="{Binding [QuizzesEmptyDashboardTitle], Source={StaticResource Loc}}"
+                                            Description="{Binding QuizzesEmptyDashboardPrompt}"
                                             ButtonContent="{Binding [NewQuizAction], Source={StaticResource Loc}}"
                                             Click="CreateQuizButton_Click"/>
                             </Grid>

@@ -31,15 +31,15 @@ public sealed class StudyResultEmblem : Grid
     {
         Width = Height = 144; IsHitTestVisible = false; RenderTransformOrigin = new Point(.5, .5);
         var track = new Ellipse { Margin = new Thickness(8), StrokeThickness = 4 };
-        track.SetResourceReference(Shape.StrokeProperty, "AccentPrimarySubtle");
-        _arc.SetResourceReference(Shape.StrokeProperty, "AccentPrimary");
-        _check.SetResourceReference(Shape.StrokeProperty, "AccentPrimary");
+        track.SetResourceReference(Shape.StrokeProperty, "IllustrationLayer");
+        _arc.SetResourceReference(Shape.StrokeProperty, "IllustrationInk");
+        _check.SetResourceReference(Shape.StrokeProperty, "IllustrationInk");
         _number.SetResourceReference(TextBlock.ForegroundProperty, "TextColor");
         Children.Add(track); Children.Add(_arc); Children.Add(_number); Children.Add(_check);
         var halo = new Ellipse(); halo.SetResourceReference(Shape.FillProperty, "ShowcaseHalo");
-        var plate = new Ellipse { Margin = new Thickness(18) }; plate.SetResourceReference(Shape.FillProperty, "CardBackground");
+        var plate = new Ellipse { Margin = new Thickness(18) }; plate.SetResourceReference(Shape.FillProperty, "IllustrationPaper");
         var rim = new Ellipse { Margin = new Thickness(18), StrokeThickness = 1 };
-        rim.SetResourceReference(Shape.StrokeProperty, "FloatingSurfaceEdge");
+        rim.SetResourceReference(Shape.StrokeProperty, "IllustrationPaperEdge");
         foreach (var layer in new[] { halo, plate, rim }) { Panel.SetZIndex(layer, -1); Children.Add(layer); }
         void Refresh() { foreach (var layer in new[] { halo, plate, rim }) layer.Visibility = MotionPolicy.Spatial ? Visibility.Visible : Visibility.Hidden; }
         Loaded += (_, _) => { UpdateGraphic(); MotionPolicy.Changed += Refresh; Refresh(); };

@@ -812,7 +812,8 @@
                                             Grid.Row="2"
                                             IconKind="Flashcards"
                                             Visibility="{Binding ShowFlashcardsEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            Prompt="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
+                                            Prompt="{Binding [FlashcardsEmptyDashboardTitle], Source={StaticResource Loc}}"
+                                            Description="{Binding [FlashcardsEmptyDashboardPrompt], Source={StaticResource Loc}}"
                                             ButtonContent="{Binding [NewFlashcardsAction], Source={StaticResource Loc}}"
                                             Click="CreateFlashcardsButton_Click"/>
                             </Grid>

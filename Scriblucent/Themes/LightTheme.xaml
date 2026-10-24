@@ -42,6 +42,14 @@
         <GradientStop Color="#00465BFF" Offset="1"/>
     </RadialGradientBrush>
     <SolidColorBrush x:Key="FloatingSurfaceEdge" Color="#65FFFFFF"/>
+    <!-- Shared artwork roles; kept separate from interactive control colors. -->
+    <SolidColorBrush x:Key="IllustrationPaper" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="IllustrationPaperEdge" Color="#CAD1E8"/>
+    <SolidColorBrush x:Key="IllustrationLayer" Color="#EEF0FE"/>
+    <SolidColorBrush x:Key="IllustrationLayerEdge" Color="#D9DFF6"/>
+    <SolidColorBrush x:Key="IllustrationInk" Color="#435CEC"/>
+    <SolidColorBrush x:Key="IllustrationHeadline" Color="#30323A"/>
+    <SolidColorBrush x:Key="IllustrationDetail" Color="#B8C4EE"/>
     <Color x:Key="Surface.Content.Color">#FFFFFFFF</Color>
     <SolidColorBrush x:Key="CardBackground" Color="{StaticResource Surface.Content.Color}"/>
     <SolidColorBrush x:Key="InputSurface" Color="#FFFFFF"/>

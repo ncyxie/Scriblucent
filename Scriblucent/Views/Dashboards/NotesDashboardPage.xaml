@@ -527,7 +527,8 @@
                                             Grid.Row="2"
                                             IconKind="Notes"
                                             Visibility="{Binding ShowNotesEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            Prompt="{Binding [NotesEmptyDashboardPrompt], Source={StaticResource Loc}}"
+                                            Prompt="{Binding [NotesEmptyDashboardTitle], Source={StaticResource Loc}}"
+                                            Description="{Binding [NotesEmptyDashboardPrompt], Source={StaticResource Loc}}"
                                             ButtonContent="{Binding [NewNoteAction], Source={StaticResource Loc}}"
                                             Click="CreateNoteButton_Click"/>
                             </Grid>

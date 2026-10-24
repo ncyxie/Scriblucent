@@ -34,8 +34,8 @@ internal sealed class EmptyDashboardIllustration : Grid
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var shadow = new CardShadowLayer { Opacity = front ? .8 : .35 }; group.Children.Add(shadow);
         var plane = new Border { CornerRadius = new CornerRadius(front ? 14 : 12), BorderThickness = new Thickness(1) };
-        plane.SetResourceReference(Border.BackgroundProperty, front ? "CardBackground" : "AccentPrimarySubtle");
-        plane.SetResourceReference(Border.BorderBrushProperty, front ? "FloatingSurfaceEdge" : "AccentPrimarySubtle");
+        plane.SetResourceReference(Border.BackgroundProperty, front ? "IllustrationPaper" : "IllustrationLayer");
+        plane.SetResourceReference(Border.BorderBrushProperty, front ? "IllustrationPaperEdge" : "IllustrationLayerEdge");
         group.Children.Add(plane);
         var rotate = new RotateTransform(angle); var move = new TranslateTransform(x, y);
         group.RenderTransform = new TransformGroup { Children = { rotate, move } };
@@ -47,14 +47,14 @@ internal sealed class EmptyDashboardIllustration : Grid
     {
         var line = new Border { Width = width, Height = height, CornerRadius = new CornerRadius(height / 2),
             HorizontalAlignment = HorizontalAlignment.Left };
-        line.SetResourceReference(Border.BackgroundProperty, "AccentPrimarySubtle"); return line;
+        line.SetResourceReference(Border.BackgroundProperty, "IllustrationDetail"); return line;
     }
     private Path Stroke(string geometry, double length, double thickness = 2.5)
     {
         var path = new Path { Data = Geometry.Parse(geometry), StrokeThickness = thickness,
             StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
             StrokeDashArray = new DoubleCollection { length, length } };
-        path.SetResourceReference(Shape.StrokeProperty, "AccentPrimary"); _strokes.Add((path, length)); return path;
+        path.SetResourceReference(Shape.StrokeProperty, "IllustrationInk"); _strokes.Add((path, length)); return path;
     }
     private void BuildPages(AppIconKind kind)
     {
@@ -67,14 +67,14 @@ internal sealed class EmptyDashboardIllustration : Grid
         {
             var header = new Border { Width = 24, Height = 4, CornerRadius = new CornerRadius(2),
                 VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left };
-            header.SetResourceReference(Border.BackgroundProperty, "AccentPrimary"); content.Children.Add(header);
+            header.SetResourceReference(Border.BackgroundProperty, "IllustrationInk"); content.Children.Add(header);
             for (var row = 0; row < 3; row++)
             {
                 var top = 18 + row * 17;
                 var box = new Border { Width = 10, Height = 10, BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left,
                     VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, top, 0, 0) };
-                box.SetResourceReference(Border.BorderBrushProperty, "AccentPrimary"); content.Children.Add(box);
+                box.SetResourceReference(Border.BorderBrushProperty, "IllustrationInk"); content.Children.Add(box);
                 var line = Line(row == 2 ? 20 : 29); line.VerticalAlignment = VerticalAlignment.Top;
                 line.Margin = new Thickness(17, top + 4, 0, 0); content.Children.Add(line);
             }
@@ -85,7 +85,7 @@ internal sealed class EmptyDashboardIllustration : Grid
             var icon = new AppIcon { Kind = kind, Width = flash ? 34 : 26, Height = flash ? 34 : 26,
                 HorizontalAlignment = flash ? HorizontalAlignment.Center : HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, flash ? 7 : 0, 0, 0) };
-            icon.SetResourceReference(Control.ForegroundProperty, "AccentPrimary"); content.Children.Add(icon);
+            icon.SetResourceReference(Control.ForegroundProperty, "IllustrationInk"); content.Children.Add(icon);
             var rows = new StackPanel { VerticalAlignment = VerticalAlignment.Bottom };
             foreach (var width in flash ? new[] { 38d, 27d } : new[] { 44d, 44d, 29d })
             { var line = Line(width); line.Margin = new Thickness(0, 0, 0, 6); rows.Children.Add(line); }
@@ -102,7 +102,7 @@ internal sealed class EmptyDashboardIllustration : Grid
         Plane(36, 24, 4, 34, 36, false);
         var center = Plane(54, 38, 0, 0, 0, true);
         var icon = new AppIcon { Kind = AppIconKind.MindMaps, Width = 27, Height = 27 };
-        icon.SetResourceReference(Control.ForegroundProperty, "AccentPrimary"); center.Child = icon;
+        icon.SetResourceReference(Control.ForegroundProperty, "IllustrationInk"); center.Child = icon;
     }
     private void RefreshPolicy()
     {

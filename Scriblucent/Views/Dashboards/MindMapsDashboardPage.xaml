@@ -895,7 +895,8 @@
                                             Grid.Row="2"
                                             IconKind="MindMaps"
                                             Visibility="{Binding ShowMindMapsEmptyDashboard, Converter={StaticResource BoolToVis}}"
-                                            Prompt="{Binding MindMapsEmptyDashboardPrompt}"
+                                            Prompt="{Binding [MindMapsEmptyDashboardTitle], Source={StaticResource Loc}}"
+                                            Description="{Binding MindMapsEmptyDashboardPrompt}"
                                             ButtonContent="{Binding [NewMindMapAction], Source={StaticResource Loc}}"
                                             Click="CreateMindMapButton_Click"/>
                             </Grid>

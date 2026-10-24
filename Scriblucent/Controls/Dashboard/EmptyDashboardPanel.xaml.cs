@@ -27,6 +27,10 @@ public partial class EmptyDashboardPanel : UserControl
             typeof(ICommand),
             typeof(EmptyDashboardPanel));
 
+    public static readonly DependencyProperty DescriptionProperty =
+        DependencyProperty.Register(
+            nameof(Description), typeof(string), typeof(EmptyDashboardPanel), new PropertyMetadata(string.Empty));
+
     public static readonly DependencyProperty IconKindProperty =
         DependencyProperty.Register(
             nameof(IconKind),
@@ -44,7 +48,8 @@ public partial class EmptyDashboardPanel : UserControl
     public EmptyDashboardPanel()
     {
         InitializeComponent();
-        PromptText.SetBinding(TextBlock.TextProperty, new Binding(nameof(Prompt)) { Source = this });
+        PromptText.SetBinding(IllustratedStateHeading.TextProperty, new Binding(nameof(Prompt)) { Source = this });
+        DescriptionText.SetBinding(TextBlock.TextProperty, new Binding(nameof(Description)) { Source = this });
         PrimaryButton.SetBinding(ContentControl.ContentProperty, new Binding(nameof(ButtonContent)) { Source = this });
         PrimaryButton.SetBinding(Button.CommandProperty, new Binding(nameof(Command)) { Source = this });
         ApplyIconKind();
@@ -66,6 +71,12 @@ public partial class EmptyDashboardPanel : UserControl
     {
         get => (ICommand?)GetValue(CommandProperty);
         set => SetValue(CommandProperty, value);
+    }
+
+    public string Description
+    {
+        get => (string)GetValue(DescriptionProperty);
+        set => SetValue(DescriptionProperty, value);
     }
 
     public AppIconKind IconKind

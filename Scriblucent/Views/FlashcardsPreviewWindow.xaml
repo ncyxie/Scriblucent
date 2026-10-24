@@ -988,16 +988,10 @@
                                 Visibility="Collapsed"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center">
-                        <controls:EmptyStateIllustration IconKind="Flashcards" Margin="0,0,0,16" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{Binding [FlashcardGridEmptyBeginCreating], Source={StaticResource Loc}}"
-                                   FontFamily="{StaticResource FontFamily.UI}"
-                                   FontSize="{StaticResource Type.EmptyState}"
-                                   Foreground="{DynamicResource TextColor}"
-                                   HorizontalAlignment="Center"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"
-                                   MaxWidth="520"
-                                   Margin="0,0,0,16"/>
+                        <controls:EmptyStateIllustration IconKind="Flashcards" Margin="0,0,0,20" HorizontalAlignment="Center"/>
+                        <controls:IllustratedStateHeading Text="{Binding [FlashcardGridEmptyBeginCreating], Source={StaticResource Loc}}"
+                                   Style="{StaticResource IllustratedStateTitleStyle}"
+                                   Margin="0,0,0,20"/>
                         <Button Style="{StaticResource DialogPrimaryButtonStyle}"
                                 MinWidth="180"
                                 Padding="18,10"

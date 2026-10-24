@@ -2,24 +2,20 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:icons="clr-namespace:Scriblucent.Icons"
+             xmlns:controls="clr-namespace:Scriblucent.Controls"
              HorizontalAlignment="Center"
              Margin="0,32,0,0">
     <StackPanel x:Name="MotionRoot" HorizontalAlignment="Center">
         <Grid x:Name="GlyphChip" Width="144" Height="120" HorizontalAlignment="Center"
               IsHitTestVisible="False" Margin="0,0,0,20"/>
-        <TextBlock x:Name="PromptText"
-                   FontFamily="{StaticResource FontFamily.UI}"
-                   FontSize="{StaticResource Type.EmptyState}"
-                   Foreground="{DynamicResource TextColor}"
-                   HorizontalAlignment="Center"
-                   TextAlignment="Center"
-                   TextWrapping="Wrap"
-                   MaxWidth="520"
-                   Margin="0,0,0,16"/>
+        <controls:IllustratedStateHeading x:Name="PromptText"
+                   Style="{StaticResource IllustratedStateTitleStyle}"/>
+        <TextBlock x:Name="DescriptionText" Style="{StaticResource IllustratedStateDescriptionStyle}"/>
         <Button x:Name="PrimaryButton"
                 Style="{StaticResource EmptyDashboardPrimaryButtonStyle}"
                 MinWidth="180"
                 Padding="18,10"
+                Margin="0,20,0,0"
                 HorizontalAlignment="Center"
                 Click="PrimaryButton_Click"/>
     </StackPanel>

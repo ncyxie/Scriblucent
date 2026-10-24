@@ -750,10 +750,12 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardsPreviewTitle" xml:space="preserve"><value>Flashcard Editor</value></data>
   <data name="FlashcardsEditorTitle" xml:space="preserve"><value>Flashcard Editor</value></data>
   <data name="NotesDashboard" xml:space="preserve"><value>Notes</value></data>
-  <data name="NotesEmptyDashboardPrompt" xml:space="preserve"><value>Start by creating a note</value></data>
+  <data name="NotesEmptyDashboardTitle" xml:space="preserve"><value>Your next idea starts here</value></data>
+  <data name="NotesEmptyDashboardPrompt" xml:space="preserve"><value>Keep ideas, details and discoveries together.</value></data>
   <data name="FlashcardsDashboard" xml:space="preserve"><value>Flashcards</value></data>
   <data name="FlashcardGroupsDashboardTitle" xml:space="preserve"><value>Flashcards</value></data>
-  <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Start by creating flashcards</value></data>
+  <data name="FlashcardsEmptyDashboardTitle" xml:space="preserve"><value>Make it memorable</value></data>
+  <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Build a set and learn one card at a time.</value></data>
   <data name="CreateFlashcards" xml:space="preserve"><value>Create flashcards</value></data>
   <data name="FlashcardSetCountFormat" xml:space="preserve"><value>{0} sets</value></data>
   <data name="FlashcardCardsCountFormat" xml:space="preserve"><value>{0} cards</value></data>
@@ -829,6 +831,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="QuizImportFailedFormat" xml:space="preserve"><value>Failed to import questions: {0}</value></data>
   <data name="QuizzesDashboard" xml:space="preserve"><value>Quizzes</value></data>
   <data name="QuizzesDashboardTitle" xml:space="preserve"><value>Quizzes</value></data>
+  <data name="QuizzesEmptyDashboardTitle" xml:space="preserve"><value>Put your knowledge to the test</value></data>
   <data name="QuizzesEmptyDashboardPrompt" xml:space="preserve"><value>Create a quiz or convert a note into a quiz to see it here.</value></data>
   <data name="QuizzesEmptyDashboardPromptNoAi" xml:space="preserve"><value>Create a quiz to see it here.</value></data>
   <data name="CreateQuiz" xml:space="preserve"><value>Create quiz</value></data>
@@ -953,6 +956,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="MindMapPreviewTitle" xml:space="preserve"><value>Mind map</value></data>
   <data name="MindMapsDashboard" xml:space="preserve"><value>Mind maps</value></data>
   <data name="MindMapsDashboardTitle" xml:space="preserve"><value>Mind maps</value></data>
+  <data name="MindMapsEmptyDashboardTitle" xml:space="preserve"><value>Give your ideas a shape</value></data>
   <data name="MindMapsEmptyDashboardPrompt" xml:space="preserve"><value>Convert a note into a mind map to see it here.</value></data>
   <data name="MindMapsEmptyDashboardPromptNoAi" xml:space="preserve"><value>Create a mind map to see it here.</value></data>
   <data name="CreateMindMap" xml:space="preserve"><value>Create mind map</value></data>

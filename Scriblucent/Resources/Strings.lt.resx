@@ -720,10 +720,12 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardsPreviewTitle" xml:space="preserve"><value>Kortelių redaktorius</value></data>
   <data name="FlashcardsEditorTitle" xml:space="preserve"><value>Kortelių redaktorius</value></data>
   <data name="NotesDashboard" xml:space="preserve"><value>Užrašai</value></data>
-  <data name="NotesEmptyDashboardPrompt" xml:space="preserve"><value>Pradėkite sukurdami užrašą</value></data>
+  <data name="NotesEmptyDashboardTitle" xml:space="preserve"><value>Čia prasideda jūsų idėjos</value></data>
+  <data name="NotesEmptyDashboardPrompt" xml:space="preserve"><value>Idėjos, detalės ir atradimai vienoje vietoje.</value></data>
   <data name="FlashcardsDashboard" xml:space="preserve"><value>Kortelės</value></data>
   <data name="FlashcardGroupsDashboardTitle" xml:space="preserve"><value>Mokymosi kortelės</value></data>
-  <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Pradėkite sukurdami mokymosi korteles</value></data>
+  <data name="FlashcardsEmptyDashboardTitle" xml:space="preserve"><value>Įsiminkite daugiau</value></data>
+  <data name="FlashcardsEmptyDashboardPrompt" xml:space="preserve"><value>Sukurkite rinkinį ir mokykitės po vieną kortelę.</value></data>
   <data name="CreateFlashcards" xml:space="preserve"><value>Sukurti flashcards</value></data>
   <data name="FlashcardSetCountFormat" xml:space="preserve"><value>{0} rinkiniai(-ių)</value></data>
   <data name="FlashcardCardsCountFormat" xml:space="preserve"><value>{0} kortelės(-ių)</value></data>
@@ -799,6 +801,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="QuizImportFailedFormat" xml:space="preserve"><value>Nepavyko importuoti klausimų: {0}</value></data>
   <data name="QuizzesDashboard" xml:space="preserve"><value>Viktorinos</value></data>
   <data name="QuizzesDashboardTitle" xml:space="preserve"><value>Viktorinos</value></data>
+  <data name="QuizzesEmptyDashboardTitle" xml:space="preserve"><value>Išbandykite savo žinias</value></data>
   <data name="QuizzesEmptyDashboardPrompt" xml:space="preserve"><value>Sukurkite viktoriną arba paverskite užrašą į viktoriną ir ji atsiras čia.</value></data>
   <data name="QuizzesEmptyDashboardPromptNoAi" xml:space="preserve"><value>Sukurkite viktoriną ir ji atsiras čia.</value></data>
   <data name="CreateQuiz" xml:space="preserve"><value>Sukurti viktoriną</value></data>
@@ -924,6 +927,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MindMapsDashboard" xml:space="preserve"><value>Minčių žemėlapiai</value></data>
   <data name="MindMapsDashboardTitle" xml:space="preserve"><value>Minčių žemėlapiai</value></data>
   <data name="CreateMindMap" xml:space="preserve"><value>Sukurti minčių žemėlapį</value></data>
+  <data name="MindMapsEmptyDashboardTitle" xml:space="preserve"><value>Suteikite idėjoms formą</value></data>
   <data name="MindMapsEmptyDashboardPrompt" xml:space="preserve"><value>Paverskite užrašą į minčių žemėlapį ir jis atsiras čia.</value></data>
   <data name="MindMapsEmptyDashboardPromptNoAi" xml:space="preserve"><value>Sukurkite minčių žemėlapį ir jis atsiras čia.</value></data>
   <data name="MindMapUntitled" xml:space="preserve"><value>Minčių žemėlapis be pavadinimo</value></data>

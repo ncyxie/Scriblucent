@@ -129,7 +129,7 @@
                             </DataTemplate></ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <StackPanel VerticalAlignment="Center" Visibility="{Binding Workspace.IsSourceListEmpty, Converter={StaticResource VisibleWhen}}">
-                            <controls:ContextualStatePanel IllustrationKind="Search" Title="{Binding Workspace.EmptyTitle}" Description="{Binding Workspace.EmptyDescription}"/>
+                            <controls:ContextualStatePanel IsCompact="True" IllustrationKind="Search" Title="{Binding Workspace.EmptyTitle}" Description="{Binding Workspace.EmptyDescription}"/>
                             <Button Content="{Binding [CombineBackToAll], Source={StaticResource Loc}}" Command="{Binding Workspace.ShowAllCommand}" HorizontalAlignment="Center" Style="{StaticResource FeatureToolbarSecondaryButtonStyle}" Visibility="{Binding Workspace.ShowSelectedOnly, Converter={StaticResource VisibleWhen}}"/>
                             <Button Content="{Binding [PremiumClearFilter], Source={StaticResource Loc}}" Command="{Binding Workspace.ClearFiltersCommand}" HorizontalAlignment="Center" Style="{StaticResource FeatureToolbarSecondaryButtonStyle}" Visibility="{Binding Workspace.CanClearFilters, Converter={StaticResource VisibleWhen}}"/>
                         </StackPanel>
@@ -149,7 +149,7 @@
                         </Grid>
                         <Grid MinHeight="156" Margin="0,0,0,12">
                             <Grid.Style><Style TargetType="Grid"><Style.Triggers><DataTrigger Binding="{Binding (behaviors:CombineLayoutBehavior.IsCompact), ElementName=LayoutRoot}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger><DataTrigger Binding="{Binding Workspace.HasSources}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Grid.Style>
-                            <controls:ContextualStatePanel IllustrationKind="{Binding Workspace.SelectionIllustration}" Title="{Binding Workspace.SelectionTitle}" Description="{Binding Workspace.SelectionDescription}">
+                            <controls:ContextualStatePanel IsCompact="True" IllustrationKind="{Binding Workspace.SelectionIllustration}" Title="{Binding Workspace.SelectionTitle}" Description="{Binding Workspace.SelectionDescription}">
                                 <controls:ContextualStatePanel.Style><Style TargetType="controls:ContextualStatePanel"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding Workspace.HasSelection}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></controls:ContextualStatePanel.Style>
                             </controls:ContextualStatePanel>
                             <Border x:Name="ResultSummary" Style="{StaticResource ContentInsetBorderStyle}" VerticalAlignment="Top" Visibility="{Binding Workspace.HasSelection, Converter={StaticResource VisibleWhen}}">

@@ -31,6 +31,7 @@
 
     <!-- Typography -->
     <FontFamily x:Key="FontFamily.UI">Segoe UI Variable Text, Segoe UI, sans-serif</FontFamily>
+    <FontFamily x:Key="FontFamily.Display">Segoe UI Variable Display, Segoe UI, sans-serif</FontFamily>
     <FontFamily x:Key="FontFamily.Editor">Calibri, Segoe UI, sans-serif</FontFamily>
     <SolidColorBrush x:Key="Brand.Lucent" Color="#435CEC"/>
     <sys:Double x:Key="Type.Display">28</sys:Double>
@@ -42,6 +43,8 @@
     <sys:Double x:Key="Type.CardTitle.Large">16</sys:Double>
     <sys:Double x:Key="Type.Meta">13</sys:Double>
     <sys:Double x:Key="Type.EmptyState">17</sys:Double>
+    <sys:Double x:Key="Type.StateHeadline">24</sys:Double>
+    <sys:Double x:Key="Type.StateHeadline.Compact">20</sys:Double>
     <sys:Double x:Key="Type.Chip">11</sys:Double>
     <sys:Double x:Key="Type.Caption">12</sys:Double>
     <sys:Double x:Key="Type.BlockTitle">16</sys:Double>

@@ -13,6 +13,39 @@
     <sys:Double x:Key="CheckGlyphPathLength">14</sys:Double>
     <DoubleCollection x:Key="CheckGlyphDashArray">14</DoubleCollection>
 
+    <!-- Display typography belongs to illustrated states; controls retain the UI text face. -->
+    <Style x:Key="IllustratedStateTitleStyle" TargetType="controls:IllustratedStateHeading">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.Display}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.StateHeadline}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Foreground" Value="{DynamicResource IllustrationHeadline}"/>
+        <Setter Property="LineHeight" Value="30"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="MaxWidth" Value="320"/>
+    </Style>
+    <Style x:Key="IllustratedStateCompactTitleStyle" TargetType="controls:IllustratedStateHeading" BasedOn="{StaticResource IllustratedStateTitleStyle}">
+        <Setter Property="FontSize" Value="{StaticResource Type.StateHeadline.Compact}"/>
+        <Setter Property="LineHeight" Value="26"/>
+        <Setter Property="MaxWidth" Value="280"/>
+    </Style>
+    <Style x:Key="IllustratedStateDescriptionStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
+        <Setter Property="FontSize" Value="{StaticResource Type.Body}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColorSecondary}"/>
+        <Setter Property="LineHeight" Value="21"/>
+        <Setter Property="LineStackingStrategy" Value="MaxHeight"/>
+        <Setter Property="TextAlignment" Value="Center"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="MaxWidth" Value="300"/>
+        <Setter Property="Margin" Value="0,10,0,0"/>
+        <Style.Triggers>
+            <Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+            <Trigger Property="Text" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- Forms/settings dense overlay chrome (intentional step below dashboard SectionTitle/Body).
          Hierarchy: section Body → label Meta SemiBold → helper Caption. Fields stay Type.Body. -->
     <Style x:Key="FormOptionLabelStyle" TargetType="{x:Type TextBlock}">
