@@ -52,7 +52,8 @@ internal static partial class Program
                 var exitCode = 0;
                 try
                 {
-                    if (args.Contains("--calendar-resize")) ProbeCalendarResize();
+                    if (args.Contains("--quiz-review")) ProbeQuizReview();
+                    else if (args.Contains("--calendar-resize")) ProbeCalendarResize();
                     else if (args.Contains("--spell-check-words")) ProbeSpellCheckWords();
                     else if (args.Contains("--spell-check")) ProbeSpellCheck();
                     else if (args.Contains("--painting")) ProbePaintingWorkspace();

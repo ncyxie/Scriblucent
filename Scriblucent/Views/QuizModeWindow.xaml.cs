@@ -400,11 +400,7 @@ public partial class QuizModeWindow : Window
             item.IsFlagged = isFlagged;
             item.IsEnabled = canJump || isCurrent;
 
-            if (examMode && !isCurrent)
-            {
-                item.NavToolTip = LocalizationService.GetString("QuizExamNavLockedTooltip");
-            }
-            else if (isFlagged && isAnswered)
+            if (isFlagged && isAnswered)
             {
                 item.NavToolTip = string.Format(
                     CultureInfo.CurrentCulture,
@@ -432,6 +428,10 @@ public partial class QuizModeWindow : Window
                     LocalizationService.GetString("QuizJumpToQuestionTooltipFormat"),
                     index + 1);
             }
+            if (isCurrent)
+                item.NavToolTip += " · " + LocalizationService.GetString("QuizCurrentQuestion");
+            if (examMode && !isCurrent)
+                item.NavToolTip += " · " + LocalizationService.GetString("QuizExamNavLockedTooltip");
         }
     }
 
@@ -440,31 +440,29 @@ public partial class QuizModeWindow : Window
         var isFlagged = _flaggedQuestions.Contains(_currentQuestionIndex);
         if (FindName("FlagQuestionLabel") is TextBlock label)
         {
-            label.Text = LocalizationService.GetString(isFlagged ? "QuizUnflagQuestion" : "QuizFlagQuestion");
+            label.Text = LocalizationService.GetString(isFlagged ? "QuizFlaggedForReview" : "QuizFlagQuestion");
         }
 
         if (FindName("FlagQuestionIcon") is AppIcon icon)
         {
-            icon.Foreground = isFlagged
-                ? (Brush)FindResource("AccentDanger")
-                : (Brush)FindResource("TextColor");
+            icon.SetResourceReference(ForegroundProperty, isFlagged ? "AccentPrimarySubtleForeground" : "TextColor");
         }
 
         if (FindName("FlagQuestionButton") is Button flagButton)
         {
             Scriblucent.Controls.SurfaceMaterial.SetKind(flagButton, isFlagged ? Scriblucent.Controls.SurfaceMaterialKind.Tinted : Scriblucent.Controls.SurfaceMaterialKind.Neutral);
-            flagButton.SetResourceReference(BackgroundProperty, isFlagged ? "AccentDangerSubtle" : "IconButtonBackground");
+            flagButton.SetResourceReference(BackgroundProperty, isFlagged ? "AccentPrimarySubtle" : "IconButtonBackground");
             flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.HoverBackgroundProperty,
-                isFlagged ? "AccentDangerSubtleHover" : "IconButtonHoverBackground");
+                "IconButtonHoverBackground");
             flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.PressedBackgroundProperty,
-                isFlagged ? "AccentDangerSubtleHover" : "IconButtonPressedBackground");
+                "IconButtonPressedBackground");
             flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.HighlightWashProperty,
-                isFlagged ? "DangerControlHoverWash" : "ControlHoverSurfaceWash");
+                "ControlHoverSurfaceWash");
             flagButton.SetResourceReference(Scriblucent.Controls.InteractionSurface.HighlightEdgeProperty,
-                isFlagged ? "AccentDanger" : "ControlHoverSurfaceEdge");
-            flagButton.Foreground = isFlagged
-                ? (Brush)FindResource("AccentDangerSubtleForeground")
-                : (Brush)FindResource("TextColor");
+                "ControlHoverSurfaceEdge");
+            flagButton.SetResourceReference(ForegroundProperty, isFlagged ? "AccentPrimarySubtleForeground" : "TextColor");
+            flagButton.ToolTip = LocalizationService.GetString(isFlagged ? "QuizUnflagQuestion" : "QuizFlagQuestionTooltip");
+            System.Windows.Automation.AutomationProperties.SetName(flagButton, LocalizationService.GetString(isFlagged ? "QuizUnflagQuestion" : "QuizFlagQuestion"));
         }
     }
 

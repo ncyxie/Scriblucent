@@ -1462,4 +1462,6 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="QuizRetryWrong" xml:space="preserve"><value>Retry incorrect</value></data>
   <data name="AiCancelling" xml:space="preserve"><value>Cancelling…</value></data>
   <data name="Calendar" xml:space="preserve"><value>Calendar</value></data>
+  <data name="QuizFlaggedForReview" xml:space="preserve"><value>Flagged for review</value></data>
+  <data name="QuizCurrentQuestion" xml:space="preserve"><value>Current question</value></data>
 </root>

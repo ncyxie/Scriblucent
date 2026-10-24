@@ -1461,4 +1461,6 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="QuizRetryWrong" xml:space="preserve"><value>Kartoti klaidingus</value></data>
   <data name="AiCancelling" xml:space="preserve"><value>Atšaukiama…</value></data>
   <data name="Calendar" xml:space="preserve"><value>Kalendorius</value></data>
+  <data name="QuizFlaggedForReview" xml:space="preserve"><value>Pažymėta peržiūrai</value></data>
+  <data name="QuizCurrentQuestion" xml:space="preserve"><value>Atvertas klausimas</value></data>
 </root>

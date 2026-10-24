@@ -107,7 +107,7 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
-    <!-- Compact Moodle-style question jump chips (take mode navigator). -->
+    <!-- Question jump chips; review status and current position use independent paint. -->
     <Style x:Key="QuizNavQuestionButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="behaviors:ButtonPressMotionBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ButtonPressMotionBehavior.MotionHostName" Value="NavChipBorder"/>
@@ -129,14 +129,14 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}" HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}" HoverBackground="{DynamicResource IconButtonHoverBackground}" PressedBackground="{DynamicResource IconButtonPressedBackground}" x:Name="NavChipBorder"
+                    <controls:InteractionSurface controls:SurfaceMaterial.Kind="{TemplateBinding controls:SurfaceMaterial.Kind}" controls:SurfaceMaterial.Foreground="{TemplateBinding Foreground}" Role="Compact" HighlightWash="{TemplateBinding controls:InteractionSurface.HighlightWash}" HighlightEdge="{TemplateBinding controls:InteractionSurface.HighlightEdge}" HoverBackground="{TemplateBinding controls:InteractionSurface.HoverBackground}" PressedBackground="{TemplateBinding controls:InteractionSurface.PressedBackground}" x:Name="NavChipBorder"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{StaticResource Radius.Control}"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"/>
+                        <ContentPresenter HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch"/>
                     </controls:InteractionSurface>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsEnabled" Value="False">

@@ -142,7 +142,7 @@ internal static partial class Program
             Require(SurfaceMaterial.GetKind(flag) == SurfaceMaterialKind.Neutral && ReferenceEquals(flag.Background, taking.FindResource("IconButtonBackground")),
                 "Flag-for-review retained a flat idle face.");
             flag.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(240);
-            Require(SurfaceMaterial.GetKind(flag) == SurfaceMaterialKind.Tinted && ReferenceEquals(InteractionSurface.GetHoverBackground(flag), taking.FindResource("AccentDangerSubtleHover")),
+            Require(SurfaceMaterial.GetKind(flag) == SurfaceMaterialKind.Tinted && ReferenceEquals(flag.Background, taking.FindResource("AccentPrimarySubtle")),
                 "Flagged review action lost its semantic hover.");
             SaveControlCapture((FrameworkElement)taking.Content, "quiz-flagged-" + theme);
             flag.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(240);

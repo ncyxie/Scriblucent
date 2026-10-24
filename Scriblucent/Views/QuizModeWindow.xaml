@@ -30,6 +30,9 @@
                     <Setter Property="BorderThickness" Value="1"/>
                     <Setter Property="Foreground" Value="{DynamicResource AccentSuccessSubtleForeground}"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding IsFlagged}" Value="True">
+                    <Setter Property="FontWeight" Value="Bold"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding IsCurrent}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
                     <Setter Property="controls:SurfaceMaterial.Kind" Value="Tinted"/>
@@ -88,7 +91,7 @@
                               Background="Transparent"
                               Padding="20">
                 <StackPanel>
-                <!-- Type hint + flag for review (Moodle-style) -->
+                <!-- Type hint + review state -->
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -370,7 +373,7 @@
                 </Grid>
             </Border>
 
-            <!-- Moodle-style question number navigator -->
+            <!-- Question navigator: inset review marker and current-position rim remain independent. -->
             <Border Grid.Column="1"
                     x:Name="QuestionNavPanel"
                     Width="148"
@@ -424,18 +427,15 @@
                                             Tag="{Binding Index}"
                                             IsEnabled="{Binding IsEnabled}"
                                             ToolTip="{Binding NavToolTip}"
+                                            AutomationProperties.Name="{Binding NavToolTip}"
                                             Click="QuestionNavButton_Click">
-                                        <Grid Width="32" Height="32">
-                                            <TextBlock Text="{Binding Number}"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                            <Polygon Points="0,0 10,0 10,10"
-                                                     Fill="{DynamicResource AccentDanger}"
-                                                     HorizontalAlignment="Right"
-                                                     VerticalAlignment="Top"
-                                                     Margin="0,-1,-1,0"
-                                                     IsHitTestVisible="False"
-                                                     Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVis}}"/>
+                                        <Grid Margin="2,3" UseLayoutRounding="False" SnapsToDevicePixels="False">
+                                            <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock x:Name="QuestionNumber" Text="{Binding Number}"/>
+                                            </Viewbox>
+                                            <Border x:Name="ReviewFlag" Width="14" Height="2.5" CornerRadius="1.25"
+                                                    Background="{DynamicResource AccentRimBrush}" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                                    IsHitTestVisible="False" Visibility="{Binding IsFlagged, Converter={StaticResource BoolToVis}}"/>
                                         </Grid>
                                     </Button>
                                 </DataTemplate>
