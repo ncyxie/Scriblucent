@@ -170,7 +170,7 @@
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
                             <icons:AppIcon Kind="Lightbulb" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="Show Hint" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding [FlashcardShowHint], Source={StaticResource Loc}}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                     <!-- Level 5 status banner: soft fill (role I); no decorative box stroke. -->
@@ -497,7 +497,7 @@
 						Click="RetryAllButton_Click">
 					<StackPanel Orientation="Horizontal">
 						<icons:AppIcon Kind="Refresh" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
-						<TextBlock Text="Retry All" VerticalAlignment="Center"/>
+						<TextBlock Text="{Binding [QuizRetryAll], Source={StaticResource Loc}}" VerticalAlignment="Center"/>
 					</StackPanel>
 				</Button>
 				</motion:LayoutRevealHost>
@@ -514,7 +514,7 @@
 						Click="RetryWrongButton_Click">
 					<StackPanel Orientation="Horizontal">
 						<icons:AppIcon Kind="Warning" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
-						<TextBlock Text="Retry Wrong" VerticalAlignment="Center"/>
+						<TextBlock Text="{Binding [QuizRetryWrong], Source={StaticResource Loc}}" VerticalAlignment="Center"/>
 					</StackPanel>
 				</Button>
 				</motion:LayoutRevealHost>

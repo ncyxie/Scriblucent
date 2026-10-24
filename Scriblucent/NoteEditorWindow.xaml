@@ -129,7 +129,7 @@
                             VerticalAlignment="Center"
                             Style="{StaticResource EditorDangerToolButtonStyle}"
                             Content="{icons:Icon Kind=Close, Size=10}"
-                            ToolTip="Cancel"
+                            ToolTip="{Binding [Cancel], Source={StaticResource Loc}}"
                             Visibility="Collapsed"
                             Click="AiCancelButton_Click"/>
 

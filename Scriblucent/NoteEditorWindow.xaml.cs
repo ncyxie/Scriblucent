@@ -3097,7 +3097,7 @@ namespace Scriblucent
             // of looking inert or inviting a repeat click. The button is icon-only, so feedback
             // goes through ToolTip/opacity rather than resizing button text to fit new content.
             AiCancelButton.IsEnabled = false;
-            AiCancelButton.ToolTip = "Cancelling…";
+            AiCancelButton.SetBinding(ToolTipProperty, new System.Windows.Data.Binding("[AiCancelling]") { Source = LocalizationProvider.Instance });
         }
 
         /// Shown at the start of a conversion, hidden unconditionally in that conversion's
@@ -3106,7 +3106,7 @@ namespace Scriblucent
         /// restored") that have no business offering a Cancel button.
         private void ShowAiCancelButton()
         {
-            AiCancelButton.ToolTip = "Cancel";
+            AiCancelButton.SetBinding(ToolTipProperty, new System.Windows.Data.Binding("[Cancel]") { Source = LocalizationProvider.Instance });
             AiCancelButton.IsEnabled = true;
             AiCancelButton.Visibility = Visibility.Visible;
             AnimateStatusIndicatorRow(expand: true);

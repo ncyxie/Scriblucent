@@ -1458,4 +1458,8 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="SketchOriginalProtected" xml:space="preserve"><value>Eraser removes added marks. Your original picture stays intact.</value></data>
   <data name="SketchDiscard" xml:space="preserve"><value>Discard changes</value></data>
   <data name="SketchKeepDrawing" xml:space="preserve"><value>Keep drawing</value></data>
+  <data name="QuizRetryAll" xml:space="preserve"><value>Retry all</value></data>
+  <data name="QuizRetryWrong" xml:space="preserve"><value>Retry incorrect</value></data>
+  <data name="AiCancelling" xml:space="preserve"><value>Cancelling…</value></data>
+  <data name="Calendar" xml:space="preserve"><value>Calendar</value></data>
 </root>

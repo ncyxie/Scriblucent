@@ -67,15 +67,15 @@
   <data name="AutoSaveUnitMinutes" xml:space="preserve"><value>min.</value></data>
   <data name="AutoSaveUnitHours" xml:space="preserve"><value>val.</value></data>
   <data name="FlashcardModel" xml:space="preserve"><value>DI modelis:</value></data>
-  <data name="FlashcardModel08BDescription" xml:space="preserve"><value>Basic</value></data>
-  <data name="FlashcardModel2BDescription" xml:space="preserve"><value>Compact</value></data>
-  <data name="FlashcardModel4BDescription" xml:space="preserve"><value>Recommended</value></data>
-  <data name="FlashcardModel9BDescription" xml:space="preserve"><value>Advanced</value></data>
-  <data name="FlashcardModel08B" xml:space="preserve"><value>Qwen3.5-0.8B — Basic</value></data>
-  <data name="FlashcardModel2B" xml:space="preserve"><value>Qwen3.5-2B — Compact</value></data>
+  <data name="FlashcardModel08BDescription" xml:space="preserve"><value>Bazinis</value></data>
+  <data name="FlashcardModel2BDescription" xml:space="preserve"><value>Kompaktiškas</value></data>
+  <data name="FlashcardModel4BDescription" xml:space="preserve"><value>Rekomenduojamas</value></data>
+  <data name="FlashcardModel9BDescription" xml:space="preserve"><value>Pažangus</value></data>
+  <data name="FlashcardModel08B" xml:space="preserve"><value>Qwen3.5-0.8B — Bazinis</value></data>
+  <data name="FlashcardModel2B" xml:space="preserve"><value>Qwen3.5-2B — Kompaktiškas</value></data>
   <data name="AiModelBetaBadge" xml:space="preserve"><value>BETA</value></data>
-  <data name="AiModelClozeOnlyBadge" xml:space="preserve"><value>CLOZE ONLY</value></data>
-  <data name="FlashcardModel4B" xml:space="preserve"><value>Qwen3.5-4B — Recommended</value></data>
+  <data name="AiModelClozeOnlyBadge" xml:space="preserve"><value>TIK SPRAGOMS</value></data>
+  <data name="FlashcardModel4B" xml:space="preserve"><value>Qwen3.5-4B — Rekomenduojamas</value></data>
   <data name="FlashcardModelWarningTitle" xml:space="preserve"><value>Modelio suderinamumo įspėjimas</value></data>
   <data name="FlashcardModelWarningText" xml:space="preserve"><value>Įspėjimas: {0} gali būti per sunkus šiam kompiuteriui.</value></data>
   <data name="FlashcardModelWarningPrompt" xml:space="preserve"><value>Šis kompiuteris gali neturėti pakankamai RAM modeliui {0}. Tęsti vis tiek?</value></data>
@@ -1457,4 +1457,8 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="SketchOriginalProtected" xml:space="preserve"><value>Trintukas šalina pridėtus potėpius. Pradinis paveikslėlis lieka nepakeistas.</value></data>
   <data name="SketchDiscard" xml:space="preserve"><value>Atmesti pakeitimus</value></data>
   <data name="SketchKeepDrawing" xml:space="preserve"><value>Tęsti piešimą</value></data>
+  <data name="QuizRetryAll" xml:space="preserve"><value>Kartoti visus</value></data>
+  <data name="QuizRetryWrong" xml:space="preserve"><value>Kartoti klaidingus</value></data>
+  <data name="AiCancelling" xml:space="preserve"><value>Atšaukiama…</value></data>
+  <data name="Calendar" xml:space="preserve"><value>Kalendorius</value></data>
 </root>
