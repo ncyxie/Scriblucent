@@ -1,5 +1,40 @@
 # Scriblucent releases
 
+## 1.0.0-beta.4
+
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.4/Scriblucent/Assets/brand-logo-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.4/Scriblucent/Assets/brand-logo-dark.svg">
+  <img src="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.4/Scriblucent/Assets/brand-logo-dark.svg" width="220" alt="Scriblucent">
+</picture>
+
+**Write. Recite. Get it right.**
+
+</div>
+
+Beta.4 makes it easier to reuse material while editing, with a consistent Duplicate action for flashcards, quiz questions, and mind-map branches. It also polishes dashboard layouts and everyday navigation.
+
+### Build on what you already have
+
+- **Duplicate without entering multiselect.** Right-click a flashcard, quiz question, or mind-map node and choose Duplicate, or use **Ctrl+D** while the item is focused outside a text field. Bulk duplication follows the same rules.
+- **Keep the content, start fresh.** Flashcard copies retain their text, media, hints, tags, and linked notes, with fresh study progress. Quiz copies retain their questions, options, hints, and explanations without copying the previous answer result. Copies appear beside their originals.
+- **Reuse a whole branch.** Duplicate a mind-map branch with its descendants, styles, and links. In manual layouts, copies are placed in free space; undo and redo let you reverse or restore the operation.
+
+### Other changes
+
+- Dashboard calendars fit narrow layouts more reliably when the sidebar changes the available space.
+- Flagged quiz questions use a compact blue-purple review marker that stays distinct when the question is also selected or answered.
+- Additional Lithuanian translations for action labels and AI model descriptions.
+- Recent cards fade softly at overflowing edges, following smooth scrolling and clearing when every card fits. Both themes use the same treatment across all four dashboards.
+
+**[Download x64 setup](https://github.com/ncyxie/Scriblucent/releases/download/v1.0.0-beta.4/Scriblucent-1.0.0-beta.4-win-x64-Setup.exe)** · **[Download ARM64 setup](https://github.com/ncyxie/Scriblucent/releases/download/v1.0.0-beta.4/Scriblucent-1.0.0-beta.4-win-arm64-Setup.exe)**
+
+Windows 10 and 11. Required runtimes are included; installers are currently unsigned. Run the new setup to upgrade; your local data is kept.
+
+[Report an issue](https://github.com/ncyxie/Scriblucent/issues) · [All changes since beta.3](https://github.com/ncyxie/Scriblucent/compare/v1.0.0-beta.3...v1.0.0-beta.4)
+
 ## 1.0.0-beta.3
 
 <div align="center">
