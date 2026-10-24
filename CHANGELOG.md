@@ -2,14 +2,61 @@
 
 ## 1.0.0-beta.3
 
-- Windows setup now installs for all users in Program Files, safely converts existing per-user installations, and provides English and Lithuanian setup text.
-- Upgrade recovery restores program files and Windows integration after cancellation or failure, with retained recovery state for interrupted installs.
-- Smaller Windows installations with only English and Lithuanian language resources, clean AI worker publishing, and complete third-party notices.
-- Optional native file associations: opening an exported note, flashcard set, mind map, or quiz imports a library copy and opens its editor without modifying the original file.
-- Single-instance library protection and file handoff to the running app.
-- Opening a written-answer quiz no longer falsely marks it as edited or triggers an unnecessary save prompt.
-- Safer legacy data migration, upgrade and downgrade handling, and remembered setup choices.
-- Setup follows Windows light/dark mode, retains user libraries and models during uninstall, and verifies the AI CPU backend on x64 and ARM64.
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.3/Scriblucent/Assets/brand-logo-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.3/Scriblucent/Assets/brand-logo-dark.svg">
+  <img src="https://raw.githubusercontent.com/ncyxie/Scriblucent/v1.0.0-beta.3/Scriblucent/Assets/brand-logo-dark.svg" width="220" alt="Scriblucent">
+</picture>
+
+**Write. Recite. Get it right.**
+
+</div>
+
+Beta.3 brings editable drawings, more control over spelling, optional update notifications, and a more complete Windows setup. It also refines the cards, motion, and editing details introduced in beta.2.
+
+### A drawing workspace you can return to
+
+- **Sketch with more than a pen.** Use a marker, eraser, lines, arrows, rectangles, and ellipses. Hold Shift to constrain shapes, zoom in for detail, or pan around the canvas.
+- **Keep editing after insertion.** Reopen a sketch from your note and continue working with its original strokes. Paint over an ordinary picture while keeping its original image protected underneath.
+- **Undo the action you meant to undo.** Drawing, erasing, clearing marks, and changing the background support undo and redo. Drawings stay editable when saved and shared in Scriblucent's note format.
+
+### Spelling with a way back
+
+- **Manage your own dictionary.** Search, add, and remove custom words in Settings. Custom words apply across notes and languages, and changes refresh open editors.
+- **Control what you ignore.** Review words ignored in the current note, remove individual entries, or check them all again. Ignoring lasts until that note closes; adding to the dictionary is permanent until you remove the word.
+- **Reverse a choice where you made it.** Right-click an accepted word to stop ignoring it or remove it from your custom dictionary. Spelling marks now update more reliably across styled text, lists, rapid edits, and reopened notes.
+
+### Know when an update is ready
+
+Startup update checks notify you when a newer version is available. They are enabled by default and can be turned off in Settings. Read the full, formatted release notes inside the app and download the next setup when you are ready; updates are not installed automatically.
+
+### A more complete Windows setup
+
+- Install for all users under **Program Files**, with English and Lithuanian setup text and a light or dark appearance that follows Windows.
+- Upgrade an existing installation without uninstalling first. Setup can replace an older per-user copy and recover from an interrupted upgrade, while keeping each account's library and downloaded models separate from the program files.
+- Optionally associate Scriblucent files with the app. Opening an exported note, flashcard set, mind map, or quiz imports a library copy and opens its editor; the original file stays unchanged.
+
+### Other changes
+
+- More consistent flashcard editor and study layouts, with improved space for tags, hints, and Lithuanian labels.
+- Improved note image previews and more reliable detection of pictures within the preview area.
+- Reduced motion retains the core feel with fewer optional effects; Off shows dialog backdrops without a delayed entrance.
+- Rounded scrolling viewports, coordinated editing accents, and clearer illustrated states in dark mode.
+- Dashboard groups use sequential numbers instead of random identifiers.
+- More stable note lists and checklists during editing, with better marker sizing and placement.
+- Consistent modal backdrops across blocked windows and smoother, better-sized updater scrolling.
+- Clearer Settings ordering, device-only logging descriptions, and more even sidebar spacing.
+- Legacy data-conflict notices no longer repeat on every launch.
+- Opening a written-answer quiz no longer falsely marks it as edited.
+- Smaller installation payloads, remembered setup choices, and single-instance file opening.
+
+**[Download x64 setup](https://github.com/ncyxie/Scriblucent/releases/download/v1.0.0-beta.3/Scriblucent-1.0.0-beta.3-win-x64-Setup.exe)** · **[Download ARM64 setup](https://github.com/ncyxie/Scriblucent/releases/download/v1.0.0-beta.3/Scriblucent-1.0.0-beta.3-win-arm64-Setup.exe)**
+
+Windows 10 and 11. Required runtimes are included; installers are currently unsigned. Uninstalling keeps your local data.
+
+[Report an issue](https://github.com/ncyxie/Scriblucent/issues) · [All changes since beta.2](https://github.com/ncyxie/Scriblucent/compare/v1.0.0-beta.2...v1.0.0-beta.3)
 
 ## 1.0.0-beta.2
 
