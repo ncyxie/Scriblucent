@@ -52,7 +52,9 @@ internal static partial class Program
                 var exitCode = 0;
                 try
                 {
-                    if (args.Contains("--painting")) ProbePaintingWorkspace();
+                    if (args.Contains("--spell-check-words")) ProbeSpellCheckWords();
+                    else if (args.Contains("--spell-check")) ProbeSpellCheck();
+                    else if (args.Contains("--painting")) ProbePaintingWorkspace();
                     else if (args.Contains("--rename-scroll")) ProbeRenameScrolling(args.Contains("--baseline"));
                     else if (args.Contains("--flashcard-layout")) ProbeFlashcardLayout(args.Contains("--quick"));
                     else if (args.Contains("--note-image-preview")) ProbeNoteImagePreview(args.Contains("--baseline"));

@@ -69,6 +69,30 @@ public class SpellCheckServiceTests : IClassFixture<SpellCheckServiceTests.Engli
         Assert.Empty(spans);
     }
 
+    [Theory]
+    [InlineData("ąžuolas", true)]
+    [InlineData("don't", true)]
+    [InlineData("well-known", true)]
+    [InlineData("two words", false)]
+    [InlineData("word!", false)]
+    [InlineData("123", false)]
+    [InlineData("", false)]
+    public void Custom_dictionary_accepts_one_complete_word(string word, bool accepted)
+        => Assert.Equal(accepted, SpellCheckService.IsDictionaryWord(word));
+
+    [Fact]
+    public void Reversal_actions_resolve_the_word_at_a_text_position()
+    {
+        const string text = "ąžuolas and well-known";
+        var first = SpellCheckService.WordAtOffset(text, 3)!.Value;
+        Assert.Equal("ąžuolas", text.Substring(first.Start, first.Length));
+        var last = SpellCheckService.WordAtOffset(text, text.Length)!.Value;
+        Assert.Equal("well-known", text.Substring(last.Start, last.Length));
+        Assert.Null(SpellCheckService.WordAtOffset(text, -1));
+        Assert.Null(SpellCheckService.WordAtOffset(text, text.Length + 1));
+        Assert.Null(SpellCheckService.WordAtOffset("  word", 0));
+    }
+
     [Fact]
     public void FindMisspelledWordSpans_WordNotInActiveDictionary_IsFlagged()
     {

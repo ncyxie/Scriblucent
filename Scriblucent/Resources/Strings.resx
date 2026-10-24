@@ -198,7 +198,26 @@
   <data name="SpellCheckLanguageDownloadErrorDialogFormat" xml:space="preserve"><value>Could not download the {0} dictionary: {1}</value></data>
   <data name="SpellCheckLanguageDeletedFormat" xml:space="preserve"><value>{0} dictionary deleted.</value></data>
   <data name="SpellCheckNoSuggestions" xml:space="preserve"><value>No suggestions</value></data>
-  <data name="SpellCheckIgnore" xml:space="preserve"><value>Ignore</value></data>
+  <data name="SpellCheckIgnore" xml:space="preserve"><value>Ignore in this note</value></data>
+  <data name="SpellCheckCustomDictionary" xml:space="preserve"><value>Custom dictionary</value></data>
+  <data name="SpellCheckCustomWordsDescription" xml:space="preserve"><value>Words accepted in every note and language. Remove a word to check its spelling again.</value></data>
+  <data name="SpellCheckManageWords" xml:space="preserve"><value>Manage words</value></data>
+  <data name="SpellCheckIgnoredWords" xml:space="preserve"><value>Ignored words in this note</value></data>
+  <data name="SpellCheckIgnoredWordsDescription" xml:space="preserve"><value>Ignored until this note is closed. Remove a word to check it again.</value></data>
+  <data name="SpellCheckManageIgnoredCount" xml:space="preserve"><value>Ignored words in this note ({0})…</value></data>
+  <data name="SpellCheckSearchWords" xml:space="preserve"><value>Search words</value></data>
+  <data name="SpellCheckNewWord" xml:space="preserve"><value>New word</value></data>
+  <data name="SpellCheckAddWord" xml:space="preserve"><value>Add word</value></data>
+  <data name="SpellCheckWordCount" xml:space="preserve"><value>{0} of {1} words</value></data>
+  <data name="SpellCheckNoMatchingWords" xml:space="preserve"><value>No words match your search.</value></data>
+  <data name="SpellCheckNoCustomWords" xml:space="preserve"><value>No custom words yet. Add a word above or right-click an underlined word in a note.</value></data>
+  <data name="SpellCheckNoIgnoredWords" xml:space="preserve"><value>No words are ignored in this note.</value></data>
+  <data name="SpellCheckWordInvalid" xml:space="preserve"><value>Enter one word. Apostrophes and hyphens can appear inside it.</value></data>
+  <data name="SpellCheckWordExists" xml:space="preserve"><value>This word is already in your dictionary.</value></data>
+  <data name="SpellCheckRemoveSelected" xml:space="preserve"><value>Remove selected</value></data>
+  <data name="SpellCheckResetIgnored" xml:space="preserve"><value>Check all again</value></data>
+  <data name="SpellCheckUnignoreWord" xml:space="preserve"><value>Stop ignoring this word</value></data>
+  <data name="SpellCheckRemoveCustomWord" xml:space="preserve"><value>Remove word from custom dictionary</value></data>
   <data name="SpellCheckAddToDictionary" xml:space="preserve"><value>Add to Dictionary</value></data>
   <data name="SpellCheckCheckForUpdates" xml:space="preserve"><value>Check for Updates</value></data>
   <data name="SpellCheckCheckingForUpdates" xml:space="preserve"><value>Checking for updates...</value></data>

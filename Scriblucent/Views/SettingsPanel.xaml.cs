@@ -379,19 +379,11 @@ namespace Scriblucent.Views
         }
 
         private static void RefreshOpenEditorSpellCheckLanguages()
+            => NoteEditorWindow.RefreshOpenSpellCheckEditors();
+
+        private void ManageCustomDictionary_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var window in Application.Current.Windows.OfType<Window>())
-            {
-                switch (window)
-                {
-                    case NoteEditorWindow editorWindow:
-                        editorWindow.RefreshSpellCheckLanguages();
-                        break;
-                    case EditorWorkspaceWindow tabsWindow:
-                        tabsWindow.RefreshSpellCheckLanguages();
-                        break;
-                }
-            }
+            if (Window.GetWindow(this) is { } owner) SpellCheckWordsDialog.ManageCustomDictionary(owner);
         }
 
         /// <summary>Only wired to RadioButton.Checked, not Unchecked - explicitly clearing every

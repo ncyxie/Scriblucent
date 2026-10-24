@@ -143,8 +143,11 @@ namespace Scriblucent
         private long _lastSpellCheckAppliedVersion = -1;
         private long _spellCheckRequestVersion;
         private bool _isSpellCheckScanning;
+        private bool _spellCheckPassPending;
         private bool _isApplyingSpellCheckDecorations;
         private ContextMenu? _defaultContentTextBoxContextMenu;
+        private ContextMenu? _spellCheckReversalMenu;
+        private readonly List<object> _spellCheckReversalItems = new();
         // "Ignore" (Word-style) is session-only, unlike "Add to Dictionary" which persists to
         // AppSettings.SpellCheckCustomWords - resets the next time this note is opened.
         private readonly HashSet<string> _sessionIgnoredWords = new(StringComparer.OrdinalIgnoreCase);
@@ -1080,7 +1083,11 @@ namespace Scriblucent
             if (enabled)
                 ScheduleSpellCheck();
             else
+            {
+                _spellCheckRequestVersion++;
+                _spellCheckDebounceTimer?.Stop();
                 ClearSpellCheckDecorations();
+            }
             UpdateSpellCheckLanguageChooserText();
         }
 
@@ -1092,6 +1099,15 @@ namespace Scriblucent
             if (_isSpellCheckEnabled)
                 ScheduleSpellCheck();
             UpdateSpellCheckLanguageChooserText();
+        }
+
+        internal static void RefreshOpenSpellCheckEditors()
+        {
+            foreach (var window in Application.Current.Windows.OfType<Window>().ToArray())
+            {
+                if (window is NoteEditorWindow editor && !editor._isDisposed) editor.RefreshSpellCheckLanguages();
+                else if (window is EditorWorkspaceWindow workspace) workspace.RefreshSpellCheckLanguages();
+            }
         }
 
         /// <summary>Status-bar chip mirroring Word/LibreOffice's bottom-bar language indicator -
@@ -1165,6 +1181,16 @@ namespace Scriblucent
             }
 
             menu.Items.Add(new Separator());
+            var customWords = new MenuItem { Header = LocalizationService.GetString("SpellCheckCustomDictionary") + "…" };
+            customWords.Click += (_, _) => SpellCheckWordsDialog.ManageCustomDictionary(GetDialogOwnerWindow());
+            menu.Items.Add(customWords);
+            var ignoredWords = new MenuItem
+            {
+                Header = string.Format(LocalizationService.GetString("SpellCheckManageIgnoredCount"), _sessionIgnoredWords.Count)
+            };
+            ignoredWords.Click += (_, _) => ManageIgnoredSpellCheckWords();
+            menu.Items.Add(ignoredWords);
+            menu.Items.Add(new Separator());
             var disableItem = new MenuItem
             {
                 Header = LocalizationService.GetString("SpellCheckDisableEntirely"),
@@ -1175,6 +1201,13 @@ namespace Scriblucent
 
             button.ContextMenu = menu;
             menu.IsOpen = true;
+        }
+
+        private void ManageIgnoredSpellCheckWords()
+        {
+            var dialog = new SpellCheckWordsDialog(_sessionIgnoredWords, ignored: true) { Owner = GetDialogOwnerWindow() };
+            if (dialog.ShowDialog() != true) return;
+            _sessionIgnoredWords.Clear(); _sessionIgnoredWords.UnionWith(dialog.Words); ScheduleSpellCheck();
         }
 
         private void DisableSpellCheckMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1258,6 +1291,7 @@ namespace Scriblucent
             _ = disposeAiBackendSynchronously;
 
             StopAutoSaveTimer();
+            StopSpellCheck();
             _counterUpdateDebounceTimer?.Stop();
             _selectionUiTimer?.Stop();
             _findHighlightDebounceTimer?.Stop();
@@ -1314,6 +1348,7 @@ namespace Scriblucent
         {
             DropParkedSelection();
             StopAutoSaveTimer();
+            StopSpellCheck();
             _counterUpdateDebounceTimer?.Stop();
             _selectionUiTimer?.Stop();
             _findHighlightDebounceTimer?.Stop();
@@ -2002,12 +2037,6 @@ namespace Scriblucent
             UpdateEditedIndicator();
             ScheduleSelectionChromeRefresh();
 
-            // Applying/clearing spell-check squiggles is itself a document-content change (real
-            // TextDecorations, not an overlay) - guarded by _isApplyingSpellCheckDecorations so
-            // that doesn't schedule another pass against itself forever.
-            if (_isSpellCheckEnabled && !_isApplyingSpellCheckDecorations)
-                ScheduleSpellCheck();
-
             // Squiggle edits are not text-flow changes. Spell-check already restores the caret;
             // scheduling wrap from those events forces a second layout.
             if (!_isApplyingSpellCheckDecorations)
@@ -2056,17 +2085,26 @@ namespace Scriblucent
 
         private async Task RunSpellCheckPassAsync()
         {
-            if (!_isSpellCheckEnabled || _isSpellCheckScanning)
+            if (!_isSpellCheckEnabled || _isDisposed)
                 return;
+            if (_isSpellCheckScanning)
+            {
+                _spellCheckPassPending = true;
+                return;
+            }
 
             _isSpellCheckScanning = true;
+            _spellCheckPassPending = false;
+            var requestVersion = _spellCheckRequestVersion;
             try
             {
-                var requestVersion = _spellCheckRequestVersion;
                 var settings = AppSettingsService.Load();
                 var dictionary = string.IsNullOrEmpty(settings.SpellCheckLanguageKey)
                     ? null
                     : await SpellCheckDictionaryService.GetOrLoadWordListAsync(settings.SpellCheckLanguageKey);
+
+                if (!_isSpellCheckEnabled || _isDisposed || requestVersion != _spellCheckRequestVersion)
+                    return;
 
                 if (dictionary is null)
                 {
@@ -2086,31 +2124,40 @@ namespace Scriblucent
                 var spans = await Task.Run(
                     () => SpellCheckService.FindMisspelledWordSpans(text, dictionary, customWords));
 
-                if (!_isSpellCheckEnabled)
+                if (!_isSpellCheckEnabled || _isDisposed)
                     return;
 
                 // A later edit may have happened while Hunspell scanned the snapshot. Its
                 // offsets must never be applied to the newer FlowDocument.
                 if (textVersion != _editorChangeVersion
                     || requestVersion != _spellCheckRequestVersion)
-                {
-                    ScheduleSpellCheck();
                     return;
-                }
 
-                if (_lastSpellCheckAppliedVersion == textVersion
+                if (_lastSpellCheckAppliedVersion == requestVersion
                     && _lastSpellCheckAppliedSpans is not null
                     && _lastSpellCheckAppliedSpans.SequenceEqual(spans))
                     return;
 
                 ApplySpellCheckDecorations(spans);
                 _lastSpellCheckAppliedSpans = spans.ToArray();
-                _lastSpellCheckAppliedVersion = textVersion;
+                _lastSpellCheckAppliedVersion = requestVersion;
             }
             finally
             {
                 _isSpellCheckScanning = false;
+                if (_isSpellCheckEnabled && !_isDisposed
+                    && (_spellCheckPassPending || requestVersion != _spellCheckRequestVersion))
+                    ScheduleSpellCheck();
+                _spellCheckPassPending = false;
             }
+        }
+
+        private void StopSpellCheck()
+        {
+            _isSpellCheckEnabled = false;
+            _spellCheckRequestVersion++;
+            _spellCheckDebounceTimer?.Stop();
+            _spellCheckPassPending = false;
         }
 
         private void ApplySpellCheckDecorations(IReadOnlyList<SpellCheckService.WordSpan> spans)
@@ -2137,6 +2184,10 @@ namespace Scriblucent
                 ClearSpellCheckDecorations();
 
                 var runs = BuildTextRunIndex();
+                // Decoration changes split/merge Runs. Resolve every endpoint while this
+                // index still describes the document; offsets inside it are not valid after
+                // the first ApplyPropertyValue, even though its TextPointers track edits.
+                var ranges = new List<TextRange>(spans.Count);
                 foreach (var span in spans)
                 {
                     var start = PointerAtTextOffset(runs, span.Start);
@@ -2144,7 +2195,10 @@ namespace Scriblucent
                     if (start is null || end is null)
                         continue;
 
-                    var range = new TextRange(start, end);
+                    ranges.Add(new TextRange(start, end));
+                }
+                foreach (var range in ranges)
+                {
                     SetRangeTextDecoration(range, SpellCheckSquiggleDecoration, enabled: true);
                     _spellCheckDecoratedRanges.Add(range);
                 }
@@ -2156,22 +2210,21 @@ namespace Scriblucent
             }
         }
 
-        /// <summary>Clears squiggles range-by-range using the exact TextRange objects they were
-        /// applied to (TextPointers auto-track document edits elsewhere), rather than one call
-        /// across the whole document - SetRangeTextDecoration's read-current-then-diff logic
-        /// assumes a uniform range, which a mixed clear-everything range is not.</summary>
+        /// <summary>Clear actual marked runs, including marks inherited by typing, paste or
+        /// restored by Undo outside the previously tracked word ranges. Resolve before any
+        /// mutation so clearing one run cannot invalidate another run's character offsets.</summary>
         private void ClearSpellCheckDecorations()
         {
             _lastSpellCheckAppliedSpans = null;
             _lastSpellCheckAppliedVersion = -1;
-            if (_spellCheckDecoratedRanges.Count == 0)
-                return;
-
             var wasApplying = _isApplyingSpellCheckDecorations;
             _isApplyingSpellCheckDecorations = true;
             try
             {
-                foreach (var range in _spellCheckDecoratedRanges)
+                var markedRuns = BuildTextRunIndex().Select(run => new TextRange(run.Pointer,
+                    run.Pointer.GetPositionAtOffset(run.Length, LogicalDirection.Forward)!))
+                    .Where(range => RangeHasTextDecoration(range, TextDecorationLocation.Baseline)).ToList();
+                foreach (var range in markedRuns)
                     SetRangeTextDecoration(range, SpellCheckSquiggleDecoration, enabled: false);
 
                 _spellCheckDecoratedRanges.Clear();
@@ -2189,6 +2242,7 @@ namespace Scriblucent
         /// Cut/Copy/Paste menu captured at startup.</summary>
         private void ContentTextBox_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
+            ClearSpellCheckReversalMenu();
             var point = Mouse.GetPosition(ContentTextBox);
             var spellRange = FindSpellCheckRangeAtPoint(point);
             if (spellRange is not null)
@@ -2205,6 +2259,41 @@ namespace Scriblucent
             ContentTextBox.ContextMenu = cell is not null
                 ? BuildTableContextMenu(cell)
                 : _defaultContentTextBoxContextMenu;
+            if (ContentTextBox.ContextMenu is { } menu) AddSpellCheckReversalMenu(menu, point);
+        }
+
+        private void ClearSpellCheckReversalMenu()
+        {
+            if (_spellCheckReversalMenu is not null)
+                foreach (var item in _spellCheckReversalItems) _spellCheckReversalMenu.Items.Remove(item);
+            _spellCheckReversalItems.Clear(); _spellCheckReversalMenu = null;
+        }
+
+        private void AddSpellCheckReversalMenu(ContextMenu menu, Point point)
+        {
+            var pointer = ContentTextBox.GetPositionFromPoint(point, snapToText: false);
+            if (pointer is null) return;
+            var index = BuildDocumentTextIndex();
+            var span = SpellCheckService.WordAtOffset(index.Text, GetTextOffsetForPointer(index.Runs, pointer));
+            if (span is null) return;
+            var word = index.Text.Substring(span.Value.Start, span.Value.Length);
+            void Add(string label, Action action)
+            {
+                var item = new MenuItem { Header = LocalizationService.GetString(label) };
+                item.Click += (_, _) => action(); _spellCheckReversalItems.Add(item);
+            }
+            if (_sessionIgnoredWords.Contains(word))
+                Add("SpellCheckUnignoreWord", () => { _sessionIgnoredWords.Remove(word); ScheduleSpellCheck(); });
+            if (AppSettingsService.Load().SpellCheckCustomWords.Contains(word, StringComparer.OrdinalIgnoreCase))
+                Add("SpellCheckRemoveCustomWord", () =>
+                {
+                    var settings = AppSettingsService.Load();
+                    settings.SpellCheckCustomWords.RemoveAll(w => string.Equals(w, word, StringComparison.OrdinalIgnoreCase));
+                    AppSettingsService.Save(settings); RefreshOpenSpellCheckEditors();
+                });
+            if (_spellCheckReversalItems.Count == 0) return;
+            _spellCheckReversalItems.Add(new Separator()); _spellCheckReversalMenu = menu;
+            for (var i = 0; i < _spellCheckReversalItems.Count; i++) menu.Items.Insert(i, _spellCheckReversalItems[i]);
         }
 
         private TextRange? FindSpellCheckRangeAtPoint(Point point)
@@ -2224,7 +2313,7 @@ namespace Scriblucent
 
         private ContextMenu BuildSpellCheckContextMenu(TextRange range)
         {
-            var word = range.Text;
+            var word = GetSpellCheckWord(range);
             var settings = AppSettingsService.Load();
 
             // Resolving this synchronously is safe here specifically: a word can only be
@@ -2269,6 +2358,16 @@ namespace Scriblucent
             return menu;
         }
 
+        private string GetSpellCheckWord(TextRange range)
+        {
+            // TextRange.Text synthesizes bullet/number prefixes for a whole list item.
+            // Hunspell and Ignore/Add must receive only its actual word characters.
+            var index = BuildDocumentTextIndex();
+            var start = GetTextOffsetForPointer(index.Runs, range.Start);
+            var end = GetTextOffsetForPointer(index.Runs, range.End);
+            return index.Text[start..end];
+        }
+
         private void ReplaceMisspelledWord(TextRange range, string replacement)
         {
             range.Text = replacement;
@@ -2291,7 +2390,7 @@ namespace Scriblucent
                 AppSettingsService.Save(settings);
             }
 
-            ScheduleSpellCheck();
+            RefreshOpenSpellCheckEditors();
         }
 
         private void EditorField_TextChanged(object sender, TextChangedEventArgs e)
@@ -2331,10 +2430,15 @@ namespace Scriblucent
         {
             // Spell-check squiggle application is a real TextDecoration mutation but cosmetic
             // (cleared before every save) - it must not mark the note as edited.
-            if (_isLoadingDocument || _isSerializingEditorContent || _suppressEditedMarking
+            if (_isLoadingDocument || _isSerializingEditorContent
                 || _isApplyingSpellCheckDecorations || _wrapLayout?.IsApplying == true)
                 return;
 
+            // Include formatting and find/replace paths that return early from TextChanged.
+            // Proofing must also refresh while restored photos settle, independently of
+            // the dirty-state suppression used during that interval.
+            if (_isSpellCheckEnabled) ScheduleSpellCheck();
+            if (_suppressEditedMarking) return;
             _editorChangeVersion++;
             ScheduleSelectionChromeRefresh();
         }
@@ -4421,6 +4525,12 @@ namespace Scriblucent
         // Load data FROM a NoteDocument
         public void LoadFromDocument(NoteDocument document)
         {
+            // TextPointers from the previous flow survive replacement by tracking to its
+            // boundaries; they no longer describe misspelled words in the loaded content.
+            _spellCheckRequestVersion++;
+            _lastSpellCheckAppliedVersion = -1;
+            _lastSpellCheckAppliedSpans = null;
+            _spellCheckDecoratedRanges.Clear();
             _refreshLineSpacingAfterNextTyping = false;
             DropParkedSelection();
             _findDocumentVersion++;
@@ -4568,6 +4678,7 @@ namespace Scriblucent
                 _isLoadingDocument = false;
                 _floatingImages.SuppressMarkerSweep = false;
                 UpdateEditedIndicator();
+                if (_isSpellCheckEnabled) ScheduleSpellCheck();
             }
         }
 
@@ -8041,9 +8152,8 @@ namespace Scriblucent
             _isApplyingHyperlinkCtrlHints = true;
             try
             {
-                // Set decorations on the Hyperlink and its Runs. TextDecorations does not inherit,
-                // so Runs need the value directly. On hide, ClearValue (not empty collection) so
-                // we don't leave sticky local formatting in the document.
+                // Link hints share TextDecorations with proofing. Change only Underline,
+                // preserving spelling marks and authored strikethrough on child Runs.
                 //
                 // Materialize first: applying TextDecorations can make WPF reflow/split inlines
                 // (InlineCollection mutation) while the lazy enumerator is still walking it -
@@ -8054,12 +8164,12 @@ namespace Scriblucent
                     if (visible)
                     {
                         hyperlink.TextDecorations = TextDecorations.Underline;
-                        SetInlineTextDecorations(hyperlink.Inlines, TextDecorations.Underline);
+                        SetInlineHyperlinkHints(hyperlink.Inlines, true);
                     }
                     else
                     {
                         hyperlink.TextDecorations = null;
-                        ClearInlineTextDecorations(hyperlink.Inlines);
+                        SetInlineHyperlinkHints(hyperlink.Inlines, false);
                     }
                 }
             }
@@ -8069,25 +8179,18 @@ namespace Scriblucent
             }
         }
 
-        private static void SetInlineTextDecorations(InlineCollection inlines, TextDecorationCollection decorations)
+        private static void SetInlineHyperlinkHints(InlineCollection inlines, bool visible)
         {
             // ToList: property sets below can reflow/split the collection mid-enumeration.
             foreach (var inline in inlines.ToList())
             {
-                inline.TextDecorations = decorations;
+                var decorations = new TextDecorationCollection((inline.TextDecorations ?? new TextDecorationCollection())
+                    .Where(d => d.Location != TextDecorationLocation.Underline));
+                if (visible) decorations.Add(TextDecorations.Underline[0]);
+                if (decorations.Count == 0) inline.ClearValue(Inline.TextDecorationsProperty);
+                else inline.TextDecorations = decorations;
                 if (inline is Span span)
-                    SetInlineTextDecorations(span.Inlines, decorations);
-            }
-        }
-
-        private static void ClearInlineTextDecorations(InlineCollection inlines)
-        {
-            // ToList: ClearValue below can reflow/split the collection mid-enumeration.
-            foreach (var inline in inlines.ToList())
-            {
-                inline.ClearValue(Inline.TextDecorationsProperty);
-                if (inline is Span span)
-                    ClearInlineTextDecorations(span.Inlines);
+                    SetInlineHyperlinkHints(span.Inlines, visible);
             }
         }
 

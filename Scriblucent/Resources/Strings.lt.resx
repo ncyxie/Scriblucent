@@ -198,7 +198,26 @@
   <data name="SpellCheckLanguageDownloadErrorDialogFormat" xml:space="preserve"><value>Nepavyko atsisiųsti {0} žodyno: {1}</value></data>
   <data name="SpellCheckLanguageDeletedFormat" xml:space="preserve"><value>{0} žodynas ištrintas.</value></data>
   <data name="SpellCheckNoSuggestions" xml:space="preserve"><value>Pasiūlymų nėra</value></data>
-  <data name="SpellCheckIgnore" xml:space="preserve"><value>Ignoruoti</value></data>
+  <data name="SpellCheckIgnore" xml:space="preserve"><value>Praleisti šiame užraše</value></data>
+  <data name="SpellCheckCustomDictionary" xml:space="preserve"><value>Asmeninis žodynas</value></data>
+  <data name="SpellCheckCustomWordsDescription" xml:space="preserve"><value>Žodžiai, laikomi taisyklingais visuose užrašuose ir visomis kalbomis. Pašalinus žodį, jo rašyba vėl tikrinama.</value></data>
+  <data name="SpellCheckManageWords" xml:space="preserve"><value>Tvarkyti žodžius</value></data>
+  <data name="SpellCheckIgnoredWords" xml:space="preserve"><value>Šiame užraše praleidžiami žodžiai</value></data>
+  <data name="SpellCheckIgnoredWordsDescription" xml:space="preserve"><value>Šie žodžiai praleidžiami, kol užrašas atvertas. Pašalinkite žodį, kad vėl būtų tikrinama jo rašyba.</value></data>
+  <data name="SpellCheckManageIgnoredCount" xml:space="preserve"><value>Šiame užraše praleidžiami žodžiai ({0})…</value></data>
+  <data name="SpellCheckSearchWords" xml:space="preserve"><value>Ieškoti žodžių</value></data>
+  <data name="SpellCheckNewWord" xml:space="preserve"><value>Naujas žodis</value></data>
+  <data name="SpellCheckAddWord" xml:space="preserve"><value>Pridėti žodį</value></data>
+  <data name="SpellCheckWordCount" xml:space="preserve"><value>Rodoma {0} iš {1} žodžių</value></data>
+  <data name="SpellCheckNoMatchingWords" xml:space="preserve"><value>Paiešką atitinkančių žodžių nėra.</value></data>
+  <data name="SpellCheckNoCustomWords" xml:space="preserve"><value>Asmeninis žodynas tuščias. Pridėkite žodį aukščiau arba spustelėkite pabrauktą žodį užraše dešiniuoju pelės mygtuku.</value></data>
+  <data name="SpellCheckNoIgnoredWords" xml:space="preserve"><value>Šiame užraše praleidžiamų žodžių nėra.</value></data>
+  <data name="SpellCheckWordInvalid" xml:space="preserve"><value>Įveskite vieną žodį. Jo viduje gali būti apostrofų ir brūkšnelių.</value></data>
+  <data name="SpellCheckWordExists" xml:space="preserve"><value>Šis žodis jau yra jūsų žodyne.</value></data>
+  <data name="SpellCheckRemoveSelected" xml:space="preserve"><value>Pašalinti pasirinktus</value></data>
+  <data name="SpellCheckResetIgnored" xml:space="preserve"><value>Vėl tikrinti visus</value></data>
+  <data name="SpellCheckUnignoreWord" xml:space="preserve"><value>Vėl tikrinti šį žodį</value></data>
+  <data name="SpellCheckRemoveCustomWord" xml:space="preserve"><value>Pašalinti žodį iš asmeninio žodyno</value></data>
   <data name="SpellCheckAddToDictionary" xml:space="preserve"><value>Pridėti į žodyną</value></data>
   <data name="SpellCheckCheckForUpdates" xml:space="preserve"><value>Tikrinti atnaujinimus</value></data>
   <data name="SpellCheckCheckingForUpdates" xml:space="preserve"><value>Tikrinami atnaujinimai...</value></data>

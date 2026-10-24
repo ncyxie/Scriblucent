@@ -23,6 +23,23 @@ public static partial class SpellCheckService
     [GeneratedRegex(@"[\p{L}](?:[\p{L}'’-]*[\p{L}])?")]
     private static partial Regex WordPattern();
 
+    internal static bool IsDictionaryWord(string word)
+    {
+        var match = WordPattern().Match(word);
+        return match.Success && match.Index == 0 && match.Length == word.Length;
+    }
+
+    internal static WordSpan? WordAtOffset(string text, int offset)
+    {
+        if (offset < 0 || offset > text.Length) return null;
+        foreach (Match match in WordPattern().Matches(text))
+        {
+            if (match.Index > offset) break;
+            if (offset <= match.Index + match.Length) return new WordSpan(match.Index, match.Length);
+        }
+        return null;
+    }
+
     public static IReadOnlyList<WordSpan> FindMisspelledWordSpans(
         string text,
         WordList? activeDictionary,

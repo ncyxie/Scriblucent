@@ -441,6 +441,11 @@
                                                     </WrapPanel>
                                                     <TextBlock x:Name="SpellCheckLanguageStatusText" Margin="0,8,0,0" Style="{StaticResource FormHelperTextStyle}" />
                                                 </StackPanel>
+                                                <Border Height="1" Background="{DynamicResource BorderColor}" Margin="0,16,0,12"/>
+                                                <TextBlock Text="{Binding [SpellCheckCustomDictionary], Source={StaticResource Loc}}" Style="{StaticResource FormOptionLabelStyle}"/>
+                                                <TextBlock Text="{Binding [SpellCheckCustomWordsDescription], Source={StaticResource Loc}}" Style="{StaticResource FormHelperTextStyle}" Margin="0,0,0,10"/>
+                                                <Button x:Name="ManageCustomDictionaryButton" Content="{Binding [SpellCheckManageWords], Source={StaticResource Loc}}"
+                                                        Style="{StaticResource SettingsChromeSecondaryButtonStyle}" HorizontalAlignment="Left" Padding="12,6" Click="ManageCustomDictionary_Click"/>
                                             </StackPanel>
                                         </Border>
                                     </Grid>

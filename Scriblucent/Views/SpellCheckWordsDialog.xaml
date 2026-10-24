@@ -1,0 +1,92 @@
+<Window x:Class="Scriblucent.Views.SpellCheckWordsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Scriblucent.Controls"
+        xmlns:behaviors="clr-namespace:Scriblucent.Behaviors"
+        xmlns:icons="clr-namespace:Scriblucent.Icons"
+        Width="620" Height="660" WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" UseLayoutRounding="True"
+        FontFamily="{DynamicResource FontFamily.UI}" FontSize="{StaticResource Type.Control.Form}" Foreground="{DynamicResource TextColor}">
+    <controls:OverlayDialogShell x:Name="DialogShell" MaxCardWidth="560" CardPadding="20">
+        <controls:OverlayDialogShell.Header>
+            <StackPanel>
+                <TextBlock x:Name="HeadingText" FontSize="{StaticResource Type.DialogTitle}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                <TextBlock x:Name="DescriptionText" Style="{StaticResource FormHelperTextStyle}" TextWrapping="Wrap" Margin="0,8,0,16"/>
+            </StackPanel>
+        </controls:OverlayDialogShell.Header>
+        <controls:OverlayDialogShell.Body>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Style="{StaticResource ChromeInsetFieldBorderStyle}">
+                    <DockPanel>
+                        <icons:AppIcon Kind="Search" DockPanel.Dock="Left" Margin="0,0,8,0" Foreground="{DynamicResource TextColorSecondary}"/>
+                        <Grid>
+                        <TextBox x:Name="SearchBox" Style="{StaticResource EmbeddedFieldTextBoxStyle}" TextChanged="Search_Changed"
+                                 ToolTip="{Binding [SpellCheckSearchWords], Source={StaticResource Loc}}"
+                                 AutomationProperties.Name="{Binding [SpellCheckSearchWords], Source={StaticResource Loc}}"/>
+                        <TextBlock Text="{Binding [SpellCheckSearchWords], Source={StaticResource Loc}}" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                            </Style></TextBlock.Style>
+                        </TextBlock>
+                        </Grid>
+                    </DockPanel>
+                </Border>
+                <Grid x:Name="AddRow" Grid.Row="1" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource ChromeInsetFieldBorderStyle}">
+                        <Grid>
+                        <TextBox x:Name="NewWordBox" Style="{StaticResource EmbeddedFieldTextBoxStyle}" TextChanged="NewWord_Changed" PreviewKeyDown="NewWord_KeyDown"
+                                 ToolTip="{Binding [SpellCheckNewWord], Source={StaticResource Loc}}"
+                                 AutomationProperties.Name="{Binding [SpellCheckNewWord], Source={StaticResource Loc}}"/>
+                        <TextBlock Text="{Binding [SpellCheckNewWord], Source={StaticResource Loc}}" Foreground="{DynamicResource TextColorSecondary}" VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=NewWordBox}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                            </Style></TextBlock.Style>
+                        </TextBlock>
+                        </Grid>
+                    </Border>
+                    <Button x:Name="AddButton" Grid.Column="1" Margin="8,0,0,0" Padding="12,6" Style="{StaticResource DialogSecondaryButtonStyle}"
+                            Content="{Binding [SpellCheckAddWord], Source={StaticResource Loc}}" IsEnabled="False" Click="Add_Click"/>
+                </Grid>
+                <controls:InlineValidationPresenter x:Name="Validation" Grid.Row="2"/>
+                <TextBlock x:Name="CountText" Grid.Row="3" Style="{StaticResource FormHelperTextStyle}" Margin="0,12,0,8"/>
+                <Border Grid.Row="4" Style="{StaticResource ContentInsetBorderStyle}" Padding="4"
+                        behaviors:RoundedClipBehavior.IsEnabled="True" MinHeight="80">
+                    <Grid>
+                        <ListBox x:Name="WordsList" SelectionMode="Extended" SelectionChanged="Selection_Changed" KeyDown="Words_KeyDown"
+                                 Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                            <ListBox.ItemTemplate><DataTemplate>
+                                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" ToolTip="{Binding}" FontSize="{StaticResource Type.Control.Form}" Foreground="{DynamicResource TextColor}"/>
+                            </DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock x:Name="EmptyText" Foreground="{DynamicResource TextColorSecondary}" TextWrapping="Wrap" TextAlignment="Center"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </controls:OverlayDialogShell.Body>
+        <controls:OverlayDialogShell.Footer>
+            <Grid Margin="0,14,0,0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <WrapPanel Margin="0,0,0,12">
+                    <Button x:Name="RemoveButton" Style="{StaticResource DialogSecondaryButtonStyle}" Padding="12,6" Margin="0,0,8,0"
+                            Content="{Binding [SpellCheckRemoveSelected], Source={StaticResource Loc}}" Click="Remove_Click" IsEnabled="False"/>
+                    <Button x:Name="ResetIgnoredButton" Style="{StaticResource DialogSecondaryButtonStyle}" Padding="12,6"
+                            Content="{Binding [SpellCheckResetIgnored], Source={StaticResource Loc}}" Click="ResetIgnored_Click"/>
+                </WrapPanel>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Style="{StaticResource DialogSecondaryButtonStyle}" Content="{Binding [Cancel], Source={StaticResource Loc}}" Padding="16,8" Margin="0,0,8,0" Click="Cancel_Click"/>
+                    <Button x:Name="SaveButton" Style="{StaticResource DialogPrimaryButtonStyle}" Content="{Binding [Save], Source={StaticResource Loc}}" Padding="16,8" Click="Save_Click" IsEnabled="False"/>
+                </StackPanel>
+            </Grid>
+        </controls:OverlayDialogShell.Footer>
+    </controls:OverlayDialogShell>
+</Window>
