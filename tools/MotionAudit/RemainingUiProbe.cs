@@ -22,7 +22,7 @@ internal static partial class Program
         => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
     private static object? RemainingField(object target, string name)
         => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target);
-    private static void RemainingKeyboardClick(Button button)
+    private static void RemainingKeyboardClick(ButtonBase button)
     {
         button.Focus();
         foreach (var routed in new[] { Keyboard.KeyDownEvent, Keyboard.KeyUpEvent })
@@ -243,12 +243,14 @@ internal static partial class Program
         SaveControlCapture((FrameworkElement)cards.Content, "study-hint-" + suffix);
         if (!baseline)
         {
-            var hint = ControlTree(cards).OfType<Button>().First(b => b.Content as string == LocalizationService.GetString("FlashcardShowHint"));
+            var hint = ControlTree(cards).OfType<ToggleButton>().First(b => b.IsVisible && b.Content as string == LocalizationService.GetString("FlashcardShowHint"));
             var host = (FlashcardFlipHost)cards.FindName("StudyModeFlipHost");
+            var popup = (Popup)cards.FindName("FlashcardHintPopup");
             Require(hint.Focusable && hint.Template.FindName("ButtonBorder", hint) is InteractionSurface, "Hint is not a shared native command.");
             RemainingKeyboardClick(hint); Pump(180);
-            Require(!host.IsFlipped && hint.Visibility == Visibility.Collapsed, "Hint activation flipped the card or did not reveal the hint.");
+            Require(!host.IsFlipped && hint.IsChecked == true && popup.IsOpen, "Hint activation flipped the card or did not reveal the hint.");
             SaveControlCapture((FrameworkElement)cards.Content, "study-hint-revealed-" + suffix);
+            SaveControlCapture((FrameworkElement)popup.Child, "study-hint-popup-" + suffix);
         }
         cards.DisposeWorkspaceEditor(); Pump(300);
         var quiz = new QuizModeWindow(new QuizDocument { Questions = new() { new() { Question = "Keep the timer steady", Options = new() { new() { Text = "First", IsCorrect = true }, new() { Text = "Second" } } } } }, 60);

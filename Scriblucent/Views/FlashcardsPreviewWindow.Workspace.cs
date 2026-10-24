@@ -45,6 +45,7 @@ public partial class FlashcardsPreviewWindow
             ShellWindowChrome.ResumeFromFullscreen(WorkspaceOwner);
         if (!active)
         {
+            CloseFlashcardHint();
             _audioPlayer?.Stop();
             _workspacePausedCompletion |= _studyCompletionTimer is not null;
             CancelStudyCompletionTimer();
@@ -60,6 +61,7 @@ public partial class FlashcardsPreviewWindow
     public void DisposeWorkspaceEditor()
     {
         if (_workspaceDisposed) return;
+        CloseFlashcardHint();
         _workspaceDisposed = true;
         FlashcardsItemsControl.ReleaseScrollTiles();
         foreach (var item in _items)

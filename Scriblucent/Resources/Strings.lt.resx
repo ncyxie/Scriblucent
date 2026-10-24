@@ -836,7 +836,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="NewQuizQuestion" xml:space="preserve"><value>Naujas klausimas</value></data>
   <data name="NewQuizCorrectAnswer" xml:space="preserve"><value>Teisingas atsakymas</value></data>
   <data name="NewQuizWrongAnswer" xml:space="preserve"><value>Klaidingas atsakymas</value></data>
-  <data name="FlashcardsTapHint" xml:space="preserve"><value>Spustelėkite kortelę, kad apverstumėte</value></data>
+  <data name="FlashcardsTapHint" xml:space="preserve"><value>Spustelėkite ir apverskite</value></data>
   <data name="FlashcardSideQuestion" xml:space="preserve"><value>Klausimas</value></data>
   <data name="FlashcardSideAnswer" xml:space="preserve"><value>Atsakymas</value></data>
   <data name="FlashcardsShowQuestions" xml:space="preserve"><value>Rodyti klausimus</value></data>
@@ -884,9 +884,10 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="FlashcardStarCard" xml:space="preserve"><value>Pažymėti žvaigždute</value></data>
   <data name="FlashcardUnstarCard" xml:space="preserve"><value>Nuimti žvaigždutę</value></data>
   <data name="FlashcardShowHint" xml:space="preserve"><value>Rodyti užuominą</value></data>
-  <data name="FlashcardCramStart" xml:space="preserve"><value>Kimšti</value></data>
+  <data name="FlashcardCramStart" xml:space="preserve"><value>Praktikuotis</value></data>
+  <data name="FlashcardPracticeLabel" xml:space="preserve"><value>Praktika</value></data>
   <data name="FlashcardCramTooltip" xml:space="preserve"><value>Kartokite visą rinkinį be apribojimų - tai neveikia jūsų kartojimo tvarkaraščio</value></data>
-  <data name="FlashcardCramBanner" xml:space="preserve"><value>Kimšimo režimas - tik praktika, jūsų tvarkaraštis nekeičiamas</value></data>
+  <data name="FlashcardCramBanner" xml:space="preserve"><value>Praktikos režimas: kartojimo tvarkaraštis nekeičiamas</value></data>
   <data name="FlashcardCramLiveStatsFormat" xml:space="preserve"><value>Ratas {0}  ·  Peržiūrėta {1}</value></data>
   <data name="StudyModeStudiedFormat" xml:space="preserve"><value>Išmoktos kortelės: {0}</value></data>
   <data name="StudyModeComplete" xml:space="preserve"><value>Mokymosi sesija baigta</value></data>

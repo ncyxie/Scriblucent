@@ -866,7 +866,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="NewQuizQuestion" xml:space="preserve"><value>New question</value></data>
   <data name="NewQuizCorrectAnswer" xml:space="preserve"><value>Correct answer</value></data>
   <data name="NewQuizWrongAnswer" xml:space="preserve"><value>Wrong answer</value></data>
-  <data name="FlashcardsTapHint" xml:space="preserve"><value>Click a card to flip</value></data>
+  <data name="FlashcardsTapHint" xml:space="preserve"><value>Click to flip</value></data>
   <data name="FlashcardSideQuestion" xml:space="preserve"><value>Question</value></data>
   <data name="FlashcardSideAnswer" xml:space="preserve"><value>Answer</value></data>
   <data name="FlashcardsShowQuestions" xml:space="preserve"><value>Show questions</value></data>
@@ -915,6 +915,7 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="FlashcardUnstarCard" xml:space="preserve"><value>Unstar card</value></data>
   <data name="FlashcardShowHint" xml:space="preserve"><value>Show hint</value></data>
   <data name="FlashcardCramStart" xml:space="preserve"><value>Cram</value></data>
+  <data name="FlashcardPracticeLabel" xml:space="preserve"><value>Practice</value></data>
   <data name="FlashcardCramTooltip" xml:space="preserve"><value>Practice the whole set on repeat - doesn't affect your spaced-repetition schedule</value></data>
   <data name="FlashcardCramBanner" xml:space="preserve"><value>Cram mode - practice only, your schedule isn't affected</value></data>
   <data name="FlashcardCramLiveStatsFormat" xml:space="preserve"><value>Lap {0}  ·  Reviewed {1}</value></data>

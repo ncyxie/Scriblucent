@@ -675,6 +675,11 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
 
     private void FlashcardsPreviewWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (FlashcardHintPopup.IsOpen)
+        {
+            if (e.Key == Key.Escape) { CloseFlashcardHint(restoreFocus: true); e.Handled = true; }
+            return;
+        }
         if (BulkSelectionBar.HandleOperationKey(e)) return;
         if (EditorSelectionInput.HandleKey(e, BulkSelection, ConfirmDeleteSelectedFlashcards)) return;
         if (e.Key == Key.F11)
@@ -694,7 +699,8 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
         if (!_isStudyMode || _items.Count == 0)
             return;
 
-        if (e.OriginalSource is TextBox)
+        if (e.OriginalSource is TextBox
+            || e.OriginalSource is ButtonBase && e.Key is Key.Space or Key.Enter)
             return;
 
         if (e.Key == Key.Right || e.Key == Key.N)
@@ -2117,20 +2123,6 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
         FlipCurrentStudyCard();
     }
 
-    private void StudyHintPrompt_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: FlashcardPreviewItem item })
-        {
-            var hint = (sender as FrameworkElement)?.Parent is Panel parent
-                ? parent.Children.OfType<TextBlock>().FirstOrDefault() : null;
-            if (hint is not null) hint.Opacity = 0;
-            item.IsHintRevealed = true;
-            if (hint is not null) UiMotion.Fade(hint, 1, 140);
-        }
-
-        e.Handled = true;
-    }
-
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         if (_workspaceClose is not null) { _workspaceClose(); return; }
@@ -2156,6 +2148,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
 
     private void FlashcardsPreviewWindow_Closing(object? sender, CancelEventArgs e)
     {
+        CloseFlashcardHint();
         if (_workspaceDisposed) return;
         if (IsStudyFullscreen)
             ToggleFullscreenMode();
@@ -2211,14 +2204,6 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
         e.Handled = true;
     }
 
-    private void MoveStudyModeFlashcardButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (StudyModeCard.DataContext is FlashcardPreviewItem flashcard)
-            ShowMoveToSetPicker(flashcard);
-
-        e.Handled = true;
-    }
-
     private void EditFlashcardButton_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is FlashcardPreviewItem flashcard)
@@ -2250,6 +2235,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
 
     private void AnimateFlashcardFlip(FlashcardFlipHost host)
     {
+        CloseFlashcardHint();
         if (host.IsAnimating)
             return;
 
@@ -2401,6 +2387,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
 
     private void ApplyStudyModeState()
     {
+        CloseFlashcardHint();
         if (_items.Count == 0)
         {
             _isStudyMode = false;
@@ -2799,7 +2786,6 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
         private string _answer = string.Empty;
         private string _category = string.Empty;
         private string _hint = string.Empty;
-        private bool _isHintRevealed;
         private int _setIndex;
         private string? _questionImageFileName;
         private string? _questionAudioFileName;
@@ -3079,27 +3065,10 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
                 _hint = normalized;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasHint));
-                OnPropertyChanged(nameof(ShowHintPrompt));
             }
         }
 
         public bool HasHint => !string.IsNullOrWhiteSpace(_hint);
-
-        public bool IsHintRevealed
-        {
-            get => _isHintRevealed;
-            set
-            {
-                if (_isHintRevealed == value)
-                    return;
-
-                _isHintRevealed = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(ShowHintPrompt));
-            }
-        }
-
-        public bool ShowHintPrompt => HasHint && !_isHintRevealed;
 
         public bool IsFlipped
         {
@@ -3357,6 +3326,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
 
     private void AnimateStudyModeCardChange(int direction, Func<bool> moveCard)
     {
+        CloseFlashcardHint();
         if (_isStudyModeCardAnimating)
             return;
 
@@ -3435,6 +3405,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
 
     private void EditFlashcard(FlashcardPreviewItem flashcard)
     {
+        CloseFlashcardHint();
         var dialog = new EditFlashcardDialog(categoryOptions: GetCategoryOptions())
         {
             Owner = WorkspaceOwner,
