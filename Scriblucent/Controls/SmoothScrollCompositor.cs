@@ -44,6 +44,7 @@ internal static class SmoothScrollCompositor
         public bool DirectOffsetSession;
         public Action? SessionBegan;
         public Action? SessionEnded;
+        public Action? HorizontalOffsetChanged;
         public double CommittedX;
         public double CommittedY;
         public double VisualX;
@@ -375,6 +376,8 @@ internal static class SmoothScrollCompositor
 
         if (forceCommit || ShouldCommit(session, scrollViewer))
             Commit(scrollViewer, session, visualX, visualY);
+        else
+            session.HorizontalOffsetChanged?.Invoke();
 
         committedX = session.CommittedX;
         committedY = session.CommittedY;
@@ -403,6 +406,21 @@ internal static class SmoothScrollCompositor
 
     public static bool IsActive(ScrollViewer scrollViewer)
         => scrollViewer.GetValue(SessionProperty) is Session { Active: true };
+
+    // Viewport chrome can follow the visible glide without polling every rendering frame
+    // or waiting for the throttled native offset commits. Observers belong to this viewer.
+    internal static void ObserveHorizontalOffset(ScrollViewer viewer, Action observer)
+        => GetOrCreateSession(viewer).HorizontalOffsetChanged += observer;
+
+    internal static void UnobserveHorizontalOffset(ScrollViewer viewer, Action observer)
+    {
+        if (viewer.GetValue(SessionProperty) is Session session)
+            session.HorizontalOffsetChanged -= observer;
+    }
+
+    internal static double GetVisualHorizontalOffset(ScrollViewer viewer)
+        => viewer.GetValue(SessionProperty) is Session { Active: true } session
+            ? session.VisualX : viewer.HorizontalOffset;
 
     private static bool ShouldUseCompositor(ScrollViewer scrollViewer, IReadOnlyList<DashboardVirtualizationHost> hosts)
     {
@@ -488,6 +506,7 @@ internal static class SmoothScrollCompositor
             scrollViewer.ScrollToVerticalOffset(clampedY);
 
         UpdateTransform(session);
+        session.HorizontalOffsetChanged?.Invoke();
     }
 
     private static void UpdateTransform(Session session)
