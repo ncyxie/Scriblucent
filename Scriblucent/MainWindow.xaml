@@ -499,7 +499,7 @@
 									<ColumnDefinition Width="48"/>
 									<ColumnDefinition Width="*"/>
 								</Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Width="24" Height="24" HorizontalAlignment="Center">
+                                <Grid Grid.Column="0" Width="16" Height="16" HorizontalAlignment="Center">
                                     <icons:AppIcon Kind="Settings" Style="{StaticResource SidebarNavIconStyle}" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                                     <controls:SurfaceMaterialBorder x:Name="SettingsUpdateBadge" controls:SurfaceMaterial.Kind="Marker"
                                             Width="7" Height="7" CornerRadius="4" Background="{DynamicResource AccentPrimary}"
