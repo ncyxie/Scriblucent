@@ -33,27 +33,9 @@ public sealed class NoteCardItemSizeProvider : IItemSizeProvider
     }
 
     private static Size EstimateGridSize(NoteCardViewModel note)
-    {
-        // Base size matches NoteCardControl: 220x140 + 12 margin.
-        var height = GridMinHeight;
-
-        if (note.HasTags)
-            height += 28;
-
-        // note.Content lazily decodes+caches the RTF/Base64 preview on first access. During a bulk
-        // load, sizing dozens of not-yet-warmed cards here would force that decode synchronously on
-        // the UI thread for every one of them - exactly the stutter this estimate exists to avoid.
-        // Fall back to the tag-only estimate until WarmContentPreview has actually run for this card;
-        // the real measured extent corrects any difference once containers realize.
-        if (note.IsContentPreviewCached)
-        {
-            var contentLines = EstimateLineCount(note.Content, charsPerLine: 36, maxLines: 6);
-            var extraContentLines = Math.Max(0, contentLines - 2);
-            height += extraContentLines * 15;
-        }
-
-        return new Size(GridWidth, Math.Clamp(height, GridMinHeight, GridMinHeight + 118));
-    }
+        // Preview line budgets reserve space for the header and optional tags inside
+        // the same 140-DIP face used by scrolling tiles. No decoding or size correction.
+        => new(GridWidth, GridMinHeight);
 
     private static Size EstimateListSize(NoteCardViewModel note)
     {

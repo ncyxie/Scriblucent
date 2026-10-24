@@ -43,9 +43,10 @@ public class DashboardViewportTests
     public void Note_size_estimates_preserve_whitespace_semantics_without_allocating_preview_copies() => Sta(() =>
     {
         var card = new NoteCardViewModel(new NoteDocument
-            { SearchablePreview = "\r\n\u2003" + new string('x', 72) + "\r\n" + new string('y', 72) + "\u2002\n" }, _ => { });
+            { Content = "\r\n\u2003" + new string('x', 72) + "\r\n" + new string('y', 72) + "\u2002\n" }, _ => { });
+        card.WarmContentPreview();
         var grid = new NoteCardItemSizeProvider(false); var list = new NoteCardItemSizeProvider(true);
-        Assert.Equal(209, grid.GetSizeForItem(card).Height);
+        Assert.Equal(164, grid.GetSizeForItem(card).Height);
         Assert.Equal(106, list.GetSizeForItem(card).Height);
         for (int i = 0; i < 10; i++) _ = grid.GetSizeForItem(card);
         var before = GC.GetAllocatedBytesForCurrentThread();

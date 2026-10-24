@@ -52,7 +52,8 @@ internal static partial class Program
                 var exitCode = 0;
                 try
                 {
-                    if (args.Contains("--dashboard-toolbar-motion")) ProbeDashboardToolbarMotion(args.Contains("--dark") ? "Dark" : "Light");
+                    if (args.Contains("--note-image-preview")) ProbeNoteImagePreview(args.Contains("--baseline"));
+                    else if (args.Contains("--dashboard-toolbar-motion")) ProbeDashboardToolbarMotion(args.Contains("--dark") ? "Dark" : "Light");
                     else if (args.Contains("--dashboard-toolbar")) ProbeDashboardToolbar(args.Contains("--dark") ? "Dark" : "Light");
                     else if (args.Contains("--ordering-settings")) ProbeSettingsOrderingOnly(args.Contains("--dark") ? "Dark" : "Light");
                     else if (args.Contains("--manual-order")) ProbeManualOrder(args.FirstOrDefault(a => a.StartsWith("--case="))?["--case=".Length..], args.Contains("--editors-only"));

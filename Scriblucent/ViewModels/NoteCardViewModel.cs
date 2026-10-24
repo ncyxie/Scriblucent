@@ -1,13 +1,7 @@
-﻿using Scriblucent.Localization;
-using Scriblucent.Models;
+﻿using Scriblucent.Models;
 using Scriblucent.Services;
 using Scriblucent;
 using System.Globalization;
-using System.IO;
-using System.Text;
-using System.Windows.Controls;
-using System.Windows;
-using System.Windows.Documents;
 using System.Windows.Input;
 
 namespace Scriblucent.ViewModels;
@@ -18,6 +12,8 @@ public class NoteCardViewModel : ViewModelBase
     private bool _isSelectedInMassSelect;
     private int _contentGeneration;
     private string? _cachedContentPreview;
+    private NotePreviewSnapshot? _cachedPreview;
+    private bool _previewNeedsValidation;
     private string? _cachedTagsDisplay;
     private string? _cachedTagsSearchText;
     private string? _searchHaystack;
@@ -44,8 +40,8 @@ public class NoteCardViewModel : ViewModelBase
         _removeFromGroupAction = removeFromGroupAction;
         _duplicateAction = duplicateAction;
         _togglePinAction = togglePinAction;
-        if (document.SearchablePreview is not null)
-            _cachedContentPreview = document.SearchablePreview;
+        if (document.CardPreview is { Version: NotePreviewService.Version } preview)
+        { _cachedPreview = preview; _cachedContentPreview = preview.Text; _previewNeedsValidation = true; }
     }
 
     public bool HasTags => Document.Tags?.Count > 0;
@@ -98,11 +94,10 @@ public class NoteCardViewModel : ViewModelBase
     /// <see cref="Content"/> (that getter parses a FlowDocument).</summary>
     internal int ContentGeneration => _contentGeneration;
 
-    /// <summary>The cached preview, if one has already been decoded or loaded from
-    /// <see cref="NoteDocument.SearchablePreview"/>. Does not parse.</summary>
+    /// <summary>The validated cached excerpt. Does not parse or validate an unrequested note.</summary>
     internal bool TryGetCachedContentPreview(out string preview)
     {
-        if (_cachedContentPreview is null)
+        if (_cachedContentPreview is null || _previewNeedsValidation)
         {
             preview = string.Empty;
             return false;
@@ -119,14 +114,17 @@ public class NoteCardViewModel : ViewModelBase
     {
         get
         {
-            if (_cachedContentPreview is not null)
+            if (_cachedContentPreview is not null && !_previewNeedsValidation)
                 return _cachedContentPreview;
 
             var startedAt = Scriblucent.Services.ScrollPerfDiag.Enabled
                 ? System.Diagnostics.Stopwatch.GetTimestamp()
                 : 0;
-            _cachedContentPreview = BuildContentPreview();
-            Document.SearchablePreview = _cachedContentPreview;
+            _cachedPreview = NotePreviewService.Build(Document);
+            _previewNeedsValidation = false;
+            Document.CardPreview = _cachedPreview;
+            _cachedContentPreview = _cachedPreview.Text;
+            Document.SearchablePreview = null;
             if (startedAt != 0)
             {
                 var elapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
@@ -140,7 +138,7 @@ public class NoteCardViewModel : ViewModelBase
     /// <summary>True when the note contains any photo (floating or in-line, current or legacy),
     /// so the card can show a picture indicator instead of looking like an empty note.</summary>
     public bool HasPictures =>
-        (Document.Images is { Count: > 0 })
+        (_cachedPreview?.Text.Contains('\uFFFC') ?? false) || (Document.Images is { Count: > 0 })
         || (Document.Content?.Contains("[[ScriblucentImage:", StringComparison.Ordinal) ?? false);
     /// <summary>
     /// True once <see cref="Content"/> has decoded and cached its preview at least once. Lets
@@ -148,7 +146,7 @@ public class NoteCardViewModel : ViewModelBase
     /// decode just to size a card during a bulk load, before <see cref="WarmContentPreview"/> has
     /// had a chance to run.
     /// </summary>
-    internal bool IsContentPreviewCached => _cachedContentPreview is not null;
+    internal bool IsContentPreviewCached => _cachedContentPreview is not null && !_previewNeedsValidation;
 
     /// <summary>Duplicates share content text and equivalent image layout. Reuse a preview
     /// already decoded by the source card when the duplicate is first realized.</summary>
@@ -158,6 +156,10 @@ public class NoteCardViewModel : ViewModelBase
             return;
 
         _cachedContentPreview = source._cachedContentPreview;
+        _cachedPreview = source._cachedPreview;
+        _previewNeedsValidation = source._previewNeedsValidation;
+        Document.CardPreview = source.Document.CardPreview;
+        Document.PreviewLayoutWidth = source.Document.PreviewLayoutWidth;
         Document.SearchablePreview = source.Document.SearchablePreview;
     }
 
@@ -190,89 +192,7 @@ public class NoteCardViewModel : ViewModelBase
     /// </summary>
     internal void WarmContentPreview() => _ = Content;
 
-    /// <summary>Cards render at most a few wrapped lines; formatting the full document text is wasted layout work.</summary>
-    private const int ContentPreviewMaxLength = 600;
-
-    private static string CapPreviewLength(string preview)
-        => preview.Length <= ContentPreviewMaxLength ? preview : preview[..ContentPreviewMaxLength];
-
-    private string BuildContentPreview()
-    {
-        var raw = Document.Content;
-        if (string.IsNullOrEmpty(raw))
-            return AppendFloatingPhotoSentinels(string.Empty);
-
-        try
-        {
-            var bytes = Convert.FromBase64String(raw);
-
-            var dataFormat = DataFormats.Rtf;
-            if (bytes.Length >= 5)
-            {
-                var hdr = Encoding.ASCII.GetString(bytes, 0, Math.Min(5, bytes.Length));
-                if (hdr.StartsWith("{\\rtf"))
-                {
-                    dataFormat = DataFormats.Rtf;
-                }
-                else if (bytes.Length >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B)
-                {
-                    dataFormat = DataFormats.XamlPackage;
-                }
-                else
-                {
-                    throw new FormatException();
-                }
-            }
-
-            using var ms = new MemoryStream(bytes);
-            var flowDoc = new FlowDocument();
-            var tr = new TextRange(flowDoc.ContentStart, flowDoc.ContentEnd);
-            tr.Load(ms, dataFormat);
-            var preview = CapPreviewLength(StripLegacyImageMarkers(BuildOrderedContentPreview(flowDoc)));
-            return AppendFloatingPhotoSentinels(preview);
-        }
-        catch (FormatException)
-        {
-            return CapPreviewLength(StripLegacyImageMarkers(raw));
-        }
-        catch (Exception ex)
-        {
-            Scriblucent.Services.CrashLog.Append("NoteCardViewModel.BuildContentPreview", ex);
-            return CapPreviewLength(StripLegacyImageMarkers(raw));
-        }
-    }
-
-    /// <summary>Floating photos have no text position. A sentinel trails the preview when the
-    /// photo actually sits near the note text - a photo deep in the empty pad region below the
-    /// text is far from the card's preview and would just add noise. A photo-only note (no
-    /// previewable text) still signals its photo: the photo IS the content there.</summary>
-    private string AppendFloatingPhotoSentinels(string preview)
-    {
-        if (Document.Images is null)
-            return preview;
-
-        var hasFloating = Document.Images.Any(image => image.WrapMode != NoteImageWrapMode.Inline);
-        if (!hasFloating)
-            return preview;
-
-        if (string.IsNullOrWhiteSpace(preview))
-            return FloatingImageCoordinator.InlineMarkerChar.ToString();
-
-        var previewHeight = EstimatePreviewHeight(preview.Length);
-        var hasNearPhoto = Document.Images.Any(image =>
-            image.WrapMode != NoteImageWrapMode.Inline && image.Top <= previewHeight);
-
-        return hasNearPhoto ? preview + FloatingImageCoordinator.InlineMarkerChar : preview;
-    }
-
-    /// <summary>Rough vertical extent of the card's preview text (the flow document is not laid
-    /// out here, so the estimate stands in for the character-rect measurements).</summary>
-    private static double EstimatePreviewHeight(int characterCount)
-    {
-        const double charactersPerLine = 95;
-        const double lineHeightDip = 22;
-        return Math.Ceiling(characterCount / charactersPerLine) * lineHeightDip;
-    }
+    internal NotePreviewSnapshot Preview { get { _ = Content; return _cachedPreview!; } }
 
     public bool IsMenuVisible
     {
@@ -308,6 +228,7 @@ public class NoteCardViewModel : ViewModelBase
     {
         _contentGeneration++;
         _cachedContentPreview = null;
+        _cachedPreview = null;
         Document.SearchablePreview = null;
         _cachedTagsDisplay = null;
         _cachedTagsSearchText = null;
@@ -348,74 +269,4 @@ public class NoteCardViewModel : ViewModelBase
         _togglePinAction?.Invoke(this);
     }
 
-    private static string BuildOrderedContentPreview(FlowDocument document)
-    {
-        var preview = new StringBuilder();
-        var navigator = document.ContentStart;
-
-        while (navigator != null && navigator.CompareTo(document.ContentEnd) < 0)
-        {
-            var context = navigator.GetPointerContext(LogicalDirection.Forward);
-            if (context == TextPointerContext.Text)
-            {
-                // In-line photo markers (\uFFFC) stay in the preview as position sentinels -
-                // the card renders a picture icon where each one sits (the photo's place in
-                // the text), instead of an "obj" glyph or a leading icon.
-                preview.Append(navigator.GetTextInRun(LogicalDirection.Forward));
-            }
-            else if (context == TextPointerContext.ElementEnd
-                && navigator.Parent is Paragraph or ListItem or BlockUIContainer)
-            {
-                AppendSeparator(preview);
-            }
-
-            navigator = navigator.GetNextContextPosition(LogicalDirection.Forward);
-        }
-
-        return NormalizePreviewWhitespace(preview.ToString());
-    }
-
-    private static string StripLegacyImageMarkers(string text)
-    {
-        if (string.IsNullOrEmpty(text) || !text.Contains("[[ScriblucentImage:", StringComparison.Ordinal))
-            return text;
-
-        // Legacy in-line photos also become position sentinels (the card renders the icon there).
-        return System.Text.RegularExpressions.Regex.Replace(
-            text,
-            @"\[\[ScriblucentImage:[^\]]+\]\]",
-            FloatingImageCoordinator.InlineMarkerChar.ToString());
-    }
-
-    private static void AppendSeparator(StringBuilder preview)
-    {
-        if (preview.Length > 0 && !char.IsWhiteSpace(preview[^1]))
-            preview.Append(' ');
-    }
-
-    private static string NormalizePreviewWhitespace(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return string.Empty;
-
-        var normalized = new StringBuilder(text.Length);
-        var previousWasWhitespace = true;
-
-        foreach (var character in text)
-        {
-            if (char.IsWhiteSpace(character))
-            {
-                if (!previousWasWhitespace)
-                    normalized.Append(' ');
-
-                previousWasWhitespace = true;
-                continue;
-            }
-
-            normalized.Append(character);
-            previousWasWhitespace = false;
-        }
-
-        return normalized.ToString().Trim();
-    }
 }

@@ -6,9 +6,11 @@ public class NoteDocument
     public Guid? GroupId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
-    /// <summary>Plain-text card preview produced by <c>NoteCardViewModel</c>. Null until the
-    /// first decode or save; readers adopt it instead of parsing <see cref="Content"/> again.</summary>
+    /// <summary>Legacy cached excerpt. Current saves store the versioned <see cref="CardPreview"/> instead.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? SearchablePreview { get; set; }
+    public NotePreviewSnapshot? CardPreview { get; set; }
+    public double? PreviewLayoutWidth { get; set; }
     public List<NoteImageAttachment> Images { get; set; } = new();
     public List<string> Tags { get; set; } = new();
     public string FontFamily { get; set; } = "Calibri";

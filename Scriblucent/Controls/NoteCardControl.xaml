@@ -149,12 +149,13 @@
 
 
             </Grid>
-            <TextBlock x:Name="ContentPreview"
+            <controls:NotePreviewPresenter x:Name="ContentPreview"
                        Grid.Row="1"
-                       FontSize="{StaticResource Type.Body}" TextWrapping="Wrap"
-                       MaxHeight="100"
-                       TextTrimming="CharacterEllipsis"
-                       Foreground="{DynamicResource TextColor}"/>
+                       Margin="0,4,0,0"
+                       HasTags="{Binding HasTags}"
+                       TextBrush="{DynamicResource TextColor}"
+                       ChipBackground="{DynamicResource TagChipBackground}"
+                       ChipForeground="{DynamicResource TagChipForeground}"/>
             <controls:SurfaceMaterialBorder Grid.Row="2"
                     Style="{StaticResource DashboardTagChipStyle}">
                 <TextBlock Text="{Binding TagsDisplay}"

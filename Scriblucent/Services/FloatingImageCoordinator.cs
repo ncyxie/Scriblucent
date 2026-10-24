@@ -120,6 +120,17 @@ public sealed class FloatingImageCoordinator
 
     public bool HasSelection => _selected is not null || _selectedInlineId is not null;
     internal bool HasImages => _sessions.Count > 0;
+    internal IReadOnlyList<NoteImageAttachment> PreviewImages()
+    {
+        foreach (var session in _sessions.Values)
+            if (session.WrapMode != NoteImageWrapMode.Inline && FindWidget(session.Id) is { } widget)
+                SyncSessionFromWidget(session, widget);
+        return _sessions.Values
+        .Where(s => s.Bytes.Length > 0 && (s.WrapMode != NoteImageWrapMode.Inline
+            || _inlineContainers.TryGetValue(s.Id, out var inline) && IsInlineInDocument(inline)))
+        .Select(s => new NoteImageAttachment { Id = s.Id, Left = s.DocumentLeft, Top = s.DocumentTop,
+            Width = s.Width, Height = s.Height, WrapMode = s.WrapMode, InlineAnchorOffset = s.InlineAnchorOffset }).ToArray();
+    }
     public Guid? SelectedImageId => _selected?.ImageId ?? _selectedInlineId;
     public bool IsAdjustingExtentPad => _isAdjustingExtentPad;
     public bool HasActiveGestures => _activeGestures > 0;

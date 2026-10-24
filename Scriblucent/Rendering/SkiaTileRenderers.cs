@@ -522,7 +522,7 @@ internal sealed class NotesTileRenderer : SkiaTileRenderer
         var doc = vm.Document;
         // Document fields and the generation counter only. Content parses a FlowDocument and
         // must not run on the scroll path that asks for this signature.
-        return $"{ThemeManager.CurrentTheme}|surface-v2|{doc.Title}|{doc.LastModified.Ticks}|{vm.ContentGeneration}|{vm.TagsDisplay}|{doc.IsPinned}|{vm.HasSchedule}";
+        return $"{ThemeManager.CurrentTheme}|surface-v2|preview-v1|{doc.Title}|{doc.LastModified.Ticks}|{vm.ContentGeneration}|{vm.TagsDisplay}|{doc.IsPinned}|{vm.HasSchedule}";
     }
 
     private CardRenderColors ResolveColors()

@@ -4687,6 +4687,9 @@ namespace Scriblucent
             var newTags = ParseTags(TagsTextBox.Text);
             var newFontFamily = GetPrimaryFontFamily(ContentTextBox.FontFamily.Source);
             var newFontSize = ContentTextBox.FontSize;
+            // Read source geometry before the serialization cycle removes wrap spacers and
+            // inline elements. Capturing a preview never changes the live flow or selection.
+            var cardPreview = CaptureCardPreview();
             ClearSpellCheckDecorations();
             // Wrap insets are transient layout margins - never persist them into saved content.
             // Capture and restore the live spacers so autosave does not run a second settle.
@@ -4735,6 +4738,9 @@ namespace Scriblucent
             document.IsEditorFontPanelOpen = _isFontPanelOpen;
             document.IsEditorTagsPanelOpen = _isTagsPanelOpen;
             document.IsWordWrapEnabled = _isWordWrapEnabled;
+            document.PreviewLayoutWidth = cardPreview.LayoutWidth;
+            document.CardPreview = NotePreviewService.Complete(cardPreview, NotePreviewService.SourceHash(document));
+            document.SearchablePreview = null;
         }
 
         private static bool AreImageAttachmentsEqual(
@@ -6598,6 +6604,7 @@ namespace Scriblucent
         // dictionaries are normally already cached, so this is effectively instant).
         private NoteDocument CreateExportNoteDocument()
         {
+            var cardPreview = CaptureCardPreview();
             ClearSpellCheckDecorations();
             var document = new NoteDocument
             {
@@ -6612,12 +6619,22 @@ namespace Scriblucent
                 IsEditorFontPanelOpen = _isFontPanelOpen,
                 IsEditorTagsPanelOpen = _isTagsPanelOpen,
                 IsWordWrapEnabled = _isWordWrapEnabled,
+                PreviewLayoutWidth = cardPreview.LayoutWidth,
                 AiReviewNoticeDismissed = _currentDocument?.AiReviewNoticeDismissed == true,
                 CreatedAt = _currentDocument?.CreatedAt ?? DateTime.UtcNow,
                 LastModified = DateTime.Now
             };
+            document.CardPreview = NotePreviewService.Complete(cardPreview, NotePreviewService.SourceHash(document));
+            document.SearchablePreview = null;
             _ = RunSpellCheckPassAsync();
             return document;
+        }
+
+        private NotePreviewSnapshot CaptureCardPreview()
+        {
+            var width = NotePreviewService.ResolveWidth(ContentTextBox.ActualWidth - ContentTextBox.Padding.Left - ContentTextBox.Padding.Right);
+            return NotePreviewService.Capture(ContentTextBox.Document, _floatingImages.PreviewImages(),
+                ContentTextBox, width, _floatingImages.CaptureViewState().ScrollOffset);
         }
 
         private bool ExportToPdf(string title)

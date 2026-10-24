@@ -2403,13 +2403,13 @@ public class InlineImageTests
             Images = new List<NoteImageAttachment>
             {
                 new NoteImageAttachment { WrapMode = NoteImageWrapMode.Inline },   // marker in flow
-                new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square }    // floating → sentinel
+                new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square, Width = 100, Height = 60 }
             }
         };
         var vm = new Scriblucent.ViewModels.NoteCardViewModel(document, _ => { });
         Assert.DoesNotContain("obj", vm.Content);
-        // The inline marker stays at its position; the floating photo adds one trailing sentinel.
-        Assert.Equal("Before \uFFFC after\uFFFC", vm.Content);
+        // The inline marker stays at its position; a floating photo at the top leads the excerpt.
+        Assert.Equal("\uFFFCBefore \uFFFC after", vm.Content);
         Assert.True(vm.HasPictures);
 
         // Legacy marker content becomes a sentinel too.
@@ -2425,7 +2425,7 @@ public class InlineImageTests
             Content = content,
             Images = new List<NoteImageAttachment>
             {
-                new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square, Top = 5000 }
+                new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square, Top = 5000, Width = 100, Height = 60 }
             }
         };
         var farVm = new Scriblucent.ViewModels.NoteCardViewModel(farDocument, _ => { });
@@ -2438,7 +2438,7 @@ public class InlineImageTests
             Content = null!,
             Images = new List<NoteImageAttachment>
             {
-                new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square, Top = 5000 }
+                new NoteImageAttachment { WrapMode = NoteImageWrapMode.Square, Top = 5000, Width = 100, Height = 60 }
             }
         };
         var photoOnlyVm = new Scriblucent.ViewModels.NoteCardViewModel(photoOnly, _ => { });

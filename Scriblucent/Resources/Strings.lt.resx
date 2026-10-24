@@ -1424,4 +1424,6 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="LaunchHandoffFailed" xml:space="preserve"><value>Scriblucent jau veikia, bet neatsakė. Šiek tiek palaukite ir bandykite dar kartą.</value></data>
   <data name="LegacyMigrationConflict" xml:space="preserve"><value>NoteCards ir Scriblucent duomenų aplankuose yra failų. Naudojama dabartinė Scriblucent biblioteka. NoteCards aplankas išsaugotas vietiniame AppData aplanke; niekas neperrašyta.</value></data>
   <data name="LegacyMigrationFailed" xml:space="preserve"><value>Nepavyko perkelti NoteCards duomenų į Scriblucent. Pradinis aplankas liko vietiniame AppData aplanke. Uždarykite kitas programos kopijas ir patikrinkite aplanko teises.</value></data>
+  <data name="NotePreviewImage" xml:space="preserve"><value>Vaizdas</value></data>
+  <data name="NotePreviewImages" xml:space="preserve"><value>Vaizdai: {0}</value></data>
 </root>

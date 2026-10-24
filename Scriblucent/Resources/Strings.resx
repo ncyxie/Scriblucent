@@ -1425,4 +1425,6 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="LaunchHandoffFailed" xml:space="preserve"><value>Scriblucent is already running but could not respond. Wait a moment and try again.</value></data>
   <data name="LegacyMigrationConflict" xml:space="preserve"><value>Both NoteCards and Scriblucent data folders contain files. Your current Scriblucent library is active. The NoteCards folder has been preserved in Local AppData; nothing was overwritten.</value></data>
   <data name="LegacyMigrationFailed" xml:space="preserve"><value>Your NoteCards data could not be moved to Scriblucent. The original folder is unchanged in Local AppData. Close other copies of the app and check folder permissions before trying again.</value></data>
+  <data name="NotePreviewImage" xml:space="preserve"><value>Image</value></data>
+  <data name="NotePreviewImages" xml:space="preserve"><value>{0} images</value></data>
 </root>

@@ -14,6 +14,7 @@ internal sealed class SkiaTextRun
     public float FontSize;
     /// <summary>Distance from the line's top to the run's baseline (for canvas.DrawText y).</summary>
     public float Baseline;
+    public string? ImageLabel;
 }
 
 /// <summary>A single wrapped line of runs.</summary>
@@ -47,7 +48,8 @@ internal sealed class SkiaTextLayout
         float fontSize,
         int maxLines,
         SKFontManager fontManager,
-        Func<SKTypeface, SKShaper> shaperFactory)
+        Func<SKTypeface, SKShaper> shaperFactory,
+        IReadOnlyList<string>? imageLabels = null)
     {
         var layout = new SkiaTextLayout();
         if (string.IsNullOrEmpty(text) || maxWidth <= 0)
@@ -64,6 +66,8 @@ internal sealed class SkiaTextLayout
 
         using var measureFont = new SKFont(primaryTypeface, fontSize);
 
+        int imageIndex = 0;
+        var chipLabels = new Dictionary<SkiaTextToken, string>();
         foreach (var token in tokens)
         {
             if (token.Kind == SkiaTextTokenKind.NewLine)
@@ -80,9 +84,17 @@ internal sealed class SkiaTextLayout
                 continue;
             }
 
-            var tokenWidth = token.Kind == SkiaTextTokenKind.Image
-                ? fontSize * ImageTokenWidthRatio
-                : measureFont.MeasureText(token.Text);
+            var tokenWidth = measureFont.MeasureText(token.Text);
+            if (token.Kind == SkiaTextTokenKind.Image)
+            {
+                if (imageLabels is not null && imageIndex < imageLabels.Count)
+                {
+                    var label = imageLabels[imageIndex++]; chipLabels[token] = label;
+                    using var chipFont = new SKFont(primaryTypeface, fontSize * 12 / 14);
+                    tokenWidth = chipFont.MeasureText(label) + fontSize * 32 / 14;
+                }
+                else tokenWidth = fontSize * ImageTokenWidthRatio;
+            }
 
             if (current.Count > 0 && currentWidth + tokenWidth > maxWidth)
             {
@@ -113,6 +125,9 @@ internal sealed class SkiaTextLayout
             {
                 if (token.Kind == SkiaTextTokenKind.Image)
                 {
+                    chipLabels.TryGetValue(token, out var label);
+                    using var chipFont = new SKFont(primaryTypeface, fontSize * 12 / 14);
+                    var chipWidth = label is null ? fontSize * ImageTokenWidthRatio : chipFont.MeasureText(label) + fontSize * 32 / 14;
                     using var font = new SKFont(primaryTypeface, fontSize);
                     var metrics = font.Metrics;
                     var height = metrics.Descent - metrics.Ascent;
@@ -121,13 +136,14 @@ internal sealed class SkiaTextLayout
                         Typeface = primaryTypeface,
                         Glyphs = Array.Empty<ushort>(),
                         Positions = new[] { new SKPoint(x, 0) },
-                        Width = fontSize * ImageTokenWidthRatio,
-                        LineHeight = height,
+                        Width = chipWidth,
+                        LineHeight = label is null ? height : fontSize * 20 / 14,
                         FontSize = fontSize,
-                        Baseline = -metrics.Ascent
+                        Baseline = -metrics.Ascent,
+                        ImageLabel = label
                     });
-                    x += fontSize * ImageTokenWidthRatio;
-                    lineHeight = Math.Max(lineHeight, height);
+                    x += chipWidth;
+                    lineHeight = Math.Max(lineHeight, label is null ? height : fontSize * 20 / 14);
                     continue;
                 }
 
@@ -155,17 +171,20 @@ internal sealed class SkiaTextLayout
             }
 
             line.Width = x;
-            line.Height = lineHeight;
+            line.Height = imageLabels is null ? lineHeight : Math.Max(lineHeight, fontSize * 20.8f / 14);
+            // One baseline and line box for both the live preview and scrolling tile.
+            if (imageLabels is not null)
+                foreach (var run in line.Runs) run.Baseline += (line.Height - run.LineHeight) / 2;
             layout._lines.Add(line);
             layout.MaxIntrinsicWidth = Math.Max(layout.MaxIntrinsicWidth, x);
-            layout.Height += lineHeight;
+            layout.Height += line.Height;
         }
 
         // Ellipsis: if the last line overflows the max width, truncate its runs to fit.
         if (layout._lines.Count > 0)
         {
             var last = layout._lines[^1];
-            if (last.Width > maxWidth)
+            if (last.Width > maxWidth || (layout.Truncated && imageLabels is not null))
             {
                 layout.Truncated = true;
                 layout.TruncateLastLine(last, maxWidth, ellipsisWidth, primaryTypeface, fontSize);
@@ -177,7 +196,7 @@ internal sealed class SkiaTextLayout
 
     private void TruncateLastLine(SkiaTextLine line, float maxWidth, float ellipsisWidth, SKTypeface primaryTypeface, float fontSize)
     {
-        while (line.Runs.Count > 0 && line.Runs[^1].Glyphs.Length == 0)
+        while (line.Runs.Count > 0 && line.Runs[^1].Glyphs.Length == 0 && line.Runs[^1].ImageLabel is null)
             line.Runs.RemoveAt(line.Runs.Count - 1);
 
         if (line.Runs.Count == 0)
@@ -193,6 +212,14 @@ internal sealed class SkiaTextLayout
             if (done)
                 break;
 
+            if (run.ImageLabel is not null)
+            {
+                if (newWidth + run.Width > available) { done = true; continue; }
+                run.Positions[0] = new SKPoint(newWidth, 0);
+                newRuns.Add(run); newWidth += run.Width;
+                continue;
+            }
+
             var count = 0;
             var runWidth = 0f;
             for (var i = 0; i < run.Glyphs.Length; i++)
@@ -201,7 +228,7 @@ internal sealed class SkiaTextLayout
                 if (i + 1 < run.Positions.Length)
                     glyphWidth = run.Positions[i + 1].X - run.Positions[i].X;
                 else if (run.Positions.Length > 1)
-                    glyphWidth = run.Width - run.Positions[^1].X;
+                    glyphWidth = run.Width - (run.Positions[^1].X - run.Positions[0].X);
                 else
                     glyphWidth = run.Width;
 
@@ -221,7 +248,7 @@ internal sealed class SkiaTextLayout
                 {
                     Typeface = run.Typeface,
                     Glyphs = run.Glyphs.Take(count).ToArray(),
-                    Positions = run.Positions.Take(count).ToArray(),
+                    Positions = run.Positions.Take(count).Select(p => new SKPoint(p.X - run.Positions[0].X + newWidth, p.Y)).ToArray(),
                     Width = runWidth,
                     LineHeight = run.LineHeight,
                     FontSize = run.FontSize,
@@ -363,7 +390,7 @@ internal sealed class SkiaTextLayout
             if (ch == '\uFFFC')
             {
                 FlushWord();
-                tokens.Add(new SkiaTextToken(SkiaTextTokenKind.Image, "\uFFFC"));
+                tokens.Add(new SkiaTextToken(SkiaTextTokenKind.Image, "\uFFFC", tokens.Count));
                 continue;
             }
 
@@ -397,4 +424,4 @@ internal enum SkiaTextTokenKind
     NewLine
 }
 
-internal readonly record struct SkiaTextToken(SkiaTextTokenKind Kind, string Text);
+internal readonly record struct SkiaTextToken(SkiaTextTokenKind Kind, string Text, int Identity = 0);

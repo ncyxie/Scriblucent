@@ -34,6 +34,10 @@ internal static partial class Program
                 for (int pass = 0; pass < 2; pass++)
                 {
                     Require(RemainingCall(editor, "SaveCurrentDocument") is true, "Wrapped note save failed.");
+                    Require(document.CardPreview is { Version: NotePreviewService.Version }
+                        && document.CardPreview.SourceHash == NotePreviewService.SourceHash(document)
+                        && document.PreviewLayoutWidth > 100 && document.SearchablePreview is null,
+                        "Saving did not capture a current, nonduplicated card preview.");
                     Require(!editor.WorkspaceDirty, "Save did not initially acknowledge the note.");
                     long savedVersion = CompletionField<long>(editor, "_editorChangeVersion");
                     // Both idle debounce work and an unchanged geometry rebuild are cosmetic.

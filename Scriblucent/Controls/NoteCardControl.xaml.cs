@@ -9,7 +9,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -178,6 +177,7 @@ public partial class NoteCardControl : UserControl
 
         DataContextChanged += NoteCardControl_DataContextChanged;
         SkiaCardTileCache.Invalidated += TileCacheInvalidated;
+        ObservePreview(DataContext as NoteCardViewModel);
         ApplyBitmapMode();
         if (!IsBitmapMode) RebuildContentPreview(DataContext as NoteCardViewModel);
     }
@@ -187,6 +187,7 @@ public partial class NoteCardControl : UserControl
 
     private void NoteCardControl_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        ObservePreview(e.NewValue as NoteCardViewModel);
         ApplyBitmapMode();
         // Defer the hidden inline preview while bitmap mode displays the cached tile.
         // Rebuild the preview when the card returns to live rendering.
@@ -196,76 +197,44 @@ public partial class NoteCardControl : UserControl
 
     private NoteCardViewModel? _previewViewModel;
     private string? _previewContent;
+    private NoteCardViewModel? _observedNote;
 
-    /// <summary>Builds the card preview as inlines: a vector picture icon wherever a photo
-    /// sentinel sits in the preview text (in-line photos at their text position, floating
-    /// photos trailing the text) - so a photo-only note never reads as an empty card and
-    /// text+photo notes show the photos where they belong.</summary>
+    private void ObservePreview(NoteCardViewModel? viewModel)
+    {
+        if (!ReferenceEquals(_observedNote, viewModel))
+        {
+            if (_observedNote is not null) _observedNote.PropertyChanged -= PreviewPropertyChanged;
+            _observedNote = viewModel;
+            if (_observedNote is not null) _observedNote.PropertyChanged += PreviewPropertyChanged;
+        }
+    }
+
     private void RebuildContentPreview(NoteCardViewModel? viewModel)
     {
-        // Recycled containers can revisit the same card. Reuse its inline preview when
-        // both the view model and content are unchanged.
+        ObservePreview(viewModel);
         var content = viewModel?.Content ?? string.Empty;
-        if (ReferenceEquals(_previewViewModel, viewModel) && _previewContent == content)
-            return;
-
+        if (ReferenceEquals(_previewViewModel, viewModel) && _previewContent == content
+            && ReferenceEquals(ContentPreview.Preview, viewModel?.Document.CardPreview)) return;
         _previewViewModel = viewModel;
         _previewContent = content;
-
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        ContentPreview.Inlines.Clear();
-        if (viewModel is null)
-            return;
-
-        var text = viewModel.Content ?? string.Empty;
-        var segments = text.Split(Scriblucent.Services.FloatingImageCoordinator.InlineMarkerChar);
-        var previewIconCount = 0;
-        const int maxPreviewIcons = 4;
-        for (var i = 0; i < segments.Length; i++)
-        {
-            if (segments[i].Length > 0)
-                ContentPreview.Inlines.Add(new Run(segments[i]));
-
-            if (i < segments.Length - 1 && previewIconCount < maxPreviewIcons)
-            {
-                previewIconCount++;
-                ContentPreview.Inlines.Add(new InlineUIContainer(BuildPreviewPictureIcon())
-                {
-                    BaselineAlignment = BaselineAlignment.Center
-                });
-            }
-        }
-
-        if (Scriblucent.Services.ScrollPerfDiag.Enabled && sw.Elapsed.TotalMilliseconds > 1)
-        {
-            Scriblucent.Services.ScrollPerfDiag.Log(
-                $"previewRebuild\t{sw.Elapsed.TotalMilliseconds:F2}\ttextLen={text.Length}\tsegments={segments.Length}\ticons={previewIconCount}");
-        }
+        ContentPreview.Preview = viewModel?.Preview;
     }
 
-    private static UIElement BuildPreviewPictureIcon()
+    private void PreviewPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
-        var icon = new Icons.AppIcon
-        {
-            Kind = Icons.AppIconKind.Image,
-            Width = 14,
-            Height = 14,
-            // Flush on both sides - the photo in the editor sits directly between its
-            // surrounding text, so the preview icon must not invent a gap on either side.
-            Margin = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        icon.SetResourceReference(TextElement.ForegroundProperty, "TextColorSecondary");
-        return icon;
+        if (args.PropertyName != nameof(NoteCardViewModel.Content)) return;
+        if (IsBitmapMode) ApplyBitmapMode();
+        else RebuildContentPreview(DataContext as NoteCardViewModel);
     }
-
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         CancelTileRequest();
         SkiaCardTileCache.Invalidated -= TileCacheInvalidated;
         BitmapLayer.Source = null;
         DataContextChanged -= NoteCardControl_DataContextChanged;
-        ContentPreview.Inlines.Clear();
+        ContentPreview.Preview = null;
+        if (_observedNote is not null) _observedNote.PropertyChanged -= PreviewPropertyChanged;
+        _observedNote = null;
         _previewViewModel = null;
         _previewContent = null;
         CardSurfaceMotionBehavior.Cleanup(this);

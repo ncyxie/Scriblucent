@@ -7,7 +7,7 @@ namespace Scriblucent.Rendering;
 /// <summary>
 /// Renders a dashboard card into an SKBitmap off the UI thread. Matches the
 /// minimal NoteCardControl look: rounded card, title (1 line + ellipsis), wrapped preview
-/// (max 4 lines + ellipsis), tags chip. Photo sentinels render as small image glyphs.
+/// (3 lines, or 2 with tags), and tags. Image chips share their layout with the live preview.
 /// </summary>
 internal static class SkiaCardRenderer
 {
@@ -17,7 +17,6 @@ internal static class SkiaCardRenderer
     public const float MinCardHeightDip = 140f;
     public const float CellHeightDip = 164f;
     public const float CardCornerRadiusDip = 14f;
-    public const int MaxPreviewLines = 4;
 
     private static readonly ThreadLocal<Dictionary<SKTypeface, SKShaper>> Shapers = new(() => new());
     private static readonly object TypefaceGate = new();
@@ -69,7 +68,7 @@ internal static class SkiaCardRenderer
     public static SKBitmap Render(NoteCardViewModel vm, double dpiScale, CardRenderColors colors, out double heightDip)
     {
         var scale = (float)dpiScale;
-        var textWidth = (CardWidthDip - CardPaddingDip * 2) * scale;
+        var textWidth = (CardWidthDip - CardPaddingDip * 2 - 2) * scale;
         // Titles are SemiBold in the live UI (NoteCardControl / recent strip); the tile text
         // must match or the cards read thinner than the strip.
         var titleTypeface = GetTypeface(ResolveFontFamily(), 600);
@@ -87,24 +86,15 @@ internal static class SkiaCardRenderer
         // The menu slot becomes the selection slot while picking, matching the live header.
         var titleLayout = SkiaTextLayout.Layout(title, textWidth - 36 * scale, titleTypeface, 14.5f * scale, 1, fontManager, shaperFactory);
 
-        // Match the uniform 164-DIP cell so applying a tile keeps the estimated extent stable.
-        // Fit the preview line count into the remaining space.
-        var fixedInnerHeight = (CellHeightDip - CardMarginDip * 2) * scale;
-        var titleHeight = titleLayout.Height;
         var tagsLayout = tags.Length > 0
             ? SkiaTextLayout.Layout(tags, textWidth, bodyTypeface, 12f * scale, 1, fontManager, shaperFactory)
             : null;
-        var tagsBlockHeight = tagsLayout is null ? 0 : tagsLayout.Height + 6 * scale;
+        var previewMaxLines = tags.Length > 0 ? 2 : 3;
 
-        var previewLineHeight = 19.6f * scale;
-        var availablePreview = fixedInnerHeight - CardPaddingDip * 2 * scale - titleHeight - 4 * scale - tagsBlockHeight;
-        var previewMaxLines = Math.Max(1, Math.Min(MaxPreviewLines, (int)Math.Floor(availablePreview / previewLineHeight)));
+        var previewLayout = NotePreviewRaster.Layout(vm.Document.CardPreview ?? new Models.NotePreviewSnapshot { Text = preview }, textWidth, previewMaxLines, scale);
 
-        var previewLayout = SkiaTextLayout.Layout(preview, textWidth, bodyTypeface, 14f * scale, previewMaxLines, fontManager, shaperFactory);
-
-        var contentHeight = titleHeight + 4 * scale + previewLayout.Height + tagsBlockHeight;
-        var innerHeight = Math.Max(MinCardHeightDip * scale, Math.Min(CellHeightDip * scale - CardMarginDip * 2 * scale, CardPaddingDip * 2 * scale + contentHeight));
-        heightDip = (innerHeight + CardMarginDip * 2) / scale;
+        var innerHeight = MinCardHeightDip * scale;
+        heightDip = innerHeight / scale + CardMarginDip * 2;
 
         var bitmap = new SKBitmap(
             (int)Math.Ceiling((CardWidthDip + CardMarginDip * 2) * scale),
@@ -145,29 +135,29 @@ internal static class SkiaCardRenderer
         SurfaceMaterialRaster.LightRaisedFrame(canvas, cardRect, CardCornerRadiusDip, colors.Border, colors.Dark, scale);
 
 
-        var contentX = (CardMarginDip + CardPaddingDip) * scale;
-        var contentY = (CardMarginDip + CardPaddingDip) * scale;
+        var contentX = (CardMarginDip + CardPaddingDip + 1) * scale;
+        var contentY = (CardMarginDip + CardPaddingDip + 1) * scale;
 
         PaintLayout(canvas, titleLayout, contentX, contentY, colors.Title, scale);
-        contentY += titleLayout.Height + 4 * scale;
+        contentY += 32 * scale;
 
-        PaintLayout(canvas, previewLayout, contentX, contentY, colors.Text, scale);
+        PaintLayout(canvas, previewLayout, contentX, contentY, colors.Text, scale, colors.TagBackground, colors.TagText, colors.Dark);
         contentY += previewLayout.Height;
 
         if (tagsLayout is not null)
         {
-            contentY += 6 * scale;
-            var chipWidth = Math.Min(tagsLayout.MaxIntrinsicWidth + 12 * scale, textWidth);
-            var chipRect = SKRect.Create(contentX, contentY, chipWidth, tagsLayout.Height);
+            contentY = cardRect.Bottom - (CardPaddingDip + 1) * scale - tagsLayout.Height - 8 * scale;
+            var chipRect = SKRect.Create(contentX, contentY, textWidth, tagsLayout.Height + 8 * scale);
             using var chip = new SKPaint { Color = colors.TagBackground, IsAntialias = true };
-            SurfaceMaterialRaster.Draw(canvas, chipRect, 6 * scale, 6 * scale, chip, colors.Dark, scale);
-            PaintLayout(canvas, tagsLayout, contentX + 6 * scale, contentY, colors.TagText, scale);
+            SurfaceMaterialRaster.Draw(canvas, chipRect, 7 * scale, 7 * scale, chip, colors.Dark, scale);
+            PaintLayout(canvas, tagsLayout, contentX + 8 * scale, contentY + 4 * scale, colors.TagText, scale);
         }
 
         return bitmap;
     }
 
-    internal static void PaintLayout(SKCanvas canvas, SkiaTextLayout layout, float x, float y, SKColor color, float scale)
+    internal static void PaintLayout(SKCanvas canvas, SkiaTextLayout layout, float x, float y, SKColor color, float scale,
+        SKColor? chipBackground = null, SKColor? chipForeground = null, bool dark = false)
     {
         var lineY = y;
         foreach (var line in layout.Lines)
@@ -176,6 +166,12 @@ internal static class SkiaCardRenderer
             {
                 if (run.Glyphs.Length == 0)
                 {
+                    if (run.ImageLabel is not null)
+                    {
+                        NotePreviewRaster.PaintChip(canvas, run, run.Positions[0].X + x, lineY, line.Height,
+                            chipBackground ?? color.WithAlpha(20), chipForeground ?? color, dark);
+                        continue;
+                    }
                     PaintImageToken(canvas, run.Positions[0].X + x, lineY, run.FontSize, color);
                     continue;
                 }
@@ -218,7 +214,7 @@ internal static class SkiaCardRenderer
         canvas.DrawCircle(rect.Right - size * 0.28f, rect.Top + size * 0.3f, size * 0.09f, sun);
     }
 
-    private static string ResolveFontFamily()
+    internal static string ResolveFontFamily()
     {
         try
         {
