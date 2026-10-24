@@ -582,22 +582,11 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="SketchDialogTitle" xml:space="preserve"><value>Greitas eskizas</value></data>
   <data name="SketchPen" xml:space="preserve"><value>Pieštukas</value></data>
   <data name="SketchEraser" xml:space="preserve"><value>Trintukas</value></data>
-  <data name="SketchClear" xml:space="preserve"><value>Išvalyti eskizą</value></data>
-  <data name="SketchStrokeThin" xml:space="preserve"><value>Plonas brūkšnys</value></data>
-  <data name="SketchStrokeMedium" xml:space="preserve"><value>Vidutinis brūkšnys</value></data>
-  <data name="SketchStrokeThick" xml:space="preserve"><value>Storas brūkšnys</value></data>
-  <data name="SketchColorBlack" xml:space="preserve"><value>Juoda</value></data>
-  <data name="SketchColorAccent" xml:space="preserve"><value>Akcentas</value></data>
-  <data name="SketchColorRed" xml:space="preserve"><value>Raudona</value></data>
-  <data name="SketchColorGreen" xml:space="preserve"><value>Žalia</value></data>
-  <data name="SketchEmpty" xml:space="preserve"><value>Prieš įterpdami nupieškite eskizą.</value></data>
   <data name="FailedToInsertSketch" xml:space="preserve"><value>Nepavyko įterpti eskizo:</value></data>
   <data name="SketchMarker" xml:space="preserve"><value>Žymeklis</value></data>
   <data name="SketchStrokeWidth" xml:space="preserve"><value>Dydis</value></data>
-  <data name="SketchPenColor" xml:space="preserve"><value>Pieštukas</value></data>
   <data name="SketchBackground" xml:space="preserve"><value>Fonas</value></data>
   <data name="SketchBackgroundTransparent" xml:space="preserve"><value>Permatomas</value></data>
-  <data name="SketchBackgroundCustom" xml:space="preserve"><value>Pasirinktinė fono spalva</value></data>
   <data name="ReplaceFromFile" xml:space="preserve"><value>Pakeisti iš failo...</value></data>
   <data name="CloseTab" xml:space="preserve"><value>Uždaryti skirtuką</value></data>
   <data name="OpenInTab" xml:space="preserve"><value>Atidaryti skirtuke</value></data>
@@ -1431,4 +1420,22 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="LegacyMigrationFailed" xml:space="preserve"><value>Nepavyko perkelti NoteCards duomenų į Scriblucent. Pradinis aplankas liko vietiniame AppData aplanke. Uždarykite kitas programos kopijas ir patikrinkite aplanko teises.</value></data>
   <data name="NotePreviewImage" xml:space="preserve"><value>Vaizdas</value></data>
   <data name="NotePreviewImages" xml:space="preserve"><value>Vaizdai: {0}</value></data>
+  <data name="SketchInkColor" xml:space="preserve"><value>Rašalas</value></data>
+  <data name="SketchEditTitle" xml:space="preserve"><value>Redaguoti piešinį</value></data>
+  <data name="SketchLine" xml:space="preserve"><value>Linija</value></data>
+  <data name="SketchArrow" xml:space="preserve"><value>Rodyklė</value></data>
+  <data name="SketchRectangle" xml:space="preserve"><value>Stačiakampis</value></data>
+  <data name="SketchEllipse" xml:space="preserve"><value>Elipsė</value></data>
+  <data name="SketchFit" xml:space="preserve"><value>Sutalpinti</value></data>
+  <data name="SketchClearMarks" xml:space="preserve"><value>Išvalyti potėpius</value></data>
+  <data name="SketchHelp" xml:space="preserve"><value>Piešimo patarimai</value></data>
+  <data name="SketchInputHint" xml:space="preserve"><value>Shift: proporcijos · Ctrl+ratukas: mastelis · Tarpas+vilkimas: slinkti</value></data>
+  <data name="SketchDiscardPrompt" xml:space="preserve"><value>Atmesti piešinio pakeitimus?</value></data>
+  <data name="SketchTooLarge" xml:space="preserve"><value>Piešinyje per daug redaguojamų duomenų. Prieš piešdami sumažinkite paveikslėlį.</value></data>
+  <data name="PaintImage" xml:space="preserve"><value>Piešti</value></data>
+  <data name="SketchApplyChanges" xml:space="preserve"><value>Taikyti pakeitimus</value></data>
+  <data name="SketchPreparing" xml:space="preserve"><value>Ruošiama…</value></data>
+  <data name="SketchOriginalProtected" xml:space="preserve"><value>Trintukas šalina pridėtus potėpius. Pradinis paveikslėlis lieka nepakeistas.</value></data>
+  <data name="SketchDiscard" xml:space="preserve"><value>Atmesti pakeitimus</value></data>
+  <data name="SketchKeepDrawing" xml:space="preserve"><value>Tęsti piešimą</value></data>
 </root>

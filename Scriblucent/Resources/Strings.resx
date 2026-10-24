@@ -612,22 +612,11 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="SketchDialogTitle" xml:space="preserve"><value>Quick sketch</value></data>
   <data name="SketchPen" xml:space="preserve"><value>Pen</value></data>
   <data name="SketchEraser" xml:space="preserve"><value>Eraser</value></data>
-  <data name="SketchClear" xml:space="preserve"><value>Clear sketch</value></data>
-  <data name="SketchStrokeThin" xml:space="preserve"><value>Thin stroke</value></data>
-  <data name="SketchStrokeMedium" xml:space="preserve"><value>Medium stroke</value></data>
-  <data name="SketchStrokeThick" xml:space="preserve"><value>Thick stroke</value></data>
-  <data name="SketchColorBlack" xml:space="preserve"><value>Black</value></data>
-  <data name="SketchColorAccent" xml:space="preserve"><value>Accent</value></data>
-  <data name="SketchColorRed" xml:space="preserve"><value>Red</value></data>
-  <data name="SketchColorGreen" xml:space="preserve"><value>Green</value></data>
-  <data name="SketchEmpty" xml:space="preserve"><value>Draw something before inserting the sketch.</value></data>
   <data name="FailedToInsertSketch" xml:space="preserve"><value>Failed to insert sketch:</value></data>
   <data name="SketchMarker" xml:space="preserve"><value>Marker</value></data>
   <data name="SketchStrokeWidth" xml:space="preserve"><value>Size</value></data>
-  <data name="SketchPenColor" xml:space="preserve"><value>Pen</value></data>
   <data name="SketchBackground" xml:space="preserve"><value>Background</value></data>
   <data name="SketchBackgroundTransparent" xml:space="preserve"><value>Transparent</value></data>
-  <data name="SketchBackgroundCustom" xml:space="preserve"><value>Custom background color</value></data>
   <data name="ReplaceFromFile" xml:space="preserve"><value>Replace from file...</value></data>
   <data name="CloseTab" xml:space="preserve"><value>Close Tab</value></data>
   <data name="OpenInTab" xml:space="preserve"><value>Open in Tab</value></data>
@@ -1432,4 +1421,22 @@ Please contact support if you'd like help recovering your notes.</value></data>
   <data name="LegacyMigrationFailed" xml:space="preserve"><value>Your NoteCards data could not be moved to Scriblucent. The original folder is unchanged in Local AppData. Close other copies of the app and check folder permissions before trying again.</value></data>
   <data name="NotePreviewImage" xml:space="preserve"><value>Image</value></data>
   <data name="NotePreviewImages" xml:space="preserve"><value>{0} images</value></data>
+  <data name="SketchInkColor" xml:space="preserve"><value>Ink</value></data>
+  <data name="SketchEditTitle" xml:space="preserve"><value>Edit drawing</value></data>
+  <data name="SketchLine" xml:space="preserve"><value>Line</value></data>
+  <data name="SketchArrow" xml:space="preserve"><value>Arrow</value></data>
+  <data name="SketchRectangle" xml:space="preserve"><value>Rectangle</value></data>
+  <data name="SketchEllipse" xml:space="preserve"><value>Ellipse</value></data>
+  <data name="SketchFit" xml:space="preserve"><value>Fit</value></data>
+  <data name="SketchClearMarks" xml:space="preserve"><value>Clear marks</value></data>
+  <data name="SketchHelp" xml:space="preserve"><value>Drawing tips</value></data>
+  <data name="SketchInputHint" xml:space="preserve"><value>Shift: constrain · Ctrl+wheel: zoom · Space+drag: pan</value></data>
+  <data name="SketchDiscardPrompt" xml:space="preserve"><value>Discard your drawing changes?</value></data>
+  <data name="SketchTooLarge" xml:space="preserve"><value>This drawing contains too much editable data. Reduce the image size before painting.</value></data>
+  <data name="PaintImage" xml:space="preserve"><value>Paint</value></data>
+  <data name="SketchApplyChanges" xml:space="preserve"><value>Apply changes</value></data>
+  <data name="SketchPreparing" xml:space="preserve"><value>Preparing…</value></data>
+  <data name="SketchOriginalProtected" xml:space="preserve"><value>Eraser removes added marks. Your original picture stays intact.</value></data>
+  <data name="SketchDiscard" xml:space="preserve"><value>Discard changes</value></data>
+  <data name="SketchKeepDrawing" xml:space="preserve"><value>Keep drawing</value></data>
 </root>

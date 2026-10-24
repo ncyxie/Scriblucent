@@ -43,6 +43,8 @@
                       Click="ContextMenuCut_Click"/>
             <MenuItem Header="{Binding [ChangePicture], Source={x:Static localization:LocalizationProvider.Instance}}"
                       Click="ContextMenuChangePicture_Click"/>
+            <MenuItem Header="{Binding [PaintImage], Source={x:Static localization:LocalizationProvider.Instance}}"
+                      Click="ContextMenuPaint_Click"/>
             <MenuItem Header="{Binding [InsertCaption], Source={x:Static localization:LocalizationProvider.Instance}}"
                       Click="ContextMenuCaption_Click"/>
             <MenuItem Header="{Binding [DeleteImage], Source={x:Static localization:LocalizationProvider.Instance}}"

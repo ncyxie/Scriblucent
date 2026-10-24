@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using Scriblucent.Animations;
 using Scriblucent.Localization;
 using Scriblucent.Models;
@@ -423,6 +423,7 @@ namespace Scriblucent
             _floatingImages.CutRequested += FloatingImages_CutRequested;
             _floatingImages.ChangePictureRequested += FloatingImages_ChangePictureRequested;
             _floatingImages.CaptionRequested += FloatingImages_CaptionRequested;
+            _floatingImages.PaintRequested += FloatingImages_PaintRequested;
             _floatingImages.SelectionChanged += (_, _) =>
             {
                 UpdateInsertCaptionAvailability();
@@ -9902,7 +9903,11 @@ namespace Scriblucent
                 if (decoder.Frames.Count == 0)
                     return false;
 
-                Clipboard.SetImage(decoder.Frames[0]);
+                var data = new DataObject();
+                data.SetImage(decoder.Frames[0]);
+                if (bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+                    data.SetData("PNG", new MemoryStream(bytes, false));
+                Clipboard.SetDataObject(data, true);
                 return true;
             }
             catch
@@ -9922,73 +9927,51 @@ namespace Scriblucent
         }
 
         private async void InsertSketchButton_Click(object sender, RoutedEventArgs e)
+            => await OpenSketchAsync(null);
+
+        private void PaintSelectedImage_Click(object sender, RoutedEventArgs e)
         {
-            if (_isInsertingSketch)
-                return;
+            if (_floatingImages.SelectedImageId is { } imageId) FloatingImages_PaintRequested(this, imageId);
+        }
 
-            var sketchDialog = new SketchDialog
-            {
-                Owner = GetDialogOwnerWindow()
-            };
+        private async void FloatingImages_PaintRequested(object? sender, Guid imageId)
+            => await OpenSketchAsync(imageId);
 
-            if (sketchDialog.ShowDialog() != true
-                || sketchDialog.SketchPngBytes is null
-                || sketchDialog.SketchPngBytes.Length == 0)
-            {
-                return;
-            }
-
+        private async Task OpenSketchAsync(Guid? imageId)
+        {
+            if (_isInsertingSketch) return;
+            var original = imageId is { } id ? _floatingImages.GetImageBytes(id) : null;
+            if (imageId is not null && original is null) return;
+            _isInsertingSketch = true;
+            if (InsertSketchButton is not null) InsertSketchButton.IsEnabled = false;
             try
             {
-                var dpi = 1.0;
-                var source = PresentationSource.FromVisual(this);
-                if (source?.CompositionTarget is not null)
-                    dpi = source.CompositionTarget.TransformToDevice.M11;
-
-                _isInsertingSketch = true;
-                if (InsertSketchButton is not null)
-                    InsertSketchButton.IsEnabled = false;
-
-                var (ok, load, error) = await NoteImageLoader.TryLoadFromBytesAsync(
-                    sketchDialog.SketchPngBytes,
-                    NoteImageLoader.DefaultInsertMaxWidthDip,
-                    dpi);
-
-                if (!ok || load is null)
+                var dialog = new SketchDialog(original) { Owner = GetDialogOwnerWindow() };
+                if (dialog.ShowDialog() != true || dialog.SketchPngBytes is not { Length: > 0 } bytes) return;
+                var (ok, load, error) = await NoteImageLoader.TryLoadFromBytesAsync(bytes,
+                    NoteImageLoader.DefaultInsertMaxWidthDip, ResolveEditorDpiScale());
+                if (!ok || load is null) throw new InvalidOperationException(error);
+                if (imageId is { } existing)
+                    _floatingImages.ReplaceImageBytes(existing, load, preserveGeometry: true);
+                else
                 {
-                    ModernMessageBox.Show(
-                        $"{LocalizationService.GetString("FailedToInsertSketch")}\n\n{error}",
-                        LocalizationService.GetString("InsertSketch"),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                    return;
+                    var (width, height) = NoteImageLoader.FitWithinBox(load.NaturalPixelWidth, load.NaturalPixelHeight,
+                        NoteImageLoader.DefaultInsertMaxWidthDip, NoteImageLoader.DefaultInsertMaxHeightDip);
+                    InsertFloatingImage(load, width, height);
                 }
-
-                var (width, height) = NoteImageLoader.FitWithinBox(
-                    load.NaturalPixelWidth,
-                    load.NaturalPixelHeight,
-                    NoteImageLoader.DefaultInsertMaxWidthDip,
-                    NoteImageLoader.DefaultInsertMaxHeightDip);
-
-                InsertFloatingImage(load, width, height);
                 ContentTextBox.Focus();
             }
             catch (Exception ex)
             {
-                ModernMessageBox.Show(
-                    $"{LocalizationService.GetString("FailedToInsertSketch")}\n\n{ex.Message}",
-                    LocalizationService.GetString("InsertSketch"),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ModernMessageBox.Show(LocalizationService.GetString("FailedToInsertSketch") + "\n\n" + ex.Message,
+                    LocalizationService.GetString("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
                 _isInsertingSketch = false;
-                if (InsertSketchButton is not null)
-                    InsertSketchButton.IsEnabled = true;
+                if (InsertSketchButton is not null) InsertSketchButton.IsEnabled = true;
             }
         }
-
 
         private string SerializeEditorContent()
         {

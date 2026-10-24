@@ -781,8 +781,13 @@
                             </StackPanel>
                         </Border>
                         <Border x:Name="CaptionActionsSlot" Width="0" Height="32" Visibility="Collapsed" ClipToBounds="True">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="164">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="202">
                                 <Border Width="1" Height="20" Background="{DynamicResource SidebarSeparator}" Margin="12,0,12,0" />
+                                <Button Content="{icons:Icon Kind=Pen, Size=15}" Width="32" Height="32" Margin="0,0,6,0"
+                                        Style="{StaticResource EditorFormattingToolButtonStyle}"
+                                        ToolTip="{Binding [PaintImage], Source={StaticResource Loc}}"
+                                        AutomationProperties.Name="{Binding [PaintImage], Source={StaticResource Loc}}"
+                                        Click="PaintSelectedImage_Click"/>
                                 <Button x:Name="InsertCaptionButton"
                                     Width="136"
                                     Height="32"

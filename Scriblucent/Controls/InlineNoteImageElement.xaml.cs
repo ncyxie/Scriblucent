@@ -28,6 +28,7 @@ public partial class InlineNoteImageElement : UserControl
     public event EventHandler? CutRequested;
     public event EventHandler? ChangePictureRequested;
     public event EventHandler? CaptionRequested;
+    public event EventHandler? PaintRequested;
 
     public static readonly DependencyProperty ImageIdProperty = DependencyProperty.Register(
         nameof(ImageId), typeof(Guid), typeof(InlineNoteImageElement));
@@ -248,6 +249,12 @@ public partial class InlineNoteImageElement : UserControl
     {
         SelectionRequested?.Invoke(this, EventArgs.Empty);
         CaptionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuPaint_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        PaintRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void ContextMenuLockAspect_Click(object sender, RoutedEventArgs e)

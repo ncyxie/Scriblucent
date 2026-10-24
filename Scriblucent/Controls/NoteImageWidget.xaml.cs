@@ -57,6 +57,7 @@ public partial class NoteImageWidget : UserControl
     public event EventHandler? CutRequested;
     public event EventHandler? ChangePictureRequested;
     public event EventHandler? CaptionRequested;
+    public event EventHandler? PaintRequested;
     public bool IsBodyDragging => _isBodyDragging;
 
     public NoteImageWidget()
@@ -405,6 +406,12 @@ public partial class NoteImageWidget : UserControl
     {
         SelectionRequested?.Invoke(this, EventArgs.Empty);
         CaptionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ContextMenuPaint_Click(object sender, RoutedEventArgs e)
+    {
+        SelectionRequested?.Invoke(this, EventArgs.Empty);
+        PaintRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void ContextMenuArrange_Click(object sender, RoutedEventArgs e)

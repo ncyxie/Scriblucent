@@ -111,6 +111,7 @@ public sealed class FloatingImageCoordinator
 
     /// <summary>Raised when the user asks to insert/edit a photo's caption (the window owns the dialog).</summary>
     public event EventHandler<Guid>? CaptionRequested;
+    public event EventHandler<Guid>? PaintRequested;
 
     /// <summary>Raised continuously while an image's geometry is being dragged or resized, so
     /// consumers can refresh the wrap layout live; the final state is reported once through
@@ -486,17 +487,29 @@ public sealed class FloatingImageCoordinator
             return null;
         }
 
-        var fileName = session.Id.ToString("N") + ResolveImageExtension(session.Bytes);
+        // Each content revision owns its file. Repainting must not overwrite the
+        // saved image, a duplicate's shared source, or a cancellable editor snapshot.
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(session.Bytes))[..16];
+        var fileName = session.Id.ToString("N") + "-" + hash + ResolveImageExtension(session.Bytes);
         var filePath = Path.Combine(directory, fileName);
+        var temporaryPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllBytes(filePath, session.Bytes);
+            if (!File.Exists(filePath))
+            {
+                File.WriteAllBytes(temporaryPath, session.Bytes);
+                File.Move(temporaryPath, filePath, true);
+            }
             session.MediaFilePath = filePath;
             return fileName;
         }
         catch
         {
             return null;
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) { try { File.Delete(temporaryPath); } catch { } }
         }
     }
 
@@ -1229,15 +1242,18 @@ public sealed class FloatingImageCoordinator
     /// <summary>
     /// Replaces an image's picture data (Word "Change Picture"). The frame keeps its current
     /// width and re-fits its height to the new image's natural aspect ratio; position, wrap
-    /// mode and lock-aspect are untouched. Refreshes the displayed source for either kind.
+    /// mode and lock-aspect are untouched. Painting can preserve both frame dimensions.
+    /// Refreshes the displayed source for either kind.
     /// </summary>
-    public bool ReplaceImageBytes(Guid imageId, NoteImageLoader.LoadResult load)
+    public bool ReplaceImageBytes(Guid imageId, NoteImageLoader.LoadResult load, bool preserveGeometry = false)
     {
         if (load is null || !_sessions.TryGetValue(imageId, out var session))
             return false;
 
+        if (session.Bytes.AsSpan().SequenceEqual(load.Bytes)) return true;
+
         var width = Math.Max(1, session.Width);
-        var fitted = NoteImageResizeMath.ClampDisplaySize(
+        var fitted = preserveGeometry ? (session.Width, session.Height) : NoteImageResizeMath.ClampDisplaySize(
             width,
             width * (load.NaturalPixelHeight / Math.Max(1, load.NaturalPixelWidth)));
 
@@ -1248,23 +1264,7 @@ public sealed class FloatingImageCoordinator
         session.DisplaySource = load.DisplaySource;
         session.AttachmentData = null; // the bytes changed - the cached Base64 is stale
 
-        // The bytes changed - the media file must be re-written. A format change would produce
-        // a different file name and orphan the previous file - remove it now.
-        if (session.MediaFilePath is { } oldPath && File.Exists(oldPath))
-        {
-            var newName = session.Id.ToString("N") + ResolveImageExtension(load.Bytes);
-            if (!string.Equals(Path.GetFileName(oldPath), newName, StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    File.Delete(oldPath);
-                }
-                catch
-                {
-                }
-            }
-        }
-
+        // Keep prior revisions until the normal reference-aware orphan sweep.
         session.MediaFilePath = null;
         session.Width = fitted.Width;
         session.Height = fitted.Height;
@@ -1771,6 +1771,7 @@ public sealed class FloatingImageCoordinator
         widget.CutRequested += Widget_CutRequested;
         widget.ChangePictureRequested += Widget_ChangePictureRequested;
         widget.CaptionRequested += Widget_CaptionRequested;
+        widget.PaintRequested += Widget_PaintRequested;
         widget.PreviewMouseWheel += Widget_PreviewMouseWheel;
     }
 
@@ -1789,6 +1790,7 @@ public sealed class FloatingImageCoordinator
         widget.CutRequested -= Widget_CutRequested;
         widget.ChangePictureRequested -= Widget_ChangePictureRequested;
         widget.CaptionRequested -= Widget_CaptionRequested;
+        widget.PaintRequested -= Widget_PaintRequested;
         widget.PreviewMouseWheel -= Widget_PreviewMouseWheel;
 
         // A widget torn down mid-gesture would otherwise leave _activeGestures > 0 forever,
@@ -1868,6 +1870,11 @@ public sealed class FloatingImageCoordinator
     {
         if (sender is NoteImageWidget widget)
             CaptionRequested?.Invoke(this, widget.ImageId);
+    }
+
+    private void Widget_PaintRequested(object? sender, EventArgs e)
+    {
+        if (sender is NoteImageWidget widget) PaintRequested?.Invoke(this, widget.ImageId);
     }
 
     private void Widget_SelectionRequested(object? sender, EventArgs e)
@@ -2033,6 +2040,7 @@ public sealed class FloatingImageCoordinator
         element.CutRequested += Inline_CutRequested;
         element.ChangePictureRequested += Inline_ChangePictureRequested;
         element.CaptionRequested += Inline_CaptionRequested;
+        element.PaintRequested += Inline_PaintRequested;
     }
 
     private void UnhookInlineElement(InlineNoteImageElement element)
@@ -2045,6 +2053,7 @@ public sealed class FloatingImageCoordinator
         element.CutRequested -= Inline_CutRequested;
         element.ChangePictureRequested -= Inline_ChangePictureRequested;
         element.CaptionRequested -= Inline_CaptionRequested;
+        element.PaintRequested -= Inline_PaintRequested;
     }
 
     private void Inline_CopyRequested(object? sender, EventArgs e)
@@ -2069,6 +2078,11 @@ public sealed class FloatingImageCoordinator
     {
         if (sender is InlineNoteImageElement element)
             CaptionRequested?.Invoke(this, element.ImageId);
+    }
+
+    private void Inline_PaintRequested(object? sender, EventArgs e)
+    {
+        if (sender is InlineNoteImageElement element) PaintRequested?.Invoke(this, element.ImageId);
     }
 
     private void Inline_SelectionRequested(object? sender, EventArgs e)

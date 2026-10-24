@@ -1,428 +1,523 @@
-using Scriblucent.Animations;
-using Scriblucent.Controls;
-using Scriblucent.Localization;
-using Scriblucent.Services;
-using System.IO;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Ink;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using Scriblucent.Animations;
+using Scriblucent.Controls;
+using Scriblucent.Icons;
+using Scriblucent.Localization;
+using Scriblucent.Models;
+using Scriblucent.Services;
 
 namespace Scriblucent.Views;
 
 public partial class SketchDialog : Window
 {
-    private enum SketchTool
-    {
-        Pen,
-        Marker,
-        Eraser
-    }
-
-    // Muted ink-like pigments — shared with Select Color / AppColorPalette.Ink.
-    private static readonly Color[] PenPalette = AppColorPalette.Ink;
-
+    private readonly SketchDocument _drawing;
+    private readonly SketchHistory _history;
     private readonly OverlayDialogAnimator _overlayAnimator;
-    private readonly Stack<Stroke> _undoStack = new();
-    private bool _isApplyingStrokeChange;
-    private SketchTool _tool = SketchTool.Pen;
+    private readonly bool _isExisting;
+    private readonly Dictionary<SketchTool, ToggleButton> _toolButtons = new();
+    private SketchTool _tool;
     private Color _strokeColor = Color.FromRgb(0x1A, 0x1A, 0x1A);
-    private Color? _backgroundColor = Colors.White;
+    private Color _inkColor = Color.FromRgb(0x1A, 0x1A, 0x1A);
+    private Color _markerColor = AppColorPalette.Ink[7];
+    private Button _undoButton = null!, _redoButton = null!, _clearButton = null!;
+    private Point? _shapeStart, _panStart;
+    private Point _panOffset;
+    private bool _initialized, _fit = true, _spaceDown, _finishingGesture, _closing, _allowClose, _updatingZoom, _encoding, _confirmingClose;
+    private Popup? _palette, _help;
 
     public byte[]? SketchPngBytes { get; private set; }
-    public int SketchPixelWidth { get; private set; }
-    public int SketchPixelHeight { get; private set; }
-    public bool UsesTransparentBackground => _backgroundColor is null;
+    public int SketchPixelWidth => _drawing.PixelWidth;
+    public int SketchPixelHeight => _drawing.PixelHeight;
+    public bool UsesTransparentBackground => _drawing.Background is null;
+    public bool HasChanges => _history.IsChanged;
 
-    public SketchDialog()
+    public SketchDialog(byte[]? original = null)
     {
+        _isExisting = original is not null;
+        _drawing = original is null ? new SketchDocument() : SketchPngCodec.Open(original);
+        _inkColor = _drawing.Strokes.LastOrDefault(s => !s.DrawingAttributes.IsHighlighter)?.DrawingAttributes.Color ?? _inkColor;
+        _markerColor = _drawing.Strokes.LastOrDefault(s => s.DrawingAttributes.IsHighlighter)?.DrawingAttributes.Color ?? _markerColor;
+        _strokeColor = _inkColor;
+        _history = new SketchHistory(_drawing);
         InitializeComponent();
-        _overlayAnimator = ((OverlayDialogShell)Content).BindAnimator(this);
-        Scriblucent.Services.WindowThemeService.Register(this);
-        Loaded += SketchDialog_Loaded;
-        SketchCanvas.StrokeCollected += SketchCanvas_StrokeCollected;
-        // InkCanvas / focus / touch can nudge ancestors (bring-into-view, boundary bounce).
-        AddHandler(RequestBringIntoViewEvent, (RequestBringIntoViewEventHandler)((_, e) => e.Handled = true));
-        SketchCanvas.RequestBringIntoView += (_, e) => e.Handled = true;
-        SketchCanvas.ManipulationBoundaryFeedback += (_, e) => e.Handled = true;
-        ManipulationBoundaryFeedback += (_, e) => e.Handled = true;
-        BuildPenColorSwatches();
-        BuildBackgroundSwatches();
-        ApplyCanvasBackground();
-        ApplyDrawingAttributes();
-        UpdateToolButtonStates();
-        UpdatePenColorPreview();
-    }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        OverlayDialogBoundsHelper.Apply(this);
-    }
-
-    private void SketchDialog_Loaded(object sender, RoutedEventArgs e)
-    {
-        OverlayDialogBoundsHelper.Apply(this);
-        UiMotion.ConfigurePopupsForWindow(this);
-        // After open settles, pin the card so later ink measure/adorners cannot re-center it.
-        _overlayAnimator.BeginOpen(PinDialogCardAfterOpen);
-    }
-
-    /// <summary>
-    /// Overlay cards are vertically centered. Any tiny content height change then recenters
-    /// the whole panel (reads as a downward/upward jump when inking starts). Lock Top.
-    /// </summary>
-    private void PinDialogCardAfterOpen()
-    {
-        if (Content is not OverlayDialogShell { PanelMotionHost: { } host, OverlayRoot: { } root })
-            return;
-
-        host.UpdateLayout();
-        var top = host.TranslatePoint(new Point(0, 0), root).Y;
-        if (double.IsNaN(top) || double.IsInfinity(top) || top < 0)
-            return;
-
-        // Open animation leaves translate at 0; keep it there while switching alignment.
-        if (host.RenderTransform is TranslateTransform translate)
-            translate.Y = 0;
-
-        host.VerticalAlignment = VerticalAlignment.Top;
-        host.HorizontalAlignment = HorizontalAlignment.Center;
-        host.Margin = new Thickness(host.Margin.Left, top, host.Margin.Right, host.Margin.Bottom);
-    }
-
-    private void BuildPenColorSwatches()
-    {
-        PenColorSwatchPanel.Children.Clear();
-        foreach (var color in PenPalette)
-            PenColorSwatchPanel.Children.Add(CreateColorSwatch(color, () => SelectPenColor(color)));
-    }
-
-    private void BuildBackgroundSwatches()
-    {
-        BackgroundSwatchPanel.Children.Clear();
-
-        var transparentButton = CreateBackgroundSwatchButton(
-            LocalizationService.GetString("SketchBackgroundTransparent"),
-            CreateCheckerBrush(),
-            () => SetBackgroundColor(null));
-        BackgroundSwatchPanel.Children.Add(transparentButton);
-
-        foreach (var color in AppColorPalette.Paper)
+        _overlayAnimator = SketchShell.BindAnimator(this);
+        WindowThemeService.Register(this);
+        Paper.Width = SketchCanvas.Width = _drawing.Width;
+        Paper.Height = SketchCanvas.Height = _drawing.Height;
+        SketchCanvas.Strokes = _drawing.Strokes;
+        BaseImage.Source = SketchPngCodec.DecodeBase(_drawing);
+        TransparencyChecker.Background = CreateCheckerBrush();
+        BuildToolbar();
+        if (_isExisting)
         {
-            BackgroundSwatchPanel.Children.Add(
-                CreateColorSwatch(color, () => SetBackgroundColor(color)));
+            HeadingText.Text = LocalizationService.GetString("SketchEditTitle");
+            Title = HeadingText.Text;
+            AcceptButton.Content = LocalizationService.GetString("SketchApplyChanges");
         }
-    }
-
-    private Button CreateColorSwatch(Color color, Action onClick)
-    {
-        var button = new Button
+        ZoomBox.ItemsSource = new[] { "25%", "50%", "75%", "100%", "150%", "200%", "300%", "400%" };
+        _initialized = true;
+        ApplyBackground(); SelectTool(SketchTool.Pen); UpdateHistoryButtons();
+        Loaded += (_, _) =>
         {
-            Style = (Style)FindResource("SketchSwatchButtonStyle"),
-            Background = new SolidColorBrush(color),
-            ToolTip = $"#{color.R:X2}{color.G:X2}{color.B:X2}"
+            OverlayDialogBoundsHelper.Apply(this); UiMotion.ConfigurePopupsForWindow(this);
+            ResizeWorkspace(); UpdateCanvasViewportClip();
+            _overlayAnimator.BeginOpen();
         };
-        button.Click += (_, _) => onClick();
-        return button;
+        SizeChanged += (_, _) => { if (_initialized) ResizeWorkspace(); };
+        AddHandler(Mouse.MouseUpEvent, new MouseButtonEventHandler((_, e) => { if (e.ChangedButton == MouseButton.Left) EndGesture(); }), true);
+        SketchCanvas.AddHandler(Stylus.StylusDownEvent, new StylusDownEventHandler((_, _) => _history.Begin()), true);
+        SketchCanvas.AddHandler(Mouse.MouseMoveEvent, new MouseEventHandler(Canvas_MouseMove), true);
+        SketchCanvas.AddHandler(Stylus.StylusUpEvent, new StylusEventHandler((_, _) => Dispatcher.BeginInvoke(EndGesture, System.Windows.Threading.DispatcherPriority.Input)), true);
+        SketchCanvas.StrokeCollected += (_, _) => { _history.Commit(); UpdateHistoryButtons(); };
+        SketchCanvas.LostMouseCapture += (_, _) => { if (_shapeStart is not null) EndGesture(); else { _history.Commit(); UpdateHistoryButtons(); } };
+        Closed += (_, _) => ClosePopups();
+        Deactivated += (_, _) => ResetPan();
+        AddHandler(RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler((_, e) => e.Handled = true));
     }
 
-    private Button CreateBackgroundSwatchButton(string tooltip, Brush background, Action onClick)
+    private void BuildToolbar()
     {
-        var button = new Button
+        foreach (var (tool, icon, text) in new[]
         {
-            Style = (Style)FindResource("SketchSwatchButtonStyle"),
-            Background = background,
-            ToolTip = tooltip,
-            Width = 28,
-            Height = 22
-        };
-        button.Click += (_, _) => onClick();
-        return button;
-    }
-
-    private static Brush CreateCheckerBrush()
-    {
-        var brush = new DrawingBrush
+            (SketchTool.Pen, "PenLine", "SketchPen"), (SketchTool.Marker, "Highlighter", "SketchMarker"),
+            (SketchTool.Eraser, "Eraser", "SketchEraser"), (SketchTool.Line, "Minus", "SketchLine"),
+            (SketchTool.Arrow, "ArrowUpRight", "SketchArrow"), (SketchTool.Rectangle, "Square", "SketchRectangle"),
+            (SketchTool.Ellipse, "Circle", "SketchEllipse")
+        })
         {
-            TileMode = TileMode.Tile,
-            Viewport = new Rect(0, 0, 8, 8),
-            ViewportUnits = BrushMappingMode.Absolute,
-            Drawing = new DrawingGroup
+            if (tool == SketchTool.Line) AddDivider();
+            var button = new ToggleButton
             {
-                Children =
-                {
-                    new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xEE)), null,
-                        new RectangleGeometry(new Rect(0, 0, 8, 8))),
-                    new GeometryDrawing(new SolidColorBrush(Color.FromRgb(0xD0, 0xD0, 0xD8)), null,
-                        new GeometryGroup
-                        {
-                            Children =
-                            {
-                                new RectangleGeometry(new Rect(0, 0, 4, 4)),
-                                new RectangleGeometry(new Rect(4, 4, 4, 4))
-                            }
-                        })
-                }
-            }
+                Style = (Style)FindResource("SketchToolButtonStyle"),
+                Content = new AppIcon { LucideKind = Enum.Parse<MahApps.Metro.IconPacks.PackIconLucideKind>(icon), Width = 16, Height = 16 },
+                ToolTip = LocalizationService.GetString(text)
+            };
+            System.Windows.Automation.AutomationProperties.SetName(button, LocalizationService.GetString(text));
+            button.Click += (_, _) => SelectTool(tool); _toolButtons.Add(tool, button); ToolsPanel.Children.Add(button);
+        }
+        AddDivider();
+        _undoButton = AddAction(AppIconKind.Undo, "Undo", () => { EndGesture(); _history.Undo(); ApplyBackground(); UpdateHistoryButtons(); });
+        _redoButton = AddAction(AppIconKind.Redo, "Redo", () => { EndGesture(); _history.Redo(); ApplyBackground(); UpdateHistoryButtons(); });
+        _undoButton.ToolTip = LocalizationService.GetString("Undo") + " (Ctrl+Z)";
+        _redoButton.ToolTip = LocalizationService.GetString("Redo") + " (Ctrl+Y)";
+        AddDivider();
+        _clearButton = AddAction(AppIconKind.Trash, "SketchClearMarks", () =>
+        {
+            EndGesture(); _history.Begin(); _drawing.Strokes.Clear(); _history.Commit(); UpdateHistoryButtons();
+        });
+    }
+
+    private void AddDivider() => ToolsPanel.Children.Add(new Border
+    {
+        Width = 1, Height = 20, Margin = new Thickness(5, 0, 11, 0), VerticalAlignment = VerticalAlignment.Center,
+        Background = (Brush)FindResource("ActionDividerBrush"), Opacity = .65
+    });
+
+    private Button AddAction(AppIconKind icon, string text, Action action)
+    {
+        var button = new Button
+        {
+            Style = (Style)FindResource("EditorToolIconButtonStyle"), Content = new AppIcon { Kind = icon },
+            ToolTip = LocalizationService.GetString(text)
         };
-        brush.Freeze();
-        return brush;
+        System.Windows.Automation.AutomationProperties.SetName(button, LocalizationService.GetString(text));
+        button.Click += (_, _) => action(); ToolsPanel.Children.Add(button); return button;
     }
 
-    private void SketchCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
+    private void SelectTool(SketchTool tool)
     {
-        if (_isApplyingStrokeChange)
-            return;
-
-        _undoStack.Push(e.Stroke);
-    }
-
-    private void PenToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        _tool = SketchTool.Pen;
-        SketchCanvas.EditingMode = InkCanvasEditingMode.Ink;
+        CancelShape(); _history.Commit();
+        if (_tool == SketchTool.Marker) _markerColor = _strokeColor;
+        else if (_tool != SketchTool.Eraser) _inkColor = _strokeColor;
+        _tool = tool; _strokeColor = tool == SketchTool.Marker ? _markerColor : _inkColor;
+        foreach (var (kind, button) in _toolButtons) button.IsChecked = kind == tool;
+        SketchCanvas.EditingMode = tool == SketchTool.Eraser ? InkCanvasEditingMode.EraseByPoint
+            : tool is SketchTool.Pen or SketchTool.Marker ? InkCanvasEditingMode.Ink : InkCanvasEditingMode.None;
         ApplyDrawingAttributes();
-        UpdateToolButtonStates();
+        UpdateToolCursor();
     }
 
-    private void MarkerToolButton_Click(object sender, RoutedEventArgs e)
+    private void UpdateToolCursor()
     {
-        _tool = SketchTool.Marker;
-        SketchCanvas.EditingMode = InkCanvasEditingMode.Ink;
-        ApplyDrawingAttributes();
-        UpdateToolButtonStates();
-    }
-
-    private void EraserToolButton_Click(object sender, RoutedEventArgs e)
-    {
-        _tool = SketchTool.Eraser;
-        // Point erase gives finer control than whole-stroke erase.
-        SketchCanvas.EditingMode = InkCanvasEditingMode.EraseByPoint;
-        UpdateToolButtonStates();
-    }
-
-    private void StrokeWidthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (StrokeWidthLabel is null)
-            return;
-
-        StrokeWidthLabel.Text = ((int)Math.Round(StrokeWidthSlider.Value)).ToString();
-        ApplyDrawingAttributes();
-    }
-
-    private void SelectPenColor(Color color)
-    {
-        _strokeColor = color;
-        if (_tool == SketchTool.Eraser)
-        {
-            _tool = SketchTool.Pen;
-            SketchCanvas.EditingMode = InkCanvasEditingMode.Ink;
-        }
-
-        ApplyDrawingAttributes();
-        UpdateToolButtonStates();
-        UpdatePenColorPreview();
-    }
-
-    private void PickPenColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new ColorPickerDialog
-        {
-            Owner = this,
-            InitialColor = _strokeColor
-        };
-        if (dialog.ShowDialog() == true && dialog.SelectedColor is { } color)
-            SelectPenColor(color);
-    }
-
-    private void SetBackgroundColor(Color? color)
-    {
-        _backgroundColor = color;
-        ApplyCanvasBackground();
-    }
-
-    private void PickBackgroundColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new ColorPickerDialog
-        {
-            Owner = this,
-            InitialColor = _backgroundColor ?? Colors.White
-        };
-        if (dialog.ShowDialog() == true && dialog.SelectedColor is { } color)
-            SetBackgroundColor(color);
-    }
-
-    private void ApplyCanvasBackground()
-    {
-        if (_backgroundColor is null)
-        {
-            TransparencyChecker.Visibility = Visibility.Visible;
-            SketchCanvas.Background = Brushes.Transparent;
-            if (CurrentBackgroundColorPreview is not null)
-                CurrentBackgroundColorPreview.Background = CreateCheckerBrush();
-        }
-        else
-        {
-            TransparencyChecker.Visibility = Visibility.Collapsed;
-            SketchCanvas.Background = new SolidColorBrush(_backgroundColor.Value);
-            if (CurrentBackgroundColorPreview is not null)
-                CurrentBackgroundColorPreview.Background = new SolidColorBrush(_backgroundColor.Value);
-        }
-    }
-
-    private void UndoButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (SketchCanvas.Strokes.Count == 0)
-            return;
-
-        _isApplyingStrokeChange = true;
-        try
-        {
-            var lastIndex = SketchCanvas.Strokes.Count - 1;
-            var stroke = SketchCanvas.Strokes[lastIndex];
-            SketchCanvas.Strokes.RemoveAt(lastIndex);
-            if (_undoStack.Count > 0 && ReferenceEquals(_undoStack.Peek(), stroke))
-                _undoStack.Pop();
-        }
-        finally
-        {
-            _isApplyingStrokeChange = false;
-        }
-    }
-
-    private void ClearButton_Click(object sender, RoutedEventArgs e)
-    {
-        _isApplyingStrokeChange = true;
-        try
-        {
-            SketchCanvas.Strokes.Clear();
-            _undoStack.Clear();
-        }
-        finally
-        {
-            _isApplyingStrokeChange = false;
-        }
-    }
-
-    private void Cancel_Click(object sender, RoutedEventArgs e) => BeginCloseAnimation(false);
-
-    private void Insert_Click(object sender, RoutedEventArgs e)
-    {
-        if (SketchCanvas.Strokes.Count == 0)
-        {
-            ModernMessageBox.Show(
-                LocalizationService.GetString("SketchEmpty"),
-                LocalizationService.GetString("SketchDialogTitle"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
-
-        try
-        {
-            var bitmap = RenderSketchToBitmap();
-            SketchPixelWidth = bitmap.PixelWidth;
-            SketchPixelHeight = bitmap.PixelHeight;
-
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = new MemoryStream();
-            encoder.Save(stream);
-            SketchPngBytes = stream.ToArray();
-            BeginCloseAnimation(true);
-        }
-        catch (Exception ex)
-        {
-            ModernMessageBox.Show(
-                $"{LocalizationService.GetString("FailedToInsertSketch")}\n\n{ex.Message}",
-                LocalizationService.GetString("Error"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-    }
-
-    private RenderTargetBitmap RenderSketchToBitmap()
-    {
-        var width = Math.Max(1, (int)Math.Ceiling(SketchCanvas.ActualWidth));
-        var height = Math.Max(1, (int)Math.Ceiling(SketchCanvas.ActualHeight));
-
-        // Draw WPF strokes directly to preserve pressure, curve fitting, and transparency.
-        // Capturing InkCanvas through VisualBrush would make transparent pixels opaque.
-        var visual = new DrawingVisual();
-        using (var context = visual.RenderOpen())
-        {
-            var bounds = new Rect(0, 0, width, height);
-            if (_backgroundColor is { } background)
-                context.DrawRectangle(new SolidColorBrush(background), null, bounds);
-
-            SketchCanvas.Strokes.Draw(context);
-        }
-
-        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(visual);
-        bitmap.Freeze();
-        return bitmap;
+        SketchCanvas.Cursor = _spaceDown ? Cursors.Hand
+            : _tool is SketchTool.Pen or SketchTool.Marker or SketchTool.Eraser ? Cursors.None : Cursors.Cross;
+        CursorContrast.Visibility = CursorOutline.Visibility = Visibility.Collapsed;
     }
 
     private void ApplyDrawingAttributes()
     {
-        var width = StrokeWidthSlider?.Value > 0 ? StrokeWidthSlider.Value : 4;
-        var attributes = new DrawingAttributes
+        if (!_initialized) return;
+        var width = StrokeWidthSlider.Value;
+        SketchCanvas.DefaultDrawingAttributes = new DrawingAttributes
         {
-            Color = _strokeColor,
-            FitToCurve = true,
-            IgnorePressure = false,
-            IsHighlighter = _tool == SketchTool.Marker
+            Color = _strokeColor, FitToCurve = _tool is SketchTool.Pen or SketchTool.Marker,
+            IgnorePressure = false, IsHighlighter = _tool == SketchTool.Marker,
+            Width = _tool == SketchTool.Marker ? Math.Max(8, width * 2.2) : width,
+            Height = _tool == SketchTool.Marker ? Math.Max(14, width * 3.5) : width
         };
-
-        if (_tool == SketchTool.Marker)
-        {
-            attributes.Width = Math.Max(8, width * 2.2);
-            attributes.Height = Math.Max(14, width * 3.5);
-        }
-        else
-        {
-            attributes.Width = width;
-            attributes.Height = width;
-        }
-
-        SketchCanvas.DefaultDrawingAttributes = attributes;
-
-        // Larger eraser tip scales with stroke slider for freer cleanup.
         SketchCanvas.EraserShape = new EllipseStylusShape(Math.Max(8, width * 2.5), Math.Max(8, width * 2.5));
+        CurrentPenColorPreview.Background = new SolidColorBrush(_strokeColor);
     }
 
-    private void UpdateToolButtonStates()
+    private void StrokeWidthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        PenToolButton.Opacity = _tool == SketchTool.Pen ? 1 : 0.55;
-        MarkerToolButton.Opacity = _tool == SketchTool.Marker ? 1 : 0.55;
-        EraserToolButton.Opacity = _tool == SketchTool.Eraser ? 1 : 0.55;
+        if (StrokeWidthLabel is null) return;
+        StrokeWidthLabel.Text = Math.Round(e.NewValue).ToString(); ApplyDrawingAttributes();
     }
 
-    private void UpdatePenColorPreview()
+    private void InkColor_Click(object sender, RoutedEventArgs e) => OpenPalette(false);
+    private void BackgroundColor_Click(object sender, RoutedEventArgs e) => OpenPalette(true);
+    private void OpenPalette(bool background)
     {
-        if (CurrentPenColorPreview is not null)
-            CurrentPenColorPreview.Background = new SolidColorBrush(_strokeColor);
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        base.OnKeyDown(e);
-        if (e.Key == Key.Escape)
+        if (_help is not null) _help.IsOpen = false;
+        if (_palette is { IsOpen: true }) { _palette.IsOpen = false; return; }
+        var panel = new StackPanel { Width = 228 };
+        var swatches = new WrapPanel(); panel.Children.Add(swatches);
+        void Add(Color? color)
         {
-            BeginCloseAnimation(false);
-            e.Handled = true;
+            var button = new ToggleButton
+            {
+                Style = (Style)FindResource("SketchSwatchStyle"),
+                Background = color is { } solid ? new SolidColorBrush(solid) : CreateCheckerBrush(),
+                IsChecked = background ? _drawing.Background == color : _strokeColor == color,
+                ToolTip = color?.ToString() ?? LocalizationService.GetString("SketchBackgroundTransparent")
+            };
+            System.Windows.Automation.AutomationProperties.SetName(button, button.ToolTip.ToString());
+            button.Click += (_, _) =>
+            {
+                _palette!.IsOpen = false;
+                if (background) SetBackground(color); else SetInkColor(color!.Value);
+            };
+            swatches.Children.Add(button);
+        }
+        if (background) Add(null);
+        var colors = background ? AppColorPalette.Paper : AppColorPalette.Ink;
+        var current = background ? _drawing.Background : _strokeColor;
+        if (current is { } customColor && !colors.Contains(customColor)) Add(customColor);
+        foreach (var color in colors) Add(color);
+        var custom = new Button { Content = LocalizationService.GetString("SelectColor"), Style = (Style)FindResource("DialogSecondaryButtonStyle"), Margin = new Thickness(3, 8, 3, 0) };
+        custom.Click += (_, _) =>
+        {
+            _palette!.IsOpen = false;
+            var picker = new ColorPickerDialog { Owner = this, InitialColor = background ? _drawing.Background ?? Colors.White : _strokeColor };
+            if (picker.ShowDialog() != true || picker.SelectedColor is not { } color) return;
+            if (background) SetBackground(color); else SetInkColor(color);
+        };
+        panel.Children.Add(custom);
+        _palette = CreatePopup(panel, background ? BackgroundColorButton : InkColorButton, PlacementMode.Bottom);
+        _palette.IsOpen = true;
+    }
+
+    private void Help_Click(object sender, RoutedEventArgs e)
+    {
+        if (_help is { IsOpen: true }) { _help.IsOpen = false; return; }
+        if (_palette is not null) _palette.IsOpen = false;
+        var panel = new StackPanel { Width = 290 };
+        var instructions = new TextBlock
+        {
+            Text = LocalizationService.GetString("SketchInputHint").Replace(" · ", "\n"),
+            FontSize = 13, TextWrapping = TextWrapping.Wrap, LineHeight = 23
+        };
+        instructions.SetResourceReference(TextBlock.ForegroundProperty, "TextColor");
+        panel.Children.Add(instructions);
+        if (_drawing.BaseImage is not null)
+        {
+            var originalHint = new TextBlock
+            {
+                Text = LocalizationService.GetString("SketchOriginalProtected"), FontSize = 13,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0)
+            };
+            originalHint.SetResourceReference(TextBlock.ForegroundProperty, "TextColorSecondary");
+            panel.Children.Add(originalHint);
+        }
+        _help = CreatePopup(panel, HelpButton, PlacementMode.Top);
+        _help.IsOpen = true;
+    }
+
+    private Popup CreatePopup(UIElement content, UIElement target, PlacementMode placement)
+    {
+        var face = new SurfaceMaterialBorder
+        {
+            CornerRadius = (CornerRadius)FindResource("Radius.Control"), Padding = new Thickness(10), BorderThickness = new Thickness(1), Child = content
+        };
+        face.SetResourceReference(Border.BackgroundProperty, "CardBackground"); face.SetResourceReference(Border.BorderBrushProperty, "PopupBorder");
+        SurfaceMaterial.SetKind(face, SurfaceMaterialKind.Raised);
+        var popupRoot = new Grid { Margin = new Thickness(12) };
+        popupRoot.Children.Add(new BakedElevationLayer { Kind = BakedElevationLayer.ElevationKind.Button }); popupRoot.Children.Add(face);
+        var popup = new Popup { Child = popupRoot, AllowsTransparency = true, StaysOpen = false, Placement = placement, PlacementTarget = target };
+        UiMotion.AttachPopupOpenAnimation(popup);
+        return popup;
+    }
+
+    private void ClosePopups()
+    {
+        if (_palette is not null) _palette.IsOpen = false;
+        if (_help is not null) _help.IsOpen = false;
+    }
+
+    private void SetInkColor(Color color)
+    {
+        if (_tool == SketchTool.Eraser) SelectTool(SketchTool.Pen);
+        _strokeColor = color;
+        if (_tool == SketchTool.Marker) _markerColor = color; else _inkColor = color;
+        ApplyDrawingAttributes();
+    }
+
+    private void SetBackground(Color? color)
+    {
+        EndGesture(); _history.Begin(); _drawing.Background = color; _history.Commit(); ApplyBackground(); UpdateHistoryButtons();
+    }
+    private void ApplyBackground()
+    {
+        PaperBackground.Background = _drawing.Background is { } color ? new SolidColorBrush(color) : Brushes.Transparent;
+        CurrentBackgroundColorPreview.Background = _drawing.Background is { } selected ? new SolidColorBrush(selected) : CreateCheckerBrush();
+    }
+    private static Brush CreateCheckerBrush()
+    {
+        var drawing = new DrawingGroup();
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(232, 232, 238)), null, new RectangleGeometry(new Rect(0, 0, 16, 16))));
+        var squares = new GeometryGroup(); squares.Children.Add(new RectangleGeometry(new Rect(0, 0, 8, 8))); squares.Children.Add(new RectangleGeometry(new Rect(8, 8, 8, 8)));
+        drawing.Children.Add(new GeometryDrawing(new SolidColorBrush(Color.FromRgb(208, 208, 216)), null, squares));
+        var brush = new DrawingBrush(drawing) { TileMode = TileMode.Tile, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, 16, 16) };
+        brush.Freeze(); return brush;
+    }
+
+    private Point DrawingPoint() { var p = Mouse.GetPosition(SketchCanvas); return new Point(Math.Clamp(p.X, 0, _drawing.Width), Math.Clamp(p.Y, 0, _drawing.Height)); }
+    private void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || _spaceDown) return;
+        _history.Begin();
+        if (_tool is SketchTool.Pen or SketchTool.Marker or SketchTool.Eraser) return;
+        _shapeStart = DrawingPoint(); SketchCanvas.CaptureMouse(); e.Handled = true;
+    }
+    private void Canvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_panStart is not null || _spaceDown) return;
+        var p = DrawingPoint();
+        if (_shapeStart is { } start)
+            ShapePreview.SetStrokes(SketchShapes.Create(_tool, start, p, SketchCanvas.DefaultDrawingAttributes, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)));
+        var attributes = SketchCanvas.DefaultDrawingAttributes;
+        var width = _tool == SketchTool.Eraser ? SketchCanvas.EraserShape.Width : attributes.Width;
+        var height = _tool == SketchTool.Eraser ? SketchCanvas.EraserShape.Height : attributes.Height;
+        foreach (var cursor in new[] { CursorContrast, CursorOutline })
+        {
+            cursor.Width = width; cursor.Height = height; Canvas.SetLeft(cursor, p.X - width / 2); Canvas.SetTop(cursor, p.Y - height / 2);
+            cursor.Visibility = _tool is SketchTool.Pen or SketchTool.Marker or SketchTool.Eraser ? Visibility.Visible : Visibility.Collapsed;
         }
     }
+    private void Canvas_MouseLeave(object sender, MouseEventArgs e) { CursorContrast.Visibility = CursorOutline.Visibility = Visibility.Collapsed; }
+    private void EndGesture()
+    {
+        if (!_initialized || _finishingGesture) return;
+        _finishingGesture = true;
+        try
+        {
+            if (_shapeStart is { } start)
+            {
+                var end = DrawingPoint(); _shapeStart = null;
+                if ((end - start).Length >= 1) _drawing.Strokes.Add(SketchShapes.Create(_tool, start, end, SketchCanvas.DefaultDrawingAttributes, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)));
+                ShapePreview.SetStrokes(null); SketchCanvas.ReleaseMouseCapture();
+            }
+            _history.Commit(); UpdateHistoryButtons();
+        }
+        finally { _finishingGesture = false; }
+    }
+    private void CancelShape()
+    {
+        _shapeStart = null; ShapePreview.SetStrokes(null);
+        if (SketchCanvas.IsMouseCaptured && SketchCanvas.EditingMode == InkCanvasEditingMode.None) SketchCanvas.ReleaseMouseCapture();
+    }
+    private void UpdateHistoryButtons()
+    {
+        _undoButton.IsEnabled = _history.CanUndo; _redoButton.IsEnabled = _history.CanRedo;
+        _clearButton.IsEnabled = _drawing.Strokes.Count > 0;
+        AcceptButton.IsEnabled = _isExisting || _drawing.Strokes.Count > 0;
+    }
 
+    private void ResizeWorkspace()
+    {
+        // DesiredSize includes the footer's separation margin; ActualHeight does not.
+        // Reserve the dialog stroke too, otherwise native layout clips the bottom gutter.
+        CanvasViewport.Height = Math.Max(80, Math.Min(540, ActualHeight - 48 - 42
+            - SketchHeader.DesiredSize.Height - SketchFooter.DesiredSize.Height));
+        if (_fit) FitCanvas();
+    }
+    private void CanvasViewport_SizeChanged(object sender, SizeChangedEventArgs e) { if (_initialized && _fit) FitCanvas(); }
+    private void FitCanvas()
+    {
+        if (CanvasViewport.ActualWidth <= 24 || CanvasViewport.ActualHeight <= 24) return;
+        SetZoom(Math.Min((CanvasViewport.ActualWidth - 28) / _drawing.Width, (CanvasViewport.ActualHeight - 28) / _drawing.Height), true);
+    }
+    private void SetZoom(double zoom, bool fit = false)
+    {
+        _fit = fit; CanvasScale.ScaleX = CanvasScale.ScaleY = zoom;
+        // Frame and pointer outlines remain UI-sized while the authored ink scales.
+        var radius = (CornerRadius)FindResource("Radius.Control");
+        SketchCanvasOutline.BorderThickness = new Thickness(1.5 / zoom);
+        SketchCanvasOutline.CornerRadius = new CornerRadius(radius.TopLeft / zoom, radius.TopRight / zoom,
+            radius.BottomRight / zoom, radius.BottomLeft / zoom);
+        CursorOutline.StrokeThickness = 1 / zoom; CursorContrast.StrokeThickness = 3 / zoom;
+        UpdateCanvasViewportClip();
+        var label = Math.Round(zoom * 100) + "%";
+        _updatingZoom = true;
+        try
+        {
+            ZoomBox.ItemsSource = new[] { "25%", "50%", "75%", "100%", "150%", "200%", "300%", "400%", label }
+                .Distinct().OrderBy(s => double.Parse(s.TrimEnd('%'))).ToArray();
+            ZoomBox.SelectedItem = label;
+        }
+        finally { _updatingZoom = false; }
+    }
+    private void Fit_Click(object sender, RoutedEventArgs e) { _fit = true; FitCanvas(); }
+    private void Zoom_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_initialized && !_updatingZoom && ZoomBox.SelectedItem is string value)
+        {
+            var zoom = double.Parse(value.TrimEnd('%')) / 100;
+            if (Math.Abs(zoom - CanvasScale.ScaleX) > .001) SetZoom(zoom);
+        }
+    }
+    private void CanvasViewport_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+        if (Mouse.LeftButton == MouseButtonState.Pressed) { e.Handled = true; return; }
+        var before = Mouse.GetPosition(Paper); var viewportPoint = Mouse.GetPosition(CanvasScroll);
+        SetZoom(Math.Clamp(CanvasScale.ScaleX * (e.Delta > 0 ? 1.15 : 1 / 1.15), .25, 4));
+        CanvasScroll.UpdateLayout();
+        var after = Paper.TranslatePoint(before, CanvasScroll);
+        CanvasScroll.ScrollToHorizontalOffset(CanvasScroll.HorizontalOffset + after.X - viewportPoint.X);
+        CanvasScroll.ScrollToVerticalOffset(CanvasScroll.VerticalOffset + after.Y - viewportPoint.Y); e.Handled = true;
+    }
+    private void Viewport_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!_spaceDown || e.ChangedButton != MouseButton.Left) return;
+        _panStart = e.GetPosition(CanvasViewport); _panOffset = new Point(CanvasScroll.HorizontalOffset, CanvasScroll.VerticalOffset);
+        CanvasViewport.CaptureMouse(); e.Handled = true;
+    }
+    private void Viewport_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_panStart is not { } start) return;
+        var delta = e.GetPosition(CanvasViewport) - start;
+        CanvasScroll.ScrollToHorizontalOffset(_panOffset.X - delta.X); CanvasScroll.ScrollToVerticalOffset(_panOffset.Y - delta.Y); e.Handled = true;
+    }
+    private void Viewport_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_panStart is null) return;
+        _panStart = null; CanvasViewport.ReleaseMouseCapture(); e.Handled = true;
+    }
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (_encoding || _closing) { e.Handled = true; return; }
+        if (_palette is { IsOpen: true } || _help is { IsOpen: true })
+        {
+            if (e.Key == Key.Escape) { ClosePopups(); e.Handled = true; }
+            return;
+        }
+        if (Keyboard.FocusedElement is TextBox) return;
+        if (e.Key == Key.Space)
+        {
+            if (Mouse.LeftButton == MouseButtonState.Pressed) { e.Handled = true; return; }
+            _spaceDown = true; CanvasViewport.Cursor = SketchCanvas.Cursor = Cursors.Hand;
+            CursorContrast.Visibility = CursorOutline.Visibility = Visibility.Collapsed; e.Handled = true;
+        }
+        else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.Z or Key.Y)
+        {
+            EndGesture(); if (e.Key == Key.Y || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) _history.Redo(); else _history.Undo();
+            ApplyBackground(); UpdateHistoryButtons(); e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            if (_shapeStart is not null) CancelShape(); else BeginCloseAnimation(false); e.Handled = true;
+        }
+        else if (e.Key == Key.Enter && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) { Insert_Click(this, new RoutedEventArgs()); e.Handled = true; }
+    }
+    protected override void OnPreviewKeyUp(KeyEventArgs e)
+    {
+        base.OnPreviewKeyUp(e); if (e.Key != Key.Space) return;
+        ResetPan(); e.Handled = true;
+    }
+
+    private void ResetPan()
+    {
+        _spaceDown = false; CanvasViewport.Cursor = null; UpdateToolCursor();
+        if (_panStart is not null) { _panStart = null; CanvasViewport.ReleaseMouseCapture(); }
+    }
+
+    protected override void OnSourceInitialized(EventArgs e) { base.OnSourceInitialized(e); OverlayDialogBoundsHelper.Apply(this); }
+    private void SketchCanvasOutline_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateCanvasViewportClip();
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        Dispatcher.BeginInvoke(UpdateCanvasViewportClip, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+    private void UpdateCanvasViewportClip()
+    {
+        if (SketchCanvasViewport is null || SketchCanvasOutline is null || SketchCanvasOutline.ActualWidth <= 0 || SketchCanvasOutline.ActualHeight <= 0) return;
+        var frame = SurfaceContour.EffectiveFrame(SketchCanvasOutline);
+        var inset = Math.Max(Math.Max(frame.Left, frame.Right), Math.Max(frame.Top, frame.Bottom));
+        SketchCanvasViewport.Clip = SurfaceContour.Create(SketchCanvasOutline.RenderSize, SketchCanvasOutline.CornerRadius, frame, inset);
+    }
+    private void Cancel_Click(object sender, RoutedEventArgs e) => BeginCloseAnimation(false);
+    private async void Insert_Click(object sender, RoutedEventArgs e)
+    {
+        if (_encoding || _closing) return;
+        EndGesture();
+        if (!_isExisting && _drawing.Strokes.Count == 0) return;
+        try
+        {
+            if (!_isExisting || HasChanges)
+            {
+                _encoding = true; SketchShell.IsEnabled = false;
+                var label = AcceptButton.Content; AcceptButton.Content = LocalizationService.GetString("SketchPreparing");
+                try { SketchPngBytes = await SketchPngCodec.EncodeAsync(_drawing); }
+                finally { _encoding = false; SketchShell.IsEnabled = true; AcceptButton.Content = label; }
+            }
+            BeginCloseAnimation(true);
+        }
+        catch (Exception ex)
+        {
+            ModernMessageBox.Show(LocalizationService.GetString("FailedToInsertSketch") + "\n\n" + ex.Message, LocalizationService.GetString("Error"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e); if (_allowClose) return;
+        if (_encoding) { e.Cancel = true; return; }
+        e.Cancel = true;
+        // Off motion can finish synchronously. Leave WPF's Closing callback before
+        // requesting the final close, rather than reentering it through DialogResult.
+        Dispatcher.BeginInvoke(() => { if (IsVisible) BeginCloseAnimation(false); });
+    }
     private void BeginCloseAnimation(bool accepted)
     {
+        if (_closing || _confirmingClose) return;
+        CancelShape(); _history.Commit();
+        if (!accepted && HasChanges)
+        {
+            _confirmingClose = true;
+            ModernDialogResult result;
+            try
+            {
+                result = ModernDialog.Show(this, HeadingText.Text, LocalizationService.GetString("SketchDiscardPrompt"),
+                    ModernDialogTone.Question, LocalizationService.GetString("SketchDiscard"),
+                    LocalizationService.GetString("SketchKeepDrawing"), primaryStyle: ModernDialogButtonStyle.Danger,
+                    defaultChoice: ModernDialogResult.Cancel);
+            }
+            finally { _confirmingClose = false; }
+            if (result != ModernDialogResult.Primary) return;
+        }
+        _closing = true; ClosePopups();
         _overlayAnimator.BeginClose(() =>
         {
-            DialogResult = accepted;
+            _allowClose = true;
+            if (System.Windows.Interop.ComponentDispatcher.IsThreadModal) DialogResult = accepted;
             Close();
         });
     }

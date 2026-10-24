@@ -573,6 +573,46 @@ public class InlineImageTests
     public void BuildAttachments_CachesBase64Data()
         => RunOnSta(RunBuildAttachmentsCacheProbe);
 
+    [Fact]
+    public void Painting_revisions_preserve_saved_bytes_geometry_and_duplicate_sources()
+        => RunOnSta(() =>
+        {
+            using var harness = CreateHarness();
+            var media = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "scriblucent-paint-media-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                harness.Coordinator.MediaDirectory = media;
+                harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
+                harness.Coordinator.SetCaption(harness.ImageId, new FloatingImageCoordinator.CaptionSettings(
+                    "Figure", "Keep this caption", CaptionNumbering.Arabic, ": ", CaptionPosition.Below, false));
+                var original = harness.Coordinator.BuildAttachments().Single();
+                var source = File.ReadAllBytes(System.IO.Path.Combine(media, original.DataFilePath));
+                var drawing = new SketchDocument();
+                drawing.Strokes.Add(new System.Windows.Ink.Stroke(new System.Windows.Input.StylusPointCollection
+                    { new System.Windows.Input.StylusPoint(10, 20), new System.Windows.Input.StylusPoint(130, 40) }));
+                var bytes = SketchPngCodec.Encode(drawing);
+                Assert.True(NoteImageLoader.TryLoadFromBytes(bytes, 200, 1, out var load, out var error), error);
+                Assert.True(harness.Coordinator.ReplaceImageBytes(harness.ImageId, load!, preserveGeometry: true));
+                var painted = harness.Coordinator.BuildAttachments().Single();
+                Assert.NotEqual(original.DataFilePath, painted.DataFilePath);
+                Assert.Equal(source, File.ReadAllBytes(System.IO.Path.Combine(media, original.DataFilePath)));
+                Assert.Equal(original.Width, painted.Width); Assert.Equal(original.Height, painted.Height);
+                Assert.Equal(original.Left, painted.Left); Assert.Equal(original.Top, painted.Top);
+                Assert.Equal(original.WrapMode, painted.WrapMode); Assert.Equal(original.CaptionText, painted.CaptionText);
+                var changes = 0; harness.Coordinator.ImagesChanged += (_, _) => changes++;
+                harness.Coordinator.ReplaceImageBytes(harness.ImageId, load!, preserveGeometry: true);
+                Assert.Equal(0, changes);
+                var duplicate = Scriblucent.ViewModels.MainViewModel.CloneImageAttachments(new[] { painted }).Single();
+                harness.Coordinator.Clear(); harness.Coordinator.Restore(new[] { duplicate });
+                Assert.True(NoteImageLoader.TryLoadFromBytes(CreatePngBytes(200, 200), 200, 1, out var replacement, out error), error);
+                harness.Coordinator.ReplaceImageBytes(duplicate.Id, replacement!, preserveGeometry: true);
+                var changedDuplicate = harness.Coordinator.BuildAttachments().Single();
+                Assert.NotEqual(painted.DataFilePath, changedDuplicate.DataFilePath);
+                Assert.Equal(bytes, File.ReadAllBytes(System.IO.Path.Combine(media, painted.DataFilePath)));
+            }
+            finally { if (Directory.Exists(media)) Directory.Delete(media, true); }
+        });
+
     private static void RunBuildAttachmentsCacheProbe()
     {
         // The photo bytes are immutable between picture replacements - the save path must
