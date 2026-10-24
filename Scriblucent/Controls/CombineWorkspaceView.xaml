@@ -138,7 +138,7 @@
                 </Grid>
                 <Border Grid.Column="2">
                     <Border.Style><Style TargetType="Border" BasedOn="{StaticResource WorkspaceSectionStyle}"><Style.Triggers><DataTrigger Binding="{Binding (behaviors:CombineLayoutBehavior.IsCompact), ElementName=LayoutRoot}" Value="True"><Setter Property="Padding" Value="8"/></DataTrigger></Style.Triggers></Style></Border.Style>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+                    <ScrollViewer Style="{StaticResource RoundedCompactScrollViewerStyle}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
                         <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <TextBlock Text="{Binding Workspace.TitleLabel}" FontSize="{StaticResource Type.Control.Form}" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" TextWrapping="Wrap">
                                 <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Grid.ColumnSpan" Value="2"/><Setter Property="Margin" Value="{StaticResource Field.LabelMargin}"/><Style.Triggers><DataTrigger Binding="{Binding (behaviors:CombineLayoutBehavior.IsCompact), ElementName=LayoutRoot}" Value="True"><Setter Property="Grid.ColumnSpan" Value="1"/><Setter Property="MaxWidth" Value="180"/><Setter Property="Margin" Value="0,0,0,4"/><Setter Property="VerticalAlignment" Value="Center"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>

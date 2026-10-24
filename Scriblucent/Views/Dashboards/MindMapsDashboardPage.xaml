@@ -751,7 +751,7 @@
 																								   Foreground="{DynamicResource TextColor}"
 																								   Margin="0,0,0,8"
 																								   TextTrimming="CharacterEllipsis"/>
-																						<ScrollViewer MaxHeight="220"
+																						<ScrollViewer Style="{StaticResource RoundedCompactScrollViewerStyle}" MaxHeight="220"
 																									  VerticalScrollBarVisibility="Auto"
 																									  HorizontalScrollBarVisibility="Disabled">
 																							<ItemsControl ItemsSource="{Binding HoverContentPreviewItems}">
@@ -833,7 +833,7 @@
 																			Margin="8,0,0,0"
 													MinHeight="82"
 																			MouseMove="MindMapContentPreviewBorder_MouseMove">
-																		<ScrollViewer VerticalScrollBarVisibility="Auto"
+																		<ScrollViewer Style="{StaticResource RoundedCompactScrollViewerStyle}" VerticalScrollBarVisibility="Auto"
 																					  HorizontalScrollBarVisibility="Disabled">
 																			<ItemsControl ItemsSource="{Binding ContentPreviewItems}">
 																				<ItemsControl.ItemTemplate>

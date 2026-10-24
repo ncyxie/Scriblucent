@@ -175,8 +175,26 @@
         </Setter>
     </Style>
 
+    <!-- Clip the stationary viewport, with enough internal clearance for text and focus rims. -->
+    <Style x:Key="RoundedContentScrollViewerStyle" TargetType="ScrollViewer">
+        <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="True"/>
+        <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="6"/>
+        <Setter Property="ClipToBounds" Value="True"/>
+        <Setter Property="behaviors:RoundedClipBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:RoundedClipBehavior.CornerRadius" Value="{StaticResource Radius.Card}"/>
+    </Style>
+    <Style x:Key="RoundedCompactScrollViewerStyle" TargetType="ScrollViewer" BasedOn="{StaticResource RoundedContentScrollViewerStyle}">
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="behaviors:RoundedClipBehavior.CornerRadius" Value="{StaticResource Radius.Control}"/>
+    </Style>
+
     <Style x:Key="PopupListScrollViewerStyle" TargetType="{x:Type ScrollViewer}">
         <Setter Property="behaviors:PopupListSizeBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:RoundedClipBehavior.IsEnabled" Value="True"/>
+        <Setter Property="behaviors:RoundedClipBehavior.CornerRadius" Value="{StaticResource Radius.Control}"/>
         <Setter Property="behaviors:ScrollBarAutoHideBehavior.Enable" Value="False"/>
         <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True"/>
         <Setter Property="behaviors:ScrollWheelContainmentBehavior.IsEnabled" Value="True"/>
@@ -1023,6 +1041,7 @@
     <Style TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource StateListBoxItemStyle}"/>
     <!-- Native list semantics and recycling, with app-owned viewport chrome. -->
     <Style TargetType="ListBox">
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
         <Setter Property="FontFamily" Value="{StaticResource FontFamily.UI}"/>
         <Setter Property="FontSize" Value="{StaticResource Type.Control.Toolbar}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -1035,6 +1054,8 @@
             <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                     BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{StaticResource Radius.Control}">
                 <ScrollViewer x:Name="PART_ScrollViewer" Focusable="False" Padding="{TemplateBinding Padding}"
+                              behaviors:RoundedClipBehavior.IsEnabled="True"
+                              behaviors:RoundedClipBehavior.CornerRadius="{StaticResource Radius.Control}"
                               CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
                               VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
                               HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}">

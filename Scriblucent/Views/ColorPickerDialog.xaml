@@ -65,6 +65,7 @@
 
         <controls:OverlayDialogShell.Body>
             <ScrollViewer x:Name="ColorBodyScrollViewer" VerticalScrollBarVisibility="Auto"
+                          Style="{StaticResource RoundedCompactScrollViewerStyle}"
                           HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" Padding="0">
                 <!-- Reserve marker bleed inside the viewport, including when recent colors wrap. -->
                 <StackPanel Margin="8">

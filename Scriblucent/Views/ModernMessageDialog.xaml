@@ -57,6 +57,7 @@
 
         <controls:OverlayDialogShell.Body>
             <ScrollViewer MaxHeight="260"
+                          Style="{StaticResource RoundedCompactScrollViewerStyle}"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Margin="64,0,0,26">

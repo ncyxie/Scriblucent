@@ -128,7 +128,7 @@
                             </StackPanel>
                             <Button Grid.Column="1" Style="{StaticResource OverlayCloseIconButtonStyle}" Content="{icons:Icon Close}" Click="CloseButton_Click"/>
                         </Grid>
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4" MaxHeight="440">
+                        <ScrollViewer Style="{StaticResource RoundedCompactScrollViewerStyle}" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4" MaxHeight="440">
                             <StackPanel>
                                         <StackPanel x:Name="OwnerPickerSection" Visibility="Collapsed" Margin="0,0,0,16">
                                             <TextBlock Text="{Binding [CalendarChooseItem], Source={StaticResource Loc}}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}" Margin="{StaticResource Field.LabelMargin}"/>

@@ -2219,6 +2219,7 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged, Scri
             Child = new ScrollViewer
             {
                 Style = TryFindResource("PopupListScrollViewerStyle") as Style,
+                Padding = new Thickness(4),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 MaxHeight = 280,

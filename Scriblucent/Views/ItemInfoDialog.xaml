@@ -94,6 +94,7 @@
 
         <controls:OverlayDialogShell.Body>
             <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Style="{StaticResource RoundedCompactScrollViewerStyle}"
                           HorizontalScrollBarVisibility="Disabled"
                           CanContentScroll="False"
                           Padding="0,0,2,0"

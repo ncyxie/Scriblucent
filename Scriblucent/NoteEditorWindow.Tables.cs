@@ -569,7 +569,7 @@ public partial class NoteEditorWindow
         var divider = _resizeTable is null ? _hoverDivider : _resizeDivider;
         var x = EditorTableLayout.DividerPosition(table, ContentTextBox, divider);
         if (!double.IsFinite(x)) return;
-        var brush = TryFindResource("AccentPrimary") as Brush ?? Brushes.Gray;
+        var brush = TryFindResource("AccentRimBrush") as Brush ?? Brushes.Gray;
         var top = Math.Max(ContentTextBox.Padding.Top, bounds.Top);
         var bottom = Math.Min(ContentTextBox.ActualHeight - ContentTextBox.Padding.Bottom, bounds.Bottom);
         if (bottom <= top) return;

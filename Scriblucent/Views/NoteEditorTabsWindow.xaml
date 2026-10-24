@@ -160,6 +160,7 @@
                                     Visibility="Collapsed" ToolTip="{Binding [ScrollTabsLeft], Source={StaticResource Loc}}"
                                     AutomationProperties.Name="{Binding [ScrollTabsLeft], Source={StaticResource Loc}}"/>
                                 <ScrollViewer x:Name="TabHeaderScrollViewer" Grid.Column="1"
+                                    behaviors:RoundedClipBehavior.IsEnabled="True" behaviors:RoundedClipBehavior.CornerRadius="10,10,0,0"
                                     HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                                     <StackPanel x:Name="HeaderPanel" IsItemsHost="True" Orientation="Horizontal"
                                         Background="Transparent" ClipToBounds="False" KeyboardNavigation.TabIndex="1"/>

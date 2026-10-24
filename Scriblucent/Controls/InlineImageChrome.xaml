@@ -8,101 +8,51 @@
              IsHitTestVisible="True"
              Visibility="Collapsed">
     <UserControl.Resources>
-        <Style x:Key="InlineChromeHandleHitStyle" TargetType="Thumb">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Height" Value="22"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="IsTabStop" Value="False"/>
-        </Style>
-
-        <!-- Shared L-bracket stroke (elbow at local 11,11 = thumb center), same as the
-             floating widget's selection chrome. -->
-        <Style x:Key="InlineChromeBracketPathStyle" TargetType="Path">
-            <Setter Property="Stroke" Value="{DynamicResource AccentPrimary}"/>
-            <Setter Property="StrokeThickness" Value="2.25"/>
-            <Setter Property="StrokeStartLineCap" Value="Round"/>
-            <Setter Property="StrokeEndLineCap" Value="Round"/>
-            <Setter Property="StrokeLineJoin" Value="Round"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="IsHitTestVisible" Value="False"/>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Scriblucent;component/Themes/Controls/ImageChrome.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </UserControl.Resources>
     <Grid ClipToBounds="False">
         <!-- Flush with the image; each 22x22 thumb center sits on a corner (same geometry as
              the floating widget's corner handles). The chrome lives on the overlay canvas, so
              the handles always meet the photo's corners - never clipped by the text content. -->
         <Thumb x:Name="TopLeftThumb"
-               Style="{StaticResource InlineChromeHandleHitStyle}"
+               Style="{StaticResource ImageResizeThumbStyle}"
                Cursor="SizeNWSE"
                HorizontalAlignment="Left" VerticalAlignment="Top"
                Margin="-11,-11,0,0" Tag="TL"
                DragStarted="ResizeThumb_DragStarted"
                DragDelta="ResizeThumb_DragDelta"
-               DragCompleted="ResizeThumb_DragCompleted">
-            <Thumb.Template>
-                <ControlTemplate TargetType="Thumb">
-                    <Grid Background="Transparent" Width="22" Height="22">
-                        <Path Style="{StaticResource InlineChromeBracketPathStyle}"
-                              Data="M 3,11 L 11,11 L 11,3"/>
-                    </Grid>
-                </ControlTemplate>
-            </Thumb.Template>
-        </Thumb>
+               DragCompleted="ResizeThumb_DragCompleted"/>
 
         <Thumb x:Name="TopRightThumb"
-               Style="{StaticResource InlineChromeHandleHitStyle}"
+               Style="{StaticResource ImageResizeThumbStyle}"
                Cursor="SizeNESW"
                HorizontalAlignment="Right" VerticalAlignment="Top"
                Margin="0,-11,-11,0" Tag="TR"
                DragStarted="ResizeThumb_DragStarted"
                DragDelta="ResizeThumb_DragDelta"
-               DragCompleted="ResizeThumb_DragCompleted">
-            <Thumb.Template>
-                <ControlTemplate TargetType="Thumb">
-                    <Grid Background="Transparent" Width="22" Height="22">
-                        <Path Style="{StaticResource InlineChromeBracketPathStyle}"
-                              Data="M 19,11 L 11,11 L 11,3"/>
-                    </Grid>
-                </ControlTemplate>
-            </Thumb.Template>
-        </Thumb>
+               DragCompleted="ResizeThumb_DragCompleted"/>
 
         <Thumb x:Name="BottomRightThumb"
-               Style="{StaticResource InlineChromeHandleHitStyle}"
+               Style="{StaticResource ImageResizeThumbStyle}"
                Cursor="SizeNWSE"
                HorizontalAlignment="Right" VerticalAlignment="Bottom"
                Margin="0,0,-11,-11" Tag="BR"
                DragStarted="ResizeThumb_DragStarted"
                DragDelta="ResizeThumb_DragDelta"
-               DragCompleted="ResizeThumb_DragCompleted">
-            <Thumb.Template>
-                <ControlTemplate TargetType="Thumb">
-                    <Grid Background="Transparent" Width="22" Height="22">
-                        <Path Style="{StaticResource InlineChromeBracketPathStyle}"
-                              Data="M 19,11 L 11,11 L 11,19"/>
-                    </Grid>
-                </ControlTemplate>
-            </Thumb.Template>
-        </Thumb>
+               DragCompleted="ResizeThumb_DragCompleted"/>
 
         <Thumb x:Name="BottomLeftThumb"
-               Style="{StaticResource InlineChromeHandleHitStyle}"
+               Style="{StaticResource ImageResizeThumbStyle}"
                Cursor="SizeNESW"
                HorizontalAlignment="Left" VerticalAlignment="Bottom"
                Margin="-11,0,0,-11" Tag="BL"
                DragStarted="ResizeThumb_DragStarted"
                DragDelta="ResizeThumb_DragDelta"
-               DragCompleted="ResizeThumb_DragCompleted">
-            <Thumb.Template>
-                <ControlTemplate TargetType="Thumb">
-                    <Grid Background="Transparent" Width="22" Height="22">
-                        <Path Style="{StaticResource InlineChromeBracketPathStyle}"
-                              Data="M 3,11 L 11,11 L 11,19"/>
-                    </Grid>
-                </ControlTemplate>
-            </Thumb.Template>
-        </Thumb>
+               DragCompleted="ResizeThumb_DragCompleted"/>
 
         <!-- Aspect lock + delete chips, same chrome as the floating widget; flipped below the
              photo when it is pressed against the editor's top edge. -->

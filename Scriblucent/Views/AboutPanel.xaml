@@ -207,6 +207,7 @@
                         </Border>
 
                         <ScrollViewer x:Name="AboutContentScroll" Grid.Row="1"
+                                      Style="{StaticResource RoundedCompactScrollViewerStyle}"
                                       Margin="22,0,20,0"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"

@@ -28,7 +28,8 @@
 
         <controls:OverlayDialogShell.Body>
             <ScrollViewer x:Name="CaptionBodyScrollViewer" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" Padding="0">
+                          Style="{StaticResource RoundedCompactScrollViewerStyle}"
+                          HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
                 <StackPanel>
                     <!-- Live preview of the resulting caption (LibreOffice shows the result). -->
                     <TextBlock Text="{Binding [CaptionPreview], Source={StaticResource Loc}}"

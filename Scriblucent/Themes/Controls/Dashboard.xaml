@@ -190,8 +190,11 @@
             <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="CanContentScroll" Value="False"/>
             <Setter Property="PanningMode" Value="HorizontalOnly"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="ClipToBounds" Value="False"/>
+            <!-- Keep first/last card edges and shadow clearance inside the fixed rounded viewport. -->
+            <Setter Property="Padding" Value="6,0,6,0"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="behaviors:RoundedClipBehavior.IsEnabled" Value="True"/>
+            <Setter Property="behaviors:RoundedClipBehavior.CornerRadius" Value="{StaticResource Radius.Card}"/>
             <Setter Property="behaviors:MiddleClickScrollBehavior.IsEnabled" Value="True"/>
         </Style>
 

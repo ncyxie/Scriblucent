@@ -37,7 +37,7 @@ internal static class ItemReorderPreview
         var icon = new AppIcon { Kind = kind, Width = 20, Height = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
         DockPanel.SetDock(icon, Dock.Left); row.Children.Add(icon); row.Children.Add(label);
         var face = new SurfaceMaterialBorder { MinWidth = 140, MaxWidth = 320, Padding = new Thickness(14, 12, 14, 12), Child = row,
-            Background = (Brush)source.FindResource("CardBackground"), BorderBrush = (Brush)source.FindResource("AccentPrimary"),
+            Background = (Brush)source.FindResource("CardBackground"), BorderBrush = (Brush)source.FindResource("AccentRimBrush"),
             BorderThickness = new Thickness(1), CornerRadius = (CornerRadius)source.FindResource("Radius.Card") };
         TextElement.SetForeground(face, (Brush)source.FindResource("TextColor"));
         TextElement.SetFontFamily(face, (FontFamily)source.FindResource("FontFamily.UI"));

@@ -42,8 +42,8 @@
       <Border Style="{StaticResource ChromeInsetFieldBorderStyle}"><TextBox Style="{StaticResource EmbeddedFieldTextBoxStyle}" FontSize="{StaticResource Type.Control.Form}" x:Name="StartBox" Text="1" TextChanged="RuleChanged"/></Border></StackPanel>
     </Grid>
     <TextBlock x:Name="PreviewCount" Style="{StaticResource FormHelperTextStyle}" Margin="0,0,0,8"/>
-    <ItemsControl x:Name="PreviewList" MaxHeight="210" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
-     <ItemsControl.Template><ControlTemplate TargetType="ItemsControl"><ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="True"><ItemsPresenter/></ScrollViewer></ControlTemplate></ItemsControl.Template>
+    <ItemsControl x:Name="PreviewList" MaxHeight="210" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
+     <ItemsControl.Template><ControlTemplate TargetType="ItemsControl"><ScrollViewer Style="{StaticResource RoundedCompactScrollViewerStyle}" VerticalScrollBarVisibility="Auto" CanContentScroll="True"><ItemsPresenter/></ScrollViewer></ControlTemplate></ItemsControl.Template>
      <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
      <ItemsControl.ItemTemplate><DataTemplate>
       <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Raised" Background="{DynamicResource CardBackground}" CornerRadius="10" Padding="10,8" Margin="0,0,0,6">

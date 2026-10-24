@@ -41,6 +41,7 @@
 
         <controls:FeatureWindowShell.Body>
             <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Style="{StaticResource RoundedContentScrollViewerStyle}"
                           HorizontalScrollBarVisibility="Auto"
                           Padding="24,24,24,28"
                           Background="{DynamicResource WindowBackground}">

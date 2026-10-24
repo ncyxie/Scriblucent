@@ -101,13 +101,27 @@
     <!-- Semantic accents (brand blue #435CEC + derived hover / pressed / subtle) -->
     <SolidColorBrush x:Key="AccentPrimary" Color="#435CEC"/>
     <!-- One directional accent light for focus, selection and drop targets. -->
-    <SolidColorBrush x:Key="AccentRimTop" Color="#6786F5"/>
-    <SolidColorBrush x:Key="AccentRimBody" Color="#435CEC"/>
-    <SolidColorBrush x:Key="AccentRimBottom" Color="#344AC2"/>
+    <Color x:Key="AccentRimTopColor">#6786F5</Color>
+    <Color x:Key="AccentRimBodyColor">#435CEC</Color>
+    <Color x:Key="AccentRimBottomColor">#344AC2</Color>
+    <SolidColorBrush x:Key="AccentRimTop" Color="{StaticResource AccentRimTopColor}"/>
+    <SolidColorBrush x:Key="AccentRimBody" Color="{StaticResource AccentRimBodyColor}"/>
+    <SolidColorBrush x:Key="AccentRimBottom" Color="{StaticResource AccentRimBottomColor}"/>
     <LinearGradientBrush x:Key="AccentRimBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#6786F5" Offset="0"/>
-        <GradientStop Color="#435CEC" Offset="0.42"/>
-        <GradientStop Color="#344AC2" Offset="1"/>
+        <GradientStop Color="{StaticResource AccentRimTopColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentRimBodyColor}" Offset="0.42"/>
+        <GradientStop Color="{StaticResource AccentRimBottomColor}" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="AccentGuideHorizontalBrush" StartPoint="0,0.5" EndPoint="1,0.5">
+        <GradientStop Color="{StaticResource AccentRimTopColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentRimBodyColor}" Offset="0.42"/>
+        <GradientStop Color="{StaticResource AccentRimBottomColor}" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="EditHandleContrast" Color="#EFFFFFFF"/>
+    <LinearGradientBrush x:Key="EditSelectionWash" StartPoint="0,0" EndPoint="0,1" Opacity="0.14">
+        <GradientStop Color="{StaticResource AccentRimTopColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentRimBodyColor}" Offset="0.42"/>
+        <GradientStop Color="{StaticResource AccentRimBottomColor}" Offset="1"/>
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="DropTargetWash" StartPoint="0,0" EndPoint="0,1">
         <GradientStop Color="#24435CEC" Offset="0"/>
@@ -157,9 +171,9 @@
     <SolidColorBrush x:Key="NoteCardTitle" Color="#1C1C1C"/>
     <SolidColorBrush x:Key="NoteCardSelection" Color="#EEF0FE"/>
     <LinearGradientBrush x:Key="NoteCardSelectionBorder" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#6786F5" Offset="0"/>
-        <GradientStop Color="#435CEC" Offset="0.42"/>
-        <GradientStop Color="#344AC2" Offset="1"/>
+        <GradientStop Color="{StaticResource AccentRimTopColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentRimBodyColor}" Offset="0.42"/>
+        <GradientStop Color="{StaticResource AccentRimBottomColor}" Offset="1"/>
     </LinearGradientBrush>
 
     <!-- Flashcard Colors -->
@@ -169,9 +183,9 @@
     <SolidColorBrush x:Key="FlashcardCardSelectedHoverBackground" Color="#E8EBFD"/>
     <SolidColorBrush x:Key="FlashcardCardBorder" Color="#00000000"/>
     <LinearGradientBrush x:Key="FlashcardCardSelectedBorder" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#6786F5" Offset="0"/>
-        <GradientStop Color="#435CEC" Offset="0.42"/>
-        <GradientStop Color="#344AC2" Offset="1"/>
+        <GradientStop Color="{StaticResource AccentRimTopColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentRimBodyColor}" Offset="0.42"/>
+        <GradientStop Color="{StaticResource AccentRimBottomColor}" Offset="1"/>
     </LinearGradientBrush>
     <SolidColorBrush x:Key="FlashcardSideChipBackground" Color="#F5F7FB"/>
     <SolidColorBrush x:Key="FlashcardSideChipBorder" Color="#DDE4F3"/>
@@ -249,7 +263,11 @@
     <!-- RichTextBox Colors -->
     <SolidColorBrush x:Key="RichTextBoxBackground" Color="{StaticResource Surface.Content.Color}"/>
     <SolidColorBrush x:Key="RichTextBoxForeground" Color="#1C1C1C"/>
-    <SolidColorBrush x:Key="EditorSelectionBrush" Color="#435CEC"/>
+    <LinearGradientBrush x:Key="EditorSelectionBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="{StaticResource AccentRimTopColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentRimBodyColor}" Offset="0.42"/>
+        <GradientStop Color="{StaticResource AccentRimBottomColor}" Offset="1"/>
+    </LinearGradientBrush>
     <SolidColorBrush x:Key="EditorFindMatchBackground" Color="#FEF3C7"/>
     <SolidColorBrush x:Key="EditorFindActiveMatchBackground" Color="#FBBF24"/>
 

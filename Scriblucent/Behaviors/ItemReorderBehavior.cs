@@ -516,21 +516,31 @@ public static class ItemReorderBehavior
         public void Show(Rect bounds, bool after, bool vertical, double? markerX) { IsHitTestVisible = false; _bounds = bounds; _after = after; _vertical = vertical; _markerX = markerX; InvalidateVisual(); }
         protected override void OnRender(DrawingContext drawing)
         {
-            var brush = (AdornedElement as FrameworkElement)?.TryFindResource("AccentPrimary") as Brush ?? Brushes.DodgerBlue;
-            var pen = new Pen(brush, 2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            var owner = AdornedElement as FrameworkElement;
+            var brush = owner?.TryFindResource(_vertical ? "AccentGuideHorizontalBrush" : "AccentRimBrush") as Brush ?? Brushes.DodgerBlue;
+            var contrast = owner?.TryFindResource("EditHandleContrast") as Brush;
             // AdornerLayer manages UIElement.Clip during layout. Keep our viewport
             // boundary on the drawing itself so later layout cannot remove it.
             if (_viewportClip is not null) drawing.PushClip(_viewportClip);
+            Rect marker;
             if (_vertical)
             {
                 double y = _after ? _bounds.Bottom - 4 : _bounds.Top + 2;
-                drawing.DrawLine(pen, new(_bounds.Left + 8, y), new(_bounds.Right - 8, y));
+                marker = new Rect(_bounds.Left + 7, y - 1, Math.Max(0, _bounds.Width - 14), 2);
             }
             else
             {
                 double x = _markerX ?? (_after ? _bounds.Right - 4 : _bounds.Left + 2);
-                drawing.DrawLine(pen, new(x, _bounds.Top + 8), new(x, _bounds.Bottom - 8));
+                marker = new Rect(x - 1, _bounds.Top + 7, 2, Math.Max(0, _bounds.Height - 14));
             }
+            // A retained contrast edge keeps the lit accent readable over cards and photos.
+            // Filled geometry gives a thin guide a stable brush mapping in either orientation.
+            if (contrast is not null)
+            {
+                var outline = marker; outline.Inflate(.75, .75);
+                drawing.DrawRoundedRectangle(contrast, null, outline, 1.75, 1.75);
+            }
+            drawing.DrawRoundedRectangle(brush, null, marker, 1, 1);
             if (_viewportClip is not null) drawing.Pop();
         }
     }

@@ -63,33 +63,11 @@
         </ContextMenu>
     </UserControl.ContextMenu>
     <UserControl.Resources>
-        <Style x:Key="NoteImageHandleHitStyle" TargetType="Thumb">
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Height" Value="22"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="IsTabStop" Value="False"/>
-        </Style>
-
-        <!-- Shared L-bracket stroke (elbow at local 11,11 = thumb center). -->
-        <Style x:Key="NoteImageBracketPathStyle" TargetType="Path">
-            <Setter Property="Stroke" Value="{DynamicResource AccentPrimary}"/>
-            <Setter Property="StrokeThickness" Value="2.25"/>
-            <Setter Property="StrokeStartLineCap" Value="Round"/>
-            <Setter Property="StrokeEndLineCap" Value="Round"/>
-            <Setter Property="StrokeLineJoin" Value="Round"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="IsHitTestVisible" Value="False"/>
-        </Style>
-
-        <!-- Mid-edge capsule bar. -->
-        <Style x:Key="NoteImageEdgeBarStyle" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource AccentPrimary}"/>
-            <Setter Property="controls:SurfaceMaterial.Kind" Value="Filled"/>
-            <Setter Property="CornerRadius" Value="1.5"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="IsHitTestVisible" Value="False"/>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Scriblucent;component/Themes/Controls/ImageChrome.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid x:Name="LayoutRoot" ClipToBounds="False">
@@ -138,8 +116,8 @@
                            Stretch="Fill"
                            SnapsToDevicePixels="True"/>
                     <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Marker" controls:SurfaceMaterial.Foreground="{DynamicResource AccentPrimaryForeground}" x:Name="SelectionWash"
-                            Background="{DynamicResource AccentPrimary}"
-                            Opacity="0.12"
+                            Background="{DynamicResource EditSelectionWash}"
+                            Opacity="1"
                             IsHitTestVisible="False"
                             Visibility="Collapsed"/>
                 </Grid>
@@ -154,146 +132,70 @@
               ClipToBounds="False">
 
             <!-- Corners: elbow of L at thumb center (11,11) -->
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeNWSE"
                    HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="-11,-11,0,0" Tag="TL"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource NoteImageBracketPathStyle}"
-                                  Data="M 3,11 L 11,11 L 11,3"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeNESW"
                    HorizontalAlignment="Right" VerticalAlignment="Top"
                    Margin="0,-11,-11,0" Tag="TR"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource NoteImageBracketPathStyle}"
-                                  Data="M 19,11 L 11,11 L 11,3"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeNWSE"
                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
                    Margin="0,0,-11,-11" Tag="BR"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource NoteImageBracketPathStyle}"
-                                  Data="M 19,11 L 11,11 L 11,19"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeNESW"
                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
                    Margin="-11,0,0,-11" Tag="BL"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <Path Style="{StaticResource NoteImageBracketPathStyle}"
-                                  Data="M 3,11 L 11,11 L 11,19"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
             <!-- Mid-edge capsule bars -->
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeNS"
                    HorizontalAlignment="Center" VerticalAlignment="Top"
                    Margin="0,-11,0,0" Tag="T"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <controls:SurfaceMaterialBorder Style="{StaticResource NoteImageEdgeBarStyle}"
-                                    Width="14" Height="3"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeWE"
                    HorizontalAlignment="Right" VerticalAlignment="Center"
                    Margin="0,0,-11,0" Tag="R"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <controls:SurfaceMaterialBorder Style="{StaticResource NoteImageEdgeBarStyle}"
-                                    Width="3" Height="14"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeNS"
                    HorizontalAlignment="Center" VerticalAlignment="Bottom"
                    Margin="0,0,0,-11" Tag="B"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <controls:SurfaceMaterialBorder Style="{StaticResource NoteImageEdgeBarStyle}"
-                                    Width="14" Height="3"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
-            <Thumb Style="{StaticResource NoteImageHandleHitStyle}"
+            <Thumb Style="{StaticResource ImageResizeThumbStyle}"
                    Cursor="SizeWE"
                    HorizontalAlignment="Left" VerticalAlignment="Center"
                    Margin="-11,0,0,0" Tag="L"
                    DragStarted="ResizeThumb_DragStarted"
                    DragDelta="ResizeThumb_DragDelta"
-                   DragCompleted="ResizeThumb_DragCompleted">
-                <Thumb.Template>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid Background="Transparent" Width="22" Height="22">
-                            <controls:SurfaceMaterialBorder Style="{StaticResource NoteImageEdgeBarStyle}"
-                                    Width="3" Height="14"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Grid>
-                    </ControlTemplate>
-                </Thumb.Template>
-            </Thumb>
+                   DragCompleted="ResizeThumb_DragCompleted"/>
 
             <!-- Aspect lock + delete chips — above the top edge, clear of resize brackets;
                  flipped below the bottom edge when the image is pressed against the top. -->

@@ -92,6 +92,7 @@
 
         <controls:OverlayDialogShell.Body>
                 <ScrollViewer
+                              Style="{StaticResource RoundedCompactScrollViewerStyle}"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>

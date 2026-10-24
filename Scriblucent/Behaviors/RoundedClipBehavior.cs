@@ -20,6 +20,8 @@ public static class RoundedClipBehavior
         public DependencyPropertyDescriptor? CornerRadiusDescriptor;
         public EventHandler? CornerRadiusChangedHandler;
         public DependencyPropertyDescriptor? BorderThicknessDescriptor;
+        public ScrollContentPresenter? ScrollContent;
+        public DependencyPropertyDescriptor? ScrollPaddingDescriptor;
     }
 
     private static readonly DependencyProperty StateProperty = DependencyProperty.RegisterAttached(
@@ -115,6 +117,12 @@ public static class RoundedClipBehavior
             state.BorderThicknessDescriptor = DependencyPropertyDescriptor.FromProperty(Border.BorderThicknessProperty, typeof(Border));
             state.BorderThicknessDescriptor?.AddValueChanged(element, state.CornerRadiusChangedHandler);
         }
+        else if (element is ScrollViewer)
+        {
+            state.CornerRadiusChangedHandler = (_, _) => UpdateClip(element);
+            state.ScrollPaddingDescriptor = DependencyPropertyDescriptor.FromProperty(Control.PaddingProperty, typeof(ScrollViewer));
+            state.ScrollPaddingDescriptor?.AddValueChanged(element, state.CornerRadiusChangedHandler);
+        }
 
         UpdateClip(element);
     }
@@ -135,8 +143,15 @@ public static class RoundedClipBehavior
             state.CornerRadiusDescriptor.RemoveValueChanged(element, state.CornerRadiusChangedHandler);
         if (state.BorderThicknessDescriptor is not null && state.CornerRadiusChangedHandler is not null)
             state.BorderThicknessDescriptor.RemoveValueChanged(element, state.CornerRadiusChangedHandler);
+        if (state.ScrollPaddingDescriptor is not null && state.CornerRadiusChangedHandler is not null)
+            state.ScrollPaddingDescriptor.RemoveValueChanged(element, state.CornerRadiusChangedHandler);
 
         state.IsAttached = false;
+        if (state.ScrollContent is { } content)
+        {
+            SetIsEnabled(content, false);
+            state.ScrollContent = null;
+        }
         element.Clip = null;
     }
 
@@ -177,6 +192,7 @@ public static class RoundedClipBehavior
             topInset = 0;
 
         var radius = ResolveRadius(element);
+        if (element is ScrollViewer viewer) UpdateScrollContentClip(viewer, radius);
         if (element is Border border || radius.TopLeft != radius.TopRight || radius.TopLeft != radius.BottomLeft || radius.TopLeft != radius.BottomRight)
         {
             var contour = SurfaceContour.Create(new Size(width, height - topInset), radius,
@@ -215,5 +231,26 @@ public static class RoundedClipBehavior
             return border.CornerRadius;
 
         return default;
+    }
+
+    private static void UpdateScrollContentClip(ScrollViewer viewer, CornerRadius radius)
+    {
+        // ScrollViewer padding and scrollbar tracks sit outside the content presenter.
+        // Round that stationary inner viewport as well, rather than leaving a square inset.
+        var presenter = viewer.Template?.FindName("PART_ScrollContentPresenter", viewer) as ScrollContentPresenter;
+        if (presenter is null) return; // Loaded retries after the native template has been applied.
+        var state = GetOrCreateState(viewer);
+        if (!ReferenceEquals(state.ScrollContent, presenter))
+        {
+            if (state.ScrollContent is { } previous) SetIsEnabled(previous, false);
+            state.ScrollContent = presenter;
+        }
+        var padding = viewer.Padding;
+        SetCornerRadius(presenter, new CornerRadius(
+            Math.Max(0, radius.TopLeft - Math.Max(padding.Left, padding.Top)),
+            Math.Max(0, radius.TopRight - Math.Max(padding.Right, padding.Top)),
+            Math.Max(0, radius.BottomRight - Math.Max(padding.Right, padding.Bottom)),
+            Math.Max(0, radius.BottomLeft - Math.Max(padding.Left, padding.Bottom))));
+        SetIsEnabled(presenter, true);
     }
 }

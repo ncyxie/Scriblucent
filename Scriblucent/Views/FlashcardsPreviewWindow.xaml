@@ -583,6 +583,7 @@
                     <controls:SurfaceMaterialBorder Background="{DynamicResource CardBackground}" controls:SurfaceMaterial.Kind="Raised"
                             BorderBrush="{DynamicResource PopupBorder}" BorderThickness="1" CornerRadius="{StaticResource Radius.Card}" Padding="12">
                         <ScrollViewer x:Name="FlashcardHintScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Style="{StaticResource RoundedCompactScrollViewerStyle}"
                                       Focusable="True" KeyboardNavigation.TabNavigation="Cycle" behaviors:SmoothScrollBehavior.IsEnabled="True"
                                       behaviors:ScrollWheelContainmentBehavior.IsEnabled="True">
                             <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" FontSize="{StaticResource Type.Body}"

@@ -1909,10 +1909,8 @@ namespace Scriblucent
             if (_cachedSelectionOverlayBrush is not null)
                 return _cachedSelectionOverlayBrush;
 
-            var source = TryFindResource("EditorSelectionBrush") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(67, 92, 236));
-            if (source.IsFrozen)
-                source = source.Clone();
+            var source = (TryFindResource("EditorSelectionBrush") as Brush
+                ?? new SolidColorBrush(Color.FromRgb(67, 92, 236))).CloneCurrentValue();
 
             source.Opacity = 0.4;
             if (source.CanFreeze)

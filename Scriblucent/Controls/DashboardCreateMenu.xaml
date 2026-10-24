@@ -25,6 +25,7 @@
     <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="52"/></Grid.RowDefinitions>
         <ScrollViewer x:Name="ActionViewport" Grid.Row="0" Margin="-16,-16,-16,-4"
+                      Style="{StaticResource RoundedContentScrollViewerStyle}" Padding="0"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       Focusable="False" CanContentScroll="False" Visibility="{Binding Visibility, ElementName=ActionPanel}">
             <!-- Inset inside the scroll content: ScrollViewer.Padding clips the shadow at its inner edge. -->

@@ -3668,7 +3668,7 @@ public sealed class FloatingImageCoordinator
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed
         };
-        _inlineDropIndicator.SetResourceReference(Border.BackgroundProperty, "AccentPrimary");
+        _inlineDropIndicator.SetResourceReference(Border.BackgroundProperty, "AccentRimBrush");
         _overlay?.Children.Add(_inlineDropIndicator);
         return _inlineDropIndicator;
     }

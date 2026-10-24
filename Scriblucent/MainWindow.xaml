@@ -377,7 +377,7 @@
 					</Grid>
 				</Button>
 
-				<ScrollViewer Grid.Row="1"
+				<ScrollViewer Grid.Row="1" Style="{StaticResource RoundedCompactScrollViewerStyle}" Padding="0"
 							  VerticalScrollBarVisibility="Auto"
 							  HorizontalScrollBarVisibility="Disabled">
 					<StackPanel>

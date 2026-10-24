@@ -39,6 +39,7 @@
 
         <controls:OverlayDialogShell.Body>
             <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Style="{StaticResource RoundedCompactScrollViewerStyle}"
                           HorizontalScrollBarVisibility="Disabled"
                           Background="Transparent">
             <StackPanel>

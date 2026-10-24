@@ -47,7 +47,7 @@
                 </Border>
             </controls:FeatureWindowShell.Header>
             <controls:FeatureWindowShell.Body>
-                <ScrollViewer Margin="24,4,24,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="Transparent" ClipToBounds="False">
+                <ScrollViewer Style="{StaticResource RoundedContentScrollViewerStyle}" Margin="24,4,24,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="Transparent">
                     <StackPanel>
                         <StackPanel motion:ArrivalGroups.Role="Content">
                             <WrapPanel Margin="0,0,0,12">

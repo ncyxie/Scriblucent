@@ -64,8 +64,8 @@
                        Stretch="Fill"
                        SnapsToDevicePixels="True"/>
                 <controls:SurfaceMaterialBorder controls:SurfaceMaterial.Kind="Marker" controls:SurfaceMaterial.Foreground="{DynamicResource AccentPrimaryForeground}" x:Name="SelectionWash"
-                        Background="{DynamicResource AccentPrimary}"
-                        Opacity="0.12"
+                        Background="{DynamicResource EditSelectionWash}"
+                        Opacity="1"
                         IsHitTestVisible="False"
                         Visibility="Collapsed"/>
             </Grid>

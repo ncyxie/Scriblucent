@@ -297,6 +297,34 @@ public class MotionCoherenceTests
         MotionPolicy.Configure(MotionPreference.Off, false); Assert.Equal(0, drop.Opacity); Assert.Equal(new Thickness(), drop.BorderThickness);
     });
     [Fact]
+    public void Scroll_content_keeps_its_rounded_viewport_during_scroll_resize_and_workspace_reattachment() => Sta(() =>
+    {
+        var viewer = new ScrollViewer { Width = 220, Height = 140, Padding = new Thickness(6), Content = new Border { Width = 480, Height = 1600, Background = Brushes.White } };
+        RoundedClipBehavior.SetCornerRadius(viewer, new CornerRadius(14));
+        RoundedClipBehavior.SetIsEnabled(viewer, true);
+        var root = new Grid { Children = { viewer } };
+        using var host = new Host(root);
+        var presenter = (ScrollContentPresenter)viewer.Template.FindName("PART_ScrollContentPresenter", viewer);
+        Assert.NotNull(presenter.Clip);
+        Assert.Equal(new CornerRadius(8), RoundedClipBehavior.GetCornerRadius(presenter));
+        Assert.False(presenter.Clip.FillContains(new Point(.5, .5)));
+        var clip = presenter.Clip;
+        viewer.ScrollToVerticalOffset(200); host.Window.UpdateLayout(); Pump(20);
+        Assert.True(viewer.VerticalOffset > 0);
+        Assert.Same(clip, presenter.Clip);
+        viewer.Width = 320; host.Window.UpdateLayout(); Pump(20);
+        Assert.Equal(presenter.ActualWidth, presenter.Clip.Bounds.Width, 1);
+        viewer.Padding = new Thickness(4); host.Window.UpdateLayout(); Pump(20);
+        Assert.Equal(new CornerRadius(10), RoundedClipBehavior.GetCornerRadius(presenter));
+        root.Children.Remove(viewer); host.Window.UpdateLayout(); Pump(20);
+        Assert.Null(presenter.Clip);
+        root.Children.Add(viewer); host.Window.UpdateLayout(); Pump(20);
+        Assert.NotNull(presenter.Clip);
+        Assert.False(presenter.Clip.FillContains(new Point(.5, .5)));
+        RoundedClipBehavior.SetIsEnabled(viewer, false);
+        Assert.Null(viewer.Clip); Assert.Null(presenter.Clip);
+    });
+    [Fact]
     public void Raised_cards_reserve_no_shadow_layout_and_keep_their_shadow_outside_the_face_clip() => Sta(() =>
     {
         var face = new Border { Width = 220, Height = 140, CornerRadius = new(14), Background = Brushes.White };
@@ -306,6 +334,23 @@ public class MotionCoherenceTests
         Assert.Equal(face.RenderSize, surface.RenderSize); Assert.Null(surface.Clip); Assert.NotNull(face.Clip);
         Assert.True(shadow.ActualWidth > face.ActualWidth); Assert.Equal(new Thickness(-17), shadow.Margin);
         var move = new TranslateTransform(0, -2); face.RenderTransform = move; Assert.Same(move, shadow.RenderTransform);
+    });
+    [Fact]
+    public void Default_lists_accept_pixel_wheel_input_without_losing_virtualization() => Sta(() =>
+    {
+        var list = new ListBox { Width = 260, Height = 160, ItemsSource = Enumerable.Range(0, 200).Select(i => "Item " + i).ToArray() };
+        using var host = new Host(new Grid { Children = { list } });
+        var viewer = Tree(list).OfType<ScrollViewer>().Single();
+        SmoothScrollBehavior.SetIsEnabled(viewer, true);
+        MotionPolicy.Configure(MotionPreference.Off, false);
+        var wheel = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, Environment.TickCount, -120) { RoutedEvent = System.Windows.Input.Mouse.PreviewMouseWheelEvent };
+        viewer.RaiseEvent(wheel); host.Window.UpdateLayout(); Pump(30);
+        Assert.True(wheel.Handled);
+        Assert.True(viewer.ViewportHeight > 100);
+        Assert.InRange(viewer.VerticalOffset, 10, 80);
+        Assert.True(Tree(list).OfType<ListBoxItem>().Count() < list.Items.Count);
+        viewer.ScrollToEnd(); host.Window.UpdateLayout(); Pump(30);
+        Assert.True(list.ItemContainerGenerator.ContainerFromIndex(199) is ListBoxItem { IsVisible: true });
     });
     [Theory]
     [InlineData("Light", "QuizLibraryRow", 2)]
