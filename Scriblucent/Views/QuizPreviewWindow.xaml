@@ -381,7 +381,11 @@
                         <controls:CollectionSelectionFrame FaceName="QuizQuestionFace" IsHoverTintEnabled="False" SelectionInset="0,16,16,0" ItemId="{Binding Id}" SelectionLabel="{Binding Question}"
                             Selection="{Binding Path=(controls:EditorChromeContext.Controller).BulkSelection, RelativeSource={RelativeSource Self}}">
                         <controls:CollectionSelectionFrame.ContextMenu>
-                            <ContextMenu behaviors:ItemReorderBehavior.MenuActions="True"><MenuItem Header="{Binding [MassSelectModeTitle], Source={StaticResource Loc}}" Click="SelectQuestionMenuItem_Click"/></ContextMenu>
+                            <ContextMenu behaviors:ItemReorderBehavior.MenuActions="True" Opened="QuestionItemContextMenu_Opened">
+                                <MenuItem Tag="Duplicate" Header="{Binding [Duplicate], Source={StaticResource Loc}}" InputGestureText="Ctrl+D" Click="DuplicateQuestionMenuItem_Click"/>
+                                <Separator/>
+                                <MenuItem Tag="Selection" Header="{Binding [MassSelectModeTitle], Source={StaticResource Loc}}" Click="SelectQuestionMenuItem_Click"/>
+                            </ContextMenu>
                         </controls:CollectionSelectionFrame.ContextMenu>
                         <controls:DashboardTileHost RendererKey="QuizQuestion">
                         <Grid ClipToBounds="False">

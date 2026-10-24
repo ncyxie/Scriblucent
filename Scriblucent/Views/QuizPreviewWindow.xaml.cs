@@ -1417,6 +1417,7 @@ public partial class QuizPreviewWindow : Window, INotifyPropertyChanged, Scriblu
     private void QuizPreviewWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (BulkSelectionBar.HandleOperationKey(e)) return;
+        if (Scriblucent.Controls.EditorSelectionInput.HandleDuplicateKey(e, Keyboard.Modifiers, () => DuplicateCurrentQuestions(e.OriginalSource as DependencyObject))) return;
         if (Scriblucent.Controls.EditorSelectionInput.HandleKey(e, BulkSelection, ConfirmDeleteSelectedQuestions)) return;
         if (e.Key == Key.Escape)
         {

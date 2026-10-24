@@ -101,9 +101,39 @@ public partial class QuizPreviewWindow
         UpdateSummary(); UpdateEditedIndicator(); SyncBulkSelectionChrome();
     }
     internal void DuplicateSelectedQuestions()
+        => DuplicateQuestions(SelectedQuestionIds());
+
+    private void DuplicateQuestionMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var selected = SelectedQuestionIds();
-        if (selected.Count == 0) return;
+        if (sender is not MenuItem { Parent: ContextMenu { PlacementTarget: CollectionSelectionFrame frame } }) return;
+        DuplicateQuestions(BulkSelection.IsActive && BulkSelection.Contains(frame.ItemId)
+            ? SelectedQuestionIds() : new HashSet<Guid> { frame.ItemId });
+        e.Handled = true;
+    }
+    private void QuestionItemContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu)
+            foreach (var item in menu.Items.OfType<MenuItem>().Where(item => item.Tag as string is "Duplicate" or "Selection"))
+                item.IsEnabled = IsEditMode;
+    }
+    private bool DuplicateCurrentQuestions(DependencyObject? source)
+    {
+        if (!IsEditMode) return false;
+        if (BulkSelection.IsActive)
+        {
+            if (!BulkSelection.HasSelection) return false;
+            DuplicateSelectedQuestions(); return true;
+        }
+        var id = source is not null ? CollectionSelectionFrame.For(source)?.ItemId : null;
+        var question = _questions.FirstOrDefault(question => question.Id == id) ?? _questions.FirstOrDefault(question => question.IsFocused);
+        if (question is null) return false;
+        DuplicateQuestions(new HashSet<Guid> { question.Id }); return true;
+    }
+    private void DuplicateQuestions(IReadOnlySet<Guid> selected)
+    {
+        if (!IsEditMode || selected.Count == 0) return;
+        CommitWorkspaceEdits();
+        bool bulk = BulkSelection.IsActive;
         var result = new List<QuizPreviewQuestion>(_questions.Count + selected.Count);
         var copies = new List<Guid>();
         foreach (var question in _questions)
@@ -115,7 +145,14 @@ public partial class QuizPreviewWindow
             var copy = new QuizPreviewQuestion(0, model);
             result.Add(copy); copies.Add(copy.Id);
         }
-        CommitQuestionBulk(result, copies);
+        CommitQuestionBulk(result, bulk ? copies : null);
+        if (!bulk && copies.Count > 0)
+        {
+            var copy = _questions.First(question => question.Id == copies[0]);
+            SetQuestionFocus(_questions.IndexOf(copy));
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,
+                () => EditorSelectionInput.RevealItem(QuestionsItemsControl, copy));
+        }
     }
     internal bool CanMoveSelectedQuestions(bool down)
     {

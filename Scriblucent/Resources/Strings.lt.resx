@@ -530,7 +530,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="SortButtonFormat" xml:space="preserve"><value>Rikiavimas: {0}</value></data>
   <data name="Pin" xml:space="preserve"><value>Prisegti</value></data>
   <data name="Unpin" xml:space="preserve"><value>Atsegti</value></data>
-  <data name="Duplicate" xml:space="preserve"><value>Kopijuoti</value></data>
+  <data name="Duplicate" xml:space="preserve"><value>Dubliuoti</value></data>
   <data name="FindReplaceTitle" xml:space="preserve"><value>Rasti / Pakeisti</value></data>
   <data name="FindLabel" xml:space="preserve"><value>Rasti:</value></data>
   <data name="ReplaceLabel" xml:space="preserve"><value>Pakeisti:</value></data>
@@ -646,7 +646,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="MassSelectGroupSelected" xml:space="preserve"><value>Sugrupuoti pažymėtus</value></data>
   <data name="MassSelectPinSelected" xml:space="preserve"><value>Prisegti pažymėtus</value></data>
   <data name="MassSelectUnpinSelected" xml:space="preserve"><value>Atsegti pažymėtus</value></data>
-  <data name="MassSelectDuplicateSelected" xml:space="preserve"><value>Kopijuoti pažymėtus</value></data>
+  <data name="MassSelectDuplicateSelected" xml:space="preserve"><value>Dubliuoti pažymėtus</value></data>
   <data name="MassSelectAddTagsTitle" xml:space="preserve"><value>Pridėti žymes pažymėtiems elementams</value></data>
   <data name="MassSelectAddTagsPrompt" xml:space="preserve"><value>Įveskite žymes atskirtas kableliais (pvz.: darbas, skubu):</value></data>
   <data name="ConfirmDelete" xml:space="preserve"><value>Ištrinti negrįžtamai</value></data>
@@ -1352,7 +1352,7 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="EditorDeleteSelectedConfirmation" xml:space="preserve"><value>Ištrinti {0} pasirinktus elementus? Šio veiksmo negalima atšaukti.</value></data>
   <data name="EditorCopiesHiddenByFilters" xml:space="preserve"><value>Sukurta kopijų, neatitinkančių dabartinių filtrų: {0}.</value></data>
   <data name="SelectionMatchingTotal" xml:space="preserve"><value>iš {0} filtruotų elementų</value></data>
-  <data name="SelectionDuplicate" xml:space="preserve"><value>Kopijuoti</value></data>
+  <data name="SelectionDuplicate" xml:space="preserve"><value>Dubliuoti</value></data>
   <data name="SelectionDeleteCount" xml:space="preserve"><value>Ištrinti {0} pasirinktų elementų</value></data>
   <data name="SelectionExportWorking" xml:space="preserve"><value>Eksportuojami pasirinkti elementai…</value></data>
   <data name="SelectionExportComplete" xml:space="preserve"><value>Pasirinkti elementai eksportuoti.</value></data>
@@ -1463,4 +1463,5 @@ Jei norite pagalbos atkuriant užrašus, susisiekite su palaikymo komanda.</valu
   <data name="Calendar" xml:space="preserve"><value>Kalendorius</value></data>
   <data name="QuizFlaggedForReview" xml:space="preserve"><value>Pažymėta peržiūrai</value></data>
   <data name="QuizCurrentQuestion" xml:space="preserve"><value>Atvertas klausimas</value></data>
+  <data name="MindMapDuplicateRootUnavailable" xml:space="preserve"><value>Pasirinkite šaką, kurią norite dubliuoti. Šakninis mazgas lieka vienintelis.</value></data>
 </root>

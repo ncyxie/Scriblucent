@@ -55,6 +55,22 @@ internal static class MindMapSelectionOperations
             parent.Children = parent.Children.SelectMany(child => selected.Contains(child) ? (IEnumerable<MindMapNode>)child.Children : new[] { child }).ToList();
         RemoveDanglingLinks(root);
     }
+    internal static IReadOnlyList<MindMapNode> DuplicateBranches(MindMapNode root, IReadOnlySet<MindMapNode> selected)
+    {
+        if (selected.Contains(root)) return [];
+        var roots = Roots(root, selected);
+        if (roots.Count == 0) return [];
+        var copies = CloneForest(roots);
+        var bySource = roots.Zip(copies).ToDictionary(pair => pair.First, pair => pair.Second);
+        // Traverse the original tree only, inserting each copied branch next to its source once.
+        foreach (var parent in Nodes(root).ToArray())
+        {
+            if (!parent.Children.Any(bySource.ContainsKey)) continue;
+            parent.Children = parent.Children.SelectMany(child => bySource.TryGetValue(child, out var copy)
+                ? new[] { child, copy } : new[] { child }).ToList();
+        }
+        return copies;
+    }
     internal static void CutBranches(MindMapNode root, IReadOnlySet<MindMapNode> selected)
     {
         if (selected.Contains(root)) throw new InvalidOperationException("The root cannot be cut.");

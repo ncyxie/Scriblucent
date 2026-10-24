@@ -86,7 +86,7 @@ public partial class FlashcardsPreviewWindow
         bool study = FlashcardFaceContext.GetIsStudy(target);
         bool audio = FlashcardFaceContext.GetIsAnswer(target) ? item.HasAnswerAudio : item.HasQuestionAudio;
         foreach (var command in menu.Items.OfType<MenuItem>())
-            if (command.Tag as string == "Selection") command.Visibility = study ? Visibility.Collapsed : Visibility.Visible;
+            if (command.Tag as string is "Selection" or "Duplicate") command.Visibility = study ? Visibility.Collapsed : Visibility.Visible;
             else if (command.Tag as string == "Restart") command.Visibility = audio ? Visibility.Visible : Visibility.Collapsed;
         if (menu.Items[1] is Separator separator) separator.Visibility = study ? Visibility.Collapsed : Visibility.Visible;
     }

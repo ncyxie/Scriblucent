@@ -681,6 +681,7 @@ public partial class FlashcardsPreviewWindow : Window, INotifyPropertyChanged, S
             return;
         }
         if (BulkSelectionBar.HandleOperationKey(e)) return;
+        if (EditorSelectionInput.HandleDuplicateKey(e, Keyboard.Modifiers, () => DuplicateCurrentFlashcards(e.OriginalSource as DependencyObject))) return;
         if (EditorSelectionInput.HandleKey(e, BulkSelection, ConfirmDeleteSelectedFlashcards)) return;
         if (e.Key == Key.F11)
         {

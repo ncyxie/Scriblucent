@@ -2698,6 +2698,14 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged, Scri
         var selectItem = new MenuItem { Header = LocalizationService.GetString("MassSelectModeTitle") };
         selectItem.Click += (_, _) => BeginNodeSelection(node);
         border.ContextMenu.Items.Add(selectItem);
+        var duplicateItem = new MenuItem { Header = LocalizationService.GetString("Duplicate"), InputGestureText = "Ctrl+D" };
+        duplicateItem.Click += (_, _) => DuplicateSelectedNodes();
+        border.ContextMenu.Items.Add(duplicateItem);
+        border.ContextMenu.Opened += (_, _) =>
+        {
+            duplicateItem.IsEnabled = CanDuplicateNodeSelection();
+            duplicateItem.ToolTip = duplicateItem.IsEnabled ? null : LocalizationService.GetString("MindMapDuplicateRootUnavailable");
+        };
         var renameItem = new MenuItem { Header = LocalizationService.GetString("RenameSelected") };
         renameItem.Click += (_, _) => RenameSelectedNodes();
         border.ContextMenu.Items.Add(renameItem);
@@ -2937,6 +2945,8 @@ public partial class MindMapPreviewWindow : Window, INotifyPropertyChanged, Scri
         if (!isCanvasFocused && !isIslandFocused)
             return;
 
+        if (EditorSelectionInput.HandleDuplicateKey(e, Keyboard.Modifiers, () =>
+            { if (!CanDuplicateNodeSelection()) return false; DuplicateSelectedNodes(); return true; })) return;
         if (HandleNodeSelectionKey(e)) return;
         var isCtrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var isShift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);

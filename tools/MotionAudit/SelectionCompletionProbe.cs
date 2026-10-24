@@ -67,7 +67,11 @@ internal static partial class Program
             scope.Clear(); scope.Toggle(left.Id); scope.Toggle(child.Id); scope.Toggle(right.Id); Pump(180);
             Require(dock.IsVisible && ((CheckBox)dock.FindName("AllToggle")).IsChecked is null, "Mind-map partial selection has wrong island state.");
             int baseline = undo.Count;
-            SelectionClick((Button)dock.FindName("DuplicateButton"));
+            SelectionClick((Button)dock.FindName("MoreButton"));
+            var actions = CompletionField<ContextMenu>(dock, "_openMenu");
+            actions.Items.OfType<MenuItem>().Single(item => (string)item.Header == LocalizationService.GetString("Copy"))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            actions.IsOpen = false;
             Require(undo.Count == baseline && !map.WorkspaceDirty, "Copy changed content or undo.");
             scope.Begin(folded.Id); // Begin intentionally selects one target for paste.
             RemainingCall(map, "PasteSelectedBranches", folded); Pump(200);

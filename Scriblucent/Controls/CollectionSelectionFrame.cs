@@ -242,6 +242,30 @@ public sealed class CollectionSelectionFrame : ContentControl
 
 internal static class EditorSelectionInput
 {
+    internal static void RevealItem(ItemsControl list, object item)
+    {
+        if (!list.IsLoaded) return;
+        int index = list.Items.IndexOf(item);
+        if (index < 0) return;
+        var container = list.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+        if (container is null && CollectionSelectionFrame.Descendants(list).OfType<VirtualizingPanel>().FirstOrDefault() is { } panel)
+        {
+            panel.BringIndexIntoViewPublic(index); list.UpdateLayout();
+            container = list.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+        }
+        if (container is null) return;
+        container.BringIntoView();
+        CollectionSelectionFrame.Descendants(container).OfType<CollectionSelectionFrame>().FirstOrDefault()?.Focus();
+    }
+    internal static bool HandleDuplicateKey(KeyEventArgs e, ModifierKeys modifiers, Func<bool> duplicate)
+    {
+        if (e.Handled || e.Key != Key.D || modifiers != ModifierKeys.Control) return false;
+        for (var p = e.OriginalSource as DependencyObject; p is not null; p = Parent(p))
+            if (p is TextBoxBase or PasswordBox or ComboBox) return false;
+        if (!duplicate()) return false;
+        e.Handled = true;
+        return true;
+    }
     internal static DependencyObject? Parent(DependencyObject source) => source is Visual or System.Windows.Media.Media3D.Visual3D
         ? VisualTreeHelper.GetParent(source) : source is FrameworkContentElement content ? content.Parent : LogicalTreeHelper.GetParent(source);
     internal static bool IsInteractive(DependencyObject? source, DependencyObject? stop = null)

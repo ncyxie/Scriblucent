@@ -146,12 +146,37 @@ public partial class FlashcardsPreviewWindow
         CommitFlashcardBulk(() => { foreach (var card in selected) card.IsStarred = starred; });
     }
     internal void DuplicateSelectedFlashcards()
+        => DuplicateFlashcards(BulkSelection.SelectedIds.ToHashSet());
+
+    private void DuplicateFlashcardMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var selected = SelectedFlashcards().Select(card => card.Id).ToHashSet();
-        if (selected.Count == 0) return;
+        if (sender is not MenuItem menu || ResolveFlashcardFromMenuItem(menu) is not { } card) return;
+        DuplicateFlashcards(BulkSelection.IsActive && BulkSelection.Contains(card.Id)
+            ? BulkSelection.SelectedIds.ToHashSet() : new HashSet<Guid> { card.Id });
+        e.Handled = true;
+    }
+    private bool DuplicateCurrentFlashcards(DependencyObject? source)
+    {
+        if (_isStudyMode || _isCramMode) return false;
+        if (BulkSelection.IsActive)
+        {
+            if (!BulkSelection.HasSelection) return false;
+            DuplicateSelectedFlashcards(); return true;
+        }
+        var card = source is not null && CollectionSelectionFrame.For(source)?.DataContext is FlashcardPreviewItem focused
+            ? focused : _selectedItem;
+        if (card is null || !_items.Contains(card)) return false;
+        DuplicateFlashcards(new HashSet<Guid> { card.Id }); return true;
+    }
+    private void DuplicateFlashcards(IReadOnlySet<Guid> selected)
+    {
+        if (_isStudyMode || _isCramMode || selected.Count == 0) return;
+        CommitWorkspaceEdits();
+        bool bulk = BulkSelection.IsActive;
+        var baseline = CardOrderForEdit();
         var result = new List<FlashcardPreviewItem>(_allItems.Count + selected.Count);
         var copies = new List<FlashcardPreviewItem>(selected.Count);
-        foreach (var card in _allItems)
+        foreach (var card in baseline)
         {
             result.Add(card);
             if (!selected.Contains(card.Id)) continue;
@@ -163,11 +188,19 @@ public partial class FlashcardsPreviewWindow
         }
         CommitFlashcardBulk(() =>
         {
-            foreach (var pair in copies.Zip(_allItems.Where(card => selected.Contains(card.Id))))
+            foreach (var pair in copies.Zip(baseline.Where(card => selected.Contains(card.Id))))
                 _cardNoteLinks[pair.First.Id] = _cardNoteLinks.GetValueOrDefault(pair.Second.Id);
             _allItems.Clear(); _allItems.AddRange(result);
-        }, copies.Select(card => card.Id));
-        int hiddenCopies = copies.Count - BulkSelection.Count;
+            // A fresh single copy must remain visible instead of disappearing under a maturity filter.
+            if (!bulk && _statusFilterMaturity is CardMaturity.Learning or CardMaturity.Mature) StatusFilterComboBox.SelectedIndex = 0;
+        }, bulk ? copies.Select(card => card.Id) : null);
+        if (!bulk && copies.FirstOrDefault(copy => _items.Contains(copy)) is { } first)
+        {
+            SelectFlashcard(first);
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,
+                () => EditorSelectionInput.RevealItem(FlashcardsItemsControl, first));
+        }
+        int hiddenCopies = copies.Count(copy => !_items.Contains(copy));
         if (hiddenCopies > 0) BulkSelection.ReportStatus(string.Format(LocalizationService.GetString("EditorCopiesHiddenByFilters"), hiddenCopies));
     }
     private void ConfirmDeleteSelectedFlashcards()

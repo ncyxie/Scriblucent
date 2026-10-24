@@ -20,13 +20,14 @@ public partial class MindMapPreviewWindow
     {
         _nodeSelectionScope = new(this);
         NodeSelectionDock.Initialize(_nodeSelectionScope,
-            new("Copy", AppIconKind.Duplicate, () => CopySelectedNodes()),
+            new("SelectionDuplicate", AppIconKind.Duplicate, DuplicateSelectedNodes, CanDuplicateNodeSelection),
             new("Delete", AppIconKind.Delete, () => DeleteSelectedNodes(), CanDeleteSelection),
             BuildNodeSelectionMenu, new("Cut", AppIconKind.Cut, () => CutSelectedNodes(), CanDeleteSelection));
         LocalizationService.CultureChanged += NodeSelectionCultureChanged;
         Closed += (_, _) => { LocalizationService.CultureChanged -= NodeSelectionCultureChanged; NodeSelectionDock.Dispose(); };
     }
     private bool CanDeleteSelection() => _selectedNodes.Count > 0 && !_selectedNodes.Contains(_root);
+    private bool CanDuplicateNodeSelection() => _selectedNodes.Count > 0 && !_selectedNodes.Contains(_root);
     private void NodeSelectionCultureChanged(object? sender, EventArgs e) => _nodeSelectionScope?.Notify();
     private void SyncNodeSelection()
     {
@@ -46,6 +47,7 @@ public partial class MindMapPreviewWindow
         void Add(string key, Action action, bool enabled = true)
         { var item = new MenuItem { Header = LocalizationService.GetString(key), IsEnabled = enabled }; item.Click += (_, _) => action(); menu.Items.Add(item); }
         Add("RenameSelected", RenameSelectedNodes);
+        Add("Copy", CopySelectedNodes, _selectedNodes.Count > 0);
         Add("FontLabel", () => SetFontPanelOpen(true));
         Add("MindMapExportSelectedBranch", () => ExportMindMap(true));
         Add("MindMapPasteStyle", () => { if (_selectedNode is { } node) PasteNodeStyle(node); }, _copiedStyle is not null);
@@ -75,6 +77,47 @@ public partial class MindMapPreviewWindow
     {
         _clipboardNodes = MindMapSelectionOperations.CloneForest(MindMapSelectionOperations.Roots(_root, _selectedNodes));
         _clipboardMap = _root.Id;
+    }
+    internal void DuplicateSelectedNodes()
+    {
+        if (!CanDuplicateNodeSelection()) return;
+        CommitWorkspaceEdits();
+        var sources = MindMapSelectionOperations.Roots(_root, _selectedNodes);
+        if (sources.Count == 0) return;
+        PushUndoSnapshot();
+        var copies = MindMapSelectionOperations.DuplicateBranches(_root, _selectedNodes);
+        if (_isManualPositioningMode)
+        {
+            var visible = sources.SelectMany(node => MindMapSelectionOperations.Nodes(node))
+                .Where(_layouts.ContainsKey).Select(node => _layouts[node]).ToArray();
+            if (visible.Length > 0)
+            {
+                var bounds = new Rect(visible.Min(layout => layout.X), visible.Min(layout => layout.Y),
+                    visible.Max(layout => layout.X + layout.Width) - visible.Min(layout => layout.X),
+                    visible.Max(layout => layout.Y + layout.Height) - visible.Min(layout => layout.Y));
+                var candidates = new[] { new Vector(36, 36), new Vector(bounds.Width + 32, 0), new Vector(0, bounds.Height + 32),
+                    new Vector(Math.Max(0, CanvasPadding - bounds.Left),
+                        Math.Max(CanvasPadding, _layouts.Values.Max(layout => layout.Y + layout.Height) + 32) - bounds.Top) };
+                var offset = candidates.First(candidate =>
+                {
+                    var moved = bounds; moved.Offset(candidate);
+                    if (moved.Left < CanvasPadding || moved.Top < CanvasPadding) return false;
+                    moved.Inflate(8, 8);
+                    return !_layouts.Values.Any(layout => moved.IntersectsWith(new Rect(layout.X, layout.Y, layout.Width, layout.Height)));
+                });
+                foreach (var branch in sources.Zip(copies))
+                foreach (var pair in MindMapSelectionOperations.Nodes(branch.First).Zip(MindMapSelectionOperations.Nodes(branch.Second)))
+                {
+                    if (_layouts.TryGetValue(pair.First, out var layout)) SetManualPosition(pair.Second, new Point(layout.X + offset.X, layout.Y + offset.Y));
+                    else if (pair.Second.ManualX is { } x && pair.Second.ManualY is { } y)
+                        SetManualPosition(pair.Second, new Point(x + offset.X, y + offset.Y));
+                }
+            }
+        }
+        else foreach (var copy in copies) ClearManualPositions(copy);
+        _selectedNodes.Clear(); _selectedNodes.UnionWith(copies); _selectedNode = copies.Last();
+        RebuildMap(); SyncNodeSelection();
+        if (_layouts.TryGetValue(_selectedNode, out var selectedLayout)) CenterViewOnLayout(selectedLayout);
     }
     private void CutSelectedNodes()
     {

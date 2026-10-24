@@ -90,6 +90,43 @@ public class SelectionCompletionTests : IDisposable
         Assert.Equal(new[] { keep }, root.Children); Assert.Empty(keep.CrossLinkTargetIds); Assert.Single(branch.Children);
     }
     [Fact]
+    public void Duplicate_inserts_independent_branches_after_sources_and_remaps_links()
+    {
+        var leaf = new MindMapNode { Text = "leaf", Note = "authored note", LinkedNoteId = Guid.NewGuid(), Icons = ["Star"], FontSize = 18 };
+        var left = new MindMapNode { Text = "left", IsExpanded = false, Children = [leaf] };
+        var right = new MindMapNode { Text = "right" };
+        var keep = new MindMapNode { Text = "keep" };
+        leaf.CrossLinkTargetIds = [right.Id, keep.Id];
+        var root = new MindMapNode { Children = [left, right, keep] };
+        var copies = MindMapSelectionOperations.DuplicateBranches(root, new HashSet<MindMapNode> { left, leaf, right });
+        Assert.Equal(2, copies.Count);
+        Assert.Equal(new[] { left, copies[0], right, copies[1], keep }, root.Children);
+        var copiedLeaf = Assert.Single(copies[0].Children);
+        Assert.Equal(new[] { copies[1].Id, keep.Id }, copiedLeaf.CrossLinkTargetIds);
+        Assert.False(copies[0].IsExpanded);
+        Assert.Equal(leaf.LinkedNoteId, copiedLeaf.LinkedNoteId);
+        Assert.Equal(leaf.Note, copiedLeaf.Note);
+        Assert.Equal(18, copiedLeaf.FontSize);
+        Assert.Equal(leaf.Icons, copiedLeaf.Icons);
+        var all = MindMapSelectionOperations.Nodes(root).ToArray();
+        Assert.Equal(all.Length, all.Select(node => node.Id).Distinct().Count());
+        copiedLeaf.Text = "copy only"; copiedLeaf.Icons.Clear(); copiedLeaf.CrossLinkTargetIds.Clear();
+        Assert.Equal("leaf", leaf.Text); Assert.Single(leaf.Icons); Assert.Equal(2, leaf.CrossLinkTargetIds.Count);
+    }
+    [Fact]
+    public void Duplicate_keeps_each_parent_and_protects_the_unique_root()
+    {
+        var a = new MindMapNode { Text = "a" }; var b = new MindMapNode { Text = "b" };
+        var left = new MindMapNode { Children = [a] }; var right = new MindMapNode { Children = [b] };
+        var root = new MindMapNode { Children = [left, right] };
+        Assert.Empty(MindMapSelectionOperations.DuplicateBranches(root, new HashSet<MindMapNode> { root, a }));
+        Assert.Single(left.Children); Assert.Single(right.Children);
+        var copies = MindMapSelectionOperations.DuplicateBranches(root, new HashSet<MindMapNode> { a, b });
+        Assert.Equal(new[] { a, copies[0] }, left.Children);
+        Assert.Equal(new[] { b, copies[1] }, right.Children);
+        Assert.Empty(MindMapSelectionOperations.DuplicateBranches(root, new HashSet<MindMapNode>()));
+    }
+    [Fact]
     public void Card_subset_keeps_native_progress_media_and_filters_session_references()
     {
         var a = new FlashcardItem { Question = "keep", Repetitions = 7, QuestionAudioFileName = "clip.wav", SetIndex = 2 };

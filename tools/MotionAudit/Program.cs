@@ -52,7 +52,8 @@ internal static partial class Program
                 var exitCode = 0;
                 try
                 {
-                    if (args.Contains("--quiz-review")) ProbeQuizReview();
+                    if (args.Contains("--editor-duplicate")) ProbeEditorDuplicate();
+                    else if (args.Contains("--quiz-review")) ProbeQuizReview();
                     else if (args.Contains("--calendar-resize")) ProbeCalendarResize();
                     else if (args.Contains("--spell-check-words")) ProbeSpellCheckWords();
                     else if (args.Contains("--spell-check")) ProbeSpellCheck();

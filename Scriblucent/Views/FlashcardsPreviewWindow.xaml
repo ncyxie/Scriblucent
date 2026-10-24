@@ -206,6 +206,8 @@
             </ContextMenu.DataContext>
             <MenuItem Tag="Selection" Header="{Binding [MassSelectModeTitle], Source={StaticResource Loc}}" Click="SelectFlashcardMenuItem_Click"/>
             <Separator/>
+            <MenuItem Tag="Duplicate" Header="{Binding [Duplicate], Source={StaticResource Loc}}" InputGestureText="Ctrl+D"
+                      Click="DuplicateFlashcardMenuItem_Click"/>
             <MenuItem Header="{Binding [MoveToSet], Source={StaticResource Loc}}"
                       Click="MoveToSetMenuItem_Click"/>
             <MenuItem Header="{Binding [AddFlashcardToSet], Source={StaticResource Loc}}"

@@ -132,15 +132,17 @@ internal static partial class Program
             Require(first.IsSelecting && first.RenderSize == size, "Selection changed flashcard card dimensions.");
             ProbeSelectionAttachment(first);
             var visibleFace = ControlTree(first).OfType<Border>().First(face => face.Name == first.FaceName && face.IsVisible);
-            var starControl = ControlTree(visibleFace).OfType<Button>().Single(button => button.Style == window.FindResource("FlashcardStarButtonStyle"));
+            // The card header pairs the grip and checkbox; Star now belongs to the footer actions.
+            var grip = ControlTree(visibleFace).OfType<ItemReorderGrip>().Single(control => control.IsVisible);
             var selectionToggle = ControlTree(first).OfType<CollectionSelectionToggle>().Single();
-            double starCenter = starControl.TranslatePoint(new Point(0, starControl.ActualHeight / 2), first).Y;
+            double gripCenter = grip.TranslatePoint(new Point(0, grip.ActualHeight / 2), first).Y;
             double checkboxCenter = selectionToggle.TranslatePoint(new Point(0, selectionToggle.ActualHeight / 2), first).Y;
-            Require(Math.Abs(starCenter - checkboxCenter) < .6, $"Flashcard checkbox is not centered with header controls: star={starCenter}, checkbox={checkboxCenter}.");
-            var box = (FrameworkElement)selectionToggle.Template.FindName("SelectionBox", selectionToggle);
-            double boxLeft = box.TranslatePoint(new Point(), first).X;
-            double starRight = starControl.TranslatePoint(new Point(starControl.ActualWidth, 0), first).X;
-            Require(Math.Abs(boxLeft - starRight - 6) < .6, $"Flashcard checkbox has unequal header spacing: {boxLeft - starRight} DIP.");
+            double pixel = 1 / System.Windows.Media.VisualTreeHelper.GetDpi(first).DpiScaleY;
+            Require(Math.Abs(gripCenter - checkboxCenter) <= pixel + .01,
+                $"Flashcard checkbox differs from the header grip by more than one rounded device pixel: grip={gripCenter}, checkbox={checkboxCenter}.");
+            var checkboxBounds = selectionToggle.TransformToVisual(visibleFace).TransformBounds(new Rect(selectionToggle.RenderSize));
+            Require(checkboxBounds.Left > visibleFace.ActualWidth / 2 && checkboxBounds.Right <= visibleFace.ActualWidth - 8,
+                "Flashcard checkbox did not stay inset in the header's right corner.");
             Require(grid.RenderSize == viewportSize, "Selection island consumed the card viewport.");
             Require(!SelectionKey((TextBox)window.FindName("TitleTextBox"), window, Key.Delete).Handled && window.GetFlashcardItems().Count == 168,
                 "Selection stole a text field's Delete key.");
