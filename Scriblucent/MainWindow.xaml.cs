@@ -2846,62 +2846,34 @@ namespace Scriblucent
 
         private string GetNoteInfoGroupName(Guid? groupId)
         {
-            if (!groupId.HasValue)
-                return InfoText("InfoUngrouped");
-
-            if (DataContext is MainViewModel vm)
-            {
-                var group = vm.NoteGroups.FirstOrDefault(candidate => candidate.GroupId == groupId.Value);
-                if (group != null && !string.IsNullOrWhiteSpace(group.Name))
-                    return group.Name;
-            }
-
-            return FormatGroupFallback(groupId.Value);
+            if (!groupId.HasValue) return InfoText("InfoUngrouped");
+            return DataContext is MainViewModel vm
+                ? vm.GetDashboardGroupName(DashboardMotionScope.Notes, groupId.Value)
+                : InfoText("InfoLabelGroup");
         }
 
         private string GetFlashcardSetInfoGroupName(Guid? groupId)
         {
-            if (!groupId.HasValue)
-                return InfoText("InfoUngrouped");
-
-            if (DataContext is MainViewModel vm)
-            {
-                var group = vm.FlashcardSetGroups.FirstOrDefault(candidate => candidate.GroupId == groupId.Value);
-                if (group != null && !string.IsNullOrWhiteSpace(group.Name))
-                    return group.Name;
-            }
-
-            return FormatGroupFallback(groupId.Value);
+            if (!groupId.HasValue) return InfoText("InfoUngrouped");
+            return DataContext is MainViewModel vm
+                ? vm.GetDashboardGroupName(DashboardMotionScope.Flashcards, groupId.Value)
+                : InfoText("InfoLabelGroup");
         }
 
         private string GetMindMapInfoGroupName(Guid? groupId)
         {
-            if (!groupId.HasValue)
-                return InfoText("InfoUngrouped");
-
-            if (DataContext is MainViewModel vm)
-            {
-                var group = vm.MindMapGroups.FirstOrDefault(candidate => candidate.GroupId == groupId.Value);
-                if (group != null && !string.IsNullOrWhiteSpace(group.Name))
-                    return group.Name;
-            }
-
-            return FormatGroupFallback(groupId.Value);
+            if (!groupId.HasValue) return InfoText("InfoUngrouped");
+            return DataContext is MainViewModel vm
+                ? vm.GetDashboardGroupName(DashboardMotionScope.MindMaps, groupId.Value)
+                : InfoText("InfoLabelGroup");
         }
 
         private string GetQuizInfoGroupName(Guid? groupId)
         {
-            if (!groupId.HasValue)
-                return InfoText("InfoUngrouped");
-
-            if (DataContext is MainViewModel vm)
-            {
-                var group = vm.QuizGroups.FirstOrDefault(candidate => candidate.GroupId == groupId.Value);
-                if (group != null && !string.IsNullOrWhiteSpace(group.Name))
-                    return group.Name;
-            }
-
-            return FormatGroupFallback(groupId.Value);
+            if (!groupId.HasValue) return InfoText("InfoUngrouped");
+            return DataContext is MainViewModel vm
+                ? vm.GetDashboardGroupName(DashboardMotionScope.Quizzes, groupId.Value)
+                : InfoText("InfoLabelGroup");
         }
 
         private string GetSourceNoteInfoTitle(Guid? sourceNoteId)
@@ -2917,14 +2889,6 @@ namespace Scriblucent
             }
 
             return sourceNoteId.Value.ToString();
-        }
-
-        private static string FormatGroupFallback(Guid groupId)
-        {
-            return string.Format(
-                CultureInfo.CurrentCulture,
-                InfoText("InfoGroupFallbackFormat"),
-                groupId.ToString()[..4].ToUpperInvariant());
         }
 
         private static string FormatMindMapLayout(string? layoutMode)

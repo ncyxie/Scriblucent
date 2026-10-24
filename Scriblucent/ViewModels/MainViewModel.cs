@@ -1402,6 +1402,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void RebuildFlashcardSetGroups()
     {
+        DashboardGroupNaming.Normalize(_flashcardSetGroupMetadata.Values);
         var grouped = FlashcardSets
             .Where(set => set.Document.GroupId.HasValue)
             .GroupBy(set => set.Document.GroupId!.Value)
@@ -1473,7 +1474,8 @@ public partial class MainViewModel : ViewModelBase
         metadata = new FlashcardSetGroupData
         {
             GroupId = groupId,
-            Name = string.Format(LocalizationService.GetString("GroupTitleFormat"), groupId.ToString()[..4].ToUpperInvariant()),
+            Name = DashboardGroupNaming.NextName(_flashcardSetGroupMetadata.Values),
+            NameVersion = DashboardGroupNaming.Version,
             BackgroundColor = DefaultGroupBackground,
             SortOrder = GetNextFlashcardSetGroupSortOrder()
         };
@@ -1573,6 +1575,7 @@ public partial class MainViewModel : ViewModelBase
 
         var metadata = EnsureFlashcardSetGroupMetadata(group.GroupId);
         metadata.Name = trimmed;
+        metadata.NameVersion = DashboardGroupNaming.Version;
         group.Name = trimmed;
         SaveFlashcardSets();
         return true;
@@ -2037,8 +2040,9 @@ public partial class MainViewModel : ViewModelBase
 
     public MindMapGroupViewModel CreateMindMapGroup(string name)
     {
+        name = string.IsNullOrWhiteSpace(name) ? DashboardGroupNaming.NextName(_mindMapGroupMetadata.Values) : name.Trim();
         var groupId = Guid.NewGuid();
-        _mindMapGroupMetadata[groupId] = new MindMapGroupData { GroupId = groupId, Name = name, BackgroundColor = DefaultGroupBackground };
+        _mindMapGroupMetadata[groupId] = new MindMapGroupData { GroupId = groupId, Name = name, NameVersion = DashboardGroupNaming.Version, BackgroundColor = DefaultGroupBackground };
         var group = new MindMapGroupViewModel(groupId, name, DefaultGroupBackground, Enumerable.Empty<MindMapViewModel>(), GetGroupDisclosure(DashboardMotionScope.MindMaps, groupId));
         MindMapGroups.Add(group);
         SaveMindMaps();
@@ -2049,8 +2053,9 @@ public partial class MainViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(newName)) return false;
         group.Name = newName.Trim();
-        if (_mindMapGroupMetadata.TryGetValue(group.GroupId, out var meta))
-            meta.Name = group.Name;
+        var meta = EnsureMindMapGroupMetadata(group.GroupId);
+        meta.Name = group.Name;
+        meta.NameVersion = DashboardGroupNaming.Version;
         SaveMindMaps();
         return true;
     }
@@ -2088,6 +2093,26 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    private MindMapGroupData EnsureMindMapGroupMetadata(Guid groupId)
+    {
+        if (_mindMapGroupMetadata.TryGetValue(groupId, out var existing)) return existing;
+        var created = new MindMapGroupData
+        {
+            GroupId = groupId, Name = DashboardGroupNaming.NextName(_mindMapGroupMetadata.Values),
+            NameVersion = DashboardGroupNaming.Version, BackgroundColor = DefaultGroupBackground
+        };
+        _mindMapGroupMetadata[groupId] = created;
+        return created;
+    }
+
+    internal string GetDashboardGroupName(DashboardMotionScope scope, Guid groupId) => scope switch
+    {
+        DashboardMotionScope.Flashcards => EnsureFlashcardSetGroupMetadata(groupId).Name,
+        DashboardMotionScope.MindMaps => EnsureMindMapGroupMetadata(groupId).Name,
+        DashboardMotionScope.Quizzes => EnsureQuizGroupMetadata(groupId).Name,
+        _ => EnsureGroupMetadata(groupId).Name
+    };
+
     public void AddMindMapToGroup(MindMapViewModel map, MindMapGroupViewModel group)
     {
         map.Document.GroupId = group.GroupId;
@@ -2113,13 +2138,7 @@ public partial class MainViewModel : ViewModelBase
 
         void CommitGroup()
         {
-            if (!_mindMapGroupMetadata.ContainsKey(targetGroupId))
-                _mindMapGroupMetadata[targetGroupId] = new MindMapGroupData
-                {
-                    GroupId = targetGroupId,
-                    Name = string.Format(LocalizationService.GetString("GroupTitleFormat"), targetGroupId.ToString()[..4].ToUpperInvariant()),
-                    BackgroundColor = DefaultGroupBackground
-                };
+            EnsureMindMapGroupMetadata(targetGroupId);
 
             foreach (var map in new[] { draggedMap, targetMap })
             {
@@ -2165,6 +2184,7 @@ public partial class MainViewModel : ViewModelBase
                 {
                     GroupId = targetGroup.GroupId,
                     Name = targetGroup.Name,
+                    NameVersion = DashboardGroupNaming.Version,
                     BackgroundColor = targetGroup.BackgroundColor
                 };
             draggedMap.NotifyChanged();
@@ -2854,6 +2874,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void RebuildQuizGroups()
     {
+        DashboardGroupNaming.Normalize(_quizGroupMetadata.Values);
         var grouped = Quizzes
             .Where(quiz => quiz.Document.GroupId.HasValue)
             .GroupBy(quiz => quiz.Document.GroupId!.Value)
@@ -2925,7 +2946,8 @@ public partial class MainViewModel : ViewModelBase
         metadata = new QuizGroupData
         {
             GroupId = groupId,
-            Name = string.Format(LocalizationService.GetString("GroupTitleFormat"), groupId.ToString()[..4].ToUpperInvariant()),
+            Name = DashboardGroupNaming.NextName(_quizGroupMetadata.Values),
+            NameVersion = DashboardGroupNaming.Version,
             BackgroundColor = DefaultGroupBackground,
             SortOrder = GetNextQuizGroupSortOrder()
         };
@@ -3025,6 +3047,7 @@ public partial class MainViewModel : ViewModelBase
 
         var metadata = EnsureQuizGroupMetadata(group.GroupId);
         metadata.Name = trimmed;
+        metadata.NameVersion = DashboardGroupNaming.Version;
         group.Name = trimmed;
         SaveQuizzes();
         return true;
@@ -3051,6 +3074,7 @@ public partial class MainViewModel : ViewModelBase
         var groupId = Guid.NewGuid();
         var metadata = EnsureQuizGroupMetadata(groupId);
         metadata.Name = trimmed;
+        metadata.NameVersion = DashboardGroupNaming.Version;
         NormalizeQuizGroups();
         RebuildQuizGroups();
         ApplyQuizFilters();
@@ -3070,6 +3094,7 @@ public partial class MainViewModel : ViewModelBase
         var groupId = quiz.Document.GroupId ?? Guid.NewGuid();
         var metadata = EnsureQuizGroupMetadata(groupId);
         metadata.Name = trimmed;
+        metadata.NameVersion = DashboardGroupNaming.Version;
         quiz.Document.GroupId = groupId;
         quiz.NotifyChanged();
 
@@ -5673,6 +5698,7 @@ public partial class MainViewModel : ViewModelBase
             return false;
 
         metadata.Name = trimmed;
+        metadata.NameVersion = DashboardGroupNaming.Version;
         group.Name = trimmed;
         SaveNotes();
         return true;
@@ -6051,9 +6077,7 @@ public partial class MainViewModel : ViewModelBase
             return metadata.Name;
         }
 
-        return string.Format(
-            LocalizationService.GetString("GroupTitleFormat"),
-            note.Document.GroupId.Value.ToString()[..4].ToUpperInvariant());
+        return GetDashboardGroupName(DashboardMotionScope.Notes, note.Document.GroupId.Value);
     }
 
     private static List<string> ComputeSortedDistinctTags<TDoc>(
@@ -7564,13 +7588,7 @@ public partial class MainViewModel : ViewModelBase
                 EnsureFlashcardSetGroupMetadata(groupId);
                 break;
             case DashboardMindMaps:
-                if (!_mindMapGroupMetadata.ContainsKey(groupId))
-                    _mindMapGroupMetadata[groupId] = new MindMapGroupData
-                    {
-                        GroupId = groupId,
-                        Name = string.Format(LocalizationService.GetString("GroupTitleFormat"), groupId.ToString()[..4].ToUpperInvariant()),
-                        BackgroundColor = DefaultGroupBackground
-                    };
+                EnsureMindMapGroupMetadata(groupId);
                 break;
             case DashboardQuizzes:
                 EnsureQuizGroupMetadata(groupId);
@@ -8437,6 +8455,7 @@ public partial class MainViewModel : ViewModelBase
             {
                 GroupId = kvp.Value.GroupId,
                 Name = kvp.Value.Name,
+                NameVersion = kvp.Value.NameVersion,
                 BackgroundColor = kvp.Value.BackgroundColor,
                 SortOrder = kvp.Value.SortOrder
             });
@@ -8888,6 +8907,7 @@ public partial class MainViewModel : ViewModelBase
         string sortOptionKey,
         Dictionary<Guid, NoteGroupData> metadata, IReadOnlyDictionary<Guid, int>? manual = null)
     {
+        DashboardGroupNaming.Normalize(metadata.Values);
         var groupedByRecent = notes
             .Where(n => n.Document.GroupId.HasValue)
             .GroupBy(n => n.Document.GroupId!.Value)
@@ -8925,6 +8945,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void RebuildGroups(bool bulkNoteUpdate = false)
     {
+        DashboardGroupNaming.Normalize(_groupMetadata.Values);
         var groupTimer = bulkNoteUpdate && ScrollPerfDiag.Enabled
             ? System.Diagnostics.Stopwatch.StartNew()
             : null;
@@ -9091,6 +9112,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void RebuildMindMapGroups()
     {
+        DashboardGroupNaming.Normalize(_mindMapGroupMetadata.Values);
         var grouped = MindMaps
             .Where(m => m.Document.GroupId.HasValue)
             .GroupBy(m => m.Document.GroupId!.Value)
@@ -9105,11 +9127,7 @@ public partial class MainViewModel : ViewModelBase
         var desiredGroups = new List<MindMapGroupViewModel>();
         foreach (var group in grouped)
         {
-            if (!_mindMapGroupMetadata.TryGetValue(group.Key, out var meta))
-            {
-                meta = new MindMapGroupData { GroupId = group.Key, Name = string.Format(LocalizationService.GetString("GroupTitleFormat"), group.Key.ToString()[..4].ToUpperInvariant()), BackgroundColor = DefaultGroupBackground };
-                _mindMapGroupMetadata[group.Key] = meta;
-            }
+            var meta = EnsureMindMapGroupMetadata(group.Key);
 
             var visibleMaps = SortMindMaps(group.Where(MatchesMindMapFilters));
             if (visibleMaps.Count == 0)
@@ -10054,9 +10072,8 @@ public partial class MainViewModel : ViewModelBase
         var created = new NoteGroupData
         {
             GroupId = groupId,
-            Name = string.Format(
-                LocalizationService.GetString("GroupTitleFormat"),
-                groupId.ToString()[..4].ToUpperInvariant()),
+            Name = DashboardGroupNaming.NextName(metadata.Values),
+            NameVersion = DashboardGroupNaming.Version,
             BackgroundColor = DefaultGroupBackground,
             SortOrder = GetNextGroupSortOrder(metadata)
         };
