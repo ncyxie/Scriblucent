@@ -446,7 +446,7 @@ namespace Scriblucent
         private void InitializeEditorUiPreferences()
         {
             var settings = AppSettingsService.Load();
-            _measurementUnitSystem = AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem);
+            _measurementUnitSystem = MeasurementUnitService.Resolve(settings.MeasurementUnitSystem);
             _isWordWrapEnabled = settings.IsEditorWordWrapEnabled;
             ApplySpellCheckPreference(settings.EnableSpellCheck);
             _lineSpacingMultiplier = NormalizeLineSpacingMultiplier(settings.PreferredLineSpacing);
@@ -1068,7 +1068,7 @@ namespace Scriblucent
 
         public void ApplyMeasurementUnitSystemPreference(string unitSystem)
         {
-            var normalized = AppSettings.NormalizeMeasurementUnitSystem(unitSystem);
+            var normalized = MeasurementUnitService.Resolve(unitSystem);
             if (string.Equals(_measurementUnitSystem, normalized, StringComparison.Ordinal))
                 return;
 

@@ -172,7 +172,7 @@ namespace Scriblucent.Views
                 SelectComboBoxItemByTag(
                     MeasurementUnitSystemBox,
                     AppSettings.NormalizeMeasurementUnitSystem(settings.MeasurementUnitSystem),
-                    AppSettings.UnitSystemImperial);
+                    AppSettings.UnitSystemSystem);
                 SelectComboBoxItemByTag(
                     FlashcardSchedulingAlgorithmBox,
                     settings.FlashcardSchedulingAlgorithm == SpacedRepetitionAlgorithm.Fsrs6 ? "Fsrs6" : "Sm2",
@@ -1786,7 +1786,7 @@ namespace Scriblucent.Views
 
         private static string FormatTemplateIndent(double indentSize, string? unitSystem)
         {
-            if (string.Equals(AppSettings.NormalizeMeasurementUnitSystem(unitSystem), AppSettings.UnitSystemMetric, StringComparison.Ordinal))
+            if (string.Equals(MeasurementUnitService.Resolve(unitSystem), AppSettings.UnitSystemMetric, StringComparison.Ordinal))
                 return $"{FormatTemplateNumber(indentSize / 96.0 * 2.54)} cm";
             return $"{FormatTemplateNumber(indentSize / 96.0)} in";
         }

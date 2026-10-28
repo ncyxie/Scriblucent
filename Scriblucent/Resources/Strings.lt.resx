@@ -54,6 +54,7 @@
   <data name="Cancel" xml:space="preserve"><value>Atšaukti</value></data>
   <data name="Ok" xml:space="preserve"><value>Gerai</value></data>
   <data name="Language" xml:space="preserve"><value>Kalba:</value></data>
+  <data name="LanguageSystem" xml:space="preserve"><value>Naudoti sistemos</value></data>
   <data name="LanguageEnglish" xml:space="preserve"><value>Anglų</value></data>
   <data name="LanguageLithuanian" xml:space="preserve"><value>Lietuvių</value></data>
   <data name="Scrollbar" xml:space="preserve"><value>Slinkties juosta:</value></data>
@@ -168,6 +169,7 @@
   <data name="ViewModeGrid" xml:space="preserve"><value>Tinklelis</value></data>
   <data name="ViewModeList" xml:space="preserve"><value>Sąrašas</value></data>
   <data name="MeasurementUnitSystem" xml:space="preserve"><value>Matavimo sistema</value></data>
+  <data name="MeasurementUnitSystemDefault" xml:space="preserve"><value>Naudoti sistemos</value></data>
   <data name="MeasurementUnitImperial" xml:space="preserve"><value>Imperinė (coliai)</value></data>
   <data name="MeasurementUnitMetric" xml:space="preserve"><value>Metrinė (centimetrai)</value></data>
   <data name="DefaultNoteTemplate" xml:space="preserve"><value>Numatytasis šablonas</value></data>

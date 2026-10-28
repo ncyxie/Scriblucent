@@ -6,10 +6,11 @@ public class AppSettings
 {
     public const string UnitSystemImperial = "Imperial";
     public const string UnitSystemMetric = "Metric";
+    public const string UnitSystemSystem = "System";
 
-    public string Language { get; set; } = "en";
+    public string Language { get; set; } = Localization.LocalizationService.SystemLanguage;
 
-    public string Theme { get; set; } = "Light";
+    public string Theme { get; set; } = ThemeManager.SystemTheme;
 
     public bool CheckForUpdatesOnStartup { get; set; } = true;
 
@@ -17,7 +18,7 @@ public class AppSettings
 
     public bool LegacyMigrationConflictAcknowledged { get; set; }
 
-    public string MeasurementUnitSystem { get; set; } = UnitSystemImperial;
+    public string MeasurementUnitSystem { get; set; } = UnitSystemSystem;
 
     // Null preserves the language's normal week layout for existing settings files.
     public DayOfWeek? CalendarFirstDayOfWeek { get; set; }
@@ -217,9 +218,12 @@ public class AppSettings
     public const int DefaultRecentItemsLimit = 20;
 
     public static string NormalizeMeasurementUnitSystem(string? unitSystem)
-        => string.Equals(unitSystem, UnitSystemMetric, StringComparison.OrdinalIgnoreCase)
-            ? UnitSystemMetric
-            : UnitSystemImperial;
+    {
+        if (string.IsNullOrWhiteSpace(unitSystem) || string.Equals(unitSystem, UnitSystemSystem, StringComparison.OrdinalIgnoreCase))
+            return UnitSystemSystem;
+        return string.Equals(unitSystem, UnitSystemMetric, StringComparison.OrdinalIgnoreCase)
+            ? UnitSystemMetric : UnitSystemImperial;
+    }
 
     public static int NormalizeRecentItemsLimit(int limit)
         => Math.Clamp(limit, MinRecentItemsLimit, MaxRecentItemsLimit);

@@ -12,7 +12,7 @@ namespace Scriblucent
         public const string DarkTheme = "Dark";
         public const string SystemTheme = "System";
 
-        private static string _themePreference = LightTheme;
+        private static string _themePreference = SystemTheme;
         private static string _currentTheme = LightTheme;
         private static int _nativeThemeRefreshVersion;
         private static bool _systemEventsRegistered;

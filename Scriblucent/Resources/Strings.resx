@@ -54,6 +54,7 @@
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Ok" xml:space="preserve"><value>OK</value></data>
   <data name="Language" xml:space="preserve"><value>Language:</value></data>
+  <data name="LanguageSystem" xml:space="preserve"><value>Use system</value></data>
   <data name="LanguageEnglish" xml:space="preserve"><value>English</value></data>
   <data name="LanguageLithuanian" xml:space="preserve"><value>Lithuanian</value></data>
   <data name="Scrollbar" xml:space="preserve"><value>Scrollbar:</value></data>
@@ -168,6 +169,7 @@
   <data name="ViewModeGrid" xml:space="preserve"><value>Grid</value></data>
   <data name="ViewModeList" xml:space="preserve"><value>List</value></data>
   <data name="MeasurementUnitSystem" xml:space="preserve"><value>Measurement system</value></data>
+  <data name="MeasurementUnitSystemDefault" xml:space="preserve"><value>Use system</value></data>
   <data name="MeasurementUnitImperial" xml:space="preserve"><value>Imperial (inches)</value></data>
   <data name="MeasurementUnitMetric" xml:space="preserve"><value>Metric (centimeters)</value></data>
   <data name="DefaultNoteTemplate" xml:space="preserve"><value>Default template</value></data>

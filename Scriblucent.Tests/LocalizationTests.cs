@@ -2,16 +2,107 @@ using System.Collections;
 using System.Globalization;
 using System.Resources;
 using System.Runtime.ExceptionServices;
+using System.Text.Json;
 using System.Windows.Controls;
 using System.Windows.Markup;
 using System.Xml.Linq;
 using Scriblucent.Localization;
+using Scriblucent.Models;
+using Scriblucent.Services;
 
 namespace Scriblucent.Tests;
 
 [Collection("Layout reveal")]
 public class LocalizationTests
 {
+    [Fact]
+    public void New_settings_follow_system_and_existing_explicit_choices_are_preserved()
+    {
+        var defaults = JsonSerializer.Deserialize<AppSettings>("{}")!;
+        Assert.Equal(LocalizationService.SystemLanguage, defaults.Language);
+        Assert.Equal(ThemeManager.SystemTheme, defaults.Theme);
+        Assert.Equal(AppSettings.UnitSystemSystem, defaults.MeasurementUnitSystem);
+        foreach (var (language, theme, units) in new[] { ("en", "Light", "Imperial"), ("lt", "Dark", "Metric"), ("System", "System", "System") })
+        {
+            var settings = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(new AppSettings { Language = language, Theme = theme, MeasurementUnitSystem = units }))!;
+            Assert.Equal(language, settings.Language);
+            Assert.Equal(theme, settings.Theme);
+            Assert.Equal(units, settings.MeasurementUnitSystem);
+        }
+    }
+
+    [Theory]
+    [InlineData("metric", "Metric")]
+    [InlineData("Imperial", "Imperial")]
+    public void Explicit_measurement_choices_override_Windows(string preference, string expected)
+        => Assert.Equal(expected, MeasurementUnitService.Resolve(preference));
+
+    [Fact]
+    public void System_measurements_ignore_app_language_and_match_editor_and_template_labels() => Sta(() =>
+    {
+        var original = (CultureInfo.CurrentCulture, CultureInfo.CurrentUICulture,
+            CultureInfo.DefaultThreadCurrentCulture, CultureInfo.DefaultThreadCurrentUICulture);
+        try
+        {
+            var system = MeasurementUnitService.Resolve(AppSettings.UnitSystemSystem);
+            using var regionalSettings = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\International");
+            if (regionalSettings?.GetValue("iMeasure") is string measure && measure is "0" or "1")
+                Assert.Equal(measure == "0" ? AppSettings.UnitSystemMetric : AppSettings.UnitSystemImperial, system);
+            var expected = system == AppSettings.UnitSystemMetric ? "1.27 cm" : "0.5 in";
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+            foreach (var language in new[] { "en", "lt" })
+            {
+                LocalizationService.SetCulture(language);
+                Assert.Equal(system, MeasurementUnitService.Resolve(AppSettings.UnitSystemSystem));
+                Assert.Equal(expected, typeof(Views.SettingsPanel).GetMethod("FormatTemplateIndent", flags)!
+                    .Invoke(null, new object[] { 48d, AppSettings.UnitSystemSystem }));
+                Assert.Equal(expected, typeof(NoteEditorWindow).GetMethod("FormatIndentSizeLabel", flags)!
+                    .Invoke(null, new object[] { 48d, system }));
+            }
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original.Item1; CultureInfo.CurrentUICulture = original.Item2;
+            CultureInfo.DefaultThreadCurrentCulture = original.Item3; CultureInfo.DefaultThreadCurrentUICulture = original.Item4;
+            LocalizationProvider.Instance.Refresh();
+        }
+    });
+
+    [Theory]
+    [InlineData("System", "lt-LT", "lt")]
+    [InlineData("system", "en-GB", "en")]
+    [InlineData(null, "lt-LT", "lt")]
+    [InlineData("System", "de-DE", "en")]
+    [InlineData("lt", "en-US", "lt")]
+    [InlineData("en", "lt-LT", "en")]
+    [InlineData("lt-LT", "en-US", "lt")]
+    public void Language_preferences_resolve_supported_Windows_languages_and_fallback(string? preference, string windowsLanguage, string expected)
+        => Assert.Equal(expected, LocalizationService.ResolveLanguage(preference, CultureInfo.GetCultureInfo(windowsLanguage)));
+
+    [Fact]
+    public void Switching_back_to_system_does_not_use_the_last_app_language() => Sta(() =>
+    {
+        var original = (CultureInfo.CurrentCulture, CultureInfo.CurrentUICulture,
+            CultureInfo.DefaultThreadCurrentCulture, CultureInfo.DefaultThreadCurrentUICulture);
+        try
+        {
+            LocalizationService.SetCulture("lt");
+            LocalizationService.SetCulture(LocalizationService.SystemLanguage);
+            var systemLanguage = CultureInfo.CurrentUICulture.Name;
+            LocalizationService.SetCulture(systemLanguage == "lt" ? "en" : "lt");
+            LocalizationService.SetCulture(LocalizationService.SystemLanguage);
+            Assert.Equal(systemLanguage, CultureInfo.CurrentUICulture.Name);
+            Assert.Equal(systemLanguage, CultureInfo.DefaultThreadCurrentUICulture!.Name);
+            Assert.Equal(systemLanguage, CultureInfo.CurrentCulture.Name);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original.Item1; CultureInfo.CurrentUICulture = original.Item2;
+            CultureInfo.DefaultThreadCurrentCulture = original.Item3; CultureInfo.DefaultThreadCurrentUICulture = original.Item4;
+            LocalizationProvider.Instance.Refresh();
+        }
+    });
+
     [Fact]
     public void Lithuanian_catalog_has_every_English_entry_without_fallback()
     {

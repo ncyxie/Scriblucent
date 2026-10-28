@@ -20,7 +20,7 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        LocalizationService.SetCulture(System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName);
+        LocalizationService.SetCulture(LocalizationService.SystemLanguage);
         string[] paths;
         try { paths = LaunchImportQueue.ParseArguments(e.Args); }
         catch (Exception ex) when (ex is ArgumentException or System.IO.IOException or NotSupportedException)

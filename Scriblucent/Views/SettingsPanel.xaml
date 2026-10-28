@@ -140,6 +140,7 @@
                                                     <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{Binding [Language], Source={StaticResource Loc}}" Style="{StaticResource FormOptionLabelStyle}" VerticalAlignment="Center" Margin="{StaticResource Field.LabelMargin}" TextWrapping="Wrap" />
                                                         <ComboBox Margin="0" SelectedValuePath="Tag" SelectedValue="{Binding SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Stretch">
+                                                            <ComboBoxItem Tag="System" Content="{Binding [LanguageSystem], Source={StaticResource Loc}}" />
                                                             <ComboBoxItem Tag="en" Content="{Binding [LanguageEnglish], Source={StaticResource Loc}}" />
                                                             <ComboBoxItem Tag="lt" Content="{Binding [LanguageLithuanian], Source={StaticResource Loc}}" />
                                                         </ComboBox>
@@ -167,6 +168,7 @@
                                                     <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{Binding [MeasurementUnitSystem], Source={StaticResource Loc}}" Style="{StaticResource FormOptionLabelStyle}" VerticalAlignment="Center" Margin="{StaticResource Field.LabelMargin}" TextWrapping="Wrap" />
                                                         <ComboBox x:Name="MeasurementUnitSystemBox" Margin="0" SelectionChanged="MeasurementUnitSystemBox_SelectionChanged" HorizontalAlignment="Stretch">
+                                                            <ComboBoxItem Tag="System" Content="{Binding [MeasurementUnitSystemDefault], Source={StaticResource Loc}}" />
                                                             <ComboBoxItem Tag="Imperial" Content="{Binding [MeasurementUnitImperial], Source={StaticResource Loc}}" />
                                                             <ComboBoxItem Tag="Metric" Content="{Binding [MeasurementUnitMetric], Source={StaticResource Loc}}" />
                                                         </ComboBox>

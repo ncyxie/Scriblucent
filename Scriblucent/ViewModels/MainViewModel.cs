@@ -146,8 +146,8 @@ public partial class MainViewModel : ViewModelBase
     private bool _enableScrollbar = true;
     private bool _enableVerticalScrollbar = true;
     private bool _enableHorizontalScrollbar = true;
-    private string _selectedLanguage = LocalizationService.English;
-    private string _selectedTheme = "Light";
+    private string _selectedLanguage = LocalizationService.SystemLanguage;
+    private string _selectedTheme = ThemeManager.SystemTheme;
     private string _activeDashboard = DashboardNotes;
     private string _selectedSortOptionKey = SortLastModifiedDesc;
     private string _selectedFlashcardSortOptionKey = SortLastModifiedDesc;
