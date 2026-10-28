@@ -14,10 +14,257 @@ namespace Scriblucent.Tests;
 /// FloatingImageCoordinator + NoteWrapLayoutEngine on an off-screen STA window, so
 /// paragraph geometry is measured exactly like in the editor.
 /// </summary>
-public class NoteWrapLayoutEngineTests
+public class NoteWrapLayoutEngineTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     private static string FixturePath =>
         Path.Combine(AppContext.BaseDirectory, "TestData", "Images", "pixel.png");
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(200)]
+    public void Engine_Square_LiveMoveAndResizeClearsTheEntireBand(double left) => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        var image = h.Coordinator.GetWrapSessions().Single();
+        image.DocumentLeft = left;
+        image.DocumentTop = 100;
+        h.Engine.Apply();
+        foreach (var (top, height) in new[] { (120d, 220d), (148d, 250d), (80d, 180d), (110d, 240d) })
+        {
+            image.DocumentTop = top;
+            image.Height = height;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            h.Engine.Apply(live: true);
+            output.WriteLine($"Live {left}/{top}/{height}: {watch.Elapsed.TotalMilliseconds:F1} ms");
+            h.Editor.UpdateLayout();
+            AssertTextClearsSquarePhotos(h);
+        }
+    });
+
+    [Fact]
+    public void Engine_Square_StationaryLiveTicksDoNotMutateOrResetTheCaret() => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        h.Engine.Apply();
+        h.Coordinator.GetWrapSessions().Single().DocumentLeft += 2;
+        h.Engine.Apply(live: true);
+        var changes = 0;
+        var selections = 0;
+        h.Editor.TextChanged += (_, _) => changes++;
+        h.Editor.SelectionChanged += (_, _) => selections++;
+        for (var tick = 0; tick < 20; tick++) h.Engine.Apply(live: true);
+        Assert.Equal(0, changes);
+        Assert.Equal(0, selections);
+    });
+
+    [Fact]
+    public void Engine_Square_LiveReflowKeepsUndoAndRedoUsable() => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        h.Engine.Apply();
+        h.Editor.Document.ContentEnd.InsertTextInRun("Undo this authored edit.");
+        string ReadText() => string.Concat(EnumerateAllParagraphs(h.Editor.Document.Blocks)
+            .SelectMany(p => p.Inlines.OfType<Run>()).Select(r => r.Text));
+        var authored = ReadText();
+        h.Coordinator.GetWrapSessions().Single().DocumentTop += 12;
+        h.Engine.Apply(live: true);
+        Assert.True(h.Editor.CanUndo);
+        h.Editor.Undo();
+        Assert.True(h.Editor.CanRedo);
+        h.Editor.Redo();
+        Assert.Equal(authored, ReadText());
+    });
+
+    [Fact]
+    public void Engine_Square_LiveScrollingKeepsTheGestureThrottle() => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        h.Engine.Apply();
+        h.Engine.ScheduleApply();
+        h.Engine.ScheduleApplyLive();
+        DispatcherTimer Timer(string name) => (DispatcherTimer)typeof(NoteWrapLayoutEngine)
+            .GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(h.Engine)!;
+        Assert.False(Timer("_recomputeDebounce").IsEnabled);
+        ScrollEditorTo(h.Editor, 40);
+        Assert.True(Timer("_liveApplyThrottle").IsEnabled);
+        Assert.False(Timer("_recomputeDebounce").IsEnabled);
+        h.Engine.ScheduleApply();
+        Assert.False(Timer("_liveApplyThrottle").IsEnabled);
+    });
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(200)]
+    public void Engine_Square_ContinuousLiveGesture(double left) => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        var image = h.Coordinator.GetWrapSessions().Single();
+        image.DocumentLeft = left;
+        image.DocumentTop = 100;
+        h.Engine.Apply();
+        for (var step = 1; step <= 10; step++)
+        {
+            image.DocumentTop += 2;
+            image.DocumentLeft += 1;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            h.Engine.Apply(live: true);
+            output.WriteLine($"Step {step}: {watch.Elapsed.TotalMilliseconds:F1} ms");
+            h.Editor.UpdateLayout();
+            AssertTextClearsSquarePhotos(h);
+            var spacers = FindSquareSpacers(EnumerateAllParagraphs(h.Editor.Document.Blocks).First());
+            Assert.All(spacers.GroupBy(s => Math.Round(s.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top)), row => Assert.Single(row));
+        }
+    });
+
+    [Theory]
+    [InlineData(40, 200)]
+    [InlineData(200, 200)]
+    [InlineData(340, 200)]
+    [InlineData(0, 750)]
+    public void Engine_Square_AllTextClearsPhoto(double left, double width) => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        var session = h.Coordinator.GetWrapSessions().Single();
+        session.DocumentLeft = left; session.Width = width;
+        h.Engine.Apply(); h.Editor.UpdateLayout();
+        AssertTextClearsSquarePhotos(h);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Engine_Square_MultiplePhotosKeepAllExclusions(bool fullWidth) => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        var first = h.Coordinator.GetWrapSessions().Single();
+        first.DocumentLeft = 0; first.Width = fullWidth ? 390 : 200;
+        var second = h.Coordinator.Insert(h.Load, fullWidth ? 350 : 200, 150, new Point(fullWidth ? 390 : 260, 300));
+        h.Coordinator.SetWrapMode(second!.Value, NoteImageWrapMode.Square);
+        h.Engine.Apply(); h.Editor.UpdateLayout();
+        AssertTextClearsSquarePhotos(h);
+    });
+
+    [Fact]
+    public void Engine_Square_ReflowsAfterTypingMovingAndResizing() => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        h.Engine.Apply(); h.Editor.UpdateLayout();
+        var paragraph = EnumerateAllParagraphs(h.Editor.Document.Blocks).First();
+        paragraph.Inlines.InsertBefore(paragraph.Inlines.FirstInline!, new Run(RepeatText("Newly typed words. ", 60)));
+        h.Engine.Apply(); h.Editor.UpdateLayout(); AssertTextClearsSquarePhotos(h);
+        var session = h.Coordinator.GetWrapSessions().Single();
+        foreach (var left in new[] { 340d, 40d, 200d })
+        {
+            session.DocumentLeft = left;
+            h.Engine.Apply(); h.Editor.UpdateLayout(); AssertTextClearsSquarePhotos(h);
+        }
+        h.Window.Width = 500; h.Editor.UpdateLayout();
+        h.Engine.Apply(); h.Editor.UpdateLayout(); AssertTextClearsSquarePhotos(h);
+    });
+
+    [Theory]
+    [InlineData(14, false)]
+    [InlineData(32, false)]
+    [InlineData(14, true)]
+    [InlineData(32, true)]
+    public void Engine_Square_TextAndListItemsClearPhoto(double fontSize, bool list) => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        if (list) { h.Editor.Document.Blocks.Clear(); BuildListItemParagraph(h.Editor); }
+        foreach (var paragraph in EnumerateAllParagraphs(h.Editor.Document.Blocks)) paragraph.FontSize = fontSize;
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        h.Engine.Apply(); h.Editor.UpdateLayout();
+        AssertTextClearsSquarePhotos(h);
+        var text = GetRunsText(h.Editor.Document);
+        h.Engine.Clear(); h.Engine.Apply(); h.Editor.UpdateLayout();
+        Assert.Equal(text, GetRunsText(h.Editor.Document));
+        AssertTextClearsSquarePhotos(h);
+    });
+
+    private static void AssertTextClearsSquarePhotos(EditorHarness h)
+    {
+        var scroll = FindScrollViewer(h.Editor);
+        var collisions = new List<string>();
+        foreach (var image in h.Coordinator.GetWrapSessions().Where(image => image.WrapMode == NoteImageWrapMode.Square))
+        {
+            var box = new Rect(image.DocumentLeft + h.Editor.Padding.Left, image.DocumentTop + h.Editor.Padding.Top,
+                image.Width, image.Height);
+            foreach (var paragraph in EnumerateAllParagraphs(h.Editor.Document.Blocks))
+            for (var nav = paragraph.ContentStart; nav is not null && nav.CompareTo(paragraph.ContentEnd) < 0;
+                nav = nav.GetNextContextPosition(LogicalDirection.Forward))
+            {
+                if (nav.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text) continue;
+                var text = nav.GetTextInRun(LogicalDirection.Forward);
+                for (var i = 0; i < text.Length; i++)
+                {
+                    if (char.IsWhiteSpace(text[i])) continue;
+                    var rect = nav.GetPositionAtOffset(i)!.GetCharacterRect(LogicalDirection.Forward);
+                    // Offscreen character rects may be provisional. Scroll scenarios
+                    // expose each viewport and verify its actual rendered text.
+                    if (rect.IsEmpty || rect.Top >= h.Editor.ActualHeight || rect.Bottom <= 0) continue;
+                    rect.Offset(scroll?.HorizontalOffset ?? 0, scroll?.VerticalOffset ?? 0);
+                    if (rect.Bottom > box.Top + 1 && rect.Top < box.Bottom - 1
+                        && rect.Left > box.Left + 1 && rect.Left < box.Right - 1)
+                        collisions.Add($"'{text[i]}' at {rect} overlaps {box}; paragraph margin={paragraph.Margin}");
+                }
+            }
+        }
+        Assert.True(collisions.Count == 0, $"{collisions.Count} visible characters remain under Square photos at scroll {scroll?.VerticalOffset}: {string.Join("; ", collisions.Take(5))}");
+    }
+
+    [Theory]
+    [InlineData(200)]
+    [InlineData(750)]
+    public void Engine_Square_TallPhotoKeepsTextClear(double width) => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        h.Editor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        h.Coordinator.Clear();
+        var id = h.Coordinator.Insert(h.Load, width, 900, new Point(0, 300));
+        h.Coordinator.SetWrapMode(id!.Value, NoteImageWrapMode.Square);
+        h.Engine.Apply(); h.Editor.UpdateLayout(); AssertTextClearsSquarePhotos(h);
+        foreach (var offset in new[] { 250d, 500d, 750d })
+        {
+            ScrollEditorTo(h.Editor, offset); PumpDispatcher(h.Editor, 600); h.Editor.UpdateLayout();
+            AssertTextClearsSquarePhotos(h);
+        }
+    });
+
+    [Fact]
+    public void Engine_Square_ChecklistClearsPhoto() => RunOnSta(() =>
+    {
+        using var h = CreateHarness(0, tallParagraph: true);
+        var paragraph = EnumerateAllParagraphs(h.Editor.Document.Blocks).First();
+        new EditorLists(h.Editor, () => 48).ToggleCheckbox(paragraph);
+        h.Coordinator.SetWrapMode(h.ImageId, NoteImageWrapMode.Square);
+        var image = h.Coordinator.GetWrapSessions().Single();
+        image.DocumentLeft = 0; image.DocumentTop = 0;
+        h.Engine.Apply(); h.Editor.UpdateLayout(); AssertTextClearsSquarePhotos(h);
+    });
+
+    [Fact]
+    public void Engine_Square_DoesNotScatterMultipleGapsAcrossOneLine() => RunOnSta(() =>
+    {
+        using var h = CreateHarness(14);
+        h.Coordinator.Clear();
+        var id = h.Coordinator.Insert(h.Load, 200, 140, new Point(36, 100));
+        h.Coordinator.SetWrapMode(id!.Value, NoteImageWrapMode.Square);
+        h.Engine.Apply(); h.Editor.UpdateLayout(); AssertTextClearsSquarePhotos(h);
+        foreach (var paragraph in EnumerateAllParagraphs(h.Editor.Document.Blocks))
+        {
+            var gaps = FindSquareSpacers(paragraph).GroupBy(c => Math.Round(c.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top));
+            Assert.All(gaps, line => Assert.Single(line));
+        }
+    });
 
     [Fact]
     public void Engine_AppliesSquareWrapLanes_AndClearsThemExactly()
@@ -471,7 +718,7 @@ public class NoteWrapLayoutEngineTests
 
         Assert.True(done.Wait(TimeSpan.FromSeconds(30)), "STA scenario timed out");
         if (failure is not null)
-            throw failure;
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static List<InlineUIContainer> FindSquareSpacers(Paragraph paragraph)
@@ -628,8 +875,8 @@ public class NoteWrapLayoutEngineTests
     {
         // The office-suite behavior: a Square-wrapped photo pushed into a line splits the words
         // around it - "word word [photo] word word". Words before the photo's left edge stay in
-        // place; the words after it flow on the same line beside the photo; the lines below in
-        // the band start after the photo; lines above and below the band keep full width.
+        // place; the words after it flow on the same line beside the photo. Useful space on
+        // both sides remains available; lines above and below the band keep full width.
         using var harness = CreateHarness(paragraphCount: 0, tallParagraph: true);
         harness.Coordinator.SetWrapMode(harness.ImageId, NoteImageWrapMode.Square);
         harness.Editor.UpdateLayout();
@@ -657,9 +904,11 @@ public class NoteWrapLayoutEngineTests
             session.DocumentRight + harness.Editor.Padding.Left,
             gap);
 
-        // Lines deeper in the band start after the photo's right edge.
-        var belowBandStart = lines.Where(l => l.MinLeft >= wrapRight - 1).ToList();
-        Assert.NotEmpty(belowBandStart);
+        // Every line stays clear, with one exclusion per visual line rather than
+        // scattered gaps or an arbitrary switch to right-only text deeper in the band.
+        AssertTextClearsSquarePhotos(harness);
+        Assert.All(FindSquareSpacers(tall).GroupBy(c => Math.Round(c.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top)),
+            line => Assert.Single(line));
 
         // Lines above and below the band keep full width (start at the text edge, reach the end).
         var fullWidth = lines.Where(l => l.MinLeft < 100 && l.MaxRight > 700).ToList();
@@ -852,6 +1101,7 @@ public class NoteWrapLayoutEngineTests
                 top >= -50 && top <= 180,
                 $"spacer at layout top {top:F1} should sit on the band's lines (band scrolled by 300)");
         }
+        AssertTextClearsSquarePhotos(harness);
     }
 
     private static void RunTallParagraphScenario(

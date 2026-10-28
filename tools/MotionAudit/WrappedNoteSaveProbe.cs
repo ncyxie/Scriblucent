@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,6 +32,27 @@ internal static partial class Program
                 editor.Show(); Pump(1500);
                 var wrap = CompletionField<NoteWrapLayoutEngine>(editor, "_wrapLayout");
                 Require(images.GetWrapSessions().Count == 1 && wrap.CaptureWrapState() is not null, mode + " fixture did not actually displace text.");
+                SaveControlCapture((FrameworkElement)editor.Content, $"wrapped-note-{mode}");
+                if (mode == NoteImageWrapMode.Square)
+                {
+                    var image = images.GetWrapSessions().Single();
+                    var times = new List<double>();
+                    for (var step = 1; step <= 12; step++)
+                    {
+                        image.DocumentLeft = 36 + step * 2;
+                        image.DocumentTop = 100 + step * 2;
+                        image.Height = 140 + step * 3;
+                        images.SyncAll();
+                        var watch = Stopwatch.StartNew();
+                        wrap.Apply(live: true);
+                        times.Add(watch.Elapsed.TotalMilliseconds);
+                        Pump(20);
+                    }
+                    SaveControlCapture((FrameworkElement)editor.Content, "wrapped-note-Square-live");
+                    checks.Add($"Square/live drag: {times.Count} updates, median {times.Order().ElementAt(times.Count / 2):F1} ms, maximum {times.Max():F1} ms.");
+                    image.DocumentLeft = 36; image.DocumentTop = 100; image.Height = 140;
+                    images.SyncAll(); wrap.Apply(); Pump(150);
+                }
                 for (int pass = 0; pass < 2; pass++)
                 {
                     Require(RemainingCall(editor, "SaveCurrentDocument") is true, "Wrapped note save failed.");
