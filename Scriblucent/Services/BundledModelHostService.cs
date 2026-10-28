@@ -153,13 +153,16 @@ public sealed class BundledModelHostService
         return GetSelectedModelInfo().DisplayName;
     }
 
-    private static async Task EnsureModelAssetAsync(
+    internal static async Task EnsureModelAssetAsync(
         string modelsAssetsDir,
         string modelsDirectory,
         AiModelInfo selectedModel,
         IProgress<FlashcardProgress>? progress,
         CancellationToken cancellationToken)
     {
+        // Installation assets are optional, read-only sources. All model state,
+        // including download staging files, belongs to the current user's library.
+        Directory.CreateDirectory(modelsDirectory);
         var modelPath = Path.Combine(modelsDirectory, selectedModel.FileName);
         progress?.Report(new FlashcardProgress(ModelVerificationStatusKey));
         if (await IsModelFileValidAsync(modelPath, selectedModel, cancellationToken))
@@ -447,12 +450,8 @@ public sealed class BundledModelHostService
             return;
 
         var modelPath = Path.Combine(GetModelsDirectoryPath(), model.FileName);
-        var bundledPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Models", model.FileName);
-
         TryDeleteFile(modelPath);
-        TryDeleteFile(bundledPath);
         VerifiedModelFiles.TryRemove(modelPath, out _);
-        VerifiedModelFiles.TryRemove(bundledPath, out _);
 
         try
         {
@@ -496,9 +495,6 @@ public sealed class BundledModelHostService
             var baseDir = AppContext.BaseDirectory;
             var modelsAssetsDir = Path.Combine(baseDir, "Assets", "Models");
             var modelsDirectory = GetModelsDirectoryPath();
-
-            Directory.CreateDirectory(modelsAssetsDir);
-            Directory.CreateDirectory(modelsDirectory);
 
             await EnsureModelAssetAsync(modelsAssetsDir, modelsDirectory, selectedModel, progress, cancellationToken);
         }
